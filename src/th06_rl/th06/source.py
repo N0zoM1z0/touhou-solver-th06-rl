@@ -67,6 +67,9 @@ def kinematics_from_snapshot(snapshot) -> Kinematics:
 
 def automatic_source_context(snapshot) -> str:
     """Stable source identity for data partitioning, never movement control."""
+    direct = getattr(snapshot, "source_context", None)
+    if direct:
+        return str(direct)
     bosses = tuple(
         sorted(
             (spawner for spawner in snapshot.spawners if spawner.is_boss),

@@ -27,6 +27,8 @@ OBJECT_SCHEMA = "th06-rl-source-object-v1"
 FRAME_SCHEMA = "th06-rl-authoritative-frame-v3"
 TRANSITION_SCHEMA = "th06-rl-transition-v3"
 EVENT_SCHEMA = "th06-rl-event-v1"
+ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
+FRAME_BUDGET_MS = 1000.0 / 60.0
 DEFAULT_SHARD_RECORDS = 128
 DEFAULT_QUEUE_RECORDS = 512
 DEFAULT_MAX_RUN_BYTES = 512 * 1024 * 1024
@@ -95,6 +97,9 @@ class FrameEvidence:
     capture_ms: float
     solve_ms: float
     reason: str
+    capture_attempts: int = 1
+    observation_gap: int = 1
+    snapshot_tier: str = "authoritative-full"
 
     def __post_init__(self) -> None:
         if not self.phase_id:
@@ -114,6 +119,15 @@ class _Envelope:
     snapshot: object
     evidence: FrameEvidence
     scope: dict[str, object]
+
+
+@dataclass(frozen=True)
+class _AnchorEnvelope:
+    sequence: int
+    snapshot: object
+    phase_id: str
+    reason: str
+    control_snapshot_ref: str | None
 
 
 def _jsonable(value: object) -> object:
@@ -400,7 +414,10 @@ def _serialize_snapshot(snapshot, objects: _ObjectStore) -> dict[str, object]:
 
 
 def _scope(snapshot, phase_id: str) -> dict[str, object]:
-    shot_type = snapshot.player_attack.shot_type if snapshot.player_attack else -1
+    shot_type = getattr(snapshot, "shot_type", None)
+    if shot_type is None:
+        attack = getattr(snapshot, "player_attack", None)
+        shot_type = attack.shot_type if attack else -1
     values = {
         "difficulty": snapshot.difficulty,
         "character": snapshot.character,
@@ -412,8 +429,15 @@ def _scope(snapshot, phase_id: str) -> dict[str, object]:
 
 
 def _boss_life(snapshot) -> int | None:
+    direct = getattr(snapshot, "boss_life", None)
+    if direct is not None:
+        return int(direct)
     bosses = sorted(
-        (item for item in snapshot.spawners if item.is_boss),
+        (
+            item
+            for item in getattr(snapshot, "spawners", ())
+            if item.is_boss
+        ),
         key=lambda item: (item.boss_id, item.slot),
     )
     return bosses[0].life if bosses else None
@@ -437,8 +461,11 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
     bomb = bool(
         (before.snapshot.input_mask | after.snapshot.input_mask) & BUTTON_BOMB
         or (
-            after.snapshot.player_attack is not None
-            and after.snapshot.player_attack.bomb_active
+            getattr(after.snapshot, "bomb_active", False)
+            or (
+                getattr(after.snapshot, "player_attack", None) is not None
+                and after.snapshot.player_attack.bomb_active
+            )
         )
     )
     control_dead_end = after.evidence.reason in (
@@ -476,6 +503,11 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "hard_count_before": len(before.evidence.hard_actions),
         "hard_count_after": len(after.evidence.hard_actions),
         "phase_changed": before.scope["key"] != after.scope["key"],
+        "capture_ms_before": before.evidence.capture_ms,
+        "capture_ms_after": after.evidence.capture_ms,
+        "capture_attempts_before": before.evidence.capture_attempts,
+        "capture_attempts_after": after.evidence.capture_attempts,
+        "observation_gap": max(0, after.snapshot.frame - before.snapshot.frame),
     }
     terminal_reason = (
         "life-lost"
@@ -488,6 +520,19 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         if authority
         else None
     )
+    learning_exclusions = []
+    if before.evidence.published_action is None:
+        learning_exclusions.append("action-not-published")
+    if before.evidence.reason not in ("ok", "input-lease"):
+        learning_exclusions.append(f"decision:{before.evidence.reason}")
+    if outcome["elapsed_frames"] != 1:
+        learning_exclusions.append("observation-gap")
+    if before.evidence.capture_ms > FRAME_BUDGET_MS:
+        learning_exclusions.append("capture-over-frame-budget")
+    if bomb:
+        learning_exclusions.append("bomb")
+    if authority:
+        learning_exclusions.append("authority-loss")
     return {
         "schema_version": TRANSITION_SCHEMA,
         "sequence": before.sequence,
@@ -501,12 +546,8 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "published_action": before.evidence.published_action,
         "behavior_probability": before.evidence.behavior_probability,
         "outcome_terms": outcome,
-        "learning_eligible": bool(
-            before.evidence.published_action is not None
-            and before.evidence.reason in ("ok", "input-lease")
-            and not bomb
-            and not authority
-        ),
+        "learning_eligible": not learning_exclusions,
+        "learning_exclusion_reasons": learning_exclusions,
         "terminal": {
             "done": terminal_reason is not None,
             "reason": terminal_reason,
@@ -544,6 +585,7 @@ class CorpusRecorder:
         self.shard_records = shard_records
         self.max_run_bytes = max_run_bytes
         self.sequence = 0
+        self.anchor_sequence = 0
         self.enqueued = 0
         self.written = 0
         self.dropped = 0
@@ -566,7 +608,11 @@ class CorpusRecorder:
         self.first_frame: int | None = None
         self.last_frame: int | None = None
         self.hit_frames: list[int] = []
-        self.queue: queue.Queue[_Envelope | None] = queue.Queue(queue_records)
+        self.observation_gap_frames = 0
+        self.over_budget_capture_frames = 0
+        self.queue: queue.Queue[_Envelope | _AnchorEnvelope | None] = queue.Queue(
+            queue_records
+        )
         self.manifest_lock = threading.Lock()
         self.manifest: dict[str, object] = {
             "schema_version": MANIFEST_SCHEMA,
@@ -589,6 +635,7 @@ class CorpusRecorder:
                 "frame": FRAME_SCHEMA,
                 "transition": TRANSITION_SCHEMA,
                 "event": EVENT_SCHEMA,
+                "anchor": ANCHOR_SCHEMA,
             },
             "storage": {
                 "compression": "gzip-3",
@@ -624,6 +671,8 @@ class CorpusRecorder:
         self.capture_timings.append(float(evidence.capture_ms))
         self.solve_timings.append(float(evidence.solve_ms))
         self.reason_counts[evidence.reason] += 1
+        self.observation_gap_frames += evidence.observation_gap != 1
+        self.over_budget_capture_frames += evidence.capture_ms > FRAME_BUDGET_MS
         frame = int(envelope.snapshot.frame)
         self.first_frame = frame if self.first_frame is None else min(self.first_frame, frame)
         self.last_frame = frame if self.last_frame is None else max(self.last_frame, frame)
@@ -701,6 +750,12 @@ class CorpusRecorder:
             "stale_retry_rate": (
                 self.reason_counts["stale-retry"] / frames if frames else None
             ),
+            "observation_gap_rate": (
+                self.observation_gap_frames / frames if frames else None
+            ),
+            "capture_over_frame_budget_rate": (
+                self.over_budget_capture_frames / frames if frames else None
+            ),
             "learning_eligible_elapsed_frames": sum(
                 int(raw["learning_eligible_elapsed_frames"])
                 for raw in self.phase_metrics.values()
@@ -756,10 +811,40 @@ class CorpusRecorder:
         self.enqueued += 1
         return snapshot_id
 
+    def record_anchor(
+        self,
+        snapshot,
+        *,
+        phase_id: str,
+        reason: str,
+        control_snapshot_ref: str | None,
+    ) -> None:
+        """Queue one exhaustive source root outside the decision hot path."""
+        if self.closed:
+            raise CorpusError("corpus recorder is closed")
+        self._raise_error()
+        if snapshot.input_mask & BUTTON_BOMB:
+            raise CorpusError("Bomb bit observed in corpus anchor")
+        envelope = _AnchorEnvelope(
+            self.anchor_sequence,
+            snapshot,
+            phase_id,
+            reason,
+            control_snapshot_ref,
+        )
+        try:
+            self.queue.put_nowait(envelope)
+        except queue.Full as error:
+            self.dropped += 1
+            raise CorpusBackpressure(
+                "corpus queue full while retaining source anchor"
+            ) from error
+        self.anchor_sequence += 1
+
     def _worker(self) -> None:
         writers = {
             stream: _ShardWriter(self.run_dir, stream, self.shard_records, self._on_shard)
-            for stream in ("objects", "frames", "transitions", "events")
+            for stream in ("objects", "frames", "transitions", "events", "anchors")
         }
         objects = _ObjectStore(writers["objects"])
         previous: _Envelope | None = None
@@ -770,6 +855,19 @@ class CorpusRecorder:
                     self.queue.task_done()
                     break
                 try:
+                    if isinstance(envelope, _AnchorEnvelope):
+                        writers["anchors"].write({
+                            "schema_version": ANCHOR_SCHEMA,
+                            "sequence": envelope.sequence,
+                            "frame": envelope.snapshot.frame,
+                            "scope": _scope(envelope.snapshot, envelope.phase_id),
+                            "reason": envelope.reason,
+                            "control_snapshot_ref": envelope.control_snapshot_ref,
+                            "snapshot": _serialize_snapshot(
+                                envelope.snapshot, objects
+                            ),
+                        }, envelope.sequence)
+                        continue
                     writers["frames"].write({
                         "schema_version": FRAME_SCHEMA,
                         "sequence": envelope.sequence,

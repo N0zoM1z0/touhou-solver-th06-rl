@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+from dataclasses import replace
 
 from th06_rl.corpus import (
     CorpusRecorder,
@@ -10,6 +11,8 @@ from th06_rl.corpus import (
     expand_compact,
 )
 from th06_rl.th06.donor import enable_donor_imports
+from th06_rl.th06.control_capture import ControlSnapshot
+from th06_rl.th06.source import automatic_source_context
 
 
 enable_donor_imports()
@@ -115,3 +118,118 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     assert len(hydrated["bullets"]) == 1
     assert hydrated["bullets"][0]["x"] == 10.0
     assert hydrated["bullets"][0]["slot"] == 7
+
+
+def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata("test", "exe", "native", "test", 3, 0, 0, 4, {}),
+    )
+    control = ControlSnapshot(
+        capture_tier="control-v1",
+        frame=20,
+        stage=4,
+        player_state=0,
+        x=192.0,
+        y=400.0,
+        half_width=1.5,
+        half_height=1.5,
+        normal_speed=4.0,
+        focus_speed=2.0,
+        normal_diagonal_speed=2.8,
+        focus_diagonal_speed=1.4,
+        frame_multiplier=1.0,
+        input_mask=1,
+        bullets=(),
+        laser_count=0,
+        in_menu=False,
+        time_stopped=False,
+        replay_or_demo=False,
+        lasers=(),
+        enemies=(),
+        difficulty=3,
+        character=0,
+        shot_type=0,
+        bomb_active=False,
+        spell_active=False,
+        rank=10,
+        subrank=0,
+        max_rank=32,
+        min_rank=0,
+        rng_seed=123,
+        rng_generation=456,
+        current_power=64,
+        lives_remaining=2,
+        source_context="timeline:before-t100:op0:arg7",
+        boss_life=None,
+        timeline_time=90,
+        timeline_time_float=90.0,
+        capture_attempts=1,
+        bullet_read_retries=0,
+    )
+    evidence = FrameEvidence(
+        phase_id=control.source_context,
+        current_action="stay",
+        hard_actions=(("stay", 10.0, 192.0, 400.0),),
+        baseline_action="stay",
+        locally_admissible_actions=("stay",),
+        proposed_action="stay",
+        published_action="stay",
+        behavior_probability=1.0,
+        policy_id="test",
+        policy_generation=1,
+        policy_sha256="abc",
+        effort_horizon=4,
+        plan_min_clearance=10.0,
+        cumulative_risk=None,
+        terminal_x=192.0,
+        terminal_y=400.0,
+        endpoint_count=1,
+        continuation_action_count=1,
+        capture_ms=2.0,
+        solve_ms=0.1,
+        reason="ok",
+        snapshot_tier="control-v1",
+    )
+    root_ref = recorder.record(control, evidence)
+    recorder.record_anchor(
+        Snapshot(
+            frame=20,
+            stage=4,
+            player_state=0,
+            x=192.0,
+            y=400.0,
+            half_width=1.5,
+            half_height=1.5,
+            normal_speed=4.0,
+            focus_speed=2.0,
+            normal_diagonal_speed=2.8,
+            focus_diagonal_speed=1.4,
+            frame_multiplier=1.0,
+            input_mask=1,
+            bullets=(),
+            laser_count=0,
+            in_menu=False,
+            time_stopped=False,
+            replay_or_demo=False,
+            difficulty=3,
+            character=0,
+        ),
+        phase_id=control.source_context,
+        reason="stage-root",
+        control_snapshot_ref=root_ref,
+    )
+    recorder.record(
+        replace(control, frame=22),
+        replace(evidence, observation_gap=2),
+    )
+    run_dir = recorder.close({"stage_completed": True})
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest["records"]["anchors"] == 1
+    assert manifest["summary"]["observation_gap_rate"] == 0.5
+    assert automatic_source_context(control) == control.source_context
+    transition_path = next(run_dir.glob("transitions-*.jsonl.gz"))
+    with gzip.open(transition_path, "rt", encoding="utf-8") as source:
+        transition = json.loads(next(source))
+    assert transition["learning_eligible"] is False
+    assert "observation-gap" in transition["learning_exclusion_reasons"]

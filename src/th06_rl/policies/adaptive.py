@@ -118,7 +118,7 @@ class AdaptivePolicy:
 
     def observe(self, outcome) -> None:
         key = self.pending_keys.pop((outcome.frame, outcome.action), None)
-        if key is None or not outcome.published:
+        if key is None or not outcome.published or not outcome.learning_eligible:
             return
         reward = 1.0
         if outcome.life_lost:

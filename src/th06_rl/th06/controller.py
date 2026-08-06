@@ -11,11 +11,18 @@ import os
 from pathlib import Path
 import time
 
-from ..corpus import CorpusError, CorpusRecorder, FrameEvidence, RunMetadata
+from ..corpus import (
+    FRAME_BUDGET_MS,
+    CorpusError,
+    CorpusRecorder,
+    FrameEvidence,
+    RunMetadata,
+)
 from ..native import NativeKernel, PackedHazards
 from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from .background_input import BackgroundInputBridge
+from .control_capture import CONTROL_CAPTURE_TIER, read_control_snapshot
 from .donor import enable_donor_imports
 from .menu import start_reimu_a_practice
 from .source import (
@@ -30,7 +37,7 @@ from .source import (
 
 ACTIVE_PLAYER_STATES = (0, 3)
 CHECKPOINT_SECONDS = 60.0
-DIFFICULTIES = {"normal": 1, "hard": 2}
+DIFFICULTIES = {"normal": 1, "hard": 2, "lunatic": 3}
 
 
 def _hazard_prefix(hazards: PackedHazards, horizon: int) -> PackedHazards:
@@ -43,8 +50,9 @@ def _hazard_prefix(hazards: PackedHazards, horizon: int) -> PackedHazards:
 def _physical_bomb(snapshot) -> bool:
     return bool(
         snapshot.input_mask & 0x02
+        or getattr(snapshot, "bomb_active", False)
         or (
-            snapshot.player_attack is not None
+            getattr(snapshot, "player_attack", None) is not None
             and snapshot.player_attack.bomb_active
         )
     )
@@ -72,16 +80,25 @@ def _control_dead_end(reason: str) -> bool:
 
 
 def _snapshot_scope(snapshot) -> tuple[int, int, int, int | None]:
+    shot_type = getattr(snapshot, "shot_type", None)
+    if shot_type is None:
+        attack = getattr(snapshot, "player_attack", None)
+        shot_type = attack.shot_type if attack is not None else None
     return (
         snapshot.difficulty,
         snapshot.character,
-        (
-            snapshot.player_attack.shot_type
-            if snapshot.player_attack is not None
-            else None
-        ),
+        shot_type,
         snapshot.stage,
     )
+
+
+def _anchor_partition(source_context: str) -> str:
+    """Coarse source boundary for exhaustive roots, never movement control."""
+    if source_context.startswith("boss:"):
+        return source_context
+    if source_context == "timeline-complete":
+        return source_context
+    return "timeline"
 
 
 def _sha256(path: Path) -> str:
@@ -157,7 +174,7 @@ def run(args: argparse.Namespace) -> int:
         TARGET_SHA256,
         attach_exact,
         read_game_frame,
-        read_snapshot,
+        read_snapshot as read_authoritative_snapshot,
         read_supervisor_state,
     )
     from th06.trial import PracticeTrial, physical_hit
@@ -180,6 +197,7 @@ def run(args: argparse.Namespace) -> int:
     infrastructure_failures: dict[str, int] = {}
     trace_failure_count = 0
     corpus_failure_count = 0
+    anchor_failure_count = 0
     corpus_failure: str | None = None
     termination_reason = "controller-interrupted"
     started = time.monotonic()
@@ -245,6 +263,10 @@ def run(args: argparse.Namespace) -> int:
         previous_player_state = None
         pending_learning = None
         last_frame = None
+        last_anchor_frame = None
+        last_anchor_partition = None
+        pending_anchor_reason = "stage-root"
+        anchor_retry_after = 0
         last_reported_reason = None
         next_checkpoint = started + CHECKPOINT_SECONDS
 
@@ -334,15 +356,10 @@ def run(args: argparse.Namespace) -> int:
                     raise
             capture_started = time.perf_counter()
             try:
-                snapshot = read_snapshot(process)
+                snapshot = read_control_snapshot(process)
             except (NativeDecodeError, OSError, RuntimeError) as error:
-                # A full source/corpus snapshot is intentionally strict and
-                # may lose its epoch while TH06 advances.  In continuous
-                # collection this is a missing observation, not a reason to
-                # destroy the physical Stage episode.  Fail closed until the
-                # next coherent snapshot; HIT remains observable after input
-                # is released because the verified life patch changes only
-                # the life decrement.
+                # A compact control root is still epoch/manager-phase strict.
+                # A torn observation can never reach the Hard gate.
                 if not retain_continuous_stage("coherent-snapshot", error):
                     raise
                 capture_failure_count += 1
@@ -354,7 +371,8 @@ def run(args: argparse.Namespace) -> int:
                 })
                 continue
             capture_ms = (time.perf_counter() - capture_started) * 1000.0
-            if snapshot.frame == last_frame:
+            prior_frame = last_frame
+            if snapshot.frame == prior_frame:
                 time.sleep(0.001)
                 continue
             try:
@@ -376,6 +394,9 @@ def run(args: argparse.Namespace) -> int:
                     continue
                 raise
             last_frame = snapshot.frame
+            observation_gap = (
+                1 if prior_frame is None else max(0, snapshot.frame - prior_frame)
+            )
             hit = physical_hit(previous_player_state, snapshot.player_state)
             previous_player_state = snapshot.player_state
             previous_snapshot = snapshot
@@ -614,15 +635,16 @@ def run(args: argparse.Namespace) -> int:
 
             solve_ms = (time.perf_counter() - solve_started) * 1000.0
             if pending_learning is not None:
+                learning_elapsed = max(
+                    0, snapshot.frame - pending_learning["frame"]
+                )
                 plugin.observe(PolicyOutcome(
                     frame=pending_learning["frame"],
                     scope=pending_learning["scope"],
                     source_context=pending_learning["source_context"],
                     action=pending_learning["action"],
                     published=True,
-                    elapsed_frames=max(
-                        0, snapshot.frame - pending_learning["frame"]
-                    ),
+                    elapsed_frames=learning_elapsed,
                     life_lost=hit,
                     bomb_used=_physical_bomb(snapshot),
                     control_dead_end=_control_dead_end(reason),
@@ -636,6 +658,10 @@ def run(args: argparse.Namespace) -> int:
                     ),
                     next_player_x=snapshot.x,
                     next_player_y=snapshot.y,
+                    learning_eligible=(
+                        learning_elapsed == 1
+                        and pending_learning["capture_ms"] <= FRAME_BUDGET_MS
+                    ),
                 ))
                 pending_learning = None
             if policy is not None and published is None:
@@ -654,6 +680,7 @@ def run(args: argparse.Namespace) -> int:
                     next_hard_action_count=hard_count,
                     next_player_x=snapshot.x,
                     next_player_y=snapshot.y,
+                    learning_eligible=False,
                 ))
             if policy is not None and published is not None:
                 pending_learning = {
@@ -661,6 +688,7 @@ def run(args: argparse.Namespace) -> int:
                     "scope": expected_scope,
                     "source_context": source_context,
                     "action": published,
+                    "capture_ms": capture_ms,
                 }
             policy_status = plugin.status()
             if recorder is not None:
@@ -709,9 +737,78 @@ def run(args: argparse.Namespace) -> int:
                     capture_ms=capture_ms,
                     solve_ms=solve_ms,
                     reason=reason,
+                    capture_attempts=snapshot.capture_attempts,
+                    observation_gap=observation_gap,
+                    snapshot_tier=CONTROL_CAPTURE_TIER,
                 )
                 try:
-                    recorder.record(snapshot, evidence)
+                    snapshot_ref = recorder.record(snapshot, evidence)
+                    partition = _anchor_partition(source_context)
+                    if (
+                        last_anchor_partition is not None
+                        and partition != last_anchor_partition
+                    ):
+                        pending_anchor_reason = "source-context-change"
+                    elif (
+                        args.full_anchor_frames
+                        and last_anchor_frame is not None
+                        and snapshot.frame - last_anchor_frame
+                        >= args.full_anchor_frames
+                    ):
+                        pending_anchor_reason = "periodic"
+                    # Exhaustive decoding is intentionally admitted only in a
+                    # quiet/passive window.  An anchor may be delayed; it may
+                    # never steal an urgent high-density control frame.
+                    anchor_safe = bool(
+                        snapshot.in_menu
+                        or snapshot.time_stopped
+                        or snapshot.player_state not in ACTIVE_PLAYER_STATES
+                        or (
+                            len(snapshot.bullets) <= 8
+                            and snapshot.laser_count == 0
+                        )
+                    )
+                    if (
+                        pending_anchor_reason is not None
+                        and anchor_safe
+                        and snapshot.frame >= anchor_retry_after
+                    ):
+                        try:
+                            anchor = read_authoritative_snapshot(process)
+                            anchor_context = automatic_source_context(anchor)
+                            if (
+                                anchor.stage != expected_stage
+                                or _snapshot_scope(anchor) != expected_scope
+                            ):
+                                raise RuntimeError(
+                                    "authoritative anchor changed learning scope"
+                                )
+                            recorder.record_anchor(
+                                anchor,
+                                phase_id=anchor_context,
+                                reason=pending_anchor_reason,
+                                control_snapshot_ref=snapshot_ref,
+                            )
+                            last_anchor_frame = anchor.frame
+                            last_anchor_partition = _anchor_partition(
+                                anchor_context
+                            )
+                            pending_anchor_reason = None
+                        except (
+                            NativeDecodeError,
+                            OSError,
+                            RuntimeError,
+                            ValueError,
+                        ) as error:
+                            anchor_failure_count += 1
+                            anchor_retry_after = snapshot.frame + 60
+                            emit_trace({
+                                "time": time.time(),
+                                "event": "anchor-capture-missed",
+                                "frame": snapshot.frame,
+                                "count": anchor_failure_count,
+                                "error": str(error),
+                            })
                 except CorpusError as error:
                     # Durable evidence failure is not input authority. Preserve
                     # the same physical Stage, stop claiming this corpus is a
@@ -744,6 +841,7 @@ def run(args: argparse.Namespace) -> int:
                             "physical_hits": hit_count,
                             "control_dead_ends": control_dead_end_count,
                             "capture_failures": capture_failure_count,
+                            "anchor_failures": anchor_failure_count,
                             "corpus_failure": corpus_failure,
                             "elapsed_wall_seconds": time.monotonic() - started,
                         })
@@ -753,6 +851,7 @@ def run(args: argparse.Namespace) -> int:
                         pass
             record = {
                 "time": time.time(),
+                "run_id": recorder.run_id if recorder is not None else None,
                 "frame": snapshot.frame,
                 "scope": list(_snapshot_scope(snapshot)),
                 "source_context": source_context,
@@ -766,6 +865,8 @@ def run(args: argparse.Namespace) -> int:
                 "reason": reason,
                 "capture_ms": capture_ms,
                 "solve_ms": solve_ms,
+                "capture_attempts": snapshot.capture_attempts,
+                "observation_gap": observation_gap,
                 "policy": policy_status,
             }
             emit_trace(record)
@@ -827,6 +928,7 @@ def run(args: argparse.Namespace) -> int:
                             "physical_hits": hit_count,
                             "control_dead_ends": control_dead_end_count,
                             "capture_failures": capture_failure_count,
+                            "anchor_failures": anchor_failure_count,
                             "infrastructure_failures": infrastructure_failure_count,
                             "infrastructure_failures_by_kind": infrastructure_failures,
                             "trace_failures": trace_failure_count,
@@ -913,6 +1015,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stop-game", action="store_true")
     parser.add_argument("--seconds", type=float, default=0.0)
     parser.add_argument("--horizon", type=int, default=12)
+    parser.add_argument(
+        "--full-anchor-frames",
+        type=int,
+        default=1800,
+        help=(
+            "retain an exhaustive source snapshot at phase changes and at "
+            "this low-frequency interval; 0 disables periodic anchors"
+        ),
+    )
     parser.add_argument("--exploration-rate", type=float, default=0.03)
     parser.add_argument("--native-library", type=Path)
     parser.add_argument(
@@ -941,6 +1052,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--seconds cannot be negative")
     if args.horizon < 4:
         parser.error("--horizon must cover Hard-4")
+    if args.full_anchor_frames < 0:
+        parser.error("--full-anchor-frames cannot be negative")
     if not 0.0 <= args.exploration_rate <= 1.0:
         parser.error("--exploration-rate must be in [0, 1]")
     expected_stage = args.practice_stage or args.expected_stage

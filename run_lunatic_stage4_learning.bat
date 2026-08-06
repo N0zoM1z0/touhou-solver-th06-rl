@@ -21,12 +21,12 @@ if not exist "%NATIVE_DLL%" (
   exit /b 1
 )
 
-echo TH06-RL Hard / Reimu-A / Stage 4 complete-stage learning
+echo TH06-RL Lunatic / Reimu-A / Stage 4 latency and learning loop
 echo Physical HIT is recorded and recovered in the same stage.
-echo Create artifacts\pause-hard-stage4 to stop between complete stages.
+echo Create artifacts\pause-lunatic-stage4 to stop between complete stages.
 
 :trial
-if exist "%REPO%artifacts\pause-hard-stage4" (
+if exist "%REPO%artifacts\pause-lunatic-stage4" (
   echo Paused before the next trial.
   exit /b 0
 )
@@ -36,7 +36,7 @@ start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
   --game-dir "%TH06_GAME_DIR%" ^
   --native-library "%NATIVE_DLL%" ^
   --practice-stage 4 ^
-  --difficulty hard ^
+  --difficulty lunatic ^
   --exploration-rate 0.03 ^
   --patch-lives ^
   --continuous-stage ^

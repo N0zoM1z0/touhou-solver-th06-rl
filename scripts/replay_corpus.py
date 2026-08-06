@@ -14,6 +14,7 @@ from th06_rl.corpus import expand_compact
 from th06_rl.core.planner import LocalPlannerConfig
 from th06_rl.native import NativeKernel, PackedHazards
 from th06_rl.th06.donor import enable_donor_imports
+from th06_rl.th06.control_capture import decode_control_snapshot
 from th06_rl.th06.source import (
     AuthorityUnavailable,
     core_action_from_input,
@@ -109,7 +110,15 @@ def replay(args: argparse.Namespace) -> dict[str, object]:
     for index in _sample_indices(rows, args.samples, args.dense):
         row = rows[index]
         try:
-            snapshot = decode_snapshot(_hydrate(row["snapshot"], objects))
+            raw_snapshot = _hydrate(row["snapshot"], objects)
+            if raw_snapshot.get("capture_tier") == "control-v1":
+                if args.forecast_mode != "observed":
+                    raise RuntimeError(
+                        "source-ecl replay requires authoritative anchor rows"
+                    )
+                snapshot = decode_control_snapshot(raw_snapshot)
+            else:
+                snapshot = decode_snapshot(raw_snapshot)
             if (
                 snapshot.player_state not in (0, 3)
                 or snapshot.in_menu

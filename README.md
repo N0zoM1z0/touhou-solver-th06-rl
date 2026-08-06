@@ -11,7 +11,8 @@ tradeoffs but cannot enlarge the native safe set, change collision physics,
 lower margins, request Bomb, or bypass fail-close behavior. Cold start uses
 only a generic clearance/boundary-reserve fallback, never phase rules.
 
-The active collection target is Hard / Reimu-A / Stage 4. Difficulty,
+The active learning target is Hard / Reimu-A / Stage 4. Lunatic / Reimu-A /
+Stage 4 is the high-density latency qualification route. Difficulty,
 character, shot type, stage, and automatically derived source context remain
 separate corpus/model scopes.
 
@@ -25,13 +26,21 @@ also becomes feedback rather than an external restart. Bomb or an
 input-backend failure still stops the loop. Transient capture, source-context,
 policy-checkpoint, trace, and corpus failures fail closed without destroying
 the physical Stage episode. Create
-`artifacts\pause-hard-stage4` to pause between complete stages.
+`artifacts\pause-hard-stage4` to pause between complete stages. Use
+`run_lunatic_stage4_learning.bat` and `artifacts\pause-lunatic-stage4` for the
+independent Lunatic scope.
 
-Each corpus frame retains the complete coherent source snapshot, Hard set,
-local survivor set, policy probability and planner diagnostics. Stable
-timeline/ECL tables are content-addressed once per run. Transitions retain raw
-outcome terms instead of only a reward, so later GPU training can rebuild
-features, temporal windows and reward functions without recollecting play.
+Each control frame retains a coherent collision-authority root: player state,
+all live bullet motion/collision fields, lasers, lethal enemy bodies, RNG,
+resources, source context, exact Hard/local sets, behavior probability, and
+decision diagnostics. Expensive player-attack, item/effect, sprite, callback,
+and complete ECL state is retained in exhaustive anchors admitted only during
+quiet/passive windows. Stable timeline/ECL tables are content-addressed.
+Transitions retain raw outcome and latency terms instead of only a reward, so
+later GPU training can rebuild features, temporal windows and reward functions
+without teaching the policy to imitate missed control frames. A transition
+with a capture gap or over-budget root remains evidence but is excluded from
+the default online learner stratum.
 
 Non-boss play is partitioned by the next authoritative timeline event. Boss
 and midboss play is partitioned by boss ID, ECL subroutine, life/timer
@@ -49,3 +58,18 @@ includes per-source-phase HIT/dead-end/action coverage, policy support and
 observed outcomes, capture/solve latency, stale retries, and compressed corpus
 density. These are descriptive physical metrics; they are not presented as
 counterfactual or causal off-policy proof.
+
+Every batch invokes the post-Stage infra audit before starting the next game.
+It writes `infra-audit.json` inside the ignored run directory and classifies
+HITs as latency gaps, empty Hard sets, newly born hazards, possible geometry /
+Hard-certificate counterexamples, missing publication, or unresolved local
+traces. It never edits policy parameters or route behavior.
+
+After a complete Lunatic Stage, verify the dense-frame control budget with:
+
+```bash
+python scripts/evaluate_latency.py artifacts/live/lunatic_reimu_a_stage4.jsonl
+```
+
+The initial qualification requires the 500+ live-bullet bin to keep control
+P95 within one 60 Hz frame (`16.67 ms`) and stale retries at or below 2%.

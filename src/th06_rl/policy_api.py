@@ -51,3 +51,4 @@ class PolicyOutcome:
     next_hard_action_count: int
     next_player_x: float
     next_player_y: float
+    learning_eligible: bool = True
