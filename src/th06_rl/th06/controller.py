@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import time
 
-from ..corpus import CorpusRecorder, FrameEvidence, RunMetadata
+from ..corpus import CorpusError, CorpusRecorder, FrameEvidence, RunMetadata
 from ..native import NativeKernel, PackedHazards
 from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
@@ -176,6 +176,11 @@ def run(args: argparse.Namespace) -> int:
     hit_count = 0
     control_dead_end_count = 0
     capture_failure_count = 0
+    infrastructure_failure_count = 0
+    infrastructure_failures: dict[str, int] = {}
+    trace_failure_count = 0
+    corpus_failure_count = 0
+    corpus_failure: str | None = None
     termination_reason = "controller-interrupted"
     started = time.monotonic()
     try:
@@ -242,6 +247,59 @@ def run(args: argparse.Namespace) -> int:
         last_frame = None
         last_reported_reason = None
         next_checkpoint = started + CHECKPOINT_SECONDS
+
+        def emit_trace(record: dict[str, object]) -> None:
+            """Telemetry failure must never take physical input authority."""
+            nonlocal trace, trace_failure_count
+            if trace is None:
+                return
+            try:
+                trace.write(json.dumps(record, separators=(",", ":")) + "\n")
+            except OSError as error:
+                trace_failure_count += 1
+                print(f"live trace disabled after write failure: {error}", flush=True)
+                try:
+                    trace.close()
+                finally:
+                    trace = None
+
+        def retain_continuous_stage(kind: str, error: BaseException) -> bool:
+            """Fail closed on transient infra faults without ending the episode."""
+            nonlocal infrastructure_failure_count
+            if not args.continuous_stage:
+                return False
+            # WAIT_TIMEOUT (258) proves the exact process handle is still live.
+            if (
+                not process.handle
+                or process.kernel32.WaitForSingleObject(process.handle, 0) != 258
+            ):
+                return False
+            if keyboard is not None:
+                # Failure to publish this release is intentionally not caught:
+                # an input backend that cannot fail-close is a real authority
+                # loss and must reach exact-process cleanup.
+                keyboard.release_all()
+            lease.cleared()
+            infrastructure_failure_count += 1
+            count = infrastructure_failures.get(kind, 0) + 1
+            infrastructure_failures[kind] = count
+            emit_trace({
+                "time": time.time(),
+                "event": "continuous-fail-close",
+                "kind": kind,
+                "count": count,
+                "error_type": type(error).__name__,
+                "error": str(error),
+            })
+            if count == 1 or count % 60 == 0:
+                print(
+                    f"{kind} unavailable; input released and continuous Stage "
+                    f"retained (count={count}): {type(error).__name__}: {error}",
+                    flush=True,
+                )
+            time.sleep(0.001)
+            return True
+
         print(
             f"attached pid={process.pid} sha256={TARGET_SHA256}; "
             f"native={kernel.path}; policy={plugin.status()}; "
@@ -250,7 +308,12 @@ def run(args: argparse.Namespace) -> int:
         )
         while not args.seconds or time.monotonic() - started < args.seconds:
             if trial is not None:
-                _wanted, current_supervisor = read_supervisor_state(process)
+                try:
+                    _wanted, current_supervisor = read_supervisor_state(process)
+                except (OSError, RuntimeError) as error:
+                    if retain_continuous_stage("supervisor-capture", error):
+                        continue
+                    raise
                 if trial.observe_supervisor(current_supervisor):
                     stage_completed = True
                     termination_reason = "practice-stage-complete"
@@ -260,13 +323,19 @@ def run(args: argparse.Namespace) -> int:
                         flush=True,
                     )
                     break
-            if last_frame is not None and read_game_frame(process) == last_frame:
-                time.sleep(0.001)
-                continue
+            if last_frame is not None:
+                try:
+                    if read_game_frame(process) == last_frame:
+                        time.sleep(0.001)
+                        continue
+                except (OSError, RuntimeError) as error:
+                    if retain_continuous_stage("frame-capture", error):
+                        continue
+                    raise
             capture_started = time.perf_counter()
             try:
                 snapshot = read_snapshot(process)
-            except NativeDecodeError as error:
+            except (NativeDecodeError, OSError, RuntimeError) as error:
                 # A full source/corpus snapshot is intentionally strict and
                 # may lose its epoch while TH06 advances.  In continuous
                 # collection this is a missing observation, not a reason to
@@ -274,42 +343,38 @@ def run(args: argparse.Namespace) -> int:
                 # next coherent snapshot; HIT remains observable after input
                 # is released because the verified life patch changes only
                 # the life decrement.
-                if not args.continuous_stage:
+                if not retain_continuous_stage("coherent-snapshot", error):
                     raise
                 capture_failure_count += 1
-                if keyboard is not None:
-                    keyboard.release_all()
-                    lease.cleared()
-                trace.write(json.dumps({
+                emit_trace({
                     "time": time.time(),
                     "event": "capture-incoherent",
                     "count": capture_failure_count,
                     "error": str(error),
-                }, separators=(",", ":")) + "\n")
-                if capture_failure_count == 1 or capture_failure_count % 60 == 0:
-                    print(
-                        "coherent snapshot unavailable; input released and "
-                        f"continuous Stage retained (count={capture_failure_count})",
-                        flush=True,
-                    )
-                time.sleep(0.001)
+                })
                 continue
             capture_ms = (time.perf_counter() - capture_started) * 1000.0
             if snapshot.frame == last_frame:
                 time.sleep(0.001)
                 continue
-            if (
-                previous_snapshot is not None
-                and snapshot.stage == previous_snapshot.stage
-            ):
-                snapshot = replace(
-                    snapshot,
-                    lasers=track_motion(
-                        previous_snapshot.lasers,
-                        snapshot.lasers,
-                        snapshot.frame - previous_snapshot.frame,
-                    ),
-                )
+            try:
+                if (
+                    previous_snapshot is not None
+                    and snapshot.stage == previous_snapshot.stage
+                ):
+                    snapshot = replace(
+                        snapshot,
+                        lasers=track_motion(
+                            previous_snapshot.lasers,
+                            snapshot.lasers,
+                            snapshot.frame - previous_snapshot.frame,
+                        ),
+                    )
+                source_context = automatic_source_context(snapshot)
+            except (OSError, RuntimeError, ValueError) as error:
+                if retain_continuous_stage("source-context", error):
+                    continue
+                raise
             last_frame = snapshot.frame
             hit = physical_hit(previous_player_state, snapshot.player_state)
             previous_player_state = snapshot.player_state
@@ -327,7 +392,6 @@ def run(args: argparse.Namespace) -> int:
             selected_evaluation = None
             hard_count = 0
             effort_horizon = 0
-            source_context = automatic_source_context(snapshot)
             solve_started = time.perf_counter()
             try:
                 if hit:
@@ -505,16 +569,23 @@ def run(args: argparse.Namespace) -> int:
                                 )
             except AuthorityUnavailable as error:
                 error_text = str(error)
-                recoverable_dead_end = (
-                    args.continuous_stage
-                    and error_text in (
+                dead_end = error_text in (
                         "Hard safe set empty",
                         "local forecast has no safe continuation",
-                    )
                 )
-                if recoverable_dead_end:
+                recoverable = (
+                    args.continuous_stage
+                    and error_text != "physical Bomb state/input"
+                )
+                if recoverable and dead_end:
                     reason = f"control-dead-end:{error_text}"
                     control_dead_end_count += 1
+                elif recoverable:
+                    reason = f"authority-retry:{error_text}"
+                    infrastructure_failure_count += 1
+                    infrastructure_failures["authority"] = (
+                        infrastructure_failures.get("authority", 0) + 1
+                    )
                 else:
                     reason = f"authority-stop:{error_text}"
                     termination_reason = reason
@@ -533,6 +604,13 @@ def run(args: argparse.Namespace) -> int:
                 if keyboard is not None:
                     keyboard.release_all()
                     lease.cleared()
+            except (OSError, RuntimeError, ValueError) as error:
+                if not retain_continuous_stage("control-infrastructure", error):
+                    raise
+                reason = (
+                    "infrastructure-retry:"
+                    f"{type(error).__name__}:{str(error)[:160]}"
+                )
 
             solve_ms = (time.perf_counter() - solve_started) * 1000.0
             if pending_learning is not None:
@@ -586,7 +664,7 @@ def run(args: argparse.Namespace) -> int:
                 }
             policy_status = plugin.status()
             if recorder is not None:
-                recorder.record(snapshot, FrameEvidence(
+                evidence = FrameEvidence(
                     phase_id=source_context,
                     current_action=current_action_name,
                     hard_actions=tuple(
@@ -631,7 +709,48 @@ def run(args: argparse.Namespace) -> int:
                     capture_ms=capture_ms,
                     solve_ms=solve_ms,
                     reason=reason,
-                ))
+                )
+                try:
+                    recorder.record(snapshot, evidence)
+                except CorpusError as error:
+                    # Durable evidence failure is not input authority. Preserve
+                    # the same physical Stage, stop claiming this corpus is a
+                    # complete trajectory, and let the next full Stage start a
+                    # fresh recorder instead of killing the game here.
+                    corpus_failure_count += 1
+                    corpus_failure = f"{type(error).__name__}: {error}"
+                    failed_recorder = recorder
+                    recorder = None
+                    if keyboard is not None:
+                        keyboard.release_all()
+                        lease.cleared()
+                    emit_trace({
+                        "time": time.time(),
+                        "event": "corpus-disabled",
+                        "error": corpus_failure,
+                        "run_dir": str(failed_recorder.run_dir),
+                    })
+                    print(
+                        "corpus writer disabled for this Stage; physical loop "
+                        f"retained: {corpus_failure}",
+                        flush=True,
+                    )
+                    corpus_path = failed_recorder.run_dir
+                    try:
+                        failed_recorder.close({
+                            "termination_reason": "corpus-failure",
+                            "stage_completed": False,
+                            "controller_exit_code": 0,
+                            "physical_hits": hit_count,
+                            "control_dead_ends": control_dead_end_count,
+                            "capture_failures": capture_failure_count,
+                            "corpus_failure": corpus_failure,
+                            "elapsed_wall_seconds": time.monotonic() - started,
+                        })
+                    except CorpusError:
+                        # The run directory and its last atomic manifest remain
+                        # as explicit partial evidence. Cleanup must continue.
+                        pass
             record = {
                 "time": time.time(),
                 "frame": snapshot.frame,
@@ -649,8 +768,18 @@ def run(args: argparse.Namespace) -> int:
                 "solve_ms": solve_ms,
                 "policy": policy_status,
             }
-            trace.write(json.dumps(record, separators=(",", ":")) + "\n")
-            if snapshot.frame % 60 == 0 or reason != last_reported_reason:
+            emit_trace(record)
+            exceptional_change = (
+                reason not in (
+                    "ok",
+                    "stale-retry",
+                    "input-lease",
+                    "passive",
+                    "player-not-active",
+                )
+                and reason != last_reported_reason
+            )
+            if snapshot.frame % 60 == 0 or exceptional_change:
                 print(
                     f"f={snapshot.frame} bullets={len(snapshot.bullets)} "
                     f"hard={hard_count} h={effort_horizon} "
@@ -659,15 +788,26 @@ def run(args: argparse.Namespace) -> int:
                     f"reason={reason}",
                     flush=True,
                 )
-                last_reported_reason = reason
+            last_reported_reason = reason
             if reason.startswith("authority-stop:"):
                 break
             if time.monotonic() >= next_checkpoint:
-                plugin.checkpoint()
+                try:
+                    plugin.checkpoint()
+                except (OSError, RuntimeError, TypeError, ValueError) as error:
+                    if not retain_continuous_stage("policy-checkpoint", error):
+                        raise
                 next_checkpoint = time.monotonic() + CHECKPOINT_SECONDS
         else:
             termination_reason = "time-limit"
-        plugin.checkpoint()
+        try:
+            plugin.checkpoint()
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            if not args.continuous_stage:
+                raise
+            infrastructure_failure_count += 1
+            infrastructure_failures["final-policy-checkpoint"] = 1
+            print(f"final policy checkpoint failed: {error}", flush=True)
     finally:
         if trace is not None:
             trace.close()
@@ -679,15 +819,29 @@ def run(args: argparse.Namespace) -> int:
         finally:
             try:
                 if recorder is not None:
-                    corpus_path = recorder.close({
-                        "termination_reason": termination_reason,
-                        "stage_completed": stage_completed,
-                        "controller_exit_code": exit_code,
-                        "physical_hits": hit_count,
-                        "control_dead_ends": control_dead_end_count,
-                        "capture_failures": capture_failure_count,
-                        "elapsed_wall_seconds": time.monotonic() - started,
-                    })
+                    try:
+                        corpus_path = recorder.close({
+                            "termination_reason": termination_reason,
+                            "stage_completed": stage_completed,
+                            "controller_exit_code": exit_code,
+                            "physical_hits": hit_count,
+                            "control_dead_ends": control_dead_end_count,
+                            "capture_failures": capture_failure_count,
+                            "infrastructure_failures": infrastructure_failure_count,
+                            "infrastructure_failures_by_kind": infrastructure_failures,
+                            "trace_failures": trace_failure_count,
+                            "corpus_failures": corpus_failure_count,
+                            "corpus_failure": corpus_failure,
+                            "elapsed_wall_seconds": time.monotonic() - started,
+                        })
+                    except CorpusError as error:
+                        corpus_failure_count += 1
+                        corpus_failure = f"{type(error).__name__}: {error}"
+                        corpus_path = recorder.run_dir
+                        print(
+                            f"corpus finalization failed; cleanup retained: {corpus_failure}",
+                            flush=True,
+                        )
             finally:
                 try:
                     if bridge is not None:
