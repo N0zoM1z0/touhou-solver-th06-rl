@@ -110,3 +110,26 @@ def test_latency_contaminated_outcome_is_retained_but_not_trained_online() -> No
 
     assert not policy.trials
     assert not policy.pending_keys
+
+
+def test_hot_reload_accepts_pre_filter_outcome_shape() -> None:
+    policy = AdaptivePolicy()
+    decision = policy.decide(context())
+
+    class LegacyOutcome:
+        frame = 100
+        action = decision.action
+        published = True
+        life_lost = False
+        bomb_used = False
+        control_dead_end = False
+        authority_lost = False
+        next_hard_action_count = 12
+        next_player_x = 192.0
+        next_player_y = 384.0
+        phase_changed = False
+
+    policy.observe(LegacyOutcome())
+
+    assert sum(policy.trials.values()) == 1
+    assert not policy.pending_keys

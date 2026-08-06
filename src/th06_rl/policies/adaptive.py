@@ -118,7 +118,14 @@ class AdaptivePolicy:
 
     def observe(self, outcome) -> None:
         key = self.pending_keys.pop((outcome.frame, outcome.action), None)
-        if key is None or not outcome.published or not outcome.learning_eligible:
+        # A resident controller may span a policy hot reload.  Outcomes made
+        # by the pre-latency-filter API have no field yet and retain legacy
+        # eligibility; newly constructed outcomes carry the explicit bit.
+        if (
+            key is None
+            or not outcome.published
+            or not getattr(outcome, "learning_eligible", True)
+        ):
             return
         reward = 1.0
         if outcome.life_lost:
