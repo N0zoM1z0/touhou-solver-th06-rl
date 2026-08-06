@@ -11,22 +11,25 @@ tradeoffs but cannot enlarge the native safe set, change collision physics,
 lower margins, request Bomb, or bypass fail-close behavior. Cold start uses
 only a generic clearance/boundary-reserve fallback, never phase rules.
 
-The active learning target is Lunatic / Reimu-A / Stage 4. Hard / Reimu-A /
-Stage 4 is retained only as prior baseline evidence. Difficulty, character,
-shot type, stage, and automatically derived source context remain separate
-corpus/model scopes.
+The active learning target is Lunatic / Reimu-A / Stages 4, 5, and 6. Hard /
+Reimu-A / Stage 4 is retained only as prior baseline evidence. Difficulty,
+character, shot type, stage, and automatically derived source context remain
+separate corpus/model scopes.
 
-`run_lunatic_stage4_learning.bat` repeatedly starts an exact Practice Stage 4
-trial, records one complete gzip-sharded stage trajectory, checkpoints the
-bounded online model, cleans up the exact game PID, and starts the next full
-stage. The verified life patch prevents Game Over without hiding physical HIT:
+`run_lunatic_stage456_learning.bat` rotates exact Practice Stages 4, 5, and 6,
+records one complete gzip-sharded stage trajectory at a time, checkpoints each
+stage's independent bounded online model, cleans up the exact game PID, and
+starts the next full stage. The verified life patch prevents Game Over without
+hiding physical HIT:
 each HIT is recorded as negative feedback, input is released through death and
 spawn, and play resumes in the same stage. A certified local control dead-end
 also becomes feedback rather than an external restart. Bomb or an
 input-backend failure still stops the loop. Transient capture, source-context,
 policy-checkpoint, trace, and corpus failures fail closed without destroying
 the physical Stage episode. Create
-`artifacts\pause-lunatic-stage4` to pause between complete stages. The
+`artifacts\pause-lunatic-stage456` to pause between complete stages. The
+single-stage `run_lunatic_stage4_learning.bat` remains useful for focused
+experiments. The
 `run_hard_stage4_learning.bat` entry point and its independent policy state are
 retained for baseline reproduction, not for the active data flywheel.
 
@@ -63,10 +66,11 @@ they never select a handwritten movement route.
 Inspect physical learning progress without touching the game process:
 
 ```bash
-python scripts/evaluate_learning.py --recent 20
+python scripts/evaluate_learning.py --difficulty lunatic --stage 4 --recent 20
 ```
 
-The report separates complete-stage trends from interrupted diagnostics and
+Run the same command separately for stages 5 and 6; the evaluator refuses to
+mix their trends. The report separates complete-stage trends from interrupted diagnostics and
 includes per-source-phase HIT/dead-end/action coverage, policy support and
 observed outcomes, capture/solve latency, stale retries, and compressed corpus
 density. These are descriptive physical metrics; they are not presented as

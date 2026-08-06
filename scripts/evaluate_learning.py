@@ -12,6 +12,9 @@ from pathlib import Path
 from statistics import median
 
 
+DIFFICULTIES = {"normal": 1, "hard": 2, "lunatic": 3}
+
+
 def _rows(paths):
     for path in paths:
         with gzip.open(path, "rt", encoding="utf-8") as source:
@@ -262,11 +265,9 @@ def _trend(complete_runs: list[dict[str, object]]) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus-root", type=Path, default=Path("artifacts/corpus"))
-    parser.add_argument(
-        "--policy-state",
-        type=Path,
-        default=Path("artifacts/policy/hard_reimu_a_stage4.json"),
-    )
+    parser.add_argument("--difficulty", choices=tuple(DIFFICULTIES), default="lunatic")
+    parser.add_argument("--stage", type=int, choices=range(1, 7), default=4)
+    parser.add_argument("--policy-state", type=Path, default=None)
     parser.add_argument("--recent", type=int, default=20)
     parser.add_argument(
         "--include-active",
@@ -276,8 +277,25 @@ def main() -> int:
     args = parser.parse_args()
     if args.recent <= 0:
         parser.error("--recent must be positive")
+    if args.policy_state is None:
+        args.policy_state = Path(
+            f"artifacts/policy/{args.difficulty}_reimu_a_stage{args.stage}.json"
+        )
     run_dirs = []
     for path in sorted(args.corpus_root.glob("*/manifest.json")):
+        run_path = path.parent / "run.json"
+        if not run_path.is_file():
+            continue
+        metadata = json.loads(run_path.read_text(encoding="utf-8")).get(
+            "metadata", {}
+        )
+        if (
+            metadata.get("difficulty") != DIFFICULTIES[args.difficulty]
+            or metadata.get("character") != 0
+            or metadata.get("shot_type") != 0
+            or metadata.get("stage") != args.stage
+        ):
+            continue
         if not args.include_active:
             manifest = json.loads(path.read_text(encoding="utf-8"))
             if "closed_unix_ns" not in manifest:
@@ -288,6 +306,11 @@ def main() -> int:
     complete = [run for run in runs if run["stage_trajectory_complete"]]
     print(json.dumps({
         "corpus_root": str(args.corpus_root.resolve()),
+        "scope": {
+            "difficulty": args.difficulty,
+            "character_shot": "Reimu-A",
+            "stage": args.stage,
+        },
         "runs": runs,
         "complete_stage_trend": _trend(complete),
         "policy": summarize_policy(args.policy_state),
