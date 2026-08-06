@@ -52,3 +52,9 @@ new failure evidence improves play.
   was 1.36 ms, and dense native replay checked 62 samples with no divergence.
   This is a trustworthy earlier Stage 6 baseline, although it predates Stage
   policy transactions and background-activity instrumentation.
+- `20260806T135930Z-958959700` at `58b27b2`: complete Stage 6 with 15 HIT,
+  zero capture and infrastructure failures, and a committed policy update.
+  Capture p95 was 6.97 ms, solve p95 was 1.22 ms, stale retry rate was 0.417%,
+  and peak controller private memory was 80.8 MiB. Dense native replay checked
+  57 samples with no divergence. Six focus-loss events were repaired and the
+  Stage still completed. The compressed run was 280.4 MiB.
