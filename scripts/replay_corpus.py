@@ -51,6 +51,13 @@ def _encoded_row_count(value: object) -> int:
     return 0
 
 
+def _encoded_bullet_count(row: dict) -> int:
+    direct = row["snapshot"].get("live_bullet_count")
+    return int(direct) if direct is not None else _encoded_row_count(
+        row["snapshot"]["bullets"]
+    )
+
+
 def _sample_indices(rows: list[dict], evenly: int, dense: int) -> tuple[int, ...]:
     if not rows:
         return ()
@@ -63,7 +70,7 @@ def _sample_indices(rows: list[dict], evenly: int, dense: int) -> tuple[int, ...
         index
         for index, _row in sorted(
             enumerate(rows),
-            key=lambda pair: _encoded_row_count(pair[1]["snapshot"]["bullets"]),
+            key=lambda pair: _encoded_bullet_count(pair[1]),
             reverse=True,
         )[:dense]
     }

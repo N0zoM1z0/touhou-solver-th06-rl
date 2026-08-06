@@ -23,6 +23,7 @@ from .donor import enable_donor_imports
 
 CONTROL_CAPTURE_TIER = "control-v1"
 MAX_CAPTURE_ATTEMPTS = 8
+DYNAMIC_BULLET_FLAGS = 0xDF1
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,13 @@ class ControlSnapshot:
     focus_diagonal_speed: float
     frame_multiplier: float
     input_mask: int
+    # Resident roots retain only the conservative reachable subset as Python
+    # objects. ``raw_bullet_tails`` losslessly retains every occupied source
+    # slot for the asynchronous corpus worker/offline decoder.
     bullets: tuple[object, ...]
+    live_bullet_count: int
+    raw_bullet_tails: bytes
+    bullets_are_reachable_subset: bool
     laser_count: int
     in_menu: bool
     time_stopped: bool
@@ -71,6 +78,85 @@ class ControlSnapshot:
 
 def _finite(*values: float) -> bool:
     return all(math.isfinite(value) for value in values)
+
+
+def _tail_may_reach_player(
+    tail: bytes,
+    native,
+    *,
+    player_x: float,
+    player_y: float,
+    player_half_width: float,
+    player_half_height: float,
+    player_speed: float,
+    horizon: int,
+    collision_margin: float,
+) -> bool:
+    """Cheap scalar equivalent of the donor's conservative sweep reject."""
+    relative = lambda absolute: absolute - native.BULLET_SIZE_OFFSET
+    size_x, size_y = struct.unpack_from("<ff", tail, 0)
+    x, y = struct.unpack_from(
+        "<ff", tail, relative(native.BULLET_POSITION_OFFSET)
+    )
+    vx, vy = struct.unpack_from(
+        "<ff", tail, relative(native.BULLET_VELOCITY_OFFSET)
+    )
+    if (
+        not _finite(size_x, size_y, x, y, vx, vy)
+        or not 0.0 < size_x <= 256.0
+        or not 0.0 < size_y <= 256.0
+    ):
+        # Force the exact decoder to reject incoherent state rather than
+        # allowing NaN comparison semantics to turn it into a far-away skip.
+        return True
+    flags = struct.unpack_from(
+        "<H", tail, relative(native.BULLET_EX_FLAGS_OFFSET)
+    )[0]
+    if flags & DYNAMIC_BULLET_FLAGS:
+        ax, ay = struct.unpack_from(
+            "<ff", tail, relative(native.BULLET_ACCELERATION_OFFSET)
+        )
+        speed, curve_accel, turn_speed = struct.unpack_from(
+            "<fff", tail, relative(native.BULLET_SPEED_OFFSET)
+        )
+        base_speed = max(math.hypot(vx, vy), abs(speed), abs(turn_speed))
+        acceleration = math.hypot(ax, ay) + abs(curve_accel)
+        if not _finite(ax, ay, speed, curve_accel, turn_speed, acceleration):
+            return True
+        reach_x = reach_y = (
+            (base_speed + 5.0) * horizon
+            + acceleration * horizon * (horizon + 1) / 2.0
+        )
+    else:
+        reach_x = abs(vx) * horizon
+        reach_y = abs(vy) * horizon
+    margin = max(0.0, collision_margin)
+    player_left = (
+        max(8.0, player_x - player_speed * horizon)
+        - player_half_width
+        - margin
+    )
+    player_right = (
+        min(376.0, player_x + player_speed * horizon)
+        + player_half_width
+        + margin
+    )
+    player_top = (
+        max(16.0, player_y - player_speed * horizon)
+        - player_half_height
+        - margin
+    )
+    player_bottom = (
+        min(432.0, player_y + player_speed * horizon)
+        + player_half_height
+        + margin
+    )
+    return not (
+        x + size_x / 2.0 + reach_x < player_left
+        or x - size_x / 2.0 - reach_x > player_right
+        or y + size_y / 2.0 + reach_y < player_top
+        or y - size_y / 2.0 - reach_y > player_bottom
+    )
 
 
 def _ensure_subroutines(process, stage: int, native) -> tuple[int, ...]:
@@ -175,7 +261,13 @@ def _source_context(
     ), None
 
 
-def _decode_control_once(process, native, attempt: int) -> ControlSnapshot:
+def _decode_control_once(
+    process,
+    native,
+    attempt: int,
+    horizon: int,
+    collision_margin: float,
+) -> ControlSnapshot:
     # EnemyManager, BulletManager, the 640 bullet slots, and 64 laser slots
     # occupy one mapped interval in TH06 1.02h.  One bulk copy plus the source
     # timer witness is both faster and more coherent than hundreds of RPMs.
@@ -308,6 +400,14 @@ def _decode_control_once(process, native, attempt: int) -> ControlSnapshot:
         raise RuntimeError("invalid compact timeline timer")
 
     bullets = []
+    live_bullet_count = 0
+    raw_bullet_tails = bytearray()
+    player_speed = max(
+        abs(normal_speed),
+        abs(focus_speed),
+        abs(normal_diagonal),
+        abs(focus_diagonal),
+    )
     for slot in range(native.BULLET_COUNT):
         base = slot * native.BULLET_STRIDE
         tail = bytes(
@@ -315,8 +415,33 @@ def _decode_control_once(process, native, attempt: int) -> ControlSnapshot:
                 base + native.BULLET_SIZE_OFFSET : base + native.BULLET_STRIDE
             ]
         )
+        state = struct.unpack_from(
+            "<H",
+            tail,
+            native.BULLET_STATE_OFFSET - native.BULLET_SIZE_OFFSET,
+        )[0]
+        if state == 0:
+            continue
+        live_bullet_count += state != 5
+        sprite_pointer = struct.unpack_from(
+            "<I", bullet_pool, base + native.ANM_VM_SPRITE_OFFSET
+        )[0]
+        raw_bullet_tails.extend(struct.pack("<HI", slot, sprite_pointer))
+        raw_bullet_tails.extend(tail)
+        if state == 5 or not _tail_may_reach_player(
+            tail,
+            native,
+            player_x=x,
+            player_y=y,
+            player_half_width=half_width,
+            player_half_height=half_height,
+            player_speed=player_speed,
+            horizon=horizon,
+            collision_margin=collision_margin,
+        ):
+            continue
         bullet = native._decode_bullet_tail(tail, slot)
-        if bullet is not None and bullet.state != 5:
+        if bullet is not None:
             bullets.append(bullet)
 
     from th06.model import EnemyBody, Laser
@@ -451,7 +576,8 @@ def _decode_control_once(process, native, attempt: int) -> ControlSnapshot:
         CONTROL_CAPTURE_TIER,
         frame, stage, player_state, x, y, half_width, half_height,
         normal_speed, focus_speed, normal_diagonal, focus_diagonal,
-        frame_multiplier, input_mask, tuple(bullets), len(lasers), in_menu,
+        frame_multiplier, input_mask, tuple(bullets), live_bullet_count,
+        bytes(raw_bullet_tails), True, len(lasers), in_menu,
         time_stopped, bool(replay or demo_mode), tuple(lasers), tuple(enemies),
         difficulty, character, shot_type, bomb_active, spell_active,
         rank, subrank, max_rank, min_rank, rng_seed, rng_generation,
@@ -461,7 +587,12 @@ def _decode_control_once(process, native, attempt: int) -> ControlSnapshot:
     )
 
 
-def read_control_snapshot(process) -> ControlSnapshot:
+def read_control_snapshot(
+    process,
+    *,
+    horizon: int = 12,
+    collision_margin: float = 0.35,
+) -> ControlSnapshot:
     """Return one coherent observed-hazard root or fail closed."""
     enable_donor_imports()
     import th06.native as native
@@ -470,7 +601,13 @@ def read_control_snapshot(process) -> ControlSnapshot:
     last_error: BaseException | None = None
     for attempt in range(1, MAX_CAPTURE_ATTEMPTS + 1):
         try:
-            return _decode_control_once(process, native, attempt)
+            return _decode_control_once(
+                process,
+                native,
+                attempt,
+                horizon,
+                collision_margin,
+            )
         except (
             native._SnapshotEpochChanged,
             native._SnapshotPhaseIncomplete,
@@ -495,7 +632,28 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
     from th06.model import Bullet, EnemyBody, Laser
 
     values = dict(raw)
-    values["bullets"] = tuple(Bullet(**item) for item in values["bullets"])
+    values.setdefault("live_bullet_count", len(values.get("bullets", ())))
+    values.setdefault("raw_bullet_tails", b"")
+    values.setdefault("bullets_are_reachable_subset", False)
+    raw_tails = values.get("raw_bullet_tails", b"")
+    if raw_tails:
+        import th06.native as native
+
+        tail_size = native.BULLET_STRIDE - native.BULLET_SIZE_OFFSET
+        record_size = 6 + tail_size
+        if len(raw_tails) % record_size:
+            raise ValueError("invalid packed control bullet tails")
+        bullets = []
+        for offset in range(0, len(raw_tails), record_size):
+            slot, _sprite_pointer = struct.unpack_from("<HI", raw_tails, offset)
+            tail = raw_tails[offset + 6 : offset + record_size]
+            bullet = native._decode_bullet_tail(tail, slot)
+            if bullet is not None and bullet.state != 5:
+                bullets.append(bullet)
+        values["bullets"] = tuple(bullets)
+        values["bullets_are_reachable_subset"] = False
+    else:
+        values["bullets"] = tuple(Bullet(**item) for item in values["bullets"])
     values["lasers"] = tuple(Laser(**item) for item in values["lasers"])
     values["enemies"] = tuple(EnemyBody(**item) for item in values["enemies"])
     return ControlSnapshot(**values)

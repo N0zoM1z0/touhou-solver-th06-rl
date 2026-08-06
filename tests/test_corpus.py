@@ -141,6 +141,9 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         frame_multiplier=1.0,
         input_mask=1,
         bullets=(),
+        live_bullet_count=0,
+        raw_bullet_tails=b"\x00\x01\x02",
+        bullets_are_reachable_subset=True,
         laser_count=0,
         in_menu=False,
         time_stopped=False,
@@ -228,6 +231,17 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     assert manifest["records"]["anchors"] == 1
     assert manifest["summary"]["observation_gap_rate"] == 0.5
     assert automatic_source_context(control) == control.source_context
+    frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
+    with gzip.open(frame_path, "rt", encoding="utf-8") as source:
+        frame = json.loads(next(source))
+    objects = {}
+    for path in run_dir.glob("objects-*.jsonl.gz"):
+        with gzip.open(path, "rt", encoding="utf-8") as source:
+            for line in source:
+                row = json.loads(line)
+                objects[row["object_id"]] = row["payload"]
+    hydrated = expand_compact(frame["snapshot"], objects)
+    assert hydrated["raw_bullet_tails"] == b"\x00\x01\x02"
     transition_path = next(run_dir.glob("transitions-*.jsonl.gz"))
     with gzip.open(transition_path, "rt", encoding="utf-8") as source:
         transition = json.loads(next(source))

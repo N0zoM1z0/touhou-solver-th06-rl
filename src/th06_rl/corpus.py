@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import base64
 import hashlib
 import json
 import math
@@ -45,6 +46,7 @@ SOURCE_OBJECT_FIELDS = (
 SPAWNER_SOURCE_OBJECT_FIELDS = ("ecl_program", "ecl_subroutines")
 DATACLASS_ROWS_CODEC = "dataclass-rows-v1"
 DATACLASS_RECORD_CODEC = "dataclass-record-v1"
+BYTES_CODEC = "bytes-base64-v1"
 _LAYOUTS: dict[type, tuple[str, ...]] = {}
 
 
@@ -303,6 +305,11 @@ def _encode_dataclass(
 
 
 def _encode_value(value: object, objects: _ObjectStore, kind: str) -> object:
+    if isinstance(value, bytes):
+        return {
+            "codec": BYTES_CODEC,
+            "data": base64.b64encode(value).decode("ascii"),
+        }
     if is_dataclass(value):
         return _encode_dataclass(value, objects, kind)
     if isinstance(value, (tuple, list)):
@@ -343,6 +350,14 @@ def expand_compact(value: object, objects: dict[str, object]) -> object:
         if set(value) == {"kind", "object_ref"}:
             return expand_compact(objects[str(value["object_ref"])], objects)
         codec = value.get("codec")
+        if codec == BYTES_CODEC:
+            data = value.get("data")
+            if not isinstance(data, str):
+                raise CorpusError("invalid compact bytes payload")
+            try:
+                return base64.b64decode(data, validate=True)
+            except ValueError as error:
+                raise CorpusError("invalid compact bytes encoding") from error
         if codec in (DATACLASS_RECORD_CODEC, DATACLASS_ROWS_CODEC):
             layout = expand_compact(value["layout"], objects)
             if not isinstance(layout, list) or not all(

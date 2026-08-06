@@ -356,7 +356,10 @@ def run(args: argparse.Namespace) -> int:
                     raise
             capture_started = time.perf_counter()
             try:
-                snapshot = read_control_snapshot(process)
+                snapshot = read_control_snapshot(
+                    process,
+                    horizon=args.horizon,
+                )
             except (NativeDecodeError, OSError, RuntimeError) as error:
                 # A compact control root is still epoch/manager-phase strict.
                 # A torn observation can never reach the Hard gate.
@@ -547,7 +550,7 @@ def run(args: argparse.Namespace) -> int:
                             player_x=snapshot.x,
                             player_y=snapshot.y,
                             power=snapshot.current_power,
-                            bullet_count=len(snapshot.bullets),
+                            bullet_count=snapshot.live_bullet_count,
                             laser_count=snapshot.laser_count,
                             hard_action_count=len(hard),
                             exploration_rate=args.exploration_rate,
@@ -764,7 +767,7 @@ def run(args: argparse.Namespace) -> int:
                         or snapshot.time_stopped
                         or snapshot.player_state not in ACTIVE_PLAYER_STATES
                         or (
-                            len(snapshot.bullets) <= 8
+                            snapshot.live_bullet_count <= 8
                             and snapshot.laser_count == 0
                         )
                     )
@@ -857,7 +860,7 @@ def run(args: argparse.Namespace) -> int:
                 "source_context": source_context,
                 "x": snapshot.x,
                 "y": snapshot.y,
-                "bullets": len(snapshot.bullets),
+                "bullets": snapshot.live_bullet_count,
                 "lasers": snapshot.laser_count,
                 "hard_count": hard_count,
                 "effort_horizon": effort_horizon,
@@ -882,7 +885,7 @@ def run(args: argparse.Namespace) -> int:
             )
             if snapshot.frame % 60 == 0 or exceptional_change:
                 print(
-                    f"f={snapshot.frame} bullets={len(snapshot.bullets)} "
+                    f"f={snapshot.frame} bullets={snapshot.live_bullet_count} "
                     f"hard={hard_count} h={effort_horizon} "
                     f"action={record['action']} capture={capture_ms:.2f}ms "
                     f"solve={solve_ms:.2f}ms "
