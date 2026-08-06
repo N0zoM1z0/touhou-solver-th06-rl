@@ -24,6 +24,7 @@ from ..native import NativeKernel, PackedHazards
 from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from ..policy_transaction import StagePolicyTransaction
+from .background_activity import BackgroundActivityLease
 from .background_input import BackgroundInputBridge
 from .control_capture import (
     CONTROL_CAPTURE_TIER,
@@ -205,6 +206,7 @@ def run(args: argparse.Namespace) -> int:
     expected_scope = (DIFFICULTIES[args.difficulty], 0, 0, expected_stage)
     process = attach_exact(Path(args.game_dir).resolve())
     bridge = None
+    activity = None
     keyboard = None
     dialogue = None
     trace = None
@@ -235,6 +237,8 @@ def run(args: argparse.Namespace) -> int:
         if args.armed:
             bridge = BackgroundInputBridge(process)
             bridge.install()
+            activity = BackgroundActivityLease(process)
+            activity.maintain()
             keyboard = Keyboard(
                 process.pid,
                 bridge,
@@ -373,6 +377,18 @@ def run(args: argparse.Namespace) -> int:
         )
         while not args.seconds or time.monotonic() - started < args.seconds:
             now = time.monotonic()
+            if activity is not None:
+                try:
+                    if activity.maintain():
+                        emit_trace({
+                            "time": time.time(),
+                            "event": "background-reactivated",
+                            "count": activity.reactivations,
+                        })
+                except (OSError, RuntimeError) as error:
+                    if retain_continuous_stage("background-activity", error):
+                        continue
+                    raise
             if now >= next_health_sample:
                 next_health_sample = now + HEALTH_SAMPLE_SECONDS
                 try:
@@ -1160,6 +1176,11 @@ def run(args: argparse.Namespace) -> int:
                             "policy_transaction_failure": (
                                 policy_transaction_failure
                             ),
+                            "background_reactivations": (
+                                activity.reactivations
+                                if activity is not None
+                                else 0
+                            ),
                         })
                     except CorpusError as error:
                         corpus_failure_count += 1
@@ -1171,21 +1192,25 @@ def run(args: argparse.Namespace) -> int:
                         )
             finally:
                 try:
-                    if bridge is not None:
-                        bridge.close()
+                    if activity is not None:
+                        activity.release()
                 finally:
                     try:
-                        if args.stop_game:
-                            # A user/window-manager initiated exit can race the
-                            # controller cleanup. A signalled process handle means
-                            # the exact trial is already gone and needs no second
-                            # TerminateProcess call.
-                            if process.kernel32.WaitForSingleObject(
-                                process.handle, 0
-                            ) != 0:
-                                process.terminate()
+                        if bridge is not None:
+                            bridge.close()
                     finally:
-                        process.close()
+                        try:
+                            if args.stop_game:
+                                # A user/window-manager initiated exit can race the
+                                # controller cleanup. A signalled process handle means
+                                # the exact trial is already gone and needs no second
+                                # TerminateProcess call.
+                                if process.kernel32.WaitForSingleObject(
+                                    process.handle, 0
+                                ) != 0:
+                                    process.terminate()
+                        finally:
+                            process.close()
         print(
             "released input and restored bridge; "
             + (

@@ -55,6 +55,18 @@ def _longest_survival(start: int | None, end: int | None, hits: list[int]) -> in
     return max((right - left for left, right in zip(boundaries, boundaries[1:])), default=0)
 
 
+def _comparison_exclusions(run: dict[str, object]) -> list[str]:
+    """Explain why a run cannot be a full-observation learning baseline."""
+    reasons = []
+    if not run.get("stage_trajectory_complete"):
+        reasons.append("stage-incomplete")
+    if int(run.get("capture_failures", 0)):
+        reasons.append("capture-failures")
+    if int(run.get("infrastructure_failures", 0)):
+        reasons.append("infrastructure-failures")
+    return reasons
+
+
 def summarize_run(run_dir: Path) -> dict[str, object]:
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     stored_summary = manifest.get("summary")
@@ -303,7 +315,12 @@ def main() -> int:
         run_dirs.append(path.parent)
     run_dirs = run_dirs[-args.recent:]
     runs = [summarize_run(path) for path in run_dirs]
+    for run in runs:
+        exclusions = _comparison_exclusions(run)
+        run["comparison_eligible"] = not exclusions
+        run["comparison_exclusion_reasons"] = exclusions
     complete = [run for run in runs if run["stage_trajectory_complete"]]
+    comparable = [run for run in runs if run["comparison_eligible"]]
     print(json.dumps({
         "corpus_root": str(args.corpus_root.resolve()),
         "scope": {
@@ -312,11 +329,23 @@ def main() -> int:
             "stage": args.stage,
         },
         "runs": runs,
-        "complete_stage_trend": _trend(complete),
+        "complete_stage_trend": _trend(comparable),
+        "complete_but_not_comparable": [
+            {
+                "run_id": run["run_id"],
+                "physical_hits": run["physical_hits"],
+                "reasons": run["comparison_exclusion_reasons"],
+            }
+            for run in complete
+            if not run["comparison_eligible"]
+        ],
         "policy": summarize_policy(args.policy_state),
         "interpretation": (
             "Chronological physical evidence only; trend is descriptive, not "
-            "a causal off-policy estimate. Incomplete stages are excluded."
+            "a causal off-policy estimate. The trend includes only complete "
+            "Stages with zero capture and infrastructure failures; a Stage "
+            "that completed while observation was blind is retained as raw "
+            "evidence but is not a HIT baseline."
         ),
     }, indent=2, sort_keys=True))
     return 0
