@@ -18,6 +18,7 @@ from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from .background_input import BackgroundInputBridge
 from .donor import enable_donor_imports
+from .menu import start_reimu_a_practice
 from .source import (
     AuthorityUnavailable,
     automatic_source_context,
@@ -107,7 +108,6 @@ def run(args: argparse.Namespace) -> int:
         unknown_motion_may_reach_player,
     )
     from th06.input_lease import InputLease
-    from th06.menu import start_reimu_a_practice
     from th06.model import PLAYER_ALIVE, action_from_input
     from th06.native import (
         TARGET_SHA256,
