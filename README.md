@@ -22,7 +22,9 @@ stage. The verified life patch prevents Game Over without hiding physical HIT:
 each HIT is recorded as negative feedback, input is released through death and
 spawn, and play resumes in the same stage. A certified local control dead-end
 also becomes feedback rather than an external restart. Bomb or an
-infrastructure/source-authority failure still stops the loop. Create
+input-backend failure still stops the loop. Transient capture, source-context,
+policy-checkpoint, trace, and corpus failures fail closed without destroying
+the physical Stage episode. Create
 `artifacts\pause-hard-stage4` to pause between complete stages.
 
 Each corpus frame retains the complete coherent source snapshot, Hard set,
@@ -35,3 +37,15 @@ Non-boss play is partitioned by the next authoritative timeline event. Boss
 and midboss play is partitioned by boss ID, ECL subroutine, life/timer
 callbacks, and spell/nonspell state. These labels condition learning only;
 they never select a handwritten movement route.
+
+Inspect physical learning progress without touching the game process:
+
+```bash
+python scripts/evaluate_learning.py --recent 20
+```
+
+The report separates complete-stage trends from interrupted diagnostics and
+includes per-source-phase HIT/dead-end/action coverage, policy support and
+observed outcomes, capture/solve latency, stale retries, and compressed corpus
+density. These are descriptive physical metrics; they are not presented as
+counterfactual or causal off-policy proof.
