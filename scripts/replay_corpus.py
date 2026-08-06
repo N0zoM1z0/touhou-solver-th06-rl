@@ -10,6 +10,7 @@ from pathlib import Path
 from statistics import mean, median
 import time
 
+from th06_rl.corpus import expand_compact
 from th06_rl.core.planner import LocalPlannerConfig
 from th06_rl.native import NativeKernel, PackedHazards
 from th06_rl.th06.donor import enable_donor_imports
@@ -37,13 +38,16 @@ def _load_objects(run_dir: Path) -> dict[str, object]:
 
 
 def _hydrate(value: object, objects: dict[str, object]) -> object:
-    if isinstance(value, dict):
-        if set(value) == {"kind", "object_ref"}:
-            return _hydrate(objects[str(value["object_ref"])], objects)
-        return {key: _hydrate(item, objects) for key, item in value.items()}
+    return expand_compact(value, objects)
+
+
+def _encoded_row_count(value: object) -> int:
     if isinstance(value, list):
-        return [_hydrate(item, objects) for item in value]
-    return value
+        return len(value)
+    if isinstance(value, dict) and value.get("codec") == "dataclass-rows-v1":
+        rows = value.get("rows", ())
+        return len(rows) if isinstance(rows, list) else 0
+    return 0
 
 
 def _sample_indices(rows: list[dict], evenly: int, dense: int) -> tuple[int, ...]:
@@ -58,7 +62,7 @@ def _sample_indices(rows: list[dict], evenly: int, dense: int) -> tuple[int, ...
         index
         for index, _row in sorted(
             enumerate(rows),
-            key=lambda pair: len(pair[1]["snapshot"]["bullets"]),
+            key=lambda pair: _encoded_row_count(pair[1]["snapshot"]["bullets"]),
             reverse=True,
         )[:dense]
     }

@@ -22,7 +22,7 @@ from th06.model import BUTTON_BOMB  # noqa: E402
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v1"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v2"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v3"
 TRANSITION_SCHEMA = "th06-rl-transition-v3"
 EVENT_SCHEMA = "th06-rl-event-v1"
 DEFAULT_SHARD_RECORDS = 128
@@ -39,6 +39,9 @@ SOURCE_OBJECT_FIELDS = (
     "timeline_message_delays",
 )
 SPAWNER_SOURCE_OBJECT_FIELDS = ("ecl_program", "ecl_subroutines")
+DATACLASS_ROWS_CODEC = "dataclass-rows-v1"
+DATACLASS_RECORD_CODEC = "dataclass-record-v1"
+_LAYOUTS: dict[type, tuple[str, ...]] = {}
 
 
 class CorpusError(RuntimeError):
@@ -119,6 +122,15 @@ def _jsonable(value: object) -> object:
     if isinstance(value, dict):
         return {str(key): _jsonable(item) for key, item in value.items()}
     return value
+
+
+def _layout(value: object) -> tuple[str, ...]:
+    value_type = type(value)
+    layout = _LAYOUTS.get(value_type)
+    if layout is None:
+        layout = tuple(field.name for field in fields(value))
+        _LAYOUTS[value_type] = layout
+    return layout
 
 
 def _canonical(value: object) -> bytes:
@@ -251,16 +263,96 @@ class _ObjectStore:
         return {"kind": kind, "object_ref": object_id}
 
 
-def _serialize_spawner(spawner, objects: _ObjectStore) -> dict[str, object]:
-    result = {}
-    for field in fields(spawner):
-        value = getattr(spawner, field.name)
-        result[field.name] = (
-            objects.reference(f"enemy-spawner.{field.name}", value)
-            if field.name in SPAWNER_SOURCE_OBJECT_FIELDS
-            else _jsonable(value)
+def _encode_dataclass(
+    value,
+    objects: _ObjectStore,
+    kind: str,
+    *,
+    object_fields: tuple[str, ...] = (),
+) -> dict[str, object]:
+    layout = _layout(value)
+    encoded = []
+    for name in layout:
+        field_value = getattr(value, name)
+        encoded.append(
+            objects.reference(f"{kind}.{name}", field_value)
+            if name in object_fields
+            else _encode_value(field_value, objects, f"{kind}.{name}")
         )
-    return result
+    return {
+        "codec": DATACLASS_RECORD_CODEC,
+        "layout": objects.reference(f"layout.{kind}", layout),
+        "values": encoded,
+    }
+
+
+def _encode_value(value: object, objects: _ObjectStore, kind: str) -> object:
+    if is_dataclass(value):
+        return _encode_dataclass(value, objects, kind)
+    if isinstance(value, (tuple, list)):
+        if value and all(
+            is_dataclass(item) and type(item) is type(value[0])
+            for item in value
+        ):
+            layout = _layout(value[0])
+            return {
+                "codec": DATACLASS_ROWS_CODEC,
+                "layout": objects.reference(f"layout.{kind}", layout),
+                "rows": [
+                    [
+                        _encode_value(
+                            getattr(item, name),
+                            objects,
+                            f"{kind}.{name}",
+                        )
+                        for name in layout
+                    ]
+                    for item in value
+                ],
+            }
+        return [
+            _encode_value(item, objects, f"{kind}[]") for item in value
+        ]
+    if isinstance(value, dict):
+        return {
+            str(key): _encode_value(item, objects, f"{kind}.{key}")
+            for key, item in value.items()
+        }
+    return value
+
+
+def expand_compact(value: object, objects: dict[str, object]) -> object:
+    """Hydrate content references and lossless dataclass row codecs."""
+    if isinstance(value, dict):
+        if set(value) == {"kind", "object_ref"}:
+            return expand_compact(objects[str(value["object_ref"])], objects)
+        codec = value.get("codec")
+        if codec in (DATACLASS_RECORD_CODEC, DATACLASS_ROWS_CODEC):
+            layout = expand_compact(value["layout"], objects)
+            if not isinstance(layout, list) or not all(
+                isinstance(name, str) for name in layout
+            ):
+                raise CorpusError("invalid compact dataclass layout")
+            if codec == DATACLASS_RECORD_CODEC:
+                values = expand_compact(value["values"], objects)
+                if not isinstance(values, list) or len(values) != len(layout):
+                    raise CorpusError("invalid compact dataclass record")
+                return dict(zip(layout, values, strict=True))
+            rows = expand_compact(value["rows"], objects)
+            if not isinstance(rows, list):
+                raise CorpusError("invalid compact dataclass rows")
+            result = []
+            for row in rows:
+                if not isinstance(row, list) or len(row) != len(layout):
+                    raise CorpusError("invalid compact dataclass row")
+                result.append(dict(zip(layout, row, strict=True)))
+            return result
+        return {
+            key: expand_compact(item, objects) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [expand_compact(item, objects) for item in value]
+    return value
 
 
 def _serialize_snapshot(snapshot, objects: _ObjectStore) -> dict[str, object]:
@@ -270,9 +362,38 @@ def _serialize_snapshot(snapshot, objects: _ObjectStore) -> dict[str, object]:
         if field.name in SOURCE_OBJECT_FIELDS:
             result[field.name] = objects.reference(f"snapshot.{field.name}", value)
         elif field.name == "spawners":
-            result[field.name] = [_serialize_spawner(item, objects) for item in value]
+            if value:
+                layout = _layout(value[0])
+                result[field.name] = {
+                    "codec": DATACLASS_ROWS_CODEC,
+                    "layout": objects.reference("layout.enemy-spawner", layout),
+                    "rows": [
+                        [
+                            (
+                                objects.reference(
+                                    f"enemy-spawner.{name}",
+                                    getattr(item, name),
+                                )
+                                if name in SPAWNER_SOURCE_OBJECT_FIELDS
+                                else _encode_value(
+                                    getattr(item, name),
+                                    objects,
+                                    f"enemy-spawner.{name}",
+                                )
+                            )
+                            for name in layout
+                        ]
+                        for item in value
+                    ],
+                }
+            else:
+                result[field.name] = []
         else:
-            result[field.name] = _jsonable(value)
+            result[field.name] = _encode_value(
+                value,
+                objects,
+                f"snapshot.{field.name}",
+            )
     return result
 
 
@@ -443,6 +564,7 @@ class CorpusRecorder:
             "storage": {
                 "compression": "gzip-3",
                 "source_objects": "sha256-content-addressed",
+                "repeated_dataclasses": DATACLASS_ROWS_CODEC,
                 "frame_policy": "lossless-no-drop",
             },
         })
