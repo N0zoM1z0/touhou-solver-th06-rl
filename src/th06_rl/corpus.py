@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import base64
 import hashlib
+import heapq
 import json
 import math
 import os
@@ -623,6 +624,7 @@ class CorpusRecorder:
         self.first_frame: int | None = None
         self.last_frame: int | None = None
         self.hit_frames: list[int] = []
+        self.dense_frames: list[tuple[int, int, int]] = []
         self.observation_gap_frames = 0
         self.over_budget_capture_frames = 0
         self.queue: queue.Queue[_Envelope | _AnchorEnvelope | None] = queue.Queue(
@@ -689,6 +691,18 @@ class CorpusRecorder:
         self.observation_gap_frames += evidence.observation_gap != 1
         self.over_budget_capture_frames += evidence.capture_ms > FRAME_BUDGET_MS
         frame = int(envelope.snapshot.frame)
+        bullet_count = int(
+            getattr(
+                envelope.snapshot,
+                "live_bullet_count",
+                len(envelope.snapshot.bullets),
+            )
+        )
+        dense_entry = (bullet_count, envelope.sequence, frame)
+        if len(self.dense_frames) < 64:
+            heapq.heappush(self.dense_frames, dense_entry)
+        else:
+            heapq.heappushpop(self.dense_frames, dense_entry)
         self.first_frame = frame if self.first_frame is None else min(self.first_frame, frame)
         self.last_frame = frame if self.last_frame is None else max(self.last_frame, frame)
         phase = self.phase_metrics[str(envelope.scope["key"])]
@@ -776,6 +790,12 @@ class CorpusRecorder:
                 for raw in self.phase_metrics.values()
             ),
             "compressed_bytes_per_frame": compressed / frames if frames else None,
+            "dense_frame_samples": [
+                {"bullets": bullets, "sequence": sequence, "frame": frame}
+                for bullets, sequence, frame in sorted(
+                    self.dense_frames, reverse=True
+                )
+            ],
             "phases": phases,
         }
 

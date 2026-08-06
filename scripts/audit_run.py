@@ -120,7 +120,91 @@ def _decode_frame(row: dict, objects: dict[str, object]):
     return decode_control_snapshot(raw)
 
 
-def audit(run_dir: Path) -> dict[str, object]:
+def _audit_dense_hard_parity(
+    run_dir: Path,
+    manifest: dict,
+    objects: dict[str, object],
+    native_library: Path | None,
+) -> dict[str, object] | None:
+    samples = (manifest.get("summary") or {}).get("dense_frame_samples", ())
+    sequences = {int(item["sequence"]) for item in samples}
+    if not sequences or native_library is None:
+        return None
+    from th06_rl.native import NativeKernel, PackedHazards
+    from th06_rl.th06.source import (
+        core_action_from_input,
+        kinematics_from_snapshot,
+        lower_observed_hazards,
+    )
+
+    rows = {
+        int(row["sequence"]): row
+        for row in _rows(
+            _selected_paths(run_dir, manifest, "frames", sequences)
+        )
+        if int(row["sequence"]) in sequences
+    }
+    kernel = NativeKernel(native_library)
+    unsafe = []
+    conservative = []
+    checked = 0
+    for sequence in sorted(sequences):
+        row = rows.get(sequence)
+        if row is None:
+            unsafe.append({
+                "sequence": sequence,
+                "reason": "dense-frame-row-missing",
+            })
+            continue
+        snapshot = _decode_frame(row, objects)
+        if snapshot.player_state not in (0, 3) or snapshot.in_menu:
+            continue
+        forecast = lower_observed_hazards(snapshot, 4)
+        hazards = PackedHazards(
+            forecast.hazards.aabb_frames[:4],
+            forecast.hazards.laser_frames[:4],
+        )
+        certified = kernel.certify_actions(
+            x=snapshot.x,
+            y=snapshot.y,
+            half_width=snapshot.half_width,
+            half_height=snapshot.half_height,
+            kinematics=kinematics_from_snapshot(snapshot),
+            current_action=core_action_from_input(snapshot.input_mask),
+            hazards=hazards,
+        )
+        full = {item.action.name for item in certified}
+        recorded = {
+            item[0] for item in row["decision"].get("hard_actions", ())
+        }
+        unsafe_extra = sorted(recorded - full)
+        missing_safe = sorted(full - recorded)
+        if unsafe_extra:
+            unsafe.append({
+                "sequence": sequence,
+                "frame": snapshot.frame,
+                "bullets": snapshot.live_bullet_count,
+                "recorded_but_not_full_safe": unsafe_extra,
+            })
+        if missing_safe:
+            conservative.append({
+                "sequence": sequence,
+                "frame": snapshot.frame,
+                "full_safe_but_not_recorded": missing_safe,
+            })
+        checked += 1
+    return {
+        "checked": checked,
+        "unsafe_divergences": unsafe,
+        "conservative_divergences": conservative,
+    }
+
+
+def audit(
+    run_dir: Path,
+    *,
+    native_library: Path | None = None,
+) -> dict[str, object]:
     run_dir = run_dir.resolve()
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
@@ -209,6 +293,12 @@ def audit(run_dir: Path) -> dict[str, object]:
         })
 
     summary = manifest.get("summary") or {}
+    dense_hard_parity = _audit_dense_hard_parity(
+        run_dir,
+        manifest,
+        objects,
+        native_library,
+    )
     categories: dict[str, int] = {}
     for finding in findings:
         key = str(finding["classification"])
@@ -234,6 +324,8 @@ def audit(run_dir: Path) -> dict[str, object]:
         integrity_errors.append("bomb-observed")
     if scope_pollution:
         integrity_errors.append("scope-pollution")
+    if dense_hard_parity and dense_hard_parity["unsafe_divergences"]:
+        integrity_errors.append("dense-hard-parity-unsafe-divergence")
     counterexamples = categories.get("safety-counterexample-candidate", 0)
     unresolved = categories.get("unresolved-hit-needs-local-trace", 0)
     return {
@@ -248,6 +340,7 @@ def audit(run_dir: Path) -> dict[str, object]:
         "integrity_errors": integrity_errors,
         "scope_pollution": scope_pollution,
         "anchor_records": int(manifest.get("records", {}).get("anchors", 0)),
+        "dense_hard_parity": dense_hard_parity,
         "latency": {
             "capture": summary.get("capture_timing"),
             "solve": summary.get("solve_timing"),
@@ -268,8 +361,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--native-library", type=Path)
     args = parser.parse_args()
-    report = audit(args.run_dir)
+    report = audit(args.run_dir, native_library=args.native_library)
     output = args.output or args.run_dir / "infra-audit.json"
     output.write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",

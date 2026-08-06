@@ -230,6 +230,11 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     manifest = json.loads((run_dir / "manifest.json").read_text())
     assert manifest["records"]["anchors"] == 1
     assert manifest["summary"]["observation_gap_rate"] == 0.5
+    assert manifest["summary"]["dense_frame_samples"][0] == {
+        "bullets": 0,
+        "sequence": 1,
+        "frame": 22,
+    }
     assert automatic_source_context(control) == control.source_context
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:

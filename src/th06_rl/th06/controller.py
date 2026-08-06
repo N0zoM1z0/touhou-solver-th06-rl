@@ -979,12 +979,18 @@ def run(args: argparse.Namespace) -> int:
             print(f"complete corpus: {corpus_path}", flush=True)
     if corpus_path is not None and not args.no_post_run_audit:
         try:
-            result = subprocess.run(
-                [
+            audit_command = [
                     sys.executable,
                     str(args.repository / "scripts/audit_run.py"),
                     str(corpus_path),
-                ],
+                ]
+            if args.native_library is not None:
+                audit_command.extend((
+                    "--native-library",
+                    str(args.native_library),
+                ))
+            result = subprocess.run(
+                audit_command,
                 check=False,
             )
             if result.returncode:
