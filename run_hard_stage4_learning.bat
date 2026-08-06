@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal
 
 set "REPO=%~dp0"
 if not defined TH06_GAME_DIR set "TH06_GAME_DIR=D:\Entertainment\Game\Touhou\th06"
@@ -45,12 +45,7 @@ start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
   %*
 set "STATUS=%ERRORLEVEL%"
 
-if "%STATUS%"=="0" (
-  set "LATEST_RUN="
-  for /f "delims=" %%D in ('dir /b /ad /o-d "%REPO%artifacts\corpus\*" 2^>nul') do if not defined LATEST_RUN set "LATEST_RUN=%%D"
-  if defined LATEST_RUN "%TH06_PYTHON%" "%REPO%scripts\audit_run.py" "%REPO%artifacts\corpus\!LATEST_RUN!"
-  goto trial
-)
+if "%STATUS%"=="0" goto trial
 
 echo Learning loop stopped on controller status %STATUS%.
 exit /b %STATUS%

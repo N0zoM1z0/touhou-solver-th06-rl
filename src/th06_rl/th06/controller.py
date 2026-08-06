@@ -9,6 +9,8 @@ import json
 import math
 import os
 from pathlib import Path
+import subprocess
+import sys
 import time
 
 from ..corpus import (
@@ -975,6 +977,27 @@ def run(args: argparse.Namespace) -> int:
         )
         if corpus_path is not None:
             print(f"complete corpus: {corpus_path}", flush=True)
+    if corpus_path is not None and not args.no_post_run_audit:
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(args.repository / "scripts/audit_run.py"),
+                    str(corpus_path),
+                ],
+                check=False,
+            )
+            if result.returncode:
+                print(
+                    "post-run infra audit reported status "
+                    f"{result.returncode}; learning batch retained",
+                    flush=True,
+                )
+        except OSError as error:
+            print(
+                f"post-run infra audit unavailable; batch retained: {error}",
+                flush=True,
+            )
     return exit_code
 
 
@@ -1050,6 +1073,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=repository / "artifacts/corpus",
     )
     parser.add_argument("--no-corpus", action="store_true")
+    parser.add_argument("--no-post-run-audit", action="store_true")
     args = parser.parse_args(argv)
     if args.seconds < 0.0:
         parser.error("--seconds cannot be negative")

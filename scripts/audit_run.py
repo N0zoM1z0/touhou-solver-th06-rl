@@ -167,10 +167,17 @@ def audit(run_dir: Path) -> dict[str, object]:
         decision = before_row["decision"]
         hard_actions = {item[0] for item in decision.get("hard_actions", ())}
         published = decision.get("published_action")
+        decision_reason = str(decision.get("reason", ""))
         if elapsed != 1:
             classification = "latency-observation-gap"
-        elif transition["outcome_terms"].get("control_dead_end"):
+        elif (
+            transition["outcome_terms"].get("control_dead_end")
+            or decision_reason.startswith("control-dead-end:")
+            or not hard_actions
+        ):
             classification = "hard-safe-set-empty"
+        elif decision_reason == "stale-retry":
+            classification = "latency-stale-publication"
         elif published is None:
             classification = "action-not-published"
         elif evidence["new_after_overlapping_bullet_slots"]:
@@ -192,6 +199,7 @@ def audit(run_dir: Path) -> dict[str, object]:
             "frame_after": after.frame,
             "source_context": before_row["scope"]["phase_id"],
             "classification": classification,
+            "decision_reason": decision_reason,
             "published_action": published,
             "hard_actions": sorted(hard_actions),
             "capture_ms": decision.get("capture_ms"),
