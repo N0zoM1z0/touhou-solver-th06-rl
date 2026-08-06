@@ -36,6 +36,10 @@ Windows, run `run_lunatic_stage456_learning.bat`; create
 has independent policy and corpus scope. Hard remains preserved as non-sharing
 baseline evidence only.
 
+The current focused experiment repeatedly plays Lunatic Stage 5 via
+`run_lunatic_stage5_learning.bat`; its policy remains isolated from the
+preserved Stage 4 and Stage 6 checkpoints.
+
 ## Donor policy
 
 - TH08 is a geometry reference, not an online planning architecture to clone.
