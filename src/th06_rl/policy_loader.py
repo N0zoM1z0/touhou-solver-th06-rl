@@ -32,12 +32,18 @@ class HotReloadPolicy:
         self.check_interval_frames = check_interval_frames
         self.policy = None
         self.digest: str | None = None
+        self.signature: tuple[int, int] | None = None
+        self.failed_signature: tuple[int, int] | None = None
         self.failed_digest: str | None = None
         self.generation = 0
         self.reloads = 0
         self.reload_failures = 0
         self.last_error: str | None = None
-        self._rollback: tuple[object, str | None] | None = None
+        self._rollback: tuple[
+            object,
+            str | None,
+            tuple[int, int] | None,
+        ] | None = None
         self._restart_state = self._load_restart_state()
         self.maybe_reload(0, force=True)
 
@@ -79,9 +85,20 @@ class HotReloadPolicy:
         if not force and frame % self.check_interval_frames:
             return False
         try:
+            stat = self.path.stat()
+            signature = (stat.st_mtime_ns, stat.st_size)
+            if not force and signature in (
+                self.signature,
+                self.failed_signature,
+            ):
+                return False
             source = self.path.read_bytes()
             digest = hashlib.sha256(source).hexdigest()
-            if not force and digest in (self.digest, self.failed_digest):
+            if not force and digest == self.digest:
+                self.signature = signature
+                return False
+            if not force and digest == self.failed_digest:
+                self.failed_signature = signature
                 return False
             policy = self._load(source)
         except Exception as error:
@@ -89,17 +106,22 @@ class HotReloadPolicy:
             self.last_error = f"{type(error).__name__}: {error}"
             if "digest" in locals():
                 self.failed_digest = digest
+            if "signature" in locals():
+                self.failed_signature = signature
             if self.policy is None:
                 raise RuntimeError(
                     f"initial policy load failed: {self.last_error}"
                 ) from error
             return False
         self._rollback = (
-            (self.policy, self.digest) if self.policy is not None else None
+            (self.policy, self.digest, self.signature)
+            if self.policy is not None else None
         )
         self.policy = policy
         self.digest = digest
+        self.signature = signature
         self.failed_digest = None
+        self.failed_signature = None
         self.reloads += 1
         self.last_error = None
         return True
@@ -119,7 +141,7 @@ class HotReloadPolicy:
             self.last_error = f"{type(error).__name__}: {error}"
             self.failed_digest = self.digest
             if self._rollback is not None:
-                self.policy, self.digest = self._rollback
+                self.policy, self.digest, self.signature = self._rollback
                 self._rollback = None
                 try:
                     fallback = self.policy.decide(context)
