@@ -2,15 +2,36 @@
 
 from __future__ import annotations
 
+import base64
 from collections import Counter
+import json
 import math
 import random
+import zlib
 
 from ..policy_api import POLICY_API_VERSION, PolicyDecision
 
 
 STATE_SCHEMA = "th06-rl-online-ucb-v1"
+PACKED_STATE_SCHEMA = "th06-rl-online-ucb-packed-v1"
 REWARD_VERSION = "survival-reserve-v1"
+
+
+def unpack_state(state: dict[str, object]) -> dict[str, object]:
+    """Decode a compact restart checkpoint while retaining legacy support."""
+    if state.get("schema") != PACKED_STATE_SCHEMA:
+        return state
+    if state.get("codec") != "zlib-base64-v1":
+        raise ValueError("unsupported packed policy checkpoint codec")
+    encoded = state.get("payload")
+    if not isinstance(encoded, str):
+        raise TypeError("packed policy checkpoint payload must be text")
+    decoded = json.loads(
+        zlib.decompress(base64.b64decode(encoded, validate=True)).decode("utf-8")
+    )
+    if not isinstance(decoded, dict):
+        raise TypeError("decoded policy checkpoint root must be an object")
+    return decoded
 
 
 class AdaptivePolicy:
@@ -156,7 +177,7 @@ class AdaptivePolicy:
         self.reward_sum[key] += reward
 
     def export_state(self) -> dict[str, object]:
-        return {
+        state = {
             "schema": STATE_SCHEMA,
             "reward_version": REWARD_VERSION,
             "decisions": self.decisions,
@@ -165,6 +186,18 @@ class AdaptivePolicy:
             "opportunities": dict(self.opportunities),
             "trials": dict(self.trials),
             "reward_sum": dict(self.reward_sum),
+        }
+        payload = json.dumps(
+            state,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return {
+            "schema": PACKED_STATE_SCHEMA,
+            "codec": "zlib-base64-v1",
+            "payload": base64.b64encode(zlib.compress(payload, level=1)).decode(
+                "ascii"
+            ),
         }
 
     def metrics(self) -> dict[str, object]:
@@ -178,6 +211,7 @@ class AdaptivePolicy:
         }
 
     def import_state(self, state: dict[str, object]) -> None:
+        state = unpack_state(state)
         if state.get("schema") != STATE_SCHEMA:
             return
         if state.get("reward_version") != REWARD_VERSION:

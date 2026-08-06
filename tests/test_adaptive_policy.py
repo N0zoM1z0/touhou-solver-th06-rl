@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from th06_rl.policies.adaptive import AdaptivePolicy
+from th06_rl.policies.adaptive import (
+    PACKED_STATE_SCHEMA,
+    AdaptivePolicy,
+    unpack_state,
+)
 from th06_rl.policy_api import PolicyContext, PolicyOutcome
 
 
@@ -133,3 +137,34 @@ def test_hot_reload_accepts_pre_filter_outcome_shape() -> None:
 
     assert sum(policy.trials.values()) == 1
     assert not policy.pending_keys
+
+
+def test_restart_checkpoint_is_compact_and_lossless() -> None:
+    policy = AdaptivePolicy()
+    decision = policy.decide(context())
+    policy.observe(PolicyOutcome(
+        frame=100,
+        scope=(2, 0, 0, 4),
+        source_context="timeline:test",
+        action=decision.action,
+        published=True,
+        elapsed_frames=1,
+        life_lost=False,
+        bomb_used=False,
+        control_dead_end=False,
+        authority_lost=False,
+        phase_changed=False,
+        next_hard_action_count=12,
+        next_player_x=192.0,
+        next_player_y=384.0,
+    ))
+
+    packed = policy.export_state()
+    assert packed["schema"] == PACKED_STATE_SCHEMA
+    raw = unpack_state(packed)
+    restored = AdaptivePolicy()
+    restored.import_state(packed)
+
+    assert raw["trials"] == dict(policy.trials)
+    assert restored.trials == policy.trials
+    assert restored.reward_sum == policy.reward_sum

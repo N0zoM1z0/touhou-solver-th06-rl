@@ -198,6 +198,9 @@ def summarize_policy(path: Path) -> dict[str, object] | None:
     if not path.is_file():
         return None
     state = json.loads(path.read_text(encoding="utf-8"))
+    from th06_rl.policies.adaptive import unpack_state
+
+    state = unpack_state(state)
     trials = state.get("trials", {})
     rewards = state.get("reward_sum", {})
     opportunities = state.get("opportunities", {})
