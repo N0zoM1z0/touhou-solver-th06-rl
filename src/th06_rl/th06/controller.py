@@ -1,0 +1,448 @@
+"""Restartable physical TH06 shell around the phase-agnostic native planner."""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import replace
+import json
+import os
+from pathlib import Path
+import time
+
+from ..core.planner import LocalPlannerConfig
+from ..native import NativeKernel, PackedHazards
+from ..policy_api import PolicyContext
+from ..policy_loader import HotReloadPolicy
+from .donor import enable_donor_imports
+from .source import (
+    AuthorityUnavailable,
+    automatic_source_context,
+    core_action_from_input,
+    donor_action,
+    kinematics_from_snapshot,
+    lower_source_forecast,
+)
+
+
+EXPECTED_SCOPE = (1, 0, 0, 1)  # Normal / Reimu-A / Stage 1
+ACTIVE_PLAYER_STATES = (0, 3)
+CHECKPOINT_SECONDS = 60.0
+
+
+def _hazard_prefix(hazards: PackedHazards, horizon: int) -> PackedHazards:
+    return PackedHazards(
+        hazards.aabb_frames[:horizon],
+        hazards.laser_frames[:horizon],
+    )
+
+
+def _physical_bomb(snapshot) -> bool:
+    return bool(
+        snapshot.input_mask & 0x02
+        or (
+            snapshot.player_attack is not None
+            and snapshot.player_attack.bomb_active
+        )
+    )
+
+
+def _snapshot_scope(snapshot) -> tuple[int, int, int, int | None]:
+    return (
+        snapshot.difficulty,
+        snapshot.character,
+        (
+            snapshot.player_attack.shot_type
+            if snapshot.player_attack is not None
+            else None
+        ),
+        snapshot.stage,
+    )
+
+
+def run(args: argparse.Namespace) -> int:
+    if os.name != "nt":
+        raise RuntimeError("physical controller must run with Windows Python")
+    if args.practice_stage is not None and not args.armed:
+        raise RuntimeError("menu automation requires --armed")
+    enable_donor_imports()
+    from th06.actuator import Keyboard
+    from th06.dialogue import DialogueSkipper
+    from th06.hazards.lasers import (
+        track_motion,
+        unknown_motion_may_reach_player,
+    )
+    from th06.injected_input import InjectedInputBridge
+    from th06.input_lease import InputLease
+    from th06.menu import start_reimu_a_practice
+    from th06.model import PLAYER_ALIVE, action_from_input
+    from th06.native import (
+        TARGET_SHA256,
+        attach_exact,
+        read_game_frame,
+        read_snapshot,
+        read_supervisor_state,
+    )
+    from th06.trial import PracticeTrial, physical_hit
+
+    process = attach_exact(Path(args.game_dir).resolve())
+    bridge = None
+    keyboard = None
+    dialogue = None
+    trace = None
+    exit_code = 0
+    try:
+        if args.armed:
+            bridge = InjectedInputBridge(process)
+            bridge.install()
+            keyboard = Keyboard(
+                process.pid,
+                bridge,
+                foreground_required=True,
+            )
+            dialogue = DialogueSkipper(process, keyboard)
+        if args.practice_stage is not None:
+            assert keyboard is not None
+            start_reimu_a_practice(
+                process,
+                keyboard,
+                args.practice_stage,
+                difficulty=1,
+            )
+
+        kernel = NativeKernel(args.native_library)
+        plugin = HotReloadPolicy(
+            args.policy_plugin,
+            state_path=args.policy_state,
+        )
+        args.trace.parent.mkdir(parents=True, exist_ok=True)
+        trace = args.trace.open("a", encoding="utf-8", buffering=1)
+        lease = InputLease()
+        trial = PracticeTrial() if args.practice_stage is not None else None
+        previous_snapshot = None
+        previous_player_state = None
+        last_frame = None
+        started = time.monotonic()
+        next_checkpoint = started + CHECKPOINT_SECONDS
+        print(
+            f"attached pid={process.pid} sha256={TARGET_SHA256}; "
+            f"native={kernel.path}; policy={plugin.status()}; "
+            + ("armed" if args.armed else "observe-only"),
+            flush=True,
+        )
+        while not args.seconds or time.monotonic() - started < args.seconds:
+            if trial is not None:
+                _wanted, current_supervisor = read_supervisor_state(process)
+                if trial.observe_supervisor(current_supervisor):
+                    print("Practice result path reached", flush=True)
+                    break
+            if last_frame is not None and read_game_frame(process) == last_frame:
+                time.sleep(0.001)
+                continue
+            snapshot = read_snapshot(process)
+            if snapshot.frame == last_frame:
+                time.sleep(0.001)
+                continue
+            if (
+                previous_snapshot is not None
+                and snapshot.stage == previous_snapshot.stage
+            ):
+                snapshot = replace(
+                    snapshot,
+                    lasers=track_motion(
+                        previous_snapshot.lasers,
+                        snapshot.lasers,
+                        snapshot.frame - previous_snapshot.frame,
+                    ),
+                )
+            last_frame = snapshot.frame
+            hit = physical_hit(previous_player_state, snapshot.player_state)
+            previous_player_state = snapshot.player_state
+            previous_snapshot = snapshot
+            reason = "ok"
+            selected = None
+            hard_count = 0
+            effort_horizon = 0
+            source_context = automatic_source_context(snapshot)
+            solve_started = time.perf_counter()
+            try:
+                if hit:
+                    raise AuthorityUnavailable("physical HIT")
+                if _physical_bomb(snapshot):
+                    raise AuthorityUnavailable("physical Bomb state/input")
+                if snapshot.in_menu or snapshot.time_stopped:
+                    reason = "passive"
+                    if keyboard is not None:
+                        keyboard.release_all()
+                        lease.cleared()
+                elif snapshot.replay_or_demo:
+                    raise AuthorityUnavailable("replay/demo input authority")
+                elif snapshot.player_state not in ACTIVE_PLAYER_STATES:
+                    reason = "player-not-active"
+                    if keyboard is not None:
+                        keyboard.release_all()
+                        lease.cleared()
+                elif not 0.99 <= snapshot.frame_multiplier <= 1.01:
+                    raise AuthorityUnavailable("unsupported frame multiplier")
+                elif snapshot.laser_count != len(snapshot.lasers):
+                    raise AuthorityUnavailable("incoherent laser decode")
+                elif any(
+                    not laser.motion_known
+                    and unknown_motion_may_reach_player(snapshot, laser, 4)
+                    for laser in snapshot.lasers
+                ):
+                    raise AuthorityUnavailable("unknown reachable laser motion")
+                elif _snapshot_scope(snapshot) != EXPECTED_SCOPE:
+                    raise AuthorityUnavailable(
+                        f"scope changed to {_snapshot_scope(snapshot)}"
+                    )
+                else:
+                    if dialogue is not None:
+                        dialogue.update(True)
+                    current_core = core_action_from_input(snapshot.input_mask)
+                    kinematics = kinematics_from_snapshot(snapshot)
+                    lease_status = (
+                        lease.status(snapshot.input_mask, snapshot.frame)
+                        if keyboard is not None
+                        else None
+                    )
+                    if lease_status is not None and lease_status.timed_out:
+                        raise AuthorityUnavailable("input pickup timeout")
+                    if lease_status is not None and lease_status.action is not None:
+                        desired_core = core_action_from_input(
+                            # Donor action -> source control mask through its
+                            # own exact conversion path.
+                            _donor_action_mask(lease_status.action)
+                        )
+                        hard_forecast = lower_source_forecast(snapshot, 4)
+                        retained = kernel.certify_actions(
+                            x=snapshot.x,
+                            y=snapshot.y,
+                            half_width=snapshot.half_width,
+                            half_height=snapshot.half_height,
+                            kinematics=kinematics,
+                            current_action=current_core,
+                            hazards=hard_forecast.hazards,
+                            candidates=(desired_core,),
+                            delivery_delays=lease_status.delivery_delays,
+                        )
+                        if not retained:
+                            raise AuthorityUnavailable("in-flight input unsafe")
+                        selected = desired_core
+                        hard_count = 1
+                        effort_horizon = 4
+                        reason = "input-lease"
+                    else:
+                        forecast = lower_source_forecast(
+                            snapshot,
+                            args.horizon,
+                        )
+                        hard_hazards = _hazard_prefix(
+                            forecast.hazards,
+                            forecast.hard_horizon,
+                        )
+                        hard = kernel.certify_actions(
+                            x=snapshot.x,
+                            y=snapshot.y,
+                            half_width=snapshot.half_width,
+                            half_height=snapshot.half_height,
+                            kinematics=kinematics,
+                            current_action=current_core,
+                            hazards=hard_hazards,
+                        )
+                        hard_count = len(hard)
+                        if not hard:
+                            raise AuthorityUnavailable("Hard safe set empty")
+                        config = LocalPlannerConfig(
+                            horizon=forecast.source_coverage,
+                            action_hold_frames=args.action_hold,
+                            beam_width=args.beam_width,
+                        )
+                        plan = kernel.plan(
+                            x=snapshot.x,
+                            y=snapshot.y,
+                            half_width=snapshot.half_width,
+                            half_height=snapshot.half_height,
+                            kinematics=kinematics,
+                            current_action=current_core,
+                            hazards=forecast.hazards,
+                            hard=hard,
+                            config=config,
+                            control_delay=args.control_delay,
+                        )
+                        if plan is None:
+                            raise AuthorityUnavailable(
+                                "local forecast has no safe continuation"
+                            )
+                        effort_horizon = plan.effort_horizon
+                        # The first physical baseline exposes only its own
+                        # collision/clearance winner to learning. A later
+                        # measured frontier can widen this tuple without ever
+                        # widening Hard.
+                        policy = plugin.decide(PolicyContext(
+                            frame=snapshot.frame,
+                            scope=EXPECTED_SCOPE,
+                            source_context=source_context,
+                            baseline_action=plan.action.name,
+                            locally_admissible_actions=(plan.action.name,),
+                            player_x=snapshot.x,
+                            player_y=snapshot.y,
+                            power=snapshot.current_power,
+                            bullet_count=len(snapshot.bullets),
+                            laser_count=snapshot.laser_count,
+                        ))
+                        selected = next(
+                            action for action in plan.surviving_actions
+                            if action.name == policy.action
+                        )
+                        # Re-run the selected Hard certificate after soft work,
+                        # then reject publication if the physical frame moved.
+                        fresh = kernel.certify_actions(
+                            x=snapshot.x,
+                            y=snapshot.y,
+                            half_width=snapshot.half_width,
+                            half_height=snapshot.half_height,
+                            kinematics=kinematics,
+                            current_action=current_core,
+                            hazards=hard_hazards,
+                            candidates=(selected,),
+                        )
+                        if not fresh:
+                            raise AuthorityUnavailable(
+                                "selected action lost fresh Hard"
+                            )
+                        if read_game_frame(process) != snapshot.frame:
+                            selected = None
+                            reason = "stale-retry"
+                        elif keyboard is not None:
+                            events = keyboard.apply(donor_action(selected))
+                            if events and selected != current_core:
+                                lease.issued(
+                                    read_game_frame(process),
+                                    donor_action(selected),
+                                    action_from_input(snapshot.input_mask),
+                                )
+            except AuthorityUnavailable as error:
+                reason = f"authority-stop:{error}"
+                exit_code = 2
+                if keyboard is not None:
+                    keyboard.release_all()
+                    lease.cleared()
+
+            solve_ms = (time.perf_counter() - solve_started) * 1000.0
+            record = {
+                "time": time.time(),
+                "frame": snapshot.frame,
+                "scope": list(_snapshot_scope(snapshot)),
+                "source_context": source_context,
+                "x": snapshot.x,
+                "y": snapshot.y,
+                "bullets": len(snapshot.bullets),
+                "lasers": snapshot.laser_count,
+                "hard_count": hard_count,
+                "effort_horizon": effort_horizon,
+                "action": selected.name if selected is not None else None,
+                "reason": reason,
+                "solve_ms": solve_ms,
+                "policy": plugin.status(),
+            }
+            trace.write(json.dumps(record, separators=(",", ":")) + "\n")
+            if snapshot.frame % 60 == 0 or reason != "ok":
+                print(
+                    f"f={snapshot.frame} bullets={len(snapshot.bullets)} "
+                    f"hard={hard_count} h={effort_horizon} "
+                    f"action={record['action']} solve={solve_ms:.2f}ms "
+                    f"reason={reason}",
+                    flush=True,
+                )
+            if reason.startswith("authority-stop:"):
+                break
+            if time.monotonic() >= next_checkpoint:
+                plugin.checkpoint()
+                next_checkpoint = time.monotonic() + CHECKPOINT_SECONDS
+        plugin.checkpoint()
+    finally:
+        if trace is not None:
+            trace.close()
+        try:
+            if dialogue is not None:
+                dialogue.release()
+            if keyboard is not None:
+                keyboard.release_all()
+        finally:
+            try:
+                if bridge is not None:
+                    bridge.close()
+            finally:
+                try:
+                    if args.stop_game:
+                        process.terminate()
+                finally:
+                    process.close()
+        print(
+            "released input and restored bridge; "
+            + (
+                f"stopped exact pid {process.pid}"
+                if args.stop_game
+                else f"left exact pid {process.pid} running for re-attach"
+            ),
+            flush=True,
+        )
+    return exit_code
+
+
+def _donor_action_mask(action) -> int:
+    mask = 0x04 if action.focused else 0
+    if action.dx < 0:
+        mask |= 0x40
+    elif action.dx > 0:
+        mask |= 0x80
+    if action.dy < 0:
+        mask |= 0x10
+    elif action.dy > 0:
+        mask |= 0x20
+    return mask
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    repository = Path(__file__).resolve().parents[3]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--game-dir",
+        default=r"D:\Entertainment\Game\Touhou\th06",
+    )
+    parser.add_argument("--armed", action="store_true")
+    parser.add_argument("--practice-stage", type=int, choices=(1,))
+    parser.add_argument("--stop-game", action="store_true")
+    parser.add_argument("--seconds", type=float, default=0.0)
+    parser.add_argument("--horizon", type=int, default=12)
+    parser.add_argument("--control-delay", type=int, default=2)
+    parser.add_argument("--action-hold", type=int, default=2)
+    parser.add_argument("--beam-width", type=int, default=64)
+    parser.add_argument("--native-library", type=Path)
+    parser.add_argument(
+        "--policy-plugin",
+        type=Path,
+        default=repository / "src/th06_rl/policies/adaptive.py",
+    )
+    parser.add_argument(
+        "--policy-state",
+        type=Path,
+        default=repository / "artifacts/online_policy_state.json",
+    )
+    parser.add_argument(
+        "--trace",
+        type=Path,
+        default=repository / "artifacts/th06_rl_live.jsonl",
+    )
+    args = parser.parse_args(argv)
+    if args.seconds < 0.0:
+        parser.error("--seconds cannot be negative")
+    if args.horizon < 4:
+        parser.error("--horizon must cover Hard-4")
+    if not 0 <= args.control_delay < args.horizon:
+        parser.error("--control-delay must be inside the horizon")
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run(parse_args(argv))

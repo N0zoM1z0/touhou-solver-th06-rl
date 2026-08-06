@@ -65,6 +65,40 @@ def kinematics_from_snapshot(snapshot) -> Kinematics:
     )
 
 
+def automatic_source_context(snapshot) -> str:
+    """Stable source identity for data partitioning, never movement control."""
+    emitters = []
+    for spawner in sorted(snapshot.spawners, key=lambda item: item.slot):
+        instruction = spawner.next_instruction
+        containing = tuple(
+            (address, index)
+            for index, address in enumerate(spawner.ecl_subroutines)
+            if instruction is not None and address <= instruction.address
+        )
+        if containing and instruction is not None:
+            base, subroutine = max(containing)
+            source = f"sub{subroutine}:off{instruction.address - base:x}"
+        else:
+            source = "subunknown"
+        emitters.append(
+            f"slot{spawner.slot}:{source}:boss{spawner.boss_id}:"
+            f"life{spawner.life_callback_sub}:timer{spawner.timer_callback_sub}"
+        )
+    if emitters:
+        return "|".join(emitters)
+    if snapshot.timeline_instructions:
+        instruction = snapshot.timeline_instructions[0]
+        return (
+            f"timeline-next:t{instruction.time}:op{instruction.opcode}:"
+            f"arg{instruction.arg0}"
+        )
+    return (
+        "timeline-complete"
+        if snapshot.timeline_complete
+        else "timeline-unknown"
+    )
+
+
 def _reachable_aabbs(snapshot, frames, margin: float):
     speed = max(snapshot.normal_speed, snapshot.focus_speed)
     result = []
@@ -201,4 +235,3 @@ def lower_source_forecast(
             else nominal_births.reason
         ),
     )
-

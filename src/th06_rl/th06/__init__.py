@@ -3,6 +3,7 @@
 from .source import (
     AuthorityUnavailable,
     SourceForecast,
+    automatic_source_context,
     core_action_from_input,
     donor_action,
     lower_source_forecast,
@@ -11,8 +12,8 @@ from .source import (
 __all__ = (
     "AuthorityUnavailable",
     "SourceForecast",
+    "automatic_source_context",
     "core_action_from_input",
     "donor_action",
     "lower_source_forecast",
 )
-
