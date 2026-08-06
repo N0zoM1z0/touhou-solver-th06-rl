@@ -22,7 +22,7 @@ from th06.model import BUTTON_BOMB  # noqa: E402
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v1"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v1"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v2"
 TRANSITION_SCHEMA = "th06-rl-transition-v3"
 EVENT_SCHEMA = "th06-rl-event-v1"
 DEFAULT_SHARD_RECORDS = 128
@@ -63,7 +63,7 @@ class RunMetadata:
     character: int
     shot_type: int
     stage: int
-    planner: dict[str, int | float]
+    planner: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -87,6 +87,7 @@ class FrameEvidence:
     terminal_y: float | None
     endpoint_count: int
     continuation_action_count: int
+    capture_ms: float
     solve_ms: float
     reason: str
 

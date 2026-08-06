@@ -243,3 +243,70 @@ def lower_source_forecast(
             else nominal_births.reason
         ),
     )
+
+
+def lower_observed_hazards(
+    snapshot,
+    requested_horizon: int = 12,
+    *,
+    collision_margin: float = COLLISION_MARGIN,
+) -> SourceForecast:
+    """Project only already-observed physical hazards for the online gate.
+
+    This deliberately performs no timeline/ECL interpretation and predicts no
+    future births. Long-horizon birth/route reasoning belongs to learned policy
+    data and offline training; the resident loop only needs a small, bounded
+    native legality frontier over live bullets, enemy bodies, and lasers.
+    """
+    if requested_horizon < HARD_HORIZON:
+        raise ValueError("observed hazard gate must cover Hard-4")
+    enable_donor_imports()
+    from th06.hazards.bullets import reachable_hazards_by_frame
+    from th06.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
+    from th06.hazards.lasers import hazards_by_frame as laser_hazards_by_frame
+
+    bullet_frames = reachable_hazards_by_frame(
+        snapshot,
+        requested_horizon,
+        collision_margin,
+    )
+    enemy_frames = enemy_hazards_by_frame(
+        snapshot.enemies,
+        requested_horizon,
+    )
+    laser_frames = laser_hazards_by_frame(
+        snapshot.lasers,
+        requested_horizon,
+    )
+    aabb_frames = tuple(
+        bullet_frames[index] + enemy_frames[index]
+        for index in range(requested_horizon)
+    )
+    reachable_frames = _reachable_aabbs(
+        snapshot,
+        aabb_frames,
+        collision_margin,
+    )
+    return SourceForecast(
+        hazards=PackedHazards(
+            aabb_frames=tuple(
+                tuple(Aabb(*hazard) for hazard in frame)
+                for frame in reachable_frames
+            ),
+            laser_frames=tuple(
+                tuple(LaserRect(
+                    hazard.origin_x,
+                    hazard.origin_y,
+                    hazard.angle,
+                    hazard.center_offset,
+                    hazard.size_x,
+                    hazard.size_y,
+                ) for hazard in frame)
+                for frame in laser_frames
+            ),
+        ),
+        hard_horizon=HARD_HORIZON,
+        requested_horizon=requested_horizon,
+        source_coverage=requested_horizon,
+        coverage_reason="observed-physical-hazards-only",
+    )

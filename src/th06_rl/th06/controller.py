@@ -12,7 +12,6 @@ from pathlib import Path
 import time
 
 from ..corpus import CorpusRecorder, FrameEvidence, RunMetadata
-from ..core.planner import LocalPlannerConfig
 from ..native import NativeKernel, PackedHazards
 from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
@@ -25,7 +24,7 @@ from .source import (
     core_action_from_input,
     donor_action,
     kinematics_from_snapshot,
-    lower_source_forecast,
+    lower_observed_hazards,
 )
 
 
@@ -95,6 +94,27 @@ def _sha256(path: Path) -> str:
 
 def _finite(value: float) -> float | None:
     return value if math.isfinite(value) else None
+
+
+def _boundary_reserve(x: float, y: float) -> float:
+    return min(x - 8.0, 376.0 - x, y - 16.0, 432.0 - y)
+
+
+def _reactive_baseline(candidates, current_action):
+    """Constant-time cold-start ranking inside the native legal frontier."""
+    if not candidates:
+        raise ValueError("reactive baseline requires a legal action")
+    return max(
+        candidates,
+        key=lambda item: (
+            item.min_clearance,
+            _boundary_reserve(item.final_x, item.final_y),
+            item.action == current_action,
+            item.action.dx == 0 and item.action.dy == 0,
+            item.action.focused,
+            item.action.name,
+        ),
+    )
 
 
 def _code_commit(repository: Path) -> str:
@@ -205,11 +225,9 @@ def run(args: argparse.Namespace) -> int:
                     shot_type=expected_scope[2],
                     stage=expected_scope[3],
                     planner={
-                        "horizon": args.horizon,
+                        "algorithm": "observed-native-gate-v1",
+                        "observed_horizon": args.horizon,
                         "hard_horizon": 4,
-                        "control_delay": args.control_delay,
-                        "action_hold": args.action_hold,
-                        "beam_width": args.beam_width,
                         "exploration_rate": args.exploration_rate,
                     },
                 ),
@@ -220,6 +238,7 @@ def run(args: argparse.Namespace) -> int:
         previous_player_state = None
         pending_learning = None
         last_frame = None
+        last_reported_reason = None
         next_checkpoint = started + CHECKPOINT_SECONDS
         print(
             f"attached pid={process.pid} sha256={TARGET_SHA256}; "
@@ -242,7 +261,9 @@ def run(args: argparse.Namespace) -> int:
             if last_frame is not None and read_game_frame(process) == last_frame:
                 time.sleep(0.001)
                 continue
+            capture_started = time.perf_counter()
             snapshot = read_snapshot(process)
+            capture_ms = (time.perf_counter() - capture_started) * 1000.0
             if snapshot.frame == last_frame:
                 time.sleep(0.001)
                 continue
@@ -267,10 +288,12 @@ def run(args: argparse.Namespace) -> int:
             proposed = None
             published = None
             policy = None
-            plan = None
             hard = ()
+            legal = ()
             locally_admissible = ()
             current_action_name = None
+            baseline_action = None
+            selected_evaluation = None
             hard_count = 0
             effort_horizon = 0
             source_context = automatic_source_context(snapshot)
@@ -332,7 +355,7 @@ def run(args: argparse.Namespace) -> int:
                             # own exact conversion path.
                             _donor_action_mask(lease_status.action)
                         )
-                        hard_forecast = lower_source_forecast(snapshot, 4)
+                        hard_forecast = lower_observed_hazards(snapshot, 4)
                         retained = kernel.certify_actions(
                             x=snapshot.x,
                             y=snapshot.y,
@@ -350,12 +373,13 @@ def run(args: argparse.Namespace) -> int:
                         proposed = desired_core
                         published = desired_core.name if keyboard is not None else None
                         hard = retained
+                        legal = retained
                         locally_admissible = (desired_core.name,)
                         hard_count = 1
                         effort_horizon = 4
                         reason = "input-lease"
                     else:
-                        forecast = lower_source_forecast(
+                        forecast = lower_observed_hazards(
                             snapshot,
                             args.horizon,
                         )
@@ -375,12 +399,7 @@ def run(args: argparse.Namespace) -> int:
                         hard_count = len(hard)
                         if not hard:
                             raise AuthorityUnavailable("Hard safe set empty")
-                        config = LocalPlannerConfig(
-                            horizon=forecast.source_coverage,
-                            action_hold_frames=args.action_hold,
-                            beam_width=args.beam_width,
-                        )
-                        plan = kernel.plan(
+                        lookahead = kernel.certify_actions(
                             x=snapshot.x,
                             y=snapshot.y,
                             half_width=snapshot.half_width,
@@ -388,27 +407,26 @@ def run(args: argparse.Namespace) -> int:
                             kinematics=kinematics,
                             current_action=current_core,
                             hazards=forecast.hazards,
-                            hard=hard,
-                            config=config,
-                            control_delay=args.control_delay,
+                            candidates=tuple(item.action for item in hard),
                         )
-                        if plan is None:
-                            raise AuthorityUnavailable(
-                                "local forecast has no safe continuation"
-                            )
-                        effort_horizon = plan.effort_horizon
-                        # Every exposed action has both a native Hard-4
-                        # certificate and a collision-free nominal continuation
-                        # in the local beam. Learning can rank this set but can
-                        # neither add an action nor change its geometry.
+                        # A longer constant-action gate is advisory: when every
+                        # constant path closes, retain the immediate Hard set so
+                        # the learned policy can re-decide next frame instead of
+                        # requiring an online combinatorial search.
+                        legal = lookahead or hard
+                        effort_horizon = (
+                            forecast.source_coverage if lookahead else 4
+                        )
                         locally_admissible = tuple(
-                            action.name for action in plan.surviving_actions
+                            item.action.name for item in legal
                         )
+                        baseline = _reactive_baseline(legal, current_core)
+                        baseline_action = baseline.action.name
                         policy = plugin.decide(PolicyContext(
                             frame=snapshot.frame,
                             scope=expected_scope,
                             source_context=source_context,
-                            baseline_action=plan.action.name,
+                            baseline_action=baseline_action,
                             locally_admissible_actions=locally_admissible,
                             player_x=snapshot.x,
                             player_y=snapshot.y,
@@ -419,8 +437,11 @@ def run(args: argparse.Namespace) -> int:
                             exploration_rate=args.exploration_rate,
                         ))
                         selected = next(
-                            action for action in plan.surviving_actions
-                            if action.name == policy.action
+                            item.action for item in legal
+                            if item.action.name == policy.action
+                        )
+                        selected_evaluation = next(
+                            item for item in legal if item.action == selected
                         )
                         proposed = selected
                         # Re-run the selected Hard certificate after soft work,
@@ -546,7 +567,7 @@ def run(args: argparse.Namespace) -> int:
                         )
                         for item in hard
                     ),
-                    baseline_action=plan.action.name if plan is not None else None,
+                    baseline_action=baseline_action,
                     locally_admissible_actions=locally_admissible,
                     proposed_action=proposed.name if proposed is not None else None,
                     published_action=published,
@@ -562,17 +583,21 @@ def run(args: argparse.Namespace) -> int:
                     policy_sha256=policy_status.get("sha256"),
                     effort_horizon=effort_horizon,
                     plan_min_clearance=(
-                        _finite(plan.min_clearance) if plan is not None else None
+                        _finite(selected_evaluation.min_clearance)
+                        if selected_evaluation is not None else None
                     ),
-                    cumulative_risk=(
-                        _finite(plan.cumulative_risk) if plan is not None else None
+                    cumulative_risk=None,
+                    terminal_x=(
+                        selected_evaluation.final_x
+                        if selected_evaluation is not None else None
                     ),
-                    terminal_x=plan.terminal_x if plan is not None else None,
-                    terminal_y=plan.terminal_y if plan is not None else None,
-                    endpoint_count=plan.endpoint_count if plan is not None else 0,
-                    continuation_action_count=(
-                        plan.continuation_action_count if plan is not None else 0
+                    terminal_y=(
+                        selected_evaluation.final_y
+                        if selected_evaluation is not None else None
                     ),
+                    endpoint_count=len(legal),
+                    continuation_action_count=len(legal),
+                    capture_ms=capture_ms,
                     solve_ms=solve_ms,
                     reason=reason,
                 ))
@@ -589,18 +614,21 @@ def run(args: argparse.Namespace) -> int:
                 "effort_horizon": effort_horizon,
                 "action": selected.name if selected is not None else None,
                 "reason": reason,
+                "capture_ms": capture_ms,
                 "solve_ms": solve_ms,
                 "policy": policy_status,
             }
             trace.write(json.dumps(record, separators=(",", ":")) + "\n")
-            if snapshot.frame % 60 == 0 or reason not in ("ok", "stale-retry"):
+            if snapshot.frame % 60 == 0 or reason != last_reported_reason:
                 print(
                     f"f={snapshot.frame} bullets={len(snapshot.bullets)} "
                     f"hard={hard_count} h={effort_horizon} "
-                    f"action={record['action']} solve={solve_ms:.2f}ms "
+                    f"action={record['action']} capture={capture_ms:.2f}ms "
+                    f"solve={solve_ms:.2f}ms "
                     f"reason={reason}",
                     flush=True,
                 )
+                last_reported_reason = reason
             if reason.startswith("authority-stop:"):
                 break
             if time.monotonic() >= next_checkpoint:
@@ -699,9 +727,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stop-game", action="store_true")
     parser.add_argument("--seconds", type=float, default=0.0)
     parser.add_argument("--horizon", type=int, default=12)
-    parser.add_argument("--control-delay", type=int, default=2)
-    parser.add_argument("--action-hold", type=int, default=2)
-    parser.add_argument("--beam-width", type=int, default=64)
     parser.add_argument("--exploration-rate", type=float, default=0.03)
     parser.add_argument("--native-library", type=Path)
     parser.add_argument(
@@ -730,8 +755,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--seconds cannot be negative")
     if args.horizon < 4:
         parser.error("--horizon must cover Hard-4")
-    if not 0 <= args.control_delay < args.horizon:
-        parser.error("--control-delay must be inside the horizon")
     if not 0.0 <= args.exploration_rate <= 1.0:
         parser.error("--exploration-rate must be in [0, 1]")
     expected_stage = args.practice_stage or args.expected_stage

@@ -17,6 +17,7 @@ from th06_rl.th06.source import (
     AuthorityUnavailable,
     core_action_from_input,
     kinematics_from_snapshot,
+    lower_observed_hazards,
     lower_source_forecast,
 )
 
@@ -95,6 +96,11 @@ def replay(args: argparse.Namespace) -> dict[str, object]:
     maximum_lasers = 0
     minimum_hard = 18
     partial_forecasts = 0
+    forecast_function = (
+        lower_observed_hazards
+        if args.forecast_mode == "observed"
+        else lower_source_forecast
+    )
 
     for index in _sample_indices(rows, args.samples, args.dense):
         row = rows[index]
@@ -107,7 +113,7 @@ def replay(args: argparse.Namespace) -> dict[str, object]:
             ):
                 continue
             source_started = time.perf_counter()
-            forecast = lower_source_forecast(snapshot, args.horizon)
+            forecast = forecast_function(snapshot, args.horizon)
             hard_started = time.perf_counter()
             hard_hazards = PackedHazards(
                 forecast.hazards.aabb_frames[: forecast.hard_horizon],
@@ -175,6 +181,7 @@ def replay(args: argparse.Namespace) -> dict[str, object]:
 
     return {
         "run_id": run_dir.name,
+        "forecast_mode": args.forecast_mode,
         "total_snapshots": len(rows),
         "sampled_active_snapshots": sampled,
         "source_objects": len(objects),
@@ -197,6 +204,11 @@ def main() -> int:
     parser.add_argument("--samples", type=int, default=120)
     parser.add_argument("--dense", type=int, default=30)
     parser.add_argument("--horizon", type=int, default=12)
+    parser.add_argument(
+        "--forecast-mode",
+        choices=("observed", "source-ecl"),
+        default="observed",
+    )
     parser.add_argument("--native-library", type=Path)
     args = parser.parse_args()
     if args.samples <= 0 or args.dense < 0:

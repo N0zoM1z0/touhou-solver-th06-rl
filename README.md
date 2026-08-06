@@ -1,15 +1,15 @@
 # touhou-solver-th06-rl
 
-A source-grounded TH06 agent built around a non-learning reactive dodge
-baseline. The local planner searches short movement continuations, ranks
-survival and maneuver reserve before soft objectives, and can only choose from
-actions certified by an external authority layer. A fresh certification is
-required immediately before input publication.
+A source-grounded TH06 learning agent built around a small native dodge gate.
+The online loop projects already-observed physical hazards, certifies a bounded
+movement set, lets a lightweight learned policy rank that set, and freshly
+certifies the selected action immediately before publication. It performs no
+timeline/ECL expansion or combinatorial beam search in the resident hot path.
 
-Learning is intentionally downstream of that baseline. Online UCB and future
-imitation/RL policies may rank survival-equivalent actions, but cannot enlarge the safe
-set, change collision physics, lower margins, request Bomb, or bypass
-fail-close behavior.
+Online UCB and future imitation/RL policies own long-horizon/global-local
+tradeoffs but cannot enlarge the native safe set, change collision physics,
+lower margins, request Bomb, or bypass fail-close behavior. Cold start uses
+only a generic clearance/boundary-reserve fallback, never phase rules.
 
 The active collection target is Hard / Reimu-A / Stage 4. Difficulty,
 character, shot type, stage, and automatically derived source context remain
