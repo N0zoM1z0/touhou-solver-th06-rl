@@ -43,6 +43,7 @@ ACTIVE_PLAYER_STATES = (0, 3)
 CHECKPOINT_SECONDS = 60.0
 HEALTH_SAMPLE_SECONDS = 1.0
 HEALTH_TRACE_SECONDS = 10.0
+DIALOGUE_PROBE_SECONDS = 1.0 / 60.0
 LOW_COMMIT_EXIT_CODE = 75
 DIFFICULTIES = {"normal": 1, "hard": 2, "lunatic": 3}
 
@@ -189,6 +190,7 @@ def run(args: argparse.Namespace) -> int:
         NativeDecodeError,
         TARGET_SHA256,
         attach_exact,
+        read_dialogue_state,
         read_game_frame,
         read_snapshot as read_authoritative_snapshot,
         read_supervisor_state,
@@ -297,6 +299,7 @@ def run(args: argparse.Namespace) -> int:
         anchor_retry_after = 0
         last_reported_reason = None
         dialogue_active = False
+        next_dialogue_probe = started
         next_checkpoint = started + CHECKPOINT_SECONDS
         next_health_sample = started
         next_health_trace = started
@@ -462,6 +465,31 @@ def run(args: argparse.Namespace) -> int:
                 dialogue_active = False
                 keyboard.release_all()
                 lease.cleared()
+            if (
+                dialogue is not None
+                and keyboard is not None
+                and time.monotonic() >= next_dialogue_probe
+            ):
+                next_dialogue_probe = time.monotonic() + DIALOGUE_PROBE_SECONDS
+                try:
+                    message_active, _skippable = read_dialogue_state(process)
+                except (OSError, RuntimeError) as error:
+                    if retain_continuous_stage("dialogue-probe", error):
+                        continue
+                    raise
+                if message_active:
+                    # GuiImpl::msg is the authoritative dialogue state. Some
+                    # Stage 5 messages leave GameManager::time_stopped false,
+                    # so that flag cannot gate story control. Enter with no
+                    # dodge direction and retain only Shoot/Ctrl advancement.
+                    keyboard.release_all()
+                    keyboard.apply(action_from_input(0))
+                    dialogue_active = dialogue.update(True).active
+                    lease.cleared()
+                    if dialogue_active:
+                        time.sleep(0.001)
+                        continue
+                    keyboard.release_all()
             if last_frame is not None:
                 try:
                     if read_game_frame(process) == last_frame:
