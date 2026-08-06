@@ -69,3 +69,15 @@ new failure evidence improves play.
   geometry hotspot: despite only 0--170 live bullets, it carried as many as 48
   lasers, with solve p95 11.68 ms and stale retry rate 11.55% across 2,286
   frames. This is the pre-optimization comparison for prepared hazard buffers.
+- `20260806T143017Z-003184000` at `245bc81`: complete Stage 6 with 17 HIT,
+  zero capture and infrastructure failures, and a committed policy update.
+  Sixteen HITs followed a Hard-empty control dead end and one was a latency
+  observation gap. Overall capture p95 was 6.96 ms, solve p95 was 1.21 ms,
+  solve p99 was 3.51 ms, and stale retry rate was 0.322%. Peak controller
+  private memory stayed bounded, the corpus was 286 MiB, and dense native
+  replay checked 60 samples without divergence. In the sub31 spell's exact
+  48-live-laser stratum, prepared buffers plus scalar source-equivalent laser
+  projection reduced solve p50 from 5.29 to 2.34 ms, solve p95 from 14.26 to
+  9.56 ms, stale retry rate from 30.48% to 9.56%, and observation-gap rate
+  from 12.51% to 5.29%. This is physical performance evidence; the 20-to-17
+  HIT change remains chronological rather than a causal learning estimate.
