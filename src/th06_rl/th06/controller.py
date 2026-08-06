@@ -13,6 +13,7 @@ from ..core.planner import LocalPlannerConfig
 from ..native import NativeKernel, PackedHazards
 from ..policy_api import PolicyContext
 from ..policy_loader import HotReloadPolicy
+from .background_input import BackgroundInputBridge
 from .donor import enable_donor_imports
 from .source import (
     AuthorityUnavailable,
@@ -71,7 +72,6 @@ def run(args: argparse.Namespace) -> int:
         track_motion,
         unknown_motion_may_reach_player,
     )
-    from th06.injected_input import InjectedInputBridge
     from th06.input_lease import InputLease
     from th06.menu import start_reimu_a_practice
     from th06.model import PLAYER_ALIVE, action_from_input
@@ -92,7 +92,7 @@ def run(args: argparse.Namespace) -> int:
     exit_code = 0
     try:
         if args.armed:
-            bridge = InjectedInputBridge(process)
+            bridge = BackgroundInputBridge(process)
             bridge.install()
             keyboard = Keyboard(
                 process.pid,
