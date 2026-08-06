@@ -86,6 +86,16 @@ def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
         boxes = future_boxes(enemy, max(1, elapsed))
         if boxes and _overlaps_player(after, boxes[-1]):
             projected_enemy.append(index)
+    after_enemy_overlaps = [
+        index
+        for index, enemy in enumerate(after.enemies)
+        if _overlaps_player(after, (
+            enemy.x - enemy.half_width,
+            enemy.y - enemy.half_height,
+            enemy.x + enemy.half_width,
+            enemy.y + enemy.half_height,
+        ))
+    ]
     projected_lasers = []
     for laser in before.lasers:
         frames = future_hazards(laser, max(1, elapsed))
@@ -107,6 +117,10 @@ def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
         ],
         "projected_observed_bullet_slots": projected_bullets,
         "projected_enemy_indices": projected_enemy,
+        "after_overlapping_enemy_indices": after_enemy_overlaps,
+        "new_after_overlapping_enemy_indices": (
+            after_enemy_overlaps if not before.enemies else []
+        ),
         "projected_laser_slots": projected_lasers,
     }
 
@@ -292,7 +306,10 @@ def audit(
             classification = "latency-stale-publication"
         elif published is None:
             classification = "action-not-published"
-        elif evidence["new_after_overlapping_bullet_slots"]:
+        elif (
+            evidence["new_after_overlapping_bullet_slots"]
+            or evidence["new_after_overlapping_enemy_indices"]
+        ):
             classification = "new-hazard-after-observation"
         elif (
             published in hard_actions

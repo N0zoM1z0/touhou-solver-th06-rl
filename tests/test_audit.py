@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 from th06_rl.corpus import CorpusRecorder, RunMetadata
 
@@ -33,3 +34,29 @@ def test_empty_complete_stage_audit_is_structurally_stable(tmp_path) -> None:
     assert report["physical_hits"] == 0
     assert report["integrity_errors"] == []
     assert report["infra_stable_for_learning"] is True
+
+
+def test_collision_evidence_identifies_new_enemy_body() -> None:
+    common = {
+        "x": 193.0,
+        "y": 121.0,
+        "half_width": 1.25,
+        "half_height": 1.25,
+        "bullets": (),
+        "lasers": (),
+    }
+    before = SimpleNamespace(**common, enemies=())
+    after = SimpleNamespace(
+        **common,
+        enemies=(SimpleNamespace(
+            x=192.0,
+            y=128.0,
+            half_width=16.0,
+            half_height=18.0,
+        ),),
+    )
+
+    evidence = _AUDIT._collision_evidence(before, after, 1)
+
+    assert evidence["after_overlapping_enemy_indices"] == [0]
+    assert evidence["new_after_overlapping_enemy_indices"] == [0]

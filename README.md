@@ -11,12 +11,12 @@ tradeoffs but cannot enlarge the native safe set, change collision physics,
 lower margins, request Bomb, or bypass fail-close behavior. Cold start uses
 only a generic clearance/boundary-reserve fallback, never phase rules.
 
-The active learning target is Hard / Reimu-A / Stage 4. Lunatic / Reimu-A /
-Stage 4 is the high-density latency qualification route. Difficulty,
-character, shot type, stage, and automatically derived source context remain
-separate corpus/model scopes.
+The active learning target is Lunatic / Reimu-A / Stage 4. Hard / Reimu-A /
+Stage 4 is retained only as prior baseline evidence. Difficulty, character,
+shot type, stage, and automatically derived source context remain separate
+corpus/model scopes.
 
-`run_hard_stage4_learning.bat` repeatedly starts an exact Practice Stage 4
+`run_lunatic_stage4_learning.bat` repeatedly starts an exact Practice Stage 4
 trial, records one complete gzip-sharded stage trajectory, checkpoints the
 bounded online model, cleans up the exact game PID, and starts the next full
 stage. The verified life patch prevents Game Over without hiding physical HIT:
@@ -26,9 +26,9 @@ also becomes feedback rather than an external restart. Bomb or an
 input-backend failure still stops the loop. Transient capture, source-context,
 policy-checkpoint, trace, and corpus failures fail closed without destroying
 the physical Stage episode. Create
-`artifacts\pause-hard-stage4` to pause between complete stages. Use
-`run_lunatic_stage4_learning.bat` and `artifacts\pause-lunatic-stage4` for the
-independent Lunatic scope.
+`artifacts\pause-lunatic-stage4` to pause between complete stages. The
+`run_hard_stage4_learning.bat` entry point and its independent policy state are
+retained for baseline reproduction, not for the active data flywheel.
 
 Before launching each new Stage, both loops measure the complete `artifacts`
 tree and reserve the recorder's full 512 MiB per-run allowance. They stop

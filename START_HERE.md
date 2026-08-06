@@ -30,9 +30,10 @@ tests/                  synthetic and recorded focused tests
 docs/                   source contracts and physical evidence
 ```
 
-The active collection stratum is Hard / Reimu-A / Stage 4. From Windows, run
-`run_hard_stage4_learning.bat`; create
-`artifacts\pause-hard-stage4` to stop cleanly between trials.
+The active collection stratum is Lunatic / Reimu-A / Stage 4. From Windows,
+run `run_lunatic_stage4_learning.bat`; create
+`artifacts\pause-lunatic-stage4` to stop cleanly between trials. Hard remains
+preserved as non-sharing baseline evidence only.
 
 ## Donor policy
 

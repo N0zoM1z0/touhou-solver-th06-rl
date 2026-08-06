@@ -103,6 +103,15 @@ def _anchor_partition(source_context: str) -> str:
     return "timeline"
 
 
+def _checkpoint_window(snapshot) -> bool:
+    """Admit blocking durability work only outside active physical control."""
+    return bool(
+        snapshot.in_menu
+        or snapshot.time_stopped
+        or snapshot.player_state not in ACTIVE_PLAYER_STATES
+    )
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -897,12 +906,24 @@ def run(args: argparse.Namespace) -> int:
             last_reported_reason = reason
             if reason.startswith("authority-stop:"):
                 break
-            if time.monotonic() >= next_checkpoint:
+            if (
+                time.monotonic() >= next_checkpoint
+                and _checkpoint_window(snapshot)
+            ):
+                checkpoint_started = time.perf_counter()
                 try:
                     plugin.checkpoint()
                 except (OSError, RuntimeError, TypeError, ValueError) as error:
                     if not retain_continuous_stage("policy-checkpoint", error):
                         raise
+                emit_trace({
+                    "time": time.time(),
+                    "event": "policy-checkpoint",
+                    "frame": snapshot.frame,
+                    "duration_ms": (
+                        time.perf_counter() - checkpoint_started
+                    ) * 1000.0,
+                })
                 next_checkpoint = time.monotonic() + CHECKPOINT_SECONDS
         else:
             termination_reason = "time-limit"
