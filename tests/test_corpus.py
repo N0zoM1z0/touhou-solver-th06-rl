@@ -45,6 +45,7 @@ def test_manifest_distinguishes_storage_from_complete_stage(tmp_path) -> None:
     assert manifest["complete"] is True
     assert manifest["stage_trajectory_complete"] is True
     assert manifest["run_outcome"] == outcome
+    assert manifest["summary"]["frames"] == 0
 
 
 def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
@@ -96,6 +97,9 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
         reason="ok",
     ))
     run_dir = recorder.close({"stage_completed": True})
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest["summary"]["frames"] == 1
+    assert manifest["summary"]["reason_counts"] == {"ok": 1}
     objects = {}
     for path in run_dir.glob("objects-*.jsonl.gz"):
         with gzip.open(path, "rt", encoding="utf-8") as source:

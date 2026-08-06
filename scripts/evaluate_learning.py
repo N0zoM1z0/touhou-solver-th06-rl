@@ -54,6 +54,47 @@ def _longest_survival(start: int | None, end: int | None, hits: list[int]) -> in
 
 def summarize_run(run_dir: Path) -> dict[str, object]:
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    stored_summary = manifest.get("summary")
+    if isinstance(stored_summary, dict):
+        outcome = manifest.get("run_outcome") or {}
+        active_frames = int(
+            stored_summary.get("learning_eligible_elapsed_frames", 0)
+        )
+        hit_frames = [int(value) for value in stored_summary.get("hit_frames", ())]
+        hits = int(outcome.get("physical_hits", len(hit_frames)))
+        frames = int(stored_summary.get("frames", 0))
+        compressed = int(manifest.get("compressed_bytes", 0))
+        return {
+            "run_id": run_dir.name,
+            "stage_trajectory_complete": bool(
+                manifest.get("stage_trajectory_complete")
+            ),
+            "termination_reason": outcome.get("termination_reason"),
+            "physical_hits": hits,
+            "control_dead_ends": int(outcome.get("control_dead_ends", 0)),
+            "capture_failures": int(outcome.get("capture_failures", 0)),
+            "infrastructure_failures": int(
+                outcome.get("infrastructure_failures", 0)
+            ),
+            "recorded_frames": frames,
+            "active_elapsed_frames": active_frames,
+            "hit_rate_per_1000_active_frames": (
+                1000.0 * hits / active_frames if active_frames else None
+            ),
+            "first_hit_frame": min(hit_frames) if hit_frames else None,
+            "longest_observed_no_hit_frames": stored_summary.get(
+                "longest_observed_no_hit_frames"
+            ),
+            "compressed_bytes": compressed,
+            "compressed_bytes_per_frame": (
+                compressed / frames if frames else None
+            ),
+            "capture_timing": stored_summary.get("capture_timing", {}),
+            "solve_timing": stored_summary.get("solve_timing", {}),
+            "reason_counts": stored_summary.get("reason_counts", {}),
+            "stale_retry_rate": stored_summary.get("stale_retry_rate"),
+            "phases": stored_summary.get("phases", []),
+        }
     phase = defaultdict(lambda: {
         "transitions": 0,
         "elapsed_frames": 0,
@@ -224,13 +265,22 @@ def main() -> int:
         default=Path("artifacts/policy/hard_reimu_a_stage4.json"),
     )
     parser.add_argument("--recent", type=int, default=20)
+    parser.add_argument(
+        "--include-active",
+        action="store_true",
+        help="scan active/incomplete shards; expensive and unsuitable during play",
+    )
     args = parser.parse_args()
     if args.recent <= 0:
         parser.error("--recent must be positive")
-    run_dirs = sorted(
-        path.parent
-        for path in args.corpus_root.glob("*/manifest.json")
-    )[-args.recent:]
+    run_dirs = []
+    for path in sorted(args.corpus_root.glob("*/manifest.json")):
+        if not args.include_active:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            if "closed_unix_ns" not in manifest:
+                continue
+        run_dirs.append(path.parent)
+    run_dirs = run_dirs[-args.recent:]
     runs = [summarize_run(path) for path in run_dirs]
     complete = [run for run in runs if run["stage_trajectory_complete"]]
     print(json.dumps({

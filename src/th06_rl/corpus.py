@@ -5,7 +5,9 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import math
 import os
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, fields, is_dataclass
 from pathlib import Path
 import queue
@@ -417,6 +419,16 @@ def _boss_life(snapshot) -> int | None:
     return bosses[0].life if bosses else None
 
 
+def _frame_from_snapshot_ref(value: object) -> int | None:
+    marker = str(value).rsplit(":f", 1)
+    if len(marker) != 2:
+        return None
+    try:
+        return int(marker[1])
+    except ValueError:
+        return None
+
+
 def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
     enable_donor_imports()
     from th06.trial import physical_hit
@@ -537,6 +549,23 @@ class CorpusRecorder:
         self.dropped = 0
         self.closed = False
         self.error: BaseException | None = None
+        self.capture_timings: list[float] = []
+        self.solve_timings: list[float] = []
+        self.reason_counts: Counter[str] = Counter()
+        self.phase_metrics = defaultdict(lambda: {
+            "frames": 0,
+            "elapsed_frames": 0,
+            "hits": 0,
+            "control_dead_ends": 0,
+            "learning_eligible_transitions": 0,
+            "learning_eligible_elapsed_frames": 0,
+            "hard_sum": 0,
+            "published_actions": Counter(),
+            "legal_opportunities": Counter(),
+        })
+        self.first_frame: int | None = None
+        self.last_frame: int | None = None
+        self.hit_frames: list[int] = []
         self.queue: queue.Queue[_Envelope | None] = queue.Queue(queue_records)
         self.manifest_lock = threading.Lock()
         self.manifest: dict[str, object] = {
@@ -571,6 +600,114 @@ class CorpusRecorder:
         _atomic_json(self.run_dir / "manifest.json", self.manifest)
         self.thread = threading.Thread(target=self._worker, name=f"corpus-{self.run_id}")
         self.thread.start()
+
+    @staticmethod
+    def _timing_summary(values: list[float]) -> dict[str, float | None]:
+        if not values:
+            return {name: None for name in ("p50_ms", "p95_ms", "p99_ms", "max_ms")}
+        ordered = sorted(values)
+
+        def percentile(fraction: float) -> float:
+            return ordered[
+                min(len(ordered) - 1, math.ceil(fraction * len(ordered)) - 1)
+            ]
+
+        return {
+            "p50_ms": percentile(0.50),
+            "p95_ms": percentile(0.95),
+            "p99_ms": percentile(0.99),
+            "max_ms": ordered[-1],
+        }
+
+    def _observe_frame_metrics(self, envelope: _Envelope) -> None:
+        evidence = envelope.evidence
+        self.capture_timings.append(float(evidence.capture_ms))
+        self.solve_timings.append(float(evidence.solve_ms))
+        self.reason_counts[evidence.reason] += 1
+        frame = int(envelope.snapshot.frame)
+        self.first_frame = frame if self.first_frame is None else min(self.first_frame, frame)
+        self.last_frame = frame if self.last_frame is None else max(self.last_frame, frame)
+        phase = self.phase_metrics[str(envelope.scope["key"])]
+        phase["frames"] += 1
+        phase["hard_sum"] += len(evidence.hard_actions)
+        if evidence.published_action is not None:
+            phase["published_actions"][evidence.published_action] += 1
+        phase["legal_opportunities"].update(evidence.locally_admissible_actions)
+
+    def _observe_transition_metrics(self, transition: dict[str, object]) -> None:
+        phase = self.phase_metrics[str(transition["scope"]["key"])]
+        outcome = transition["outcome_terms"]
+        phase["elapsed_frames"] += max(0, int(outcome["elapsed_frames"]))
+        phase["learning_eligible_transitions"] += bool(
+            transition["learning_eligible"]
+        )
+        if transition["learning_eligible"]:
+            phase["learning_eligible_elapsed_frames"] += max(
+                0, int(outcome["elapsed_frames"])
+            )
+        if outcome["life_lost"]:
+            phase["hits"] += 1
+            frame = _frame_from_snapshot_ref(transition["next_snapshot_ref"])
+            if frame is not None:
+                self.hit_frames.append(frame)
+        if outcome["control_dead_end"]:
+            phase["control_dead_ends"] += 1
+
+    def _metrics_summary(self) -> dict[str, object]:
+        frames = self.written
+        compressed = int(self.manifest["compressed_bytes"])
+        longest = None
+        if self.first_frame is not None and self.last_frame is not None:
+            boundaries = [
+                self.first_frame,
+                *sorted(self.hit_frames),
+                self.last_frame,
+            ]
+            longest = max(
+                (right - left for left, right in zip(boundaries, boundaries[1:])),
+                default=0,
+            )
+        phases = []
+        for key, raw in self.phase_metrics.items():
+            count = int(raw["frames"])
+            phases.append({
+                "scope": key,
+                "frames": count,
+                "elapsed_frames": int(raw["elapsed_frames"]),
+                "hits": int(raw["hits"]),
+                "control_dead_ends": int(raw["control_dead_ends"]),
+                "learning_eligible_transitions": int(
+                    raw["learning_eligible_transitions"]
+                ),
+                "learning_eligible_elapsed_frames": int(
+                    raw["learning_eligible_elapsed_frames"]
+                ),
+                "mean_hard_actions": raw["hard_sum"] / count if count else None,
+                "published_actions": dict(raw["published_actions"].most_common()),
+                "legal_opportunities": dict(
+                    raw["legal_opportunities"].most_common()
+                ),
+            })
+        phases.sort(key=lambda item: (-item["hits"], -item["elapsed_frames"], item["scope"]))
+        return {
+            "frames": frames,
+            "first_frame": self.first_frame,
+            "last_frame": self.last_frame,
+            "hit_frames": self.hit_frames,
+            "longest_observed_no_hit_frames": longest,
+            "capture_timing": self._timing_summary(self.capture_timings),
+            "solve_timing": self._timing_summary(self.solve_timings),
+            "reason_counts": dict(self.reason_counts.most_common()),
+            "stale_retry_rate": (
+                self.reason_counts["stale-retry"] / frames if frames else None
+            ),
+            "learning_eligible_elapsed_frames": sum(
+                int(raw["learning_eligible_elapsed_frames"])
+                for raw in self.phase_metrics.values()
+            ),
+            "compressed_bytes_per_frame": compressed / frames if frames else None,
+            "phases": phases,
+        }
 
     def _on_shard(self, shard: dict[str, object]) -> None:
         with self.manifest_lock:
@@ -641,9 +778,11 @@ class CorpusRecorder:
                         "snapshot": _serialize_snapshot(envelope.snapshot, objects),
                         "decision": _jsonable(envelope.evidence),
                     }, envelope.sequence)
+                    self._observe_frame_metrics(envelope)
                     if previous is not None:
                         transition = _transition(previous, envelope)
                         writers["transitions"].write(transition, previous.sequence)
+                        self._observe_transition_metrics(transition)
                         if transition["terminal"]["done"]:
                             writers["events"].write({
                                 "schema_version": EVENT_SCHEMA,
@@ -695,6 +834,7 @@ class CorpusRecorder:
                 "written_frames": self.written,
                 "closed_unix_ns": time.time_ns(),
                 "run_outcome": run_outcome,
+                "summary": self._metrics_summary(),
             })
             _atomic_json(self.run_dir / "manifest.json", self.manifest)
         return self.run_dir
