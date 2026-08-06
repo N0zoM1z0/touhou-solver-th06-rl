@@ -52,17 +52,31 @@ struct Position {
     float y;
 };
 
+struct LaserBasis {
+    float sine;
+    float cosine;
+};
+
 struct HazardView {
     std::int32_t horizon;
     const std::uint32_t* aabb_offsets;
     const Th06RlAabb* aabbs;
     const std::uint32_t* laser_offsets;
     const Th06RlLaserRect* lasers;
+    const LaserBasis* laser_bases;
 };
 
 struct HazardSample {
     std::int32_t collisions;
     float clearance;
+};
+
+struct HazardAccumulator {
+    std::int32_t collisions{0};
+    float overlap_clearance{std::numeric_limits<float>::infinity()};
+    float minimum_distance_squared{std::numeric_limits<float>::infinity()};
+    float minimum_gap_x{0.0f};
+    float minimum_gap_y{0.0f};
 };
 
 bool valid_action(std::int32_t action) {
@@ -166,12 +180,14 @@ Position advance(
     return position;
 }
 
-float signed_aabb_clearance(
+void accumulate_aabb(
     float player_x,
     float player_y,
     float player_half_width,
     float player_half_height,
-    const Th06RlAabb& hazard) {
+    const Th06RlAabb& hazard,
+    float collision_margin,
+    HazardAccumulator& result) {
     const float gap_x = std::max(
         hazard.left - (player_x + player_half_width),
         (player_x - player_half_width) - hazard.right);
@@ -179,35 +195,59 @@ float signed_aabb_clearance(
         hazard.top - (player_y + player_half_height),
         (player_y - player_half_height) - hazard.bottom);
     if (gap_x <= 0.0f && gap_y <= 0.0f) {
-        return std::max(gap_x, gap_y);
+        const float clearance = std::max(gap_x, gap_y);
+        result.overlap_clearance = std::min(
+            result.overlap_clearance,
+            clearance);
+        result.collisions += static_cast<std::int32_t>(
+            clearance <= collision_margin);
+        return;
     }
-    return std::hypot(std::max(gap_x, 0.0f), std::max(gap_y, 0.0f));
+    const float positive_x = std::max(gap_x, 0.0f);
+    const float positive_y = std::max(gap_y, 0.0f);
+    const float distance_squared = positive_x * positive_x
+        + positive_y * positive_y;
+    if (distance_squared < result.minimum_distance_squared) {
+        result.minimum_distance_squared = distance_squared;
+        result.minimum_gap_x = positive_x;
+        result.minimum_gap_y = positive_y;
+    }
+    // max(x, y) is a cheap lower bound on hypot(x, y).  The exact
+    // comparison is still performed for every possible collision.
+    if (collision_margin >= 0.0f
+        && std::max(positive_x, positive_y) <= collision_margin) {
+        result.collisions += static_cast<std::int32_t>(
+            std::hypot(positive_x, positive_y) <= collision_margin);
+    }
 }
 
-float signed_laser_clearance(
+void accumulate_laser(
     float player_x,
     float player_y,
     float player_half_width,
     float player_half_height,
-    const Th06RlLaserRect& laser) {
+    const Th06RlLaserRect& laser,
+    const LaserBasis& basis,
+    float collision_margin,
+    HazardAccumulator& result) {
     const float dx = player_x - laser.origin_x;
     const float dy = player_y - laser.origin_y;
-    const float sine = std::sin(laser.angle);
-    const float cosine = std::cos(laser.angle);
-    const float local_x = cosine * dx + sine * dy;
-    const float local_y = cosine * dy - sine * dx;
+    const float local_x = basis.cosine * dx + basis.sine * dy;
+    const float local_y = basis.cosine * dy - basis.sine * dx;
     const Th06RlAabb local{
         laser.center_offset - laser.size_x / 2.0f,
         -laser.size_y / 2.0f,
         laser.center_offset + laser.size_x / 2.0f,
         laser.size_y / 2.0f,
     };
-    return signed_aabb_clearance(
+    accumulate_aabb(
         local_x,
         local_y,
         player_half_width,
         player_half_height,
-        local);
+        local,
+        collision_margin,
+        result);
 }
 
 HazardSample sample_hazards(
@@ -217,35 +257,57 @@ HazardSample sample_hazards(
     float player_half_width,
     float player_half_height,
     float collision_margin) {
-    HazardSample result{0, std::numeric_limits<float>::infinity()};
+    HazardAccumulator result;
     const auto frame_index = static_cast<std::size_t>(frame - 1);
     const auto aabb_start = hazards.aabb_offsets[frame_index];
     const auto aabb_end = hazards.aabb_offsets[frame_index + 1];
     for (auto index = aabb_start; index < aabb_end; ++index) {
-        const float clearance = signed_aabb_clearance(
+        accumulate_aabb(
             position.x,
             position.y,
             player_half_width,
             player_half_height,
-            hazards.aabbs[index]);
-        result.clearance = std::min(result.clearance, clearance);
-        result.collisions += static_cast<std::int32_t>(
-            clearance <= collision_margin);
+            hazards.aabbs[index],
+            collision_margin,
+            result);
     }
     const auto laser_start = hazards.laser_offsets[frame_index];
     const auto laser_end = hazards.laser_offsets[frame_index + 1];
     for (auto index = laser_start; index < laser_end; ++index) {
-        const float clearance = signed_laser_clearance(
+        accumulate_laser(
             position.x,
             position.y,
             player_half_width,
             player_half_height,
-            hazards.lasers[index]);
-        result.clearance = std::min(result.clearance, clearance);
-        result.collisions += static_cast<std::int32_t>(
-            clearance <= collision_margin);
+            hazards.lasers[index],
+            hazards.laser_bases[index],
+            collision_margin,
+            result);
     }
-    return result;
+    const float clearance = std::isfinite(result.overlap_clearance)
+        ? result.overlap_clearance
+        : (
+            std::isfinite(result.minimum_distance_squared)
+                ? std::hypot(result.minimum_gap_x, result.minimum_gap_y)
+                : std::numeric_limits<float>::infinity()
+        );
+    return HazardSample{result.collisions, clearance};
+}
+
+std::vector<LaserBasis> prepare_laser_bases(
+    std::int32_t horizon,
+    const std::uint32_t* laser_offsets,
+    const Th06RlLaserRect* lasers) {
+    const auto count = laser_offsets[static_cast<std::size_t>(horizon)];
+    std::vector<LaserBasis> bases;
+    bases.reserve(count);
+    for (std::uint32_t index = 0; index < count; ++index) {
+        bases.push_back(LaserBasis{
+            std::sin(lasers[index].angle),
+            std::cos(lasers[index].angle),
+        });
+    }
+    return bases;
 }
 
 bool opposed(std::int32_t first_index, std::int32_t second_index) {
@@ -388,12 +450,17 @@ extern "C" int th06_rl_certify_actions_v1(
         || action_final_xy == nullptr) {
         return 2;
     }
+    const auto laser_bases = prepare_laser_bases(
+        horizon,
+        laser_frame_offsets,
+        lasers);
     const HazardView hazards{
         horizon,
         aabb_frame_offsets,
         aabbs,
         laser_frame_offsets,
         lasers,
+        laser_bases.data(),
     };
     *safe_mask = 0;
     for (std::int32_t action = 0; action < kActionCount; ++action) {
@@ -516,12 +583,17 @@ extern "C" int th06_rl_local_plan_v1(
         std::numeric_limits<float>::infinity(), player_x, player_y,
         std::numeric_limits<float>::infinity(), 0, 0,
     };
+    const auto laser_bases = prepare_laser_bases(
+        horizon,
+        laser_frame_offsets,
+        lasers);
     const HazardView hazards{
         horizon,
         aabb_frame_offsets,
         aabbs,
         laser_frame_offsets,
         lasers,
+        laser_bases.data(),
     };
     std::vector<Node> beam;
     for (std::int32_t action = 0; action < kActionCount; ++action) {
@@ -668,4 +740,3 @@ extern "C" int th06_rl_local_plan_v1(
     result->continuation_action_count = selected->continuation_actions;
     return 0;
 }
-

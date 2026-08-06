@@ -1,8 +1,32 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
-from th06_rl.native import Aabb, LaserRect, NativeKernel, PackedHazards
+from th06_rl.core.model import Kinematics
+from th06_rl.native import ACTIONS, Aabb, LaserRect, NativeKernel, PackedHazards
+
+
+BY_NAME = {action.name: action for action in ACTIONS}
+KINEMATICS = Kinematics(4.0, 2.0, 2.828427, 1.414214)
+
+
+def certify_stay(aabb: Aabb | None):
+    frame = () if aabb is None else (aabb,)
+    return NativeKernel().certify_actions(
+        x=192.0,
+        y=384.0,
+        half_width=2.0,
+        half_height=2.0,
+        kinematics=KINEMATICS,
+        current_action=BY_NAME["stay"],
+        hazards=PackedHazards(
+            aabb_frames=(frame,) * 4,
+            laser_frames=((),) * 4,
+        ),
+        candidates=(BY_NAME["stay"],),
+    )
 
 
 def test_prepared_prefix_reuses_the_exact_native_buffers() -> None:
@@ -45,3 +69,19 @@ def test_prepared_prefix_cannot_expand_or_be_empty() -> None:
         prepared.prefix(0)
     with pytest.raises(ValueError):
         prepared.prefix(3)
+
+
+def test_native_clearance_defers_distance_without_changing_value() -> None:
+    certified = certify_stay(Aabb(197.0, 390.0, 198.0, 391.0))
+
+    assert len(certified) == 1
+    assert math.isclose(certified[0].min_clearance, 5.0)
+    assert math.isinf(certify_stay(None)[0].min_clearance)
+
+
+def test_native_collision_margin_keeps_exact_diagonal_boundary() -> None:
+    outside = certify_stay(Aabb(194.2, 386.3, 195.0, 387.0))
+    inside = certify_stay(Aabb(194.2, 386.2, 195.0, 387.0))
+
+    assert len(outside) == 1
+    assert not inside
