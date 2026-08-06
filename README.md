@@ -98,6 +98,10 @@ PYTHONPATH=src python scripts/analyze_policy_aliasing.py \
 
 The report contrasts the preserved coarse UCB grouping with a counterfactual
 hierarchical partition. It is an alias diagnostic, not an off-policy estimate.
+Fine legal-action opportunities are already losslessly present in the corpus;
+the restart checkpoint retains only selected/observed fine counters so its RAM
+and disk cost scales with feedback actually consumed rather than every action
+that happened to be legal.
 
 Every batch invokes the post-Stage infra audit before starting the next game.
 It writes `infra-audit.json` inside the ignored run directory and classifies

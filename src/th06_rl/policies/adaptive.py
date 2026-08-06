@@ -71,7 +71,6 @@ class AdaptivePolicy:
         self.trials: Counter[str] = Counter()
         self.reward_sum: Counter[str] = Counter()
         self.fine_selected: Counter[str] = Counter()
-        self.fine_opportunities: Counter[str] = Counter()
         self.fine_trials: Counter[str] = Counter()
         self.fine_reward_sum: Counter[str] = Counter()
         self.pending_keys: dict[tuple[int, str], tuple[str, str]] = {}
@@ -176,7 +175,6 @@ class AdaptivePolicy:
             baseline_prior = 0.18 if action == context.baseline_action else 0.0
             scores[action] = empirical + optimism + baseline_prior
             self.opportunities[key] += 1
-            self.fine_opportunities[fine_key] += 1
         greedy = max(legal, key=lambda action: (scores[action], action))
         exploration = max(0.0, min(1.0, float(context.exploration_rate)))
         if len(legal) == 1 or exploration == 0.0:
@@ -269,7 +267,6 @@ class AdaptivePolicy:
             "trials": dict(self.trials),
             "reward_sum": dict(self.reward_sum),
             "fine_selected": dict(self.fine_selected),
-            "fine_opportunities": dict(self.fine_opportunities),
             "fine_trials": dict(self.fine_trials),
             "fine_reward_sum": dict(self.fine_reward_sum),
         }
@@ -313,7 +310,6 @@ class AdaptivePolicy:
             (self.trials, "trials", int),
             (self.reward_sum, "reward_sum", float),
             (self.fine_selected, "fine_selected", int),
-            (self.fine_opportunities, "fine_opportunities", int),
             (self.fine_trials, "fine_trials", int),
             (self.fine_reward_sum, "fine_reward_sum", float),
         ):

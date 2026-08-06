@@ -51,6 +51,11 @@ def _group_summary(groups, minimum_support: int) -> dict[str, object]:
         for item in groups.values()
         if len(item["physical_signatures"]) > 1
     )
+    failure_support = sorted(
+        item["records"]
+        for item in groups.values()
+        for _ in range(item["next_hard_empty"])
+    )
     return {
         "context_actions": len(groups),
         "minimum_support": minimum_support,
@@ -67,6 +72,15 @@ def _group_summary(groups, minimum_support: int) -> dict[str, object]:
         "multi_physical_signature_record_rate": (
             multi_signature_records / total if total else None
         ),
+        "next_hard_empty_group_support": {
+            "events": len(failure_support),
+            "singleton_events": sum(value == 1 for value in failure_support),
+            "p50_records": (
+                failure_support[len(failure_support) // 2]
+                if failure_support else None
+            ),
+            "max_records": max(failure_support, default=None),
+        },
     }
 
 

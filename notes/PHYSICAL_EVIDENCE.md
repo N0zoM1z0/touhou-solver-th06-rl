@@ -90,3 +90,21 @@ new failure evidence improves play.
   behavior by the hierarchical v2 features reduced those figures to 4.59%
   and 9 groups. This is evidence for the new fine partition, not an off-policy
   claim that v2 would have selected a different action in the recorded run.
+- `20260806T145106Z-285711500` at `eb290c7`: first complete physical Stage 6
+  run collecting hierarchical-v2 feedback. It recorded 21 HIT, all after a
+  Hard-empty control dead end, with zero capture/infrastructure failures and a
+  committed policy update. Capture p95 was 7.05 ms, solve p95 was 1.31 ms,
+  stale retry rate was 0.106%, peak controller private memory was 118.4 MiB,
+  and the corpus was 289 MiB. The 500+ live-bullet control p95 was 9.70 ms
+  with zero stale retries; dense native replay checked 64 samples without
+  divergence. Three focus-loss events were repaired.
+
+  This run contributed 30,486 fine feedback transitions over 16,055 trained
+  fine context-actions. A same-run audit reduced the multiple-physical-
+  signature record rate from 96.66% under the coarse key to 4.64% under v2.
+  Nineteen of the 26 next-Hard-empty precursor transitions were singletons in
+  their fine group, so the HIT count is first-coverage data rather than an
+  estimate of learned improvement. The run also exposed 215,700 fine legal-
+  opportunity keys that did not participate in decisions; omitting that
+  redundant checkpoint table retains every reward/trial and cuts the same
+  packed state from 2.69 MiB to 1.20 MiB.

@@ -26,6 +26,7 @@ Infra-Audit: <compact classification summary>
 | 2026-08-06 | Lunatic / Reimu-A / Stage 5 | `20260806T114830Z-235638200` | `756fa7b` | 5 | 6.004 ms | 0% | complete cold-start episode; 5/5 HIT preceded by empty Hard set; full-decode Hard parity 64/64; 0 geometry/certificate candidates; 0 Bomb; 28 authoritative anchors; 118 MiB compressed corpus |
 | 2026-08-06 | Lunatic / Reimu-A / Stage 6 | `20260806T115616Z-821716900` | `756fa7b` | 16 | 6.078 ms | 0.958% | complete cold-start episode; 16/16 HIT preceded by empty Hard set; full-decode Hard parity 62 checked frames with 0 divergence; 0 geometry/certificate candidates; 0 Bomb; 78 authoritative anchors; 309 MiB compressed corpus |
 | 2026-08-06 | Lunatic / Reimu-A / Stage 4 | `20260806T120632Z-280200100` | `756fa7b` | 3 | 5.811 ms | 0.0075% | complete; 3/3 HIT preceded by empty Hard set; full-decode Hard parity 64/64; 0 geometry/certificate candidates; 0 Bomb; 25 authoritative anchors; 244 MiB compressed corpus |
+| 2026-08-06 | Lunatic / Reimu-A / Stage 6 | `20260806T145106Z-285711500` | `eb290c7` | 21 | 7.048 ms | 0.1061% | complete first hierarchical-v2 feedback episode; 21/21 HIT preceded by empty Hard set; dense (500+ bullets) control P95 9.702 ms with 0 stale retries; full-decode Hard parity 64/64; 0 geometry/certificate candidates; 0 Bomb; 89 authoritative anchors; 289 MiB compressed corpus |
 
 The mixed-revision row is retained because it is useful physical evidence,
 but it is not a reproducible release qualification. New qualification runs
