@@ -296,6 +296,7 @@ def run(args: argparse.Namespace) -> int:
         pending_anchor_reason = "stage-root"
         anchor_retry_after = 0
         last_reported_reason = None
+        dialogue_active = False
         next_checkpoint = started + CHECKPOINT_SECONDS
         next_health_sample = started
         next_health_trace = started
@@ -443,6 +444,24 @@ def run(args: argparse.Namespace) -> int:
                         flush=True,
                     )
                     break
+            if dialogue_active:
+                assert dialogue is not None and keyboard is not None
+                try:
+                    dialogue_state = dialogue.update(True)
+                except (OSError, RuntimeError) as error:
+                    if retain_continuous_stage("dialogue-control", error):
+                        continue
+                    raise
+                if dialogue_state.active:
+                    # Dialogue owns only Shoot/Ctrl. No battle movement is
+                    # proposed, captured, or learned while its source state
+                    # deliberately pauses the BulletManager calc chain.
+                    lease.cleared()
+                    time.sleep(0.001)
+                    continue
+                dialogue_active = False
+                keyboard.release_all()
+                lease.cleared()
             if last_frame is not None:
                 try:
                     if read_game_frame(process) == last_frame:
@@ -532,6 +551,21 @@ def run(args: argparse.Namespace) -> int:
                     if keyboard is not None:
                         keyboard.release_all()
                         lease.cleared()
+                    if (
+                        dialogue is not None
+                        and keyboard is not None
+                        and not snapshot.in_menu
+                        and not snapshot.replay_or_demo
+                    ):
+                        # Hold Shoot without movement, then let the independent
+                        # dialogue controller own Ctrl or the required fresh-Z
+                        # edge. release_all() above intentionally ran first so
+                        # no previous dodge direction survives into dialogue.
+                        keyboard.apply(action_from_input(0))
+                        dialogue_state = dialogue.update(True)
+                        dialogue_active = dialogue_state.active
+                        if not dialogue_active:
+                            keyboard.release_all()
                 elif snapshot.replay_or_demo:
                     raise AuthorityUnavailable("replay/demo input authority")
                 elif snapshot.player_state not in ACTIVE_PLAYER_STATES:
@@ -554,8 +588,6 @@ def run(args: argparse.Namespace) -> int:
                         f"scope changed to {_snapshot_scope(snapshot)}"
                     )
                 else:
-                    if dialogue is not None:
-                        dialogue.update(True)
                     current_core = core_action_from_input(snapshot.input_mask)
                     current_action_name = current_core.name
                     kinematics = kinematics_from_snapshot(snapshot)
