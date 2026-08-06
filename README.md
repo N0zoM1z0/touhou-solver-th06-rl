@@ -29,9 +29,9 @@ policy-checkpoint, trace, and corpus failures fail closed without destroying
 the physical Stage episode. Create
 `artifacts\pause-lunatic-stage456` to pause between complete stages. The
 single-stage `run_lunatic_stage4_learning.bat` remains useful for focused
-experiments. `run_lunatic_stage5_learning.bat` is the active focused Stage 5
-training entry point and retains the same complete-episode/storage/audit
-contracts. The
+experiments. `run_lunatic_stage5_learning.bat` and
+`run_lunatic_stage6_learning.bat` are the focused Stage 5 and Stage 6 training
+entry points and retain the same complete-episode/storage/audit contracts. The
 `run_hard_stage4_learning.bat` entry point and its independent policy state are
 retained for baseline reproduction, not for the active data flywheel.
 

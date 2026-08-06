@@ -37,3 +37,18 @@ new failure evidence improves play.
   replay checked 63 samples with no divergence. No focus-loss event occurred
   in this run (`background_reactivations=0`). The reduction from 19 to 16 HIT
   is chronological evidence, not yet a causal learning estimate.
+- `20260806T135011Z-455869400` at `515ceb2`: complete Stage 5 with 17 HIT,
+  zero capture and infrastructure failures, and a committed policy update.
+  Capture p95 was 5.85 ms, solve p95 was 1.00 ms, and dense native replay
+  checked 64 samples with no divergence. Two physical focus-loss events were
+  repaired (`background_reactivations=2`) and the Stage still completed. This
+  supplies the missing physical proof that background play survives switching
+  away from TH06.
+
+## Lunatic / Reimu-A / Stage 6
+
+- `20260806T115616Z-821716900` at `756fa7b`: complete Stage 6 with 16 HIT,
+  zero capture and infrastructure failures. Capture p95 was 6.08 ms, solve p95
+  was 1.36 ms, and dense native replay checked 62 samples with no divergence.
+  This is a trustworthy earlier Stage 6 baseline, although it predates Stage
+  policy transactions and background-activity instrumentation.
