@@ -8,10 +8,12 @@ are never imported by the new runtime.
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from pathlib import Path
 import sys
 
 
+@lru_cache(maxsize=1)
 def donor_scripts_path() -> Path:
     override = os.environ.get("TH06_RL_DONOR_SCRIPTS")
     if override:
@@ -27,10 +29,10 @@ def donor_scripts_path() -> Path:
     return path
 
 
+@lru_cache(maxsize=1)
 def enable_donor_imports() -> Path:
     path = donor_scripts_path()
     value = str(path)
     if value not in sys.path:
         sys.path.insert(0, value)
     return path
-
