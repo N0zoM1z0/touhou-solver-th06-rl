@@ -23,6 +23,7 @@ from ..corpus import (
 from ..native import NativeKernel, PackedHazards
 from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
+from ..policy_transaction import StagePolicyTransaction
 from .background_input import BackgroundInputBridge
 from .control_capture import CONTROL_CAPTURE_TIER, read_control_snapshot
 from .donor import enable_donor_imports
@@ -202,6 +203,8 @@ def run(args: argparse.Namespace) -> int:
     dialogue = None
     trace = None
     recorder = None
+    plugin = None
+    policy_transaction = None
     corpus_path = None
     exit_code = 0
     stage_completed = False
@@ -217,6 +220,10 @@ def run(args: argparse.Namespace) -> int:
     termination_reason = "controller-interrupted"
     minimum_commit_headroom_bytes: int | None = None
     maximum_controller_private_bytes = 0
+    policy_state_recovered = False
+    policy_state_committed = False
+    policy_state_rolled_back = False
+    policy_transaction_failure: str | None = None
     started = time.monotonic()
     try:
         if args.armed:
@@ -248,6 +255,8 @@ def run(args: argparse.Namespace) -> int:
             )
 
         kernel = NativeKernel(args.native_library)
+        policy_transaction = StagePolicyTransaction(args.policy_state)
+        policy_state_recovered = policy_transaction.begin()
         plugin = HotReloadPolicy(
             args.policy_plugin,
             state_path=args.policy_state,
@@ -1011,15 +1020,39 @@ def run(args: argparse.Namespace) -> int:
                 next_checkpoint = time.monotonic() + CHECKPOINT_SECONDS
         else:
             termination_reason = "time-limit"
-        try:
-            plugin.checkpoint()
-        except (OSError, RuntimeError, TypeError, ValueError) as error:
-            if not args.continuous_stage:
-                raise
-            infrastructure_failure_count += 1
-            infrastructure_failures["final-policy-checkpoint"] = 1
-            print(f"final policy checkpoint failed: {error}", flush=True)
     finally:
+        if policy_transaction is not None:
+            try:
+                if (
+                    stage_completed
+                    and exit_code == 0
+                    and sys.exc_info()[0] is None
+                    and plugin is not None
+                ):
+                    plugin.checkpoint()
+                    policy_transaction.commit()
+                    policy_state_committed = True
+                else:
+                    policy_transaction.rollback()
+                    policy_state_rolled_back = True
+            except (OSError, RuntimeError, TypeError, ValueError) as error:
+                policy_transaction_failure = f"{type(error).__name__}: {error}"
+                infrastructure_failure_count += 1
+                infrastructure_failures["policy-transaction"] = 1
+                try:
+                    policy_transaction.rollback()
+                    policy_state_rolled_back = True
+                except (OSError, RuntimeError, TypeError, ValueError) as rollback_error:
+                    policy_transaction_failure += (
+                        "; rollback "
+                        f"{type(rollback_error).__name__}: {rollback_error}"
+                    )
+                exit_code = 76
+                print(
+                    "Stage policy transaction failed; batch will stop: "
+                    f"{policy_transaction_failure}",
+                    flush=True,
+                )
         if trace is not None:
             trace.close()
         try:
@@ -1050,6 +1083,12 @@ def run(args: argparse.Namespace) -> int:
                             ),
                             "maximum_controller_private_bytes": (
                                 maximum_controller_private_bytes
+                            ),
+                            "policy_state_recovered": policy_state_recovered,
+                            "policy_state_committed": policy_state_committed,
+                            "policy_state_rolled_back": policy_state_rolled_back,
+                            "policy_transaction_failure": (
+                                policy_transaction_failure
                             ),
                         })
                     except CorpusError as error:
