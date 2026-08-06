@@ -223,7 +223,7 @@ def _prior_support(current, prior) -> dict[str, object]:
 def analyze(
     run_dir: Path,
     minimum_support: int,
-    prior_run_dir: Path | None = None,
+    prior_run_dirs: tuple[Path, ...] = (),
 ) -> dict[str, object]:
     manifest, eligible, groups = _collect_groups(run_dir)
     result = {
@@ -247,17 +247,23 @@ def analyze(
             "broadest hot-start backoff."
         ),
     }
-    if prior_run_dir is not None:
-        prior_manifest, _prior_eligible, prior_groups = _collect_groups(
-            prior_run_dir
-        )
-        result["prior_run_support"] = {
-            "prior_run_id": prior_manifest.get(
+    if prior_run_dirs:
+        prior_run_ids = []
+        prior_keys = {name: set() for name in groups}
+        for prior_run_dir in prior_run_dirs:
+            prior_manifest, _prior_eligible, prior_groups = _collect_groups(
+                prior_run_dir
+            )
+            prior_run_ids.append(prior_manifest.get(
                 "run_id",
                 prior_run_dir.name,
-            ),
+            ))
+            for name, values in prior_groups.items():
+                prior_keys[name].update(values)
+        result["prior_run_support"] = {
+            "prior_run_ids": prior_run_ids,
             **{
-                name: _prior_support(value, prior_groups[name])
+                name: _prior_support(value, prior_keys[name])
                 for name, value in groups.items()
             },
         }
@@ -270,14 +276,23 @@ def main() -> int:
     parser.add_argument(
         "--prior-run-dir",
         type=Path,
-        help="measure how often this run reuses context-actions from a prior run",
+        action="append",
+        default=[],
+        help=(
+            "measure reuse from a prior run; repeat to match the union of "
+            "all runs loaded by the policy"
+        ),
     )
     parser.add_argument("--minimum-support", type=int, default=2)
     args = parser.parse_args()
     if args.minimum_support < 1:
         parser.error("minimum support must be positive")
     print(json.dumps(
-        analyze(args.run_dir, args.minimum_support, args.prior_run_dir),
+        analyze(
+            args.run_dir,
+            args.minimum_support,
+            tuple(args.prior_run_dir),
+        ),
         indent=2,
         sort_keys=True,
     ))

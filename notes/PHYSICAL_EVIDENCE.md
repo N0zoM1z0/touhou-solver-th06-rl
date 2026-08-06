@@ -136,3 +136,21 @@ new failure evidence improves play.
   records while cutting the coarse alias rate to 47.42%. These descriptive
   corpus figures motivate a three-level coarse -> phase/control -> exact
   frontier backoff; they are not an off-policy claim about HIT reduction.
+- `20260806T153702Z-009110000` at `846b17f`: first complete physical Stage 6
+  using the three-level v3 policy. It recorded 19 HIT, all after a Hard-empty
+  control dead end, with zero capture/infrastructure failures and a committed
+  v3 checkpoint. Capture p95 was 6.74 ms, solve p95 was 1.46 ms, solve p99 was
+  2.83 ms, and stale retry rate was 0.0296%. The 500+ bullet control p95 was
+  10.18 ms with a 0.257% stale rate, still well inside the 16.67 ms / 2%
+  acceptance gate. Dense native parity checked 64 samples without divergence;
+  three focus-loss events were repaired. Peak controller private memory was
+  91.2 MiB, the corpus was 308 MiB, and the checkpoint held 93,627 middle and
+  93,627 fine observations.
+
+  Against the union of the two v2 corpus runs loaded at startup, v3's current
+  records had prior support rates of 80.84% coarse, 34.68% middle, and 15.64%
+  exact-fine. Their within-run multiple-signature alias rates were 96.36%,
+  45.48%, and 5.32%, respectively. Two of 25 next-Hard-empty precursors had
+  middle support versus none at exact-fine; this is sparse descriptive
+  evidence that the intended intermediate reuse path exists. It is not a
+  causal interpretation of the 12-to-19 HIT change.

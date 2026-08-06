@@ -76,7 +76,6 @@ class AdaptivePolicy:
         self.reward_sum: Counter[str] = Counter()
         self.middle_trials: Counter[str] = Counter()
         self.middle_reward_sum: Counter[str] = Counter()
-        self.fine_selected: Counter[str] = Counter()
         self.fine_trials: Counter[str] = Counter()
         self.fine_reward_sum: Counter[str] = Counter()
         self.pending_keys: dict[
@@ -232,7 +231,7 @@ class AdaptivePolicy:
                 action: 1.0
                 / math.sqrt(
                     1.0
-                    + self.fine_selected[
+                    + self.fine_trials[
                         self._action_key(fine_context_key, action)
                     ]
                 )
@@ -254,7 +253,6 @@ class AdaptivePolicy:
         key = self._action_key(context_key, chosen)
         fine_key = self._action_key(fine_context_key, chosen)
         self.selected[key] += 1
-        self.fine_selected[fine_key] += 1
         middle_key = self._action_key(middle_context_key, chosen)
         self.pending_keys[(context.frame, chosen)] = (
             key,
@@ -322,7 +320,6 @@ class AdaptivePolicy:
             "reward_sum": dict(self.reward_sum),
             "middle_trials": dict(self.middle_trials),
             "middle_reward_sum": dict(self.middle_reward_sum),
-            "fine_selected": dict(self.fine_selected),
             "fine_trials": dict(self.fine_trials),
             "fine_reward_sum": dict(self.fine_reward_sum),
         }
@@ -368,7 +365,6 @@ class AdaptivePolicy:
             (self.reward_sum, "reward_sum", float),
             (self.middle_trials, "middle_trials", int),
             (self.middle_reward_sum, "middle_reward_sum", float),
-            (self.fine_selected, "fine_selected", int),
             (self.fine_trials, "fine_trials", int),
             (self.fine_reward_sum, "fine_reward_sum", float),
         ):

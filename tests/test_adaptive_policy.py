@@ -212,6 +212,7 @@ def test_restart_checkpoint_is_compact_and_lossless() -> None:
     assert packed["schema"] == PACKED_STATE_SCHEMA
     raw = unpack_state(packed)
     assert "fine_opportunities" not in raw
+    assert "fine_selected" not in raw
     restored = AdaptivePolicy()
     restored.import_state(packed)
 

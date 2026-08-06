@@ -98,14 +98,14 @@ PYTHONPATH=src python scripts/analyze_policy_aliasing.py \
   artifacts/corpus/RUN_ID
 ```
 
-Pass `--prior-run-dir artifacts/corpus/PRIOR_RUN_ID` to measure how much of the
-current run actually reuses context-actions from the previous complete Stage.
+Pass `--prior-run-dir artifacts/corpus/PRIOR_RUN_ID` once per loaded prior run
+to measure how much of the current run actually reuses their union.
 The report contrasts coarse, middle, and exact-fine partitions. It is an alias
 and support diagnostic, not an off-policy estimate.
-Fine legal-action opportunities are already losslessly present in the corpus;
-the restart checkpoint retains only selected/observed fine counters so its RAM
-and disk cost scales with feedback actually consumed rather than every action
-that happened to be legal.
+Fine legal-action opportunities and behavior choices are already losslessly
+present in the corpus; the restart checkpoint retains only observed fine
+counters so its RAM and disk cost scales with feedback actually consumed
+rather than every action that happened to be legal or merely selected.
 
 Every batch invokes the post-Stage infra audit before starting the next game.
 It writes `infra-audit.json` inside the ignored run directory and classifies
