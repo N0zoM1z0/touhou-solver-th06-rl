@@ -46,6 +46,8 @@ goto cycle
 if exist "%REPO%artifacts\pause-lunatic-stage456" exit /b 90
 "%TH06_PYTHON%" "%REPO%scripts\check_storage_budget.py" "%REPO%artifacts" --limit-gib 45 --reserve-mib 512
 if errorlevel 1 exit /b 90
+"%TH06_PYTHON%" "%REPO%scripts\check_host_memory.py" --reserve-gib 4
+if errorlevel 1 exit /b 90
 
 echo Starting independent Lunatic Practice Stage %1.
 start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"

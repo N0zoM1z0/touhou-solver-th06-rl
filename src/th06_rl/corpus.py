@@ -31,8 +31,12 @@ TRANSITION_SCHEMA = "th06-rl-transition-v4"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
-DEFAULT_SHARD_RECORDS = 128
-DEFAULT_QUEUE_RECORDS = 512
+# Four seconds of burst tolerance is enough for the streaming writer while
+# keeping dense raw bullet roots from accumulating hundreds of frames in RAM.
+# Larger shards also avoid a manifest rename/fsync every ~2 seconds per stream
+# when Windows Python writes through the WSL UNC bridge.
+DEFAULT_SHARD_RECORDS = 512
+DEFAULT_QUEUE_RECORDS = 240
 DEFAULT_MAX_RUN_BYTES = 512 * 1024 * 1024
 
 SOURCE_OBJECT_FIELDS = (
@@ -166,6 +170,14 @@ def _content_id(value: object) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _atomic_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
@@ -228,7 +240,9 @@ class _ShardWriter:
             return
         self.gzip.close()
         self.raw.close()
-        digest = hashlib.sha256(self.temporary.read_bytes()).hexdigest()
+        # Avoid materializing a dense compressed shard a second time merely
+        # to name it. This path is a WSL UNC share during physical play.
+        digest = _file_sha256(self.temporary)
         final = self.run_dir / f"{self.stream}-{self.index:06d}-{digest[:16]}.jsonl.gz"
         self.temporary.replace(final)
         self.on_shard({

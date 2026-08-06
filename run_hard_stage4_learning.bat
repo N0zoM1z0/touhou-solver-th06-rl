@@ -37,6 +37,12 @@ if errorlevel 1 (
   exit /b 0
 )
 
+"%TH06_PYTHON%" "%REPO%scripts\check_host_memory.py" --reserve-gib 4
+if errorlevel 1 (
+  echo Learning loop paused before game launch by the host-memory guard.
+  exit /b 0
+)
+
 start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
 "%TH06_PYTHON%" "%REPO%scripts\run_th06_rl.py" ^
   --game-dir "%TH06_GAME_DIR%" ^

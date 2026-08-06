@@ -35,10 +35,14 @@ from .source import (
     kinematics_from_snapshot,
     lower_observed_hazards,
 )
+from .system_health import GIB, below_commit_reserve, read_system_memory
 
 
 ACTIVE_PLAYER_STATES = (0, 3)
 CHECKPOINT_SECONDS = 60.0
+HEALTH_SAMPLE_SECONDS = 1.0
+HEALTH_TRACE_SECONDS = 10.0
+LOW_COMMIT_EXIT_CODE = 75
 DIFFICULTIES = {"normal": 1, "hard": 2, "lunatic": 3}
 
 
@@ -211,6 +215,8 @@ def run(args: argparse.Namespace) -> int:
     anchor_failure_count = 0
     corpus_failure: str | None = None
     termination_reason = "controller-interrupted"
+    minimum_commit_headroom_bytes: int | None = None
+    maximum_controller_private_bytes = 0
     started = time.monotonic()
     try:
         if args.armed:
@@ -247,7 +253,9 @@ def run(args: argparse.Namespace) -> int:
             state_path=args.policy_state,
         )
         args.trace.parent.mkdir(parents=True, exist_ok=True)
-        trace = args.trace.open("a", encoding="utf-8", buffering=1)
+        # Corpus is the durable evidence. Live status may lag by one second;
+        # buffering avoids one WSL UNC filesystem transaction per game frame.
+        trace = args.trace.open("a", encoding="utf-8", buffering=256 * 1024)
         if not args.no_corpus:
             recorder = CorpusRecorder(
                 args.corpus_root,
@@ -280,6 +288,8 @@ def run(args: argparse.Namespace) -> int:
         anchor_retry_after = 0
         last_reported_reason = None
         next_checkpoint = started + CHECKPOINT_SECONDS
+        next_health_sample = started
+        next_health_trace = started
 
         def emit_trace(record: dict[str, object]) -> None:
             """Telemetry failure must never take physical input authority."""
@@ -288,6 +298,11 @@ def run(args: argparse.Namespace) -> int:
                 return
             try:
                 trace.write(json.dumps(record, separators=(",", ":")) + "\n")
+                frame = record.get("frame")
+                if record.get("event") is not None or (
+                    isinstance(frame, int) and frame % 60 == 0
+                ):
+                    trace.flush()
             except OSError as error:
                 trace_failure_count += 1
                 print(f"live trace disabled after write failure: {error}", flush=True)
@@ -340,6 +355,69 @@ def run(args: argparse.Namespace) -> int:
             flush=True,
         )
         while not args.seconds or time.monotonic() - started < args.seconds:
+            now = time.monotonic()
+            if now >= next_health_sample:
+                next_health_sample = now + HEALTH_SAMPLE_SECONDS
+                try:
+                    memory = read_system_memory()
+                    headroom = memory.commit_headroom_bytes
+                    minimum_commit_headroom_bytes = (
+                        headroom
+                        if minimum_commit_headroom_bytes is None
+                        else min(minimum_commit_headroom_bytes, headroom)
+                    )
+                    maximum_controller_private_bytes = max(
+                        maximum_controller_private_bytes,
+                        memory.controller_private_bytes,
+                    )
+                    if now >= next_health_trace:
+                        emit_trace({
+                            "time": time.time(),
+                            "event": "system-memory",
+                            "commit_total_bytes": memory.commit_total_bytes,
+                            "commit_limit_bytes": memory.commit_limit_bytes,
+                            "commit_headroom_bytes": headroom,
+                            "physical_available_bytes": (
+                                memory.physical_available_bytes
+                            ),
+                            "controller_private_bytes": (
+                                memory.controller_private_bytes
+                            ),
+                        })
+                        next_health_trace = now + HEALTH_TRACE_SECONDS
+                    reserve = int(args.min_commit_headroom_gib * GIB)
+                    if reserve and below_commit_reserve(memory, reserve):
+                        termination_reason = "system-commit-headroom-low"
+                        exit_code = LOW_COMMIT_EXIT_CODE
+                        emit_trace({
+                            "time": time.time(),
+                            "event": "system-memory-stop",
+                            "commit_headroom_bytes": headroom,
+                            "required_headroom_bytes": reserve,
+                            "controller_private_bytes": (
+                                memory.controller_private_bytes
+                            ),
+                        })
+                        print(
+                            "host commit headroom low; input will be released "
+                            f"and batch paused ({headroom / GIB:.2f} GiB < "
+                            f"{reserve / GIB:.2f} GiB)",
+                            flush=True,
+                        )
+                        break
+                except OSError as error:
+                    infrastructure_failure_count += 1
+                    infrastructure_failures["system-memory-sample"] = (
+                        infrastructure_failures.get("system-memory-sample", 0)
+                        + 1
+                    )
+                    if infrastructure_failures["system-memory-sample"] == 1:
+                        emit_trace({
+                            "time": time.time(),
+                            "event": "system-memory-unavailable",
+                            "error": str(error),
+                        })
+                    next_health_sample = now + 10.0
             if trial is not None:
                 try:
                     _wanted, current_supervisor = read_supervisor_state(process)
@@ -858,6 +936,12 @@ def run(args: argparse.Namespace) -> int:
                             "anchor_failures": anchor_failure_count,
                             "corpus_failure": corpus_failure,
                             "elapsed_wall_seconds": time.monotonic() - started,
+                            "minimum_commit_headroom_bytes": (
+                                minimum_commit_headroom_bytes
+                            ),
+                            "maximum_controller_private_bytes": (
+                                maximum_controller_private_bytes
+                            ),
                         })
                     except CorpusError:
                         # The run directory and its last atomic manifest remain
@@ -961,6 +1045,12 @@ def run(args: argparse.Namespace) -> int:
                             "corpus_failures": corpus_failure_count,
                             "corpus_failure": corpus_failure,
                             "elapsed_wall_seconds": time.monotonic() - started,
+                            "minimum_commit_headroom_bytes": (
+                                minimum_commit_headroom_bytes
+                            ),
+                            "maximum_controller_private_bytes": (
+                                maximum_controller_private_bytes
+                            ),
                         })
                     except CorpusError as error:
                         corpus_failure_count += 1
@@ -1101,6 +1191,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--no-corpus", action="store_true")
     parser.add_argument("--no-post-run-audit", action="store_true")
+    parser.add_argument(
+        "--min-commit-headroom-gib",
+        type=float,
+        default=4.0,
+        help=(
+            "release input and stop the batch when Windows system commit "
+            "headroom falls below this reserve; 0 disables the guard"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.seconds < 0.0:
         parser.error("--seconds cannot be negative")
@@ -1110,6 +1209,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--full-anchor-frames cannot be negative")
     if not 0.0 <= args.exploration_rate <= 1.0:
         parser.error("--exploration-rate must be in [0, 1]")
+    if args.min_commit_headroom_gib < 0.0:
+        parser.error("--min-commit-headroom-gib cannot be negative")
     expected_stage = args.practice_stage or args.expected_stage
     label = f"{args.difficulty}_reimu_a_stage{expected_stage}"
     if args.policy_state is None:
