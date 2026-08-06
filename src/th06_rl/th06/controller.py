@@ -97,7 +97,11 @@ def run(args: argparse.Namespace) -> int:
             keyboard = Keyboard(
                 process.pid,
                 bridge,
-                foreground_required=True,
+                # The verified in-process input bridge is explicitly
+                # background-capable. Foreground gating here made ordinary
+                # window switches abort menu automation and contradicted the
+                # always-on collection use case.
+                foreground_required=False,
             )
             dialogue = DialogueSkipper(process, keyboard)
         if args.practice_stage is not None:
@@ -375,7 +379,14 @@ def run(args: argparse.Namespace) -> int:
             finally:
                 try:
                     if args.stop_game:
-                        process.terminate()
+                        # A user/window-manager initiated exit can race the
+                        # controller cleanup. A signalled process handle means
+                        # the exact trial is already gone and needs no second
+                        # TerminateProcess call.
+                        if process.kernel32.WaitForSingleObject(
+                            process.handle, 0
+                        ) != 0:
+                            process.terminate()
                 finally:
                     process.close()
         print(
