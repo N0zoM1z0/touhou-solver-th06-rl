@@ -127,7 +127,11 @@ class HotReloadPolicy:
         return True
 
     def decide(self, context: PolicyContext) -> PolicyDecision:
-        self.maybe_reload(context.frame)
+        # Never touch the policy source path in the frame-critical decision
+        # call.  In the Windows deployment the repository is reached through
+        # WSL's UNC provider, where even an unchanged stat can cost most of a
+        # TH06 frame.  checkpoint() polls and atomically activates changes at
+        # a low-frequency boundary instead.
         assert self.policy is not None
         try:
             decision = self.policy.decide(context)
@@ -161,6 +165,9 @@ class HotReloadPolicy:
             )
 
     def checkpoint(self) -> bool:
+        # Hot reload is deliberately coupled to this low-frequency durability
+        # boundary, not to game-frame modulo checks in decide().
+        self.maybe_reload(0)
         if self.state_path is None or self.policy is None:
             return False
         export = getattr(self.policy, "export_state", None)

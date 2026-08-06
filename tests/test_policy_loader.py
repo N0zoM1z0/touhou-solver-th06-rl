@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from th06_rl.policy_loader import HotReloadPolicy
 
@@ -38,3 +39,34 @@ def test_unchanged_policy_does_not_cross_unc_read_boundary(
 
     assert loader.maybe_reload(30) is False
     assert reads == 0
+
+
+def test_decide_never_polls_policy_source(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "policy.py"
+    path.write_bytes(POLICY)
+    loader = HotReloadPolicy(path)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("frame-critical decide polled the policy source")
+
+    monkeypatch.setattr(loader, "maybe_reload", forbidden)
+    decision = loader.decide(SimpleNamespace(
+        baseline_action="stay",
+        locally_admissible_actions=("stay",),
+    ))
+    assert decision.action == "stay"
+
+
+def test_checkpoint_is_the_reload_poll_boundary(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "policy.py"
+    path.write_bytes(POLICY)
+    loader = HotReloadPolicy(path)
+    polls = []
+
+    monkeypatch.setattr(
+        loader,
+        "maybe_reload",
+        lambda frame: polls.append(frame) or False,
+    )
+    assert loader.checkpoint() is False
+    assert polls == [0]
