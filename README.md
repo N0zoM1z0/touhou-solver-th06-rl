@@ -16,11 +16,14 @@ character, shot type, stage, and automatically derived source context remain
 separate corpus/model scopes.
 
 `run_hard_stage4_learning.bat` repeatedly starts an exact Practice Stage 4
-trial, records one complete gzip-sharded run, checkpoints the bounded online
-model, cleans up the exact game PID, and starts the next trial. It continues
-after an ordinary HIT or a certified local control dead-end, but stops on Bomb
-or an infrastructure/source-authority failure. Create
-`artifacts\pause-hard-stage4` to pause between trials.
+trial, records one complete gzip-sharded stage trajectory, checkpoints the
+bounded online model, cleans up the exact game PID, and starts the next full
+stage. The verified life patch prevents Game Over without hiding physical HIT:
+each HIT is recorded as negative feedback, input is released through death and
+spawn, and play resumes in the same stage. A certified local control dead-end
+also becomes feedback rather than an external restart. Bomb or an
+infrastructure/source-authority failure still stops the loop. Create
+`artifacts\pause-hard-stage4` to pause between complete stages.
 
 Each corpus frame retains the complete coherent source snapshot, Hard set,
 local survivor set, policy probability and planner diagnostics. Stable

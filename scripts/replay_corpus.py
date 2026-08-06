@@ -81,7 +81,7 @@ def replay(args: argparse.Namespace) -> dict[str, object]:
 
     run_dir = args.run_dir.resolve()
     objects = _load_objects(run_dir)
-    rows = list(_rows(sorted(run_dir.glob("snapshots-*.jsonl.gz"))))
+    rows = list(_rows(sorted(run_dir.glob("frames-*.jsonl.gz"))))
     if not rows:
         raise RuntimeError(f"no snapshot shards in {run_dir}")
 

@@ -17,6 +17,15 @@ STATE_CHARACTER_SELECT = 9
 STATE_SHOT_SELECT = 11
 STATE_PRACTICE_LVL_SELECT = 17
 BACKGROUND_MENU_TIMEOUT = 15.0
+# A background TH06 instance can be throttled to roughly four updates/second.
+# The donor's foreground-oriented 50 ms tap may then begin and end between two
+# game updates. The authoritative Supervisor starts key repeat after 30 equal
+# input frames; 350 ms is only 21 frames at 60 Hz but spans a throttled update.
+BACKGROUND_TAP_SECONDS = 0.35
+
+
+def _tap(keyboard, key: str) -> None:
+    keyboard.tap(key, hold_seconds=BACKGROUND_TAP_SECONDS)
 
 
 def _wait_state(process, wanted: int, timeout: float = BACKGROUND_MENU_TIMEOUT):
@@ -55,7 +64,7 @@ def _set_cursor(process, keyboard, state: int, target: int, length: int) -> None
             return
         downward = (target - cursor) % length
         upward = (cursor - target) % length
-        keyboard.tap("down" if downward <= upward else "up")
+        _tap(keyboard, "down" if downward <= upward else "up")
     raise RuntimeError(f"could not select cursor {target} in state {state}")
 
 
@@ -68,7 +77,7 @@ def _enter_main_menu(process, keyboard) -> None:
         if state == STATE_MAIN_MENU:
             break
         if state == STATE_PRE_INPUT and timer >= 30:
-            keyboard.tap("shoot")
+            _tap(keyboard, "shoot")
         time.sleep(0.02)
     else:
         raise RuntimeError(f"main menu not reached; last={last}")
@@ -79,7 +88,7 @@ def _select_reimu_a(process, keyboard, difficulty: int) -> None:
     if difficulty not in range(4):
         raise ValueError("menu difficulty must be Easy/Normal/Hard/Lunatic")
     _set_cursor(process, keyboard, STATE_MAIN_MENU, target=2, length=8)
-    keyboard.tap("shoot")
+    _tap(keyboard, "shoot")
     _wait_state(process, STATE_DIFFICULTY_SELECT)
     _set_cursor(
         process,
@@ -88,13 +97,13 @@ def _select_reimu_a(process, keyboard, difficulty: int) -> None:
         target=difficulty,
         length=4,
     )
-    keyboard.tap("shoot")
+    _tap(keyboard, "shoot")
     _wait_timer(process, STATE_CHARACTER_SELECT, 30)
     _set_cursor(process, keyboard, STATE_CHARACTER_SELECT, target=0, length=2)
-    keyboard.tap("shoot")
+    _tap(keyboard, "shoot")
     _wait_timer(process, STATE_SHOT_SELECT, 30)
     _set_cursor(process, keyboard, STATE_SHOT_SELECT, target=0, length=2)
-    keyboard.tap("shoot")
+    _tap(keyboard, "shoot")
 
 
 def start_reimu_a_practice(
@@ -115,11 +124,11 @@ def start_reimu_a_practice(
         if state != STATE_PRACTICE_LVL_SELECT:
             raise RuntimeError("menu left Practice stage selection unexpectedly")
         if cursor == target:
-            keyboard.tap("shoot")
+            _tap(keyboard, "shoot")
             time.sleep(1.0)
             return
         if cursor in seen:
             raise RuntimeError(f"Practice stage {stage} is not unlocked")
         seen.add(cursor)
-        keyboard.tap("down")
+        _tap(keyboard, "down")
     raise RuntimeError(f"could not select Practice stage {stage}")

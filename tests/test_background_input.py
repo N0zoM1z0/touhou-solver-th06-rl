@@ -14,6 +14,7 @@ from th06_rl.th06.background_input import (
     call_target,
     keys_to_input_mask,
 )
+from th06_rl.th06.menu import BACKGROUND_TAP_SECONDS, _tap
 
 
 def test_call_site_hook_keeps_one_complete_instruction() -> None:
@@ -39,3 +40,16 @@ def test_public_key_encoder_cannot_represent_bomb() -> None:
     assert not keys_to_input_mask({"shoot", "focus", "left"}) & BUTTON_BOMB
     with pytest.raises(ValueError):
         keys_to_input_mask({"bomb"})
+
+
+def test_menu_tap_spans_a_background_throttled_update() -> None:
+    calls = []
+
+    class Keyboard:
+        def tap(self, key, *, hold_seconds):
+            calls.append((key, hold_seconds))
+
+    _tap(Keyboard(), "shoot")
+
+    assert calls == [("shoot", BACKGROUND_TAP_SECONDS)]
+    assert BACKGROUND_TAP_SECONDS > 0.25

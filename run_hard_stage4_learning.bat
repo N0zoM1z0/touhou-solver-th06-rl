@@ -21,8 +21,9 @@ if not exist "%NATIVE_DLL%" (
   exit /b 1
 )
 
-echo TH06-RL Hard / Reimu-A / Stage 4 continuous learning
-echo Create artifacts\pause-hard-stage4 to stop between complete trials.
+echo TH06-RL Hard / Reimu-A / Stage 4 complete-stage learning
+echo Physical HIT is recorded and recovered in the same stage.
+echo Create artifacts\pause-hard-stage4 to stop between complete stages.
 
 :trial
 if exist "%REPO%artifacts\pause-hard-stage4" (
@@ -37,15 +38,14 @@ start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
   --practice-stage 4 ^
   --difficulty hard ^
   --exploration-rate 0.03 ^
-  --seconds 300 ^
+  --patch-lives ^
+  --continuous-stage ^
   --armed ^
   --stop-game ^
   %*
 set "STATUS=%ERRORLEVEL%"
 
 if "%STATUS%"=="0" goto trial
-if "%STATUS%"=="10" goto trial
-if "%STATUS%"=="12" goto trial
 
 echo Learning loop stopped on controller status %STATUS%.
 exit /b %STATUS%

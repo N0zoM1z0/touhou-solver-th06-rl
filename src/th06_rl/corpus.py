@@ -23,7 +23,7 @@ RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v1"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
 FRAME_SCHEMA = "th06-rl-authoritative-frame-v1"
-TRANSITION_SCHEMA = "th06-rl-transition-v2"
+TRANSITION_SCHEMA = "th06-rl-transition-v3"
 EVENT_SCHEMA = "th06-rl-event-v1"
 DEFAULT_SHARD_RECORDS = 128
 DEFAULT_QUEUE_RECORDS = 512
@@ -308,6 +308,8 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         )
     )
     control_dead_end = after.evidence.reason in (
+        "control-dead-end:Hard safe set empty",
+        "control-dead-end:local forecast has no safe continuation",
         "authority-stop:Hard safe set empty",
         "authority-stop:local forecast has no safe continuation",
     )
@@ -369,7 +371,6 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             before.evidence.published_action is not None
             and before.evidence.reason in ("ok", "input-lease")
             and not bomb
-            and not control_dead_end
             and not authority
         ),
         "terminal": {
@@ -545,7 +546,7 @@ class CorpusRecorder:
         except BaseException as error:
             self.error = error
 
-    def close(self) -> Path:
+    def close(self, run_outcome: dict[str, object] | None = None) -> Path:
         if self.closed:
             self._raise_error()
             return self.run_dir
@@ -561,10 +562,16 @@ class CorpusRecorder:
         with self.manifest_lock:
             self.manifest.update({
                 "complete": self.dropped == 0,
+                "stage_trajectory_complete": bool(
+                    self.dropped == 0
+                    and run_outcome is not None
+                    and run_outcome.get("stage_completed") is True
+                ),
                 "dropped_records": self.dropped,
                 "enqueued_frames": self.enqueued,
                 "written_frames": self.written,
                 "closed_unix_ns": time.time_ns(),
+                "run_outcome": run_outcome,
             })
             _atomic_json(self.run_dir / "manifest.json", self.manifest)
         return self.run_dir

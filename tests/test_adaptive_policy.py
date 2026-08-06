@@ -59,3 +59,29 @@ def test_source_phase_and_stage_are_nonsharing_keys() -> None:
         context(phase="boss:0:sub1:nonspell", stage=1)
     )
     assert len({first, second, other_stage}) == 3
+
+
+def test_physical_hit_is_consumed_as_negative_learning_feedback() -> None:
+    policy = AdaptivePolicy()
+    decision = policy.decide(context())
+
+    policy.observe(PolicyOutcome(
+        frame=100,
+        scope=(2, 0, 0, 4),
+        source_context="timeline:test",
+        action=decision.action,
+        published=True,
+        elapsed_frames=1,
+        life_lost=True,
+        bomb_used=False,
+        control_dead_end=False,
+        authority_lost=False,
+        phase_changed=False,
+        next_hard_action_count=0,
+        next_player_x=192.0,
+        next_player_y=384.0,
+    ))
+
+    assert sum(policy.trials.values()) == 1
+    assert sum(policy.reward_sum.values()) < 0.0
+    assert not policy.pending_keys

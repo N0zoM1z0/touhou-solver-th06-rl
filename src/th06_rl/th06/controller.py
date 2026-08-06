@@ -65,6 +65,8 @@ def _authority_loss(reason: str) -> bool:
 
 def _control_dead_end(reason: str) -> bool:
     return reason in (
+        "control-dead-end:Hard safe set empty",
+        "control-dead-end:local forecast has no safe continuation",
         "authority-stop:Hard safe set empty",
         "authority-stop:local forecast has no safe continuation",
     )
@@ -108,6 +110,18 @@ def run(args: argparse.Namespace) -> int:
         raise RuntimeError("physical controller must run with Windows Python")
     if args.practice_stage is not None and not args.armed:
         raise RuntimeError("menu automation requires --armed")
+    if args.patch_lives and not args.armed:
+        raise RuntimeError("--patch-lives requires --armed")
+    if args.patch_lives and not args.stop_game:
+        raise RuntimeError("--patch-lives requires exact-process cleanup via --stop-game")
+    if args.continuous_stage and (
+        not args.armed
+        or args.practice_stage is None
+        or not args.patch_lives
+    ):
+        raise RuntimeError(
+            "--continuous-stage requires armed Practice play with --patch-lives"
+        )
     enable_donor_imports()
     from th06.actuator import Keyboard
     from th06.dialogue import DialogueSkipper
@@ -118,6 +132,7 @@ def run(args: argparse.Namespace) -> int:
     from th06.input_lease import InputLease
     from th06.model import PLAYER_ALIVE, action_from_input
     from th06.native import (
+        ADDR_LIFE_PATCH,
         TARGET_SHA256,
         attach_exact,
         read_game_frame,
@@ -136,6 +151,11 @@ def run(args: argparse.Namespace) -> int:
     recorder = None
     corpus_path = None
     exit_code = 0
+    stage_completed = False
+    hit_count = 0
+    control_dead_end_count = 0
+    termination_reason = "controller-interrupted"
+    started = time.monotonic()
     try:
         if args.armed:
             bridge = BackgroundInputBridge(process)
@@ -150,6 +170,12 @@ def run(args: argparse.Namespace) -> int:
                 foreground_required=False,
             )
             dialogue = DialogueSkipper(process, keyboard)
+        if args.patch_lives:
+            print(
+                f"life patch: {process.patch_lives()} "
+                f"at 0x{ADDR_LIFE_PATCH:08X}; physical HIT remains observable",
+                flush=True,
+            )
         if args.practice_stage is not None:
             assert keyboard is not None
             start_reimu_a_practice(
@@ -194,7 +220,6 @@ def run(args: argparse.Namespace) -> int:
         previous_player_state = None
         pending_learning = None
         last_frame = None
-        started = time.monotonic()
         next_checkpoint = started + CHECKPOINT_SECONDS
         print(
             f"attached pid={process.pid} sha256={TARGET_SHA256}; "
@@ -206,7 +231,13 @@ def run(args: argparse.Namespace) -> int:
             if trial is not None:
                 _wanted, current_supervisor = read_supervisor_state(process)
                 if trial.observe_supervisor(current_supervisor):
-                    print("Practice result path reached", flush=True)
+                    stage_completed = True
+                    termination_reason = "practice-stage-complete"
+                    print(
+                        f"Practice Stage {expected_stage} complete; "
+                        f"physical_hits={hit_count}",
+                        flush=True,
+                    )
                     break
             if last_frame is not None and read_game_frame(process) == last_frame:
                 time.sleep(0.001)
@@ -246,10 +277,17 @@ def run(args: argparse.Namespace) -> int:
             solve_started = time.perf_counter()
             try:
                 if hit:
-                    raise AuthorityUnavailable("physical HIT")
-                if _physical_bomb(snapshot):
+                    hit_count += 1
+                    if args.continuous_stage:
+                        reason = "physical-hit"
+                        if keyboard is not None:
+                            keyboard.release_all()
+                            lease.cleared()
+                    else:
+                        raise AuthorityUnavailable("physical HIT")
+                elif _physical_bomb(snapshot):
                     raise AuthorityUnavailable("physical Bomb state/input")
-                if snapshot.in_menu or snapshot.time_stopped:
+                elif snapshot.in_menu or snapshot.time_stopped:
                     reason = "passive"
                     if keyboard is not None:
                         keyboard.release_all()
@@ -414,19 +452,32 @@ def run(args: argparse.Namespace) -> int:
                                     action_from_input(snapshot.input_mask),
                                 )
             except AuthorityUnavailable as error:
-                reason = f"authority-stop:{error}"
-                exit_code = (
-                    10
-                    if str(error) == "physical HIT"
-                    else 11
-                    if str(error) == "physical Bomb state/input"
-                    else 12
-                    if str(error) in (
+                error_text = str(error)
+                recoverable_dead_end = (
+                    args.continuous_stage
+                    and error_text in (
                         "Hard safe set empty",
                         "local forecast has no safe continuation",
                     )
-                    else 2
                 )
+                if recoverable_dead_end:
+                    reason = f"control-dead-end:{error_text}"
+                    control_dead_end_count += 1
+                else:
+                    reason = f"authority-stop:{error_text}"
+                    termination_reason = reason
+                    exit_code = (
+                        10
+                        if error_text == "physical HIT"
+                        else 11
+                        if error_text == "physical Bomb state/input"
+                        else 12
+                        if error_text in (
+                            "Hard safe set empty",
+                            "local forecast has no safe continuation",
+                        )
+                        else 2
+                    )
                 if keyboard is not None:
                     keyboard.release_all()
                     lease.cleared()
@@ -555,6 +606,8 @@ def run(args: argparse.Namespace) -> int:
             if time.monotonic() >= next_checkpoint:
                 plugin.checkpoint()
                 next_checkpoint = time.monotonic() + CHECKPOINT_SECONDS
+        else:
+            termination_reason = "time-limit"
         plugin.checkpoint()
     finally:
         if trace is not None:
@@ -567,7 +620,14 @@ def run(args: argparse.Namespace) -> int:
         finally:
             try:
                 if recorder is not None:
-                    corpus_path = recorder.close()
+                    corpus_path = recorder.close({
+                        "termination_reason": termination_reason,
+                        "stage_completed": stage_completed,
+                        "controller_exit_code": exit_code,
+                        "physical_hits": hit_count,
+                        "control_dead_ends": control_dead_end_count,
+                        "elapsed_wall_seconds": time.monotonic() - started,
+                    })
             finally:
                 try:
                     if bridge is not None:
@@ -623,6 +683,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--practice-stage", type=int, choices=range(1, 7))
     parser.add_argument("--expected-stage", type=int, choices=range(1, 7), default=1)
     parser.add_argument("--difficulty", choices=tuple(DIFFICULTIES), default="hard")
+    parser.add_argument(
+        "--patch-lives",
+        action="store_true",
+        help="apply the verified 1.02h Practice life patch",
+    )
+    parser.add_argument(
+        "--continuous-stage",
+        action="store_true",
+        help=(
+            "record HIT/dead-end feedback and keep playing the same Practice "
+            "stage until its result path"
+        ),
+    )
     parser.add_argument("--stop-game", action="store_true")
     parser.add_argument("--seconds", type=float, default=0.0)
     parser.add_argument("--horizon", type=int, default=12)
