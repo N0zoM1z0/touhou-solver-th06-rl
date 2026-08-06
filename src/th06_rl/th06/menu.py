@@ -28,6 +28,29 @@ def _tap(keyboard, key: str) -> None:
     keyboard.tap(key, hold_seconds=BACKGROUND_TAP_SECONDS)
 
 
+def _wait_release_tick(process, timeout: float = BACKGROUND_MENU_TIMEOUT):
+    """Wait until TH06 has sampled one menu tick after the bridge release."""
+    initial = read_menu_state(process)
+    deadline = time.monotonic() + timeout
+    last = initial
+    while time.monotonic() < deadline:
+        last = read_menu_state(process)
+        if last[0] != initial[0] or last[2] != initial[2]:
+            return last
+        time.sleep(0.02)
+    raise RuntimeError(f"menu did not sample released input; last={last}")
+
+
+def _settled_tap(process, keyboard, key: str) -> None:
+    _tap(keyboard, key)
+    # MainMenu uses WAS_PRESSED, which compares the current and previous
+    # sampled masks (authoritative utils.hpp).  A background-throttled game
+    # can otherwise miss the short zero-mask interval between two taps and
+    # treat the next Select as one continuous hold.  A state/timer tick proves
+    # that the bridge's release was sampled before another key is published.
+    _wait_release_tick(process)
+
+
 def _wait_state(process, wanted: int, timeout: float = BACKGROUND_MENU_TIMEOUT):
     deadline = time.monotonic() + timeout
     last = (-1, -1, -1)
@@ -64,7 +87,7 @@ def _set_cursor(process, keyboard, state: int, target: int, length: int) -> None
             return
         downward = (target - cursor) % length
         upward = (cursor - target) % length
-        _tap(keyboard, "down" if downward <= upward else "up")
+        _settled_tap(process, keyboard, "down" if downward <= upward else "up")
     raise RuntimeError(f"could not select cursor {target} in state {state}")
 
 
@@ -77,7 +100,7 @@ def _enter_main_menu(process, keyboard) -> None:
         if state == STATE_MAIN_MENU:
             break
         if state == STATE_PRE_INPUT and timer >= 30:
-            _tap(keyboard, "shoot")
+            _settled_tap(process, keyboard, "shoot")
         time.sleep(0.02)
     else:
         raise RuntimeError(f"main menu not reached; last={last}")
@@ -88,7 +111,7 @@ def _select_reimu_a(process, keyboard, difficulty: int) -> None:
     if difficulty not in range(4):
         raise ValueError("menu difficulty must be Easy/Normal/Hard/Lunatic")
     _set_cursor(process, keyboard, STATE_MAIN_MENU, target=2, length=8)
-    _tap(keyboard, "shoot")
+    _settled_tap(process, keyboard, "shoot")
     _wait_state(process, STATE_DIFFICULTY_SELECT)
     _set_cursor(
         process,
@@ -97,13 +120,13 @@ def _select_reimu_a(process, keyboard, difficulty: int) -> None:
         target=difficulty,
         length=4,
     )
-    _tap(keyboard, "shoot")
+    _settled_tap(process, keyboard, "shoot")
     _wait_timer(process, STATE_CHARACTER_SELECT, 30)
     _set_cursor(process, keyboard, STATE_CHARACTER_SELECT, target=0, length=2)
-    _tap(keyboard, "shoot")
+    _settled_tap(process, keyboard, "shoot")
     _wait_timer(process, STATE_SHOT_SELECT, 30)
     _set_cursor(process, keyboard, STATE_SHOT_SELECT, target=0, length=2)
-    _tap(keyboard, "shoot")
+    _settled_tap(process, keyboard, "shoot")
 
 
 def start_reimu_a_practice(
@@ -130,5 +153,5 @@ def start_reimu_a_practice(
         if cursor in seen:
             raise RuntimeError(f"Practice stage {stage} is not unlocked")
         seen.add(cursor)
-        _tap(keyboard, "down")
+        _settled_tap(process, keyboard, "down")
     raise RuntimeError(f"could not select Practice stage {stage}")

@@ -14,7 +14,8 @@ from th06_rl.th06.background_input import (
     call_target,
     keys_to_input_mask,
 )
-from th06_rl.th06.menu import BACKGROUND_TAP_SECONDS, _tap
+import th06_rl.th06.menu as menu
+from th06_rl.th06.menu import BACKGROUND_TAP_SECONDS, _settled_tap, _tap
 
 
 def test_call_site_hook_keeps_one_complete_instruction() -> None:
@@ -53,3 +54,19 @@ def test_menu_tap_spans_a_background_throttled_update() -> None:
 
     assert calls == [("shoot", BACKGROUND_TAP_SECONDS)]
     assert BACKGROUND_TAP_SECONDS > 0.25
+
+
+def test_settled_menu_tap_waits_for_a_post_release_game_tick(monkeypatch) -> None:
+    states = iter(((7, 3, 65), (7, 3, 65), (7, 3, 66)))
+    calls = []
+
+    class Keyboard:
+        def tap(self, key, *, hold_seconds):
+            calls.append((key, hold_seconds))
+
+    monkeypatch.setattr(menu, "read_menu_state", lambda _process: next(states))
+    monkeypatch.setattr(menu.time, "sleep", lambda _seconds: None)
+
+    _settled_tap(object(), Keyboard(), "shoot")
+
+    assert calls == [("shoot", BACKGROUND_TAP_SECONDS)]
