@@ -219,6 +219,7 @@ def summarize_policy(path: Path) -> dict[str, object] | None:
     trials = state.get("trials", {})
     rewards = state.get("reward_sum", {})
     opportunities = state.get("opportunities", {})
+    middle_trials = state.get("middle_trials", {})
     fine_trials = state.get("fine_trials", {})
     rows = []
     if isinstance(trials, dict) and isinstance(rewards, dict):
@@ -245,6 +246,14 @@ def summarize_policy(path: Path) -> dict[str, object] | None:
         "exploratory_decisions": int(state.get("exploratory_decisions", 0)),
         "trained_context_actions": len(rows),
         "observed_trials": sum(row["trials"] for row in rows),
+        "trained_middle_context_actions": (
+            len(middle_trials) if isinstance(middle_trials, dict) else 0
+        ),
+        "middle_observed_trials": (
+            sum(int(value) for value in middle_trials.values())
+            if isinstance(middle_trials, dict)
+            else 0
+        ),
         "trained_fine_context_actions": (
             len(fine_trials) if isinstance(fine_trials, dict) else 0
         ),

@@ -84,7 +84,7 @@ def _group_summary(groups, minimum_support: int) -> dict[str, object]:
     }
 
 
-def analyze(run_dir: Path, minimum_support: int) -> dict[str, object]:
+def _collect_groups(run_dir: Path):
     run_dir = run_dir.resolve()
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     policy = AdaptivePolicy()
@@ -142,12 +142,18 @@ def analyze(run_dir: Path, minimum_support: int) -> dict[str, object]:
         )
         frame_evidence[int(row["sequence"])] = (
             policy._context_key(context),
+            policy._middle_context_key(context),
             policy._fine_context_key(context),
             published,
             physical_signature,
         )
 
     coarse = defaultdict(lambda: {
+        "records": 0,
+        "next_hard_empty": 0,
+        "physical_signatures": Counter(),
+    })
+    middle = defaultdict(lambda: {
         "records": 0,
         "next_hard_empty": 0,
         "physical_signatures": Counter(),
@@ -167,50 +173,111 @@ def analyze(run_dir: Path, minimum_support: int) -> dict[str, object]:
             or int(outcome.get("elapsed_frames", 0)) != 1
         ):
             continue
-        coarse_key, fine_key, action, signature = evidence
+        coarse_key, middle_key, fine_key, action, signature = evidence
         if action != row.get("published_action"):
             continue
         next_hard = int(outcome.get("hard_count_after", -1))
         if next_hard < 0:
             continue
         eligible += 1
-        for groups, context_key in ((coarse, coarse_key), (fine, fine_key)):
+        for groups, context_key in (
+            (coarse, coarse_key),
+            (middle, middle_key),
+            (fine, fine_key),
+        ):
             item = groups[(context_key, action)]
             item["records"] += 1
             item["next_hard_empty"] += next_hard == 0
             item["physical_signatures"][signature] += 1
 
+    return manifest, eligible, {
+        "coarse_ucb": coarse,
+        "hierarchical_middle_counterfactual": middle,
+        "hierarchical_fine_counterfactual": fine,
+    }
+
+
+def _prior_support(current, prior) -> dict[str, object]:
+    total = sum(item["records"] for item in current.values())
+    failures = sum(item["next_hard_empty"] for item in current.values())
+    shared = set(current).intersection(prior)
+    shared_records = sum(current[key]["records"] for key in shared)
+    shared_failures = sum(
+        current[key]["next_hard_empty"] for key in shared
+    )
+    union = set(current).union(prior)
     return {
-        "schema": "th06-rl-policy-alias-audit-v1",
+        "prior_context_actions": len(prior),
+        "current_context_actions": len(current),
+        "shared_context_actions": len(shared),
+        "key_jaccard": len(shared) / len(union) if union else None,
+        "current_record_prior_support_rate": (
+            shared_records / total if total else None
+        ),
+        "current_next_hard_empty_prior_support_rate": (
+            shared_failures / failures if failures else None
+        ),
+    }
+
+
+def analyze(
+    run_dir: Path,
+    minimum_support: int,
+    prior_run_dir: Path | None = None,
+) -> dict[str, object]:
+    manifest, eligible, groups = _collect_groups(run_dir)
+    result = {
+        "schema": "th06-rl-policy-alias-audit-v2",
         "run_id": manifest.get("run_id", run_dir.name),
         "stage_complete": manifest.get("stage_trajectory_complete"),
         "eligible_transitions": eligible,
         "next_hard_empty_transitions": sum(
-            item["next_hard_empty"] for item in coarse.values()
+            item["next_hard_empty"]
+            for item in groups["coarse_ucb"].values()
         ),
-        "coarse_ucb": _group_summary(coarse, minimum_support),
-        "hierarchical_fine_counterfactual": _group_summary(
-            fine,
-            minimum_support,
-        ),
+        **{
+            name: _group_summary(value, minimum_support)
+            for name, value in groups.items()
+        },
         "interpretation": (
-            "The fine result is a counterfactual partition of recorded behavior, "
-            "not an off-policy reward estimate. It measures whether cheap current "
-            "action, phase clock, baseline, and Hard/legal masks reduce state "
-            "aliasing while the coarse statistics remain the hot-start backoff."
+            "The middle and fine results are counterfactual partitions of "
+            "recorded behavior, not off-policy reward estimates. They measure "
+            "the alias/reuse tradeoff of the phase-clock/control backoff and "
+            "exact Hard/legal frontier while coarse statistics remain the "
+            "broadest hot-start backoff."
         ),
     }
+    if prior_run_dir is not None:
+        prior_manifest, _prior_eligible, prior_groups = _collect_groups(
+            prior_run_dir
+        )
+        result["prior_run_support"] = {
+            "prior_run_id": prior_manifest.get(
+                "run_id",
+                prior_run_dir.name,
+            ),
+            **{
+                name: _prior_support(value, prior_groups[name])
+                for name, value in groups.items()
+            },
+        }
+    return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path)
+    parser.add_argument(
+        "--prior-run-dir",
+        type=Path,
+        help="measure how often this run reuses context-actions from a prior run",
+    )
     parser.add_argument("--minimum-support", type=int, default=2)
     args = parser.parse_args()
     if args.minimum_support < 1:
         parser.error("minimum support must be positive")
     print(json.dumps(
-        analyze(args.run_dir, args.minimum_support),
+        analyze(args.run_dir, args.minimum_support, args.prior_run_dir),
         indent=2,
         sort_keys=True,
     ))

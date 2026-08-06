@@ -79,7 +79,37 @@ def test_fine_context_separates_clock_control_and_hard_geometry() -> None:
     })
 
     assert policy._context_key(base) == policy._context_key(later)
+    assert policy._middle_context_key(base) != policy._middle_context_key(later)
     assert policy._fine_context_key(base) != policy._fine_context_key(later)
+
+
+def test_middle_context_reuses_different_exact_frontiers() -> None:
+    policy = AdaptivePolicy()
+    base = context()
+    changed_frontier = PolicyContext(**{
+        **base.__dict__,
+        "hard_admissible_actions": ("stay",),
+        "locally_admissible_actions": ("stay",),
+    })
+
+    assert (
+        policy._middle_context_key(base)
+        == policy._middle_context_key(changed_frontier)
+    )
+    assert policy._fine_context_key(base) != policy._fine_context_key(
+        changed_frontier
+    )
+
+
+def test_unseen_fine_state_uses_middle_backoff() -> None:
+    policy = AdaptivePolicy()
+    value = context()
+    middle = policy._middle_context_key(value)
+    left = policy._action_key(middle, "left")
+    policy.middle_trials[left] = 10
+    policy.middle_reward_sum[left] = 20.0
+
+    assert policy.decide(value).action == "left"
 
 
 def test_physical_hit_is_consumed_as_negative_learning_feedback() -> None:
@@ -104,6 +134,7 @@ def test_physical_hit_is_consumed_as_negative_learning_feedback() -> None:
     ))
 
     assert sum(policy.trials.values()) == 1
+    assert sum(policy.middle_trials.values()) == 1
     assert sum(policy.fine_trials.values()) == 1
     assert sum(policy.reward_sum.values()) < 0.0
     assert not policy.pending_keys
@@ -187,6 +218,8 @@ def test_restart_checkpoint_is_compact_and_lossless() -> None:
     assert raw["trials"] == dict(policy.trials)
     assert restored.trials == policy.trials
     assert restored.reward_sum == policy.reward_sum
+    assert restored.middle_trials == policy.middle_trials
+    assert restored.middle_reward_sum == policy.middle_reward_sum
     assert restored.fine_trials == policy.fine_trials
     assert restored.fine_reward_sum == policy.fine_reward_sum
 
@@ -206,3 +239,27 @@ def test_legacy_checkpoint_hot_starts_coarse_backoff() -> None:
     assert policy.reward_sum[key] == 8.75
     assert not policy.fine_trials
     assert policy.decide(context()).action == "stay"
+
+
+def test_v2_checkpoint_losslessly_aggregates_middle_hot_start() -> None:
+    policy = AdaptivePolicy()
+    fine_key = policy._action_key(
+        policy._fine_context_key(context()),
+        "stay",
+    )
+    policy.import_state({
+        "schema": "th06-rl-online-hierarchical-ucb-v2",
+        "reward_version": "survival-reserve-v1",
+        "decisions": 9,
+        "fine_trials": {fine_key: 5},
+        "fine_reward_sum": {fine_key: 6.25},
+    })
+
+    assert policy.fine_trials[fine_key] == 5
+    assert policy.fine_reward_sum[fine_key] == 6.25
+    middle_key = policy._action_key(
+        policy._middle_context_key(context()),
+        "stay",
+    )
+    assert policy.middle_trials[middle_key] == 5
+    assert policy.middle_reward_sum[middle_key] == 6.25

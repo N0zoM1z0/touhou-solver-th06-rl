@@ -12,10 +12,14 @@ import zlib
 from ..policy_api import POLICY_API_VERSION, PolicyDecision
 
 
-STATE_SCHEMA = "th06-rl-online-hierarchical-ucb-v2"
-LEGACY_STATE_SCHEMA = "th06-rl-online-ucb-v1"
+STATE_SCHEMA = "th06-rl-online-hierarchical-ucb-v3"
+LEGACY_STATE_SCHEMAS = (
+    "th06-rl-online-hierarchical-ucb-v2",
+    "th06-rl-online-ucb-v1",
+)
 PACKED_STATE_SCHEMA = "th06-rl-online-ucb-packed-v1"
 REWARD_VERSION = "survival-reserve-v1"
+MIDDLE_BACKOFF_WEIGHT = 4.0
 FINE_BACKOFF_WEIGHT = 4.0
 PHASE_CLOCK_BIN_FRAMES = 30
 ACTION_NAMES = (
@@ -60,7 +64,7 @@ def unpack_state(state: dict[str, object]) -> dict[str, object]:
 
 class AdaptivePolicy:
     api_version = POLICY_API_VERSION
-    name = "phase-local-hierarchical-ucb-v2"
+    name = "phase-local-hierarchical-ucb-v3"
 
     def __init__(self) -> None:
         self.random = random.Random(6004)
@@ -70,10 +74,15 @@ class AdaptivePolicy:
         self.opportunities: Counter[str] = Counter()
         self.trials: Counter[str] = Counter()
         self.reward_sum: Counter[str] = Counter()
+        self.middle_trials: Counter[str] = Counter()
+        self.middle_reward_sum: Counter[str] = Counter()
         self.fine_selected: Counter[str] = Counter()
         self.fine_trials: Counter[str] = Counter()
         self.fine_reward_sum: Counter[str] = Counter()
-        self.pending_keys: dict[tuple[int, str], tuple[str, str]] = {}
+        self.pending_keys: dict[
+            tuple[int, str],
+            tuple[str, str, str],
+        ] = {}
 
     @staticmethod
     def _threat_bin(bullets: int, lasers: int) -> str:
@@ -114,23 +123,37 @@ class AdaptivePolicy:
         return mask
 
     def _fine_context_key(self, context) -> str:
+        middle = self._middle_context_key(context)
+        hard_mask = self._action_mask(context.hard_admissible_actions)
+        legal_mask = self._action_mask(context.locally_admissible_actions)
+        return (
+            f"{middle}|hard:{hard_mask:05x}|legal:{legal_mask:05x}"
+        )
+
+    def _middle_context_key(self, context) -> str:
         coarse = self._context_key(context)
         clock = min(
             127,
             max(0, int(context.phase_elapsed_frames))
             // PHASE_CLOCK_BIN_FRAMES,
         )
-        hard_mask = self._action_mask(context.hard_admissible_actions)
-        legal_mask = self._action_mask(context.locally_admissible_actions)
         return (
             f"{coarse}|clock:{clock}|current:{context.current_action}|"
-            f"baseline:{context.baseline_action}|hard:{hard_mask:05x}|"
-            f"legal:{legal_mask:05x}"
+            f"baseline:{context.baseline_action}"
         )
 
     @staticmethod
     def _action_key(context_key: str, action: str) -> str:
         return f"{context_key}|action:{action}"
+
+    @staticmethod
+    def _middle_action_key_from_fine(fine_key: str) -> str | None:
+        try:
+            context_key, action = fine_key.rsplit("|action:", 1)
+            middle_key, _frontier = context_key.rsplit("|hard:", 1)
+        except ValueError:
+            return None
+        return f"{middle_key}|action:{action}"
 
     def decide(self, context):
         legal = tuple(sorted(set(context.locally_admissible_actions)))
@@ -139,6 +162,7 @@ class AdaptivePolicy:
         if context.baseline_action not in legal:
             raise ValueError("reactive baseline is outside the local safe set")
         context_key = self._context_key(context)
+        middle_context_key = self._middle_context_key(context)
         fine_context_key = self._fine_context_key(context)
         total_trials = sum(
             self.trials[self._action_key(context_key, action)] for action in legal
@@ -147,26 +171,49 @@ class AdaptivePolicy:
             self.fine_trials[self._action_key(fine_context_key, action)]
             for action in legal
         )
+        middle_total_trials = sum(
+            self.middle_trials[
+                self._action_key(middle_context_key, action)
+            ]
+            for action in legal
+        )
         scores = {}
         for action in legal:
             key = self._action_key(context_key, action)
+            middle_key = self._action_key(middle_context_key, action)
             fine_key = self._action_key(fine_context_key, action)
             trials = self.trials[key]
             coarse_empirical = self.reward_sum[key] / trials if trials else 0.0
+            middle_trials = self.middle_trials[middle_key]
+            middle_empirical = (
+                (
+                    self.middle_reward_sum[middle_key]
+                    + MIDDLE_BACKOFF_WEIGHT * coarse_empirical
+                )
+                / (middle_trials + MIDDLE_BACKOFF_WEIGHT)
+                if middle_trials
+                else coarse_empirical
+            )
             fine_trials = self.fine_trials[fine_key]
             empirical = (
                 (
                     self.fine_reward_sum[fine_key]
-                    + FINE_BACKOFF_WEIGHT * coarse_empirical
+                    + FINE_BACKOFF_WEIGHT * middle_empirical
                 )
                 / (fine_trials + FINE_BACKOFF_WEIGHT)
                 if fine_trials
-                else coarse_empirical
+                else middle_empirical
             )
             optimism = (
                 0.12
                 * math.sqrt(
-                    math.log(max(2, fine_total_trials + total_trials + 2))
+                    math.log(max(
+                        2,
+                        fine_total_trials
+                        + middle_total_trials
+                        + total_trials
+                        + 2,
+                    ))
                     / fine_trials
                 )
                 if fine_trials
@@ -208,7 +255,12 @@ class AdaptivePolicy:
         fine_key = self._action_key(fine_context_key, chosen)
         self.selected[key] += 1
         self.fine_selected[fine_key] += 1
-        self.pending_keys[(context.frame, chosen)] = (key, fine_key)
+        middle_key = self._action_key(middle_context_key, chosen)
+        self.pending_keys[(context.frame, chosen)] = (
+            key,
+            middle_key,
+            fine_key,
+        )
         self.decisions += 1
         if chosen != greedy:
             self.exploratory_decisions += 1
@@ -225,7 +277,7 @@ class AdaptivePolicy:
             or not getattr(outcome, "learning_eligible", True)
         ):
             return
-        key, fine_key = keys
+        key, middle_key, fine_key = keys
         reward = 1.0
         if outcome.life_lost:
             reward -= 100.0
@@ -253,6 +305,8 @@ class AdaptivePolicy:
             reward += 5.0
         self.trials[key] += 1
         self.reward_sum[key] += reward
+        self.middle_trials[middle_key] += 1
+        self.middle_reward_sum[middle_key] += reward
         self.fine_trials[fine_key] += 1
         self.fine_reward_sum[fine_key] += reward
 
@@ -266,6 +320,8 @@ class AdaptivePolicy:
             "opportunities": dict(self.opportunities),
             "trials": dict(self.trials),
             "reward_sum": dict(self.reward_sum),
+            "middle_trials": dict(self.middle_trials),
+            "middle_reward_sum": dict(self.middle_reward_sum),
             "fine_selected": dict(self.fine_selected),
             "fine_trials": dict(self.fine_trials),
             "fine_reward_sum": dict(self.fine_reward_sum),
@@ -289,6 +345,7 @@ class AdaptivePolicy:
             "decisions": self.decisions,
             "exploratory_decisions": self.exploratory_decisions,
             "trained_scope_actions": len(self.trials),
+            "trained_middle_scope_actions": len(self.middle_trials),
             "trained_fine_scope_actions": len(self.fine_trials),
             "observed_trials": sum(self.trials.values()),
             "pending": len(self.pending_keys),
@@ -296,7 +353,7 @@ class AdaptivePolicy:
 
     def import_state(self, state: dict[str, object]) -> None:
         state = unpack_state(state)
-        if state.get("schema") not in (STATE_SCHEMA, LEGACY_STATE_SCHEMA):
+        if state.get("schema") not in (STATE_SCHEMA, *LEGACY_STATE_SCHEMAS):
             return
         if state.get("reward_version") != REWARD_VERSION:
             return
@@ -309,6 +366,8 @@ class AdaptivePolicy:
             (self.opportunities, "opportunities", int),
             (self.trials, "trials", int),
             (self.reward_sum, "reward_sum", float),
+            (self.middle_trials, "middle_trials", int),
+            (self.middle_reward_sum, "middle_reward_sum", float),
             (self.fine_selected, "fine_selected", int),
             (self.fine_trials, "fine_trials", int),
             (self.fine_reward_sum, "fine_reward_sum", float),
@@ -316,6 +375,18 @@ class AdaptivePolicy:
             values = state.get(field, {})
             if isinstance(values, dict):
                 counter.update({str(key): cast(value) for key, value in values.items()})
+        # V2 exact keys contain the entire middle-key prefix, so their
+        # observed statistics can be losslessly aggregated into the new
+        # backoff without replaying corpus or resetting any learned value.
+        if not self.middle_trials and self.fine_trials:
+            for fine_key, trials in self.fine_trials.items():
+                middle_key = self._middle_action_key_from_fine(fine_key)
+                if middle_key is None:
+                    continue
+                self.middle_trials[middle_key] += trials
+                self.middle_reward_sum[middle_key] += self.fine_reward_sum[
+                    fine_key
+                ]
         self.random = random.Random(6004)
         for _ in range(self.decisions):
             self.random.random()

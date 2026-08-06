@@ -11,12 +11,14 @@ tradeoffs but cannot enlarge the native safe set, change collision physics,
 lower margins, request Bomb, or bypass fail-close behavior. Cold start uses
 only a generic clearance/boundary-reserve fallback, never phase rules.
 
-The restartable online learner is hierarchical. Its original coarse
-phase/position/threat/reserve UCB remains the hot-start backoff, while a fine
-layer separates 30-frame phase-relative clock bins, current and baseline
-actions, and the exact Hard/lookahead masks already computed by the native
-gate. This avoids averaging visibly different physical frontiers without
-reading raw bullet geometry or running a model in the resident hot path.
+The restartable online learner uses three bounded backoff levels. Its original
+coarse phase/position/threat/reserve UCB remains the broad hot start. A middle
+layer adds a 30-frame phase-relative clock plus current and baseline actions,
+and a fine layer additionally separates the exact Hard/lookahead masks already
+computed by the native gate. Unseen exact frontiers therefore reuse a more
+specific phase/control prior before falling back to the heavily aliased coarse
+state. No level reads raw bullet geometry or runs a model in the resident hot
+path.
 
 The active learning target is Lunatic / Reimu-A / Stages 4, 5, and 6. Hard /
 Reimu-A / Stage 4 is retained only as prior baseline evidence. Difficulty,
@@ -96,8 +98,10 @@ PYTHONPATH=src python scripts/analyze_policy_aliasing.py \
   artifacts/corpus/RUN_ID
 ```
 
-The report contrasts the preserved coarse UCB grouping with a counterfactual
-hierarchical partition. It is an alias diagnostic, not an off-policy estimate.
+Pass `--prior-run-dir artifacts/corpus/PRIOR_RUN_ID` to measure how much of the
+current run actually reuses context-actions from the previous complete Stage.
+The report contrasts coarse, middle, and exact-fine partitions. It is an alias
+and support diagnostic, not an off-policy estimate.
 Fine legal-action opportunities are already losslessly present in the corpus;
 the restart checkpoint retains only selected/observed fine counters so its RAM
 and disk cost scales with feedback actually consumed rather than every action

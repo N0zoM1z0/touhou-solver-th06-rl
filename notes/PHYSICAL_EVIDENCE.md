@@ -126,3 +126,13 @@ new failure evidence improves play.
   dominated that percentile; overall solve p99 fell from 5.96 to 2.75 ms.
   The 21-to-12 HIT change is chronological evidence only and was not used to
   tune policy parameters.
+
+  Cross-run support against `20260806T145106Z-285711500` exposed the next
+  learning-infrastructure limit. Coarse state reused prior context-actions for
+  73.21% of records but aliased multiple physical signatures for 96.77%.
+  Exact hierarchical-v2 state reduced aliasing to 5.45% but reused prior
+  support for only 12.01% of records and none of 19 next-Hard-empty precursors.
+  A counterfactual phase-clock/current/baseline middle key reused 29.41% of
+  records while cutting the coarse alias rate to 47.42%. These descriptive
+  corpus figures motivate a three-level coarse -> phase/control -> exact
+  frontier backoff; they are not an off-policy claim about HIT reduction.
