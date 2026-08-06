@@ -23,3 +23,10 @@ trained context-actions. Fourteen of its nineteen HITs occurred after frame
 11,000, inside the interval that the earlier run did not observe coherently.
 The completed policy update is retained so the next run can test whether this
 new failure evidence improves play.
+
+- `20260806T133608Z-895242200` at `8ace718`: deliberately switching focus
+  exposed an infrastructure bug in the first background activity lease at
+  frame 8,940. The lease called a nonexistent donor process method, the
+  controller failed closed and stopped the exact game PID, and the incomplete
+  Stage policy transaction was rolled back. This is infrastructure evidence
+  only and is not a learning or HIT comparison run.
