@@ -30,6 +30,12 @@ the physical Stage episode. Create
 `run_lunatic_stage4_learning.bat` and `artifacts\pause-lunatic-stage4` for the
 independent Lunatic scope.
 
+Before launching each new Stage, both loops measure the complete `artifacts`
+tree and reserve the recorder's full 512 MiB per-run allowance. They stop
+before game launch if that reservation could cross the 45 GiB local budget;
+no corpus is deleted automatically. Complete, audited runs can later be
+mirrored into a Hugging Face dataset before any user-approved local pruning.
+
 Each control frame retains a coherent collision-authority root: player state,
 all live bullet motion/collision fields, lasers, lethal enemy bodies, RNG,
 resources, source context, exact Hard/local sets, behavior probability, and

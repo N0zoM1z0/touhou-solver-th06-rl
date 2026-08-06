@@ -31,6 +31,12 @@ if exist "%REPO%artifacts\pause-hard-stage4" (
   exit /b 0
 )
 
+"%TH06_PYTHON%" "%REPO%scripts\check_storage_budget.py" "%REPO%artifacts" --limit-gib 45 --reserve-mib 512
+if errorlevel 1 (
+  echo Learning loop paused before game launch by the storage guard.
+  exit /b 0
+)
+
 start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
 "%TH06_PYTHON%" "%REPO%scripts\run_th06_rl.py" ^
   --game-dir "%TH06_GAME_DIR%" ^
