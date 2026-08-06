@@ -47,6 +47,12 @@ def test_manifest_distinguishes_storage_from_complete_stage(tmp_path) -> None:
 
     assert manifest["complete"] is True
     assert manifest["stage_trajectory_complete"] is True
+    assert manifest["episode"] == {
+        "id": recorder.run_id,
+        "unit": "practice-stage",
+        "complete": True,
+        "termination_reason": "practice-stage-complete",
+    }
     assert manifest["run_outcome"] == outcome
     assert manifest["summary"]["frames"] == 0
 
@@ -252,3 +258,15 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         transition = json.loads(next(source))
     assert transition["learning_eligible"] is False
     assert "observation-gap" in transition["learning_exclusion_reasons"]
+    assert transition["episode"] == {
+        "id": recorder.run_id,
+        "unit": "practice-stage",
+        "step": 0,
+        "done": False,
+    }
+    assert transition["boundary"] == {
+        "source_context_changed": False,
+        "source_context": "3/0/0/4/timeline:before-t100:op0:arg7",
+        "next_source_context": "3/0/0/4/timeline:before-t100:op0:arg7",
+        "failure": None,
+    }

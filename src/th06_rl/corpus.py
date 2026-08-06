@@ -24,10 +24,10 @@ from th06.model import BUTTON_BOMB  # noqa: E402
 
 
 RUN_SCHEMA = "th06-rl-run-v1"
-MANIFEST_SCHEMA = "th06-rl-manifest-v1"
+MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
 FRAME_SCHEMA = "th06-rl-authoritative-frame-v3"
-TRANSITION_SCHEMA = "th06-rl-transition-v3"
+TRANSITION_SCHEMA = "th06-rl-transition-v4"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
@@ -525,7 +525,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "capture_attempts_after": after.evidence.capture_attempts,
         "observation_gap": max(0, after.snapshot.frame - before.snapshot.frame),
     }
-    terminal_reason = (
+    failure = (
         "life-lost"
         if hit
         else "bomb-used"
@@ -564,14 +564,21 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "outcome_terms": outcome,
         "learning_eligible": not learning_exclusions,
         "learning_exclusion_reasons": learning_exclusions,
-        "terminal": {
-            "done": terminal_reason is not None,
-            "reason": terminal_reason,
-            "boundary_reason": (
-                "phase-transition"
-                if outcome["phase_changed"] and terminal_reason is None
-                else None
-            ),
+        # A patched HIT is a failure observation, not the end of the physical
+        # Practice Stage.  Keep the stage episode, source option boundary and
+        # failure signal independent so an offline trainer may choose its own
+        # bootstrapping semantics without guessing what legacy `done` meant.
+        "episode": {
+            "id": before.snapshot_id.split(":", 1)[0],
+            "unit": "practice-stage",
+            "step": before.sequence,
+            "done": False,
+        },
+        "boundary": {
+            "source_context_changed": outcome["phase_changed"],
+            "source_context": before.scope["key"],
+            "next_source_context": after.scope["key"],
+            "failure": failure,
         },
     }
 
@@ -916,10 +923,10 @@ class CorpusRecorder:
                         transition = _transition(previous, envelope)
                         writers["transitions"].write(transition, previous.sequence)
                         self._observe_transition_metrics(transition)
-                        if transition["terminal"]["done"]:
+                        if transition["boundary"]["failure"] is not None:
                             writers["events"].write({
                                 "schema_version": EVENT_SCHEMA,
-                                "event": transition["terminal"]["reason"],
+                                "event": transition["boundary"]["failure"],
                                 "sequence": previous.sequence,
                                 "snapshot_ref": envelope.snapshot_id,
                                 "scope": previous.scope,
@@ -955,13 +962,24 @@ class CorpusRecorder:
         self.thread.join()
         self._raise_error()
         with self.manifest_lock:
+            stage_complete = bool(
+                self.dropped == 0
+                and run_outcome is not None
+                and run_outcome.get("stage_completed") is True
+            )
             self.manifest.update({
                 "complete": self.dropped == 0,
-                "stage_trajectory_complete": bool(
-                    self.dropped == 0
-                    and run_outcome is not None
-                    and run_outcome.get("stage_completed") is True
-                ),
+                "stage_trajectory_complete": stage_complete,
+                "episode": {
+                    "id": self.run_id,
+                    "unit": "practice-stage",
+                    "complete": stage_complete,
+                    "termination_reason": (
+                        run_outcome.get("termination_reason")
+                        if run_outcome is not None
+                        else None
+                    ),
+                },
                 "dropped_records": self.dropped,
                 "enqueued_frames": self.enqueued,
                 "written_frames": self.written,

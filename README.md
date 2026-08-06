@@ -42,6 +42,13 @@ without teaching the policy to imitate missed control frames. A transition
 with a capture gap or over-budget root remains evidence but is excluded from
 the default online learner stratum.
 
+The trajectory unit is one complete physical Practice Stage. Transition
+schema v4 records that episode identity separately from source-context changes
+and failure events: a life-patched HIT is negative evidence inside the same
+Stage, not an episode boundary. Offline phase-local learners may split on the
+source-context boundary, while a Stage-level learner can retain the full
+trajectory without inferring either convention from a generic `done` bit.
+
 Non-boss play is partitioned by the next authoritative timeline event. Boss
 and midboss play is partitioned by boss ID, ECL subroutine, life/timer
 callbacks, and spell/nonspell state. These labels condition learning only;
