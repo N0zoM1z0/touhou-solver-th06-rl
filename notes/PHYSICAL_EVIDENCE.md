@@ -81,3 +81,12 @@ new failure evidence improves play.
   9.56 ms, stale retry rate from 30.48% to 9.56%, and observation-gap rate
   from 12.51% to 5.29%. This is physical performance evidence; the 20-to-17
   HIT change remains chronological rather than a causal learning estimate.
+
+  A post-run state-alias audit found 29,851 learning-eligible one-frame
+  transitions. Under the original coarse UCB, 97.84% belonged to a
+  context-action group containing multiple current/baseline/Hard/legal/
+  clearance signatures, and 22 repeated groups mixed a safe next Hard set
+  with a next-Hard-empty outcome. Counterfactually partitioning the same
+  behavior by the hierarchical v2 features reduced those figures to 4.59%
+  and 9 groups. This is evidence for the new fine partition, not an off-policy
+  claim that v2 would have selected a different action in the recorded run.

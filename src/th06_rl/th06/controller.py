@@ -293,6 +293,8 @@ def run(args: argparse.Namespace) -> int:
         previous_snapshot = None
         previous_player_state = None
         pending_learning = None
+        policy_source_context = None
+        policy_source_start_frame = None
         last_frame = None
         last_anchor_frame = None
         last_anchor_partition = None
@@ -560,6 +562,14 @@ def run(args: argparse.Namespace) -> int:
                 if retain_continuous_stage("source-context", error):
                     continue
                 raise
+            if source_context != policy_source_context:
+                policy_source_context = source_context
+                policy_source_start_frame = snapshot.frame
+            assert policy_source_start_frame is not None
+            phase_elapsed_frames = max(
+                0,
+                snapshot.frame - policy_source_start_frame,
+            )
             last_frame = snapshot.frame
             observation_gap = (
                 1 if prior_frame is None else max(0, snapshot.frame - prior_frame)
@@ -733,6 +743,11 @@ def run(args: argparse.Namespace) -> int:
                             laser_count=snapshot.laser_count,
                             hard_action_count=len(hard),
                             exploration_rate=args.exploration_rate,
+                            current_action=current_action_name,
+                            hard_admissible_actions=tuple(
+                                item.action.name for item in hard
+                            ),
+                            phase_elapsed_frames=phase_elapsed_frames,
                         ))
                         selected = next(
                             item.action for item in legal

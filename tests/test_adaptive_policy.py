@@ -22,6 +22,9 @@ def context(*, phase: str = "timeline:test", stage: int = 4) -> PolicyContext:
         laser_count=0,
         hard_action_count=12,
         exploration_rate=0.0,
+        current_action="stay",
+        hard_admissible_actions=("stay", "left"),
+        phase_elapsed_frames=60,
     )
 
 
@@ -65,6 +68,20 @@ def test_source_phase_and_stage_are_nonsharing_keys() -> None:
     assert len({first, second, other_stage}) == 3
 
 
+def test_fine_context_separates_clock_control_and_hard_geometry() -> None:
+    policy = AdaptivePolicy()
+    base = context()
+    later = PolicyContext(**{
+        **base.__dict__,
+        "phase_elapsed_frames": 90,
+        "current_action": "left",
+        "hard_admissible_actions": ("stay",),
+    })
+
+    assert policy._context_key(base) == policy._context_key(later)
+    assert policy._fine_context_key(base) != policy._fine_context_key(later)
+
+
 def test_physical_hit_is_consumed_as_negative_learning_feedback() -> None:
     policy = AdaptivePolicy()
     decision = policy.decide(context())
@@ -87,6 +104,7 @@ def test_physical_hit_is_consumed_as_negative_learning_feedback() -> None:
     ))
 
     assert sum(policy.trials.values()) == 1
+    assert sum(policy.fine_trials.values()) == 1
     assert sum(policy.reward_sum.values()) < 0.0
     assert not policy.pending_keys
 
@@ -168,3 +186,22 @@ def test_restart_checkpoint_is_compact_and_lossless() -> None:
     assert raw["trials"] == dict(policy.trials)
     assert restored.trials == policy.trials
     assert restored.reward_sum == policy.reward_sum
+    assert restored.fine_trials == policy.fine_trials
+    assert restored.fine_reward_sum == policy.fine_reward_sum
+
+
+def test_legacy_checkpoint_hot_starts_coarse_backoff() -> None:
+    policy = AdaptivePolicy()
+    key = policy._action_key(policy._context_key(context()), "stay")
+    policy.import_state({
+        "schema": "th06-rl-online-ucb-v1",
+        "reward_version": "survival-reserve-v1",
+        "decisions": 12,
+        "trials": {key: 7},
+        "reward_sum": {key: 8.75},
+    })
+
+    assert policy.trials[key] == 7
+    assert policy.reward_sum[key] == 8.75
+    assert not policy.fine_trials
+    assert policy.decide(context()).action == "stay"

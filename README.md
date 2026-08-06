@@ -11,6 +11,13 @@ tradeoffs but cannot enlarge the native safe set, change collision physics,
 lower margins, request Bomb, or bypass fail-close behavior. Cold start uses
 only a generic clearance/boundary-reserve fallback, never phase rules.
 
+The restartable online learner is hierarchical. Its original coarse
+phase/position/threat/reserve UCB remains the hot-start backoff, while a fine
+layer separates 30-frame phase-relative clock bins, current and baseline
+actions, and the exact Hard/lookahead masks already computed by the native
+gate. This avoids averaging visibly different physical frontiers without
+reading raw bullet geometry or running a model in the resident hot path.
+
 The active learning target is Lunatic / Reimu-A / Stages 4, 5, and 6. Hard /
 Reimu-A / Stage 4 is retained only as prior baseline evidence. Difficulty,
 character, shot type, stage, and automatically derived source context remain
@@ -80,6 +87,17 @@ includes per-source-phase HIT/dead-end/action coverage, policy support and
 observed outcomes, capture/solve latency, stale retries, and compressed corpus
 density. These are descriptive physical metrics; they are not presented as
 counterfactual or causal off-policy proof.
+
+Measure whether the online state compression aliases distinct physical
+frontiers in one completed run with:
+
+```bash
+PYTHONPATH=src python scripts/analyze_policy_aliasing.py \
+  artifacts/corpus/RUN_ID
+```
+
+The report contrasts the preserved coarse UCB grouping with a counterfactual
+hierarchical partition. It is an alias diagnostic, not an off-policy estimate.
 
 Every batch invokes the post-Stage infra audit before starting the next game.
 It writes `infra-audit.json` inside the ignored run directory and classifies
