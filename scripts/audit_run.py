@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import heapq
 import json
 from pathlib import Path
 
@@ -126,10 +127,43 @@ def _audit_dense_hard_parity(
     objects: dict[str, object],
     native_library: Path | None,
 ) -> dict[str, object] | None:
+    if native_library is None:
+        return None
     samples = (manifest.get("summary") or {}).get("dense_frame_samples", ())
     sequences = {int(item["sequence"]) for item in samples}
-    if not sequences or native_library is None:
-        return None
+    rows: dict[int, dict]
+    sample_source = "manifest-dense-samples"
+    if sequences:
+        rows = {
+            int(row["sequence"]): row
+            for row in _rows(
+                _selected_paths(run_dir, manifest, "frames", sequences)
+            )
+            if int(row["sequence"]) in sequences
+        }
+    else:
+        # Compatibility for the first control-v1 run, which predates compact
+        # dense sample indices. Stream once and retain only 64 encoded roots;
+        # never materialize the full Stage corpus in RAM.
+        sample_source = "streaming-fallback"
+        densest: list[tuple[int, int, dict]] = []
+        for row in _rows(_stream_paths(run_dir, manifest, "frames")):
+            sequence = int(row["sequence"])
+            encoded = row["snapshot"].get("live_bullet_count")
+            if encoded is None:
+                bullets = row["snapshot"].get("bullets", ())
+                encoded = (
+                    len(bullets.get("rows", ()))
+                    if isinstance(bullets, dict)
+                    else len(bullets)
+                )
+            entry = (int(encoded), sequence, row)
+            if len(densest) < 64:
+                heapq.heappush(densest, entry)
+            else:
+                heapq.heappushpop(densest, entry)
+        rows = {sequence: row for _count, sequence, row in densest}
+        sequences = set(rows)
     from th06_rl.native import NativeKernel, PackedHazards
     from th06_rl.th06.source import (
         core_action_from_input,
@@ -137,13 +171,6 @@ def _audit_dense_hard_parity(
         lower_observed_hazards,
     )
 
-    rows = {
-        int(row["sequence"]): row
-        for row in _rows(
-            _selected_paths(run_dir, manifest, "frames", sequences)
-        )
-        if int(row["sequence"]) in sequences
-    }
     kernel = NativeKernel(native_library)
     unsafe = []
     conservative = []
@@ -194,6 +221,7 @@ def _audit_dense_hard_parity(
             })
         checked += 1
     return {
+        "sample_source": sample_source,
         "checked": checked,
         "unsafe_divergences": unsafe,
         "conservative_divergences": conservative,
