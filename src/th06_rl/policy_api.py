@@ -45,6 +45,7 @@ class PolicyOutcome:
     elapsed_frames: int
     life_lost: bool
     bomb_used: bool
+    control_dead_end: bool
     authority_lost: bool
     phase_changed: bool
     next_hard_action_count: int

@@ -40,6 +40,7 @@ def test_unpublished_stale_choice_does_not_train() -> None:
         elapsed_frames=0,
         life_lost=False,
         bomb_used=False,
+        control_dead_end=False,
         authority_lost=False,
         phase_changed=False,
         next_hard_action_count=12,

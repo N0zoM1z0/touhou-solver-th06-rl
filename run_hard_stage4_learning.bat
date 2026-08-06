@@ -45,6 +45,7 @@ set "STATUS=%ERRORLEVEL%"
 
 if "%STATUS%"=="0" goto trial
 if "%STATUS%"=="10" goto trial
+if "%STATUS%"=="12" goto trial
 
 echo Learning loop stopped on controller status %STATUS%.
 exit /b %STATUS%

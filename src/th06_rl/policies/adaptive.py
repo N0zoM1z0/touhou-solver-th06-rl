@@ -125,6 +125,8 @@ class AdaptivePolicy:
             reward -= 100.0
         if outcome.bomb_used:
             reward -= 100.0
+        if outcome.control_dead_end:
+            reward -= 25.0
         if outcome.authority_lost:
             reward -= 25.0
         if outcome.next_hard_action_count >= 0:
@@ -137,7 +139,10 @@ class AdaptivePolicy:
         )
         reward += 0.10 * max(0.0, min(1.0, edge / 32.0))
         if outcome.phase_changed and not (
-            outcome.life_lost or outcome.bomb_used or outcome.authority_lost
+            outcome.life_lost
+            or outcome.bomb_used
+            or outcome.control_dead_end
+            or outcome.authority_lost
         ):
             reward += 5.0
         self.trials[key] += 1

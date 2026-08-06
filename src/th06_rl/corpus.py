@@ -23,7 +23,7 @@ RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v1"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
 FRAME_SCHEMA = "th06-rl-authoritative-frame-v1"
-TRANSITION_SCHEMA = "th06-rl-transition-v1"
+TRANSITION_SCHEMA = "th06-rl-transition-v2"
 EVENT_SCHEMA = "th06-rl-event-v1"
 DEFAULT_SHARD_RECORDS = 128
 DEFAULT_QUEUE_RECORDS = 512
@@ -307,8 +307,13 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             and after.snapshot.player_attack.bomb_active
         )
     )
+    control_dead_end = after.evidence.reason in (
+        "authority-stop:Hard safe set empty",
+        "authority-stop:local forecast has no safe continuation",
+    )
     authority = (
         after.evidence.reason.startswith("authority-stop:")
+        and not control_dead_end
         and after.evidence.reason
         not in (
             "authority-stop:physical HIT",
@@ -320,6 +325,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
     outcome = {
         "life_lost": hit,
         "bomb_used": bomb,
+        "control_dead_end": control_dead_end,
         "authority_lost": authority,
         "elapsed_frames": max(0, after.snapshot.frame - before.snapshot.frame),
         "lives_delta": after.snapshot.lives_remaining - before.snapshot.lives_remaining,
@@ -336,7 +342,15 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "phase_changed": before.scope["key"] != after.scope["key"],
     }
     terminal_reason = (
-        "life-lost" if hit else "bomb-used" if bomb else "authority-lost" if authority else None
+        "life-lost"
+        if hit
+        else "bomb-used"
+        if bomb
+        else "control-dead-end"
+        if control_dead_end
+        else "authority-lost"
+        if authority
+        else None
     )
     return {
         "schema_version": TRANSITION_SCHEMA,
@@ -355,6 +369,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             before.evidence.published_action is not None
             and before.evidence.reason in ("ok", "input-lease")
             and not bomb
+            and not control_dead_end
             and not authority
         ),
         "terminal": {

@@ -54,11 +54,19 @@ def _physical_bomb(snapshot) -> bool:
 def _authority_loss(reason: str) -> bool:
     return (
         reason.startswith("authority-stop:")
+        and not _control_dead_end(reason)
         and reason
         not in (
             "authority-stop:physical HIT",
             "authority-stop:physical Bomb state/input",
         )
+    )
+
+
+def _control_dead_end(reason: str) -> bool:
+    return reason in (
+        "authority-stop:Hard safe set empty",
+        "authority-stop:local forecast has no safe continuation",
     )
 
 
@@ -412,6 +420,11 @@ def run(args: argparse.Namespace) -> int:
                     if str(error) == "physical HIT"
                     else 11
                     if str(error) == "physical Bomb state/input"
+                    else 12
+                    if str(error) in (
+                        "Hard safe set empty",
+                        "local forecast has no safe continuation",
+                    )
                     else 2
                 )
                 if keyboard is not None:
@@ -431,6 +444,7 @@ def run(args: argparse.Namespace) -> int:
                     ),
                     life_lost=hit,
                     bomb_used=_physical_bomb(snapshot),
+                    control_dead_end=_control_dead_end(reason),
                     authority_lost=_authority_loss(reason),
                     phase_changed=(
                         pending_learning["scope"] != _snapshot_scope(snapshot)
@@ -453,6 +467,7 @@ def run(args: argparse.Namespace) -> int:
                     elapsed_frames=0,
                     life_lost=False,
                     bomb_used=False,
+                    control_dead_end=False,
                     authority_lost=False,
                     phase_changed=False,
                     next_hard_action_count=hard_count,
