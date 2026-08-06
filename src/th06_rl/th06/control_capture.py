@@ -26,6 +26,68 @@ MAX_CAPTURE_ATTEMPTS = 8
 DYNAMIC_BULLET_FLAGS = 0xDF1
 
 
+def _completed_calc_lag(
+    known_stage: int | None,
+    known_lag: int | None,
+    *,
+    stage: int,
+    game_frame: int,
+    bullet_time: int,
+    passive: bool,
+) -> tuple[int, int | None, bool]:
+    """Track the source-defined completed-chain clock relationship.
+
+    GameManager::OnUpdate advances ``gameFrames`` at priority 4.  The
+    BulletManager advances its timer at priority 11, except that it returns
+    without ticking while ``isTimeStopped`` is set.  Consequently equality is
+    a valid initial-stage witness, but not a valid invariant after a pause.
+    The completed-chain lag is stable during active play; the priority-4..10
+    tear is exactly one larger.  A passive sample is safe to use as the new
+    baseline because battle movement is not published from it.
+    """
+    if game_frame < 0 or bullet_time < 0 or bullet_time > game_frame:
+        raise ValueError(
+            f"invalid control clocks: game={game_frame}, bullet={bullet_time}"
+        )
+    lag = game_frame - bullet_time
+    if known_stage != stage:
+        known_lag = None
+    if passive:
+        return stage, lag, True
+    if known_lag is None:
+        # Both source timers are initialized to zero for a fresh stage.  Do
+        # not guess a non-zero baseline from an arbitrary active-frame attach.
+        if lag != 0:
+            return stage, None, False
+        return stage, 0, True
+    return stage, known_lag, lag == known_lag
+
+
+def _accept_completed_calc_phase(
+    process,
+    native,
+    *,
+    stage: int,
+    game_frame: int,
+    bullet_time: int,
+    passive: bool,
+) -> None:
+    known_stage = getattr(process, "_th06_rl_calc_stage", None)
+    known_lag = getattr(process, "_th06_rl_completed_calc_lag", None)
+    next_stage, next_lag, complete = _completed_calc_lag(
+        known_stage,
+        known_lag,
+        stage=stage,
+        game_frame=game_frame,
+        bullet_time=bullet_time,
+        passive=passive,
+    )
+    if not complete:
+        raise native._SnapshotPhaseIncomplete(game_frame, bullet_time)
+    process._th06_rl_calc_stage = next_stage
+    process._th06_rl_completed_calc_lag = next_lag
+
+
 @dataclass(frozen=True)
 class ControlSnapshot:
     capture_tier: str
@@ -562,16 +624,18 @@ def _decode_control_once(
         stage,
         spell_active,
     )
-    if (
-        not in_menu
-        and not time_stopped
-        and 0.99 <= frame_multiplier <= 1.01
-        and bullet_time != frame
-    ):
-        raise native._SnapshotPhaseIncomplete(frame, bullet_time)
     after = native.read_game_frame(process)
     if after != frame:
         raise native._SnapshotEpochChanged
+    if 0.99 <= frame_multiplier <= 1.01:
+        _accept_completed_calc_phase(
+            process,
+            native,
+            stage=stage,
+            game_frame=frame,
+            bullet_time=bullet_time,
+            passive=bool(in_menu or time_stopped),
+        )
     return ControlSnapshot(
         CONTROL_CAPTURE_TIER,
         frame, stage, player_state, x, y, half_width, half_height,
@@ -620,6 +684,53 @@ def read_control_snapshot(
         "compact coherent capture exhausted retries; "
         f"epochs={observed_epochs}; last={last_error}"
     ) from last_error
+
+
+def observe_passive_control_clock(process) -> bool:
+    """Remember a coherent time-stop clock without copying hazard pools.
+
+    Dialogue control intentionally bypasses the battle snapshot.  Sampling
+    this tiny source state keeps the calc-phase witness synchronized across
+    those skipped frames, without admitting dialogue state into movement or
+    learning.
+    """
+    enable_donor_imports()
+    import th06.native as native
+
+    def read_clock() -> tuple[bool, int, int]:
+        time_stopped = bool(process.read(
+            native.ADDR_GAME_MANAGER + native.GAME_TIME_STOPPED_OFFSET,
+            1,
+        )[0])
+        frame, stage = struct.unpack(
+            "<Ii",
+            process.read(
+                native.ADDR_GAME_MANAGER + native.GAME_FRAMES_OFFSET,
+                8,
+            ),
+        )
+        return time_stopped, frame, stage
+
+    before = read_clock()
+    bullet_time = struct.unpack(
+        "<i",
+        process.read(
+            native.ADDR_BULLET_MANAGER + native.BULLET_MANAGER_TIME_OFFSET + 8,
+            4,
+        ),
+    )[0]
+    after = read_clock()
+    if before != after or not before[0]:
+        return False
+    _accept_completed_calc_phase(
+        process,
+        native,
+        stage=before[2],
+        game_frame=before[1],
+        bullet_time=bullet_time,
+        passive=True,
+    )
+    return True
 
 
 def with_tracked_lasers(snapshot: ControlSnapshot, lasers) -> ControlSnapshot:

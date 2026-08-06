@@ -25,7 +25,11 @@ from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from ..policy_transaction import StagePolicyTransaction
 from .background_input import BackgroundInputBridge
-from .control_capture import CONTROL_CAPTURE_TIER, read_control_snapshot
+from .control_capture import (
+    CONTROL_CAPTURE_TIER,
+    observe_passive_control_clock,
+    read_control_snapshot,
+)
 from .donor import enable_donor_imports
 from .menu import start_reimu_a_practice
 from .source import (
@@ -451,6 +455,8 @@ def run(args: argparse.Namespace) -> int:
                 assert dialogue is not None and keyboard is not None
                 try:
                     dialogue_state = dialogue.update(True)
+                    if dialogue_state.active:
+                        observe_passive_control_clock(process)
                 except (OSError, RuntimeError) as error:
                     if retain_continuous_stage("dialogue-control", error):
                         continue
@@ -471,20 +477,24 @@ def run(args: argparse.Namespace) -> int:
                 and time.monotonic() >= next_dialogue_probe
             ):
                 next_dialogue_probe = time.monotonic() + DIALOGUE_PROBE_SECONDS
+                message_active = False
                 try:
                     message_active, _skippable = read_dialogue_state(process)
+                    if message_active:
+                        # GuiImpl::msg is the authoritative dialogue state.
+                        # Some messages leave isTimeStopped false, so message
+                        # state owns fast-forward while the tiny clock sample
+                        # independently records any actual source time-stop.
+                        keyboard.release_all()
+                        keyboard.apply(action_from_input(0))
+                        dialogue_active = dialogue.update(True).active
+                        observe_passive_control_clock(process)
                 except (OSError, RuntimeError) as error:
-                    if retain_continuous_stage("dialogue-probe", error):
+                    kind = "dialogue-control" if message_active else "dialogue-probe"
+                    if retain_continuous_stage(kind, error):
                         continue
                     raise
                 if message_active:
-                    # GuiImpl::msg is the authoritative dialogue state. Some
-                    # Stage 5 messages leave GameManager::time_stopped false,
-                    # so that flag cannot gate story control. Enter with no
-                    # dodge direction and retain only Shoot/Ctrl advancement.
-                    keyboard.release_all()
-                    keyboard.apply(action_from_input(0))
-                    dialogue_active = dialogue.update(True).active
                     lease.cleared()
                     if dialogue_active:
                         time.sleep(0.001)
