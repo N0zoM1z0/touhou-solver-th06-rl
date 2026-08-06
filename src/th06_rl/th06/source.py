@@ -67,30 +67,38 @@ def kinematics_from_snapshot(snapshot) -> Kinematics:
 
 def automatic_source_context(snapshot) -> str:
     """Stable source identity for data partitioning, never movement control."""
-    emitters = []
-    for spawner in sorted(snapshot.spawners, key=lambda item: item.slot):
-        instruction = spawner.next_instruction
+    bosses = tuple(
+        sorted(
+            (spawner for spawner in snapshot.spawners if spawner.is_boss),
+            key=lambda item: (item.boss_id, item.slot),
+        )
+    )
+    if bosses:
+        boss = bosses[0]
+        instruction = boss.next_instruction
         containing = tuple(
             (address, index)
-            for index, address in enumerate(spawner.ecl_subroutines)
+            for index, address in enumerate(boss.ecl_subroutines)
             if instruction is not None and address <= instruction.address
         )
-        if containing and instruction is not None:
-            base, subroutine = max(containing)
-            source = f"sub{subroutine}:off{instruction.address - base:x}"
-        else:
-            source = "subunknown"
-        emitters.append(
-            f"slot{spawner.slot}:{source}:boss{spawner.boss_id}:"
-            f"life{spawner.life_callback_sub}:timer{spawner.timer_callback_sub}"
+        subroutine = str(max(containing)[1]) if containing else "unknown"
+        spell = bool(
+            snapshot.player_attack is not None
+            and snapshot.player_attack.spell_active
         )
-    if emitters:
-        return "|".join(emitters)
+        return ":".join((
+            "boss",
+            str(boss.boss_id),
+            f"sub{subroutine}",
+            f"life_cb{boss.life_callback_sub}",
+            f"timer_cb{boss.timer_callback_sub}",
+            "spell" if spell else "nonspell",
+        ))
     if snapshot.timeline_instructions:
         instruction = snapshot.timeline_instructions[0]
         return (
-            f"timeline-next:t{instruction.time}:op{instruction.opcode}:"
-            f"arg{instruction.arg0}"
+            f"timeline:before-t{instruction.time}:"
+            f"op{instruction.opcode}:arg{instruction.arg0}"
         )
     return (
         "timeline-complete"

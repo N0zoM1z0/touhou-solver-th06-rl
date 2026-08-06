@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from th06_rl.policies.adaptive import AdaptivePolicy
+from th06_rl.policy_api import PolicyContext, PolicyOutcome
+
+
+def context(*, phase: str = "timeline:test", stage: int = 4) -> PolicyContext:
+    return PolicyContext(
+        frame=100,
+        scope=(2, 0, 0, stage),
+        source_context=phase,
+        baseline_action="stay",
+        locally_admissible_actions=("stay", "left"),
+        player_x=192.0,
+        player_y=384.0,
+        power=64,
+        bullet_count=32,
+        laser_count=0,
+        hard_action_count=12,
+        exploration_rate=0.0,
+    )
+
+
+def test_zero_exploration_preserves_reactive_baseline() -> None:
+    policy = AdaptivePolicy()
+    decision = policy.decide(context())
+    assert decision.action == "stay"
+    assert decision.behavior_probability == 1.0
+
+
+def test_unpublished_stale_choice_does_not_train() -> None:
+    policy = AdaptivePolicy()
+    decision = policy.decide(context())
+    policy.observe(PolicyOutcome(
+        frame=100,
+        scope=(2, 0, 0, 4),
+        source_context="timeline:test",
+        action=decision.action,
+        published=False,
+        elapsed_frames=0,
+        life_lost=False,
+        bomb_used=False,
+        authority_lost=False,
+        phase_changed=False,
+        next_hard_action_count=12,
+        next_player_x=192.0,
+        next_player_y=384.0,
+    ))
+    assert not policy.trials
+    assert not policy.pending_keys
+
+
+def test_source_phase_and_stage_are_nonsharing_keys() -> None:
+    policy = AdaptivePolicy()
+    first = policy._context_key(context(phase="boss:0:sub1:nonspell", stage=4))
+    second = policy._context_key(context(phase="boss:0:sub2:spell", stage=4))
+    other_stage = policy._context_key(
+        context(phase="boss:0:sub1:nonspell", stage=1)
+    )
+    assert len({first, second, other_stage}) == 3

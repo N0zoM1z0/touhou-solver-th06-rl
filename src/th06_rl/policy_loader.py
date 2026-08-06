@@ -9,7 +9,12 @@ from pathlib import Path
 import tempfile
 import types
 
-from .policy_api import POLICY_API_VERSION, PolicyContext, PolicyDecision
+from .policy_api import (
+    POLICY_API_VERSION,
+    PolicyContext,
+    PolicyDecision,
+    PolicyOutcome,
+)
 
 
 class HotReloadPolicy:
@@ -165,7 +170,31 @@ class HotReloadPolicy:
                 os.unlink(temporary)
         return True
 
+    def observe(self, outcome: PolicyOutcome) -> None:
+        if self.policy is None:
+            return
+        callback = getattr(self.policy, "observe", None)
+        if not callable(callback):
+            return
+        try:
+            callback(outcome)
+        except Exception as error:
+            # Learning must not take input authority away from the already
+            # certified reactive action. Keep the last-good runtime alive and
+            # surface the failure in status/checkpoint telemetry.
+            self.reload_failures += 1
+            self.last_error = f"observe {type(error).__name__}: {error}"
+
     def status(self) -> dict[str, object]:
+        try:
+            metrics = (
+                self.policy.metrics()
+                if self.policy is not None
+                and callable(getattr(self.policy, "metrics", None))
+                else {}
+            )
+        except Exception as error:
+            metrics = {"error": f"{type(error).__name__}: {error}"}
         return {
             "generation": self.generation,
             "reloads": self.reloads,
@@ -173,4 +202,5 @@ class HotReloadPolicy:
             "last_error": self.last_error,
             "sha256": self.digest,
             "policy_id": getattr(self.policy, "name", None),
+            "metrics": metrics,
         }

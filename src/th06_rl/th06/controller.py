@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import time
 
+from ..corpus import CorpusRecorder, FrameEvidence, RunMetadata
 from ..core.planner import LocalPlannerConfig
 from ..native import NativeKernel, PackedHazards
-from ..policy_api import PolicyContext
+from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from .background_input import BackgroundInputBridge
 from .donor import enable_donor_imports
@@ -25,9 +28,9 @@ from .source import (
 )
 
 
-EXPECTED_SCOPE = (1, 0, 0, 1)  # Normal / Reimu-A / Stage 1
 ACTIVE_PLAYER_STATES = (0, 3)
 CHECKPOINT_SECONDS = 60.0
+DIFFICULTIES = {"normal": 1, "hard": 2}
 
 
 def _hazard_prefix(hazards: PackedHazards, horizon: int) -> PackedHazards:
@@ -47,6 +50,17 @@ def _physical_bomb(snapshot) -> bool:
     )
 
 
+def _authority_loss(reason: str) -> bool:
+    return (
+        reason.startswith("authority-stop:")
+        and reason
+        not in (
+            "authority-stop:physical HIT",
+            "authority-stop:physical Bomb state/input",
+        )
+    )
+
+
 def _snapshot_scope(snapshot) -> tuple[int, int, int, int | None]:
     return (
         snapshot.difficulty,
@@ -58,6 +72,26 @@ def _snapshot_scope(snapshot) -> tuple[int, int, int, int | None]:
         ),
         snapshot.stage,
     )
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _finite(value: float) -> float | None:
+    return value if math.isfinite(value) else None
+
+
+def _code_commit(repository: Path) -> str:
+    head = (repository / ".git/HEAD").read_text(encoding="utf-8").strip()
+    if not head.startswith("ref: "):
+        return head
+    reference = repository / ".git" / head[5:]
+    return reference.read_text(encoding="utf-8").strip()
 
 
 def run(args: argparse.Namespace) -> int:
@@ -84,11 +118,15 @@ def run(args: argparse.Namespace) -> int:
     )
     from th06.trial import PracticeTrial, physical_hit
 
+    expected_stage = args.practice_stage or args.expected_stage
+    expected_scope = (DIFFICULTIES[args.difficulty], 0, 0, expected_stage)
     process = attach_exact(Path(args.game_dir).resolve())
     bridge = None
     keyboard = None
     dialogue = None
     trace = None
+    recorder = None
+    corpus_path = None
     exit_code = 0
     try:
         if args.armed:
@@ -110,7 +148,7 @@ def run(args: argparse.Namespace) -> int:
                 process,
                 keyboard,
                 args.practice_stage,
-                difficulty=1,
+                difficulty=DIFFICULTIES[args.difficulty],
             )
 
         kernel = NativeKernel(args.native_library)
@@ -120,10 +158,33 @@ def run(args: argparse.Namespace) -> int:
         )
         args.trace.parent.mkdir(parents=True, exist_ok=True)
         trace = args.trace.open("a", encoding="utf-8", buffering=1)
+        if not args.no_corpus:
+            recorder = CorpusRecorder(
+                args.corpus_root,
+                RunMetadata(
+                    code_commit=_code_commit(args.repository),
+                    executable_sha256=TARGET_SHA256,
+                    native_kernel_sha256=_sha256(kernel.path),
+                    input_backend="supervisor-callsite-v2",
+                    difficulty=expected_scope[0],
+                    character=expected_scope[1],
+                    shot_type=expected_scope[2],
+                    stage=expected_scope[3],
+                    planner={
+                        "horizon": args.horizon,
+                        "hard_horizon": 4,
+                        "control_delay": args.control_delay,
+                        "action_hold": args.action_hold,
+                        "beam_width": args.beam_width,
+                        "exploration_rate": args.exploration_rate,
+                    },
+                ),
+            )
         lease = InputLease()
         trial = PracticeTrial() if args.practice_stage is not None else None
         previous_snapshot = None
         previous_player_state = None
+        pending_learning = None
         last_frame = None
         started = time.monotonic()
         next_checkpoint = started + CHECKPOINT_SECONDS
@@ -164,6 +225,13 @@ def run(args: argparse.Namespace) -> int:
             previous_snapshot = snapshot
             reason = "ok"
             selected = None
+            proposed = None
+            published = None
+            policy = None
+            plan = None
+            hard = ()
+            locally_admissible = ()
+            current_action_name = None
             hard_count = 0
             effort_horizon = 0
             source_context = automatic_source_context(snapshot)
@@ -195,7 +263,7 @@ def run(args: argparse.Namespace) -> int:
                     for laser in snapshot.lasers
                 ):
                     raise AuthorityUnavailable("unknown reachable laser motion")
-                elif _snapshot_scope(snapshot) != EXPECTED_SCOPE:
+                elif _snapshot_scope(snapshot) != expected_scope:
                     raise AuthorityUnavailable(
                         f"scope changed to {_snapshot_scope(snapshot)}"
                     )
@@ -203,6 +271,7 @@ def run(args: argparse.Namespace) -> int:
                     if dialogue is not None:
                         dialogue.update(True)
                     current_core = core_action_from_input(snapshot.input_mask)
+                    current_action_name = current_core.name
                     kinematics = kinematics_from_snapshot(snapshot)
                     lease_status = (
                         lease.status(snapshot.input_mask, snapshot.frame)
@@ -232,6 +301,10 @@ def run(args: argparse.Namespace) -> int:
                         if not retained:
                             raise AuthorityUnavailable("in-flight input unsafe")
                         selected = desired_core
+                        proposed = desired_core
+                        published = desired_core.name if keyboard is not None else None
+                        hard = retained
+                        locally_admissible = (desired_core.name,)
                         hard_count = 1
                         effort_horizon = 4
                         reason = "input-lease"
@@ -278,26 +351,32 @@ def run(args: argparse.Namespace) -> int:
                                 "local forecast has no safe continuation"
                             )
                         effort_horizon = plan.effort_horizon
-                        # The first physical baseline exposes only its own
-                        # collision/clearance winner to learning. A later
-                        # measured frontier can widen this tuple without ever
-                        # widening Hard.
+                        # Every exposed action has both a native Hard-4
+                        # certificate and a collision-free nominal continuation
+                        # in the local beam. Learning can rank this set but can
+                        # neither add an action nor change its geometry.
+                        locally_admissible = tuple(
+                            action.name for action in plan.surviving_actions
+                        )
                         policy = plugin.decide(PolicyContext(
                             frame=snapshot.frame,
-                            scope=EXPECTED_SCOPE,
+                            scope=expected_scope,
                             source_context=source_context,
                             baseline_action=plan.action.name,
-                            locally_admissible_actions=(plan.action.name,),
+                            locally_admissible_actions=locally_admissible,
                             player_x=snapshot.x,
                             player_y=snapshot.y,
                             power=snapshot.current_power,
                             bullet_count=len(snapshot.bullets),
                             laser_count=snapshot.laser_count,
+                            hard_action_count=len(hard),
+                            exploration_rate=args.exploration_rate,
                         ))
                         selected = next(
                             action for action in plan.surviving_actions
                             if action.name == policy.action
                         )
+                        proposed = selected
                         # Re-run the selected Hard certificate after soft work,
                         # then reject publication if the physical frame moved.
                         fresh = kernel.certify_actions(
@@ -319,6 +398,7 @@ def run(args: argparse.Namespace) -> int:
                             reason = "stale-retry"
                         elif keyboard is not None:
                             events = keyboard.apply(donor_action(selected))
+                            published = selected.name
                             if events and selected != current_core:
                                 lease.issued(
                                     read_game_frame(process),
@@ -327,12 +407,109 @@ def run(args: argparse.Namespace) -> int:
                                 )
             except AuthorityUnavailable as error:
                 reason = f"authority-stop:{error}"
-                exit_code = 2
+                exit_code = (
+                    10
+                    if str(error) == "physical HIT"
+                    else 11
+                    if str(error) == "physical Bomb state/input"
+                    else 2
+                )
                 if keyboard is not None:
                     keyboard.release_all()
                     lease.cleared()
 
             solve_ms = (time.perf_counter() - solve_started) * 1000.0
+            if pending_learning is not None:
+                plugin.observe(PolicyOutcome(
+                    frame=pending_learning["frame"],
+                    scope=pending_learning["scope"],
+                    source_context=pending_learning["source_context"],
+                    action=pending_learning["action"],
+                    published=True,
+                    elapsed_frames=max(
+                        0, snapshot.frame - pending_learning["frame"]
+                    ),
+                    life_lost=hit,
+                    bomb_used=_physical_bomb(snapshot),
+                    authority_lost=_authority_loss(reason),
+                    phase_changed=(
+                        pending_learning["scope"] != _snapshot_scope(snapshot)
+                        or pending_learning["source_context"] != source_context
+                    ),
+                    next_hard_action_count=(
+                        -1 if reason == "input-lease" else hard_count
+                    ),
+                    next_player_x=snapshot.x,
+                    next_player_y=snapshot.y,
+                ))
+                pending_learning = None
+            if policy is not None and published is None:
+                plugin.observe(PolicyOutcome(
+                    frame=snapshot.frame,
+                    scope=expected_scope,
+                    source_context=source_context,
+                    action=policy.action,
+                    published=False,
+                    elapsed_frames=0,
+                    life_lost=False,
+                    bomb_used=False,
+                    authority_lost=False,
+                    phase_changed=False,
+                    next_hard_action_count=hard_count,
+                    next_player_x=snapshot.x,
+                    next_player_y=snapshot.y,
+                ))
+            if policy is not None and published is not None:
+                pending_learning = {
+                    "frame": snapshot.frame,
+                    "scope": expected_scope,
+                    "source_context": source_context,
+                    "action": published,
+                }
+            policy_status = plugin.status()
+            if recorder is not None:
+                recorder.record(snapshot, FrameEvidence(
+                    phase_id=source_context,
+                    current_action=current_action_name,
+                    hard_actions=tuple(
+                        (
+                            item.action.name,
+                            _finite(item.min_clearance),
+                            item.final_x,
+                            item.final_y,
+                        )
+                        for item in hard
+                    ),
+                    baseline_action=plan.action.name if plan is not None else None,
+                    locally_admissible_actions=locally_admissible,
+                    proposed_action=proposed.name if proposed is not None else None,
+                    published_action=published,
+                    behavior_probability=(
+                        policy.behavior_probability if policy is not None else 1.0
+                    ),
+                    policy_id=(
+                        policy.policy_id
+                        if policy is not None
+                        else policy_status.get("policy_id")
+                    ),
+                    policy_generation=int(policy_status["generation"]),
+                    policy_sha256=policy_status.get("sha256"),
+                    effort_horizon=effort_horizon,
+                    plan_min_clearance=(
+                        _finite(plan.min_clearance) if plan is not None else None
+                    ),
+                    cumulative_risk=(
+                        _finite(plan.cumulative_risk) if plan is not None else None
+                    ),
+                    terminal_x=plan.terminal_x if plan is not None else None,
+                    terminal_y=plan.terminal_y if plan is not None else None,
+                    endpoint_count=plan.endpoint_count if plan is not None else 0,
+                    continuation_action_count=(
+                        plan.continuation_action_count if plan is not None else 0
+                    ),
+                    solve_ms=solve_ms,
+                    reason=reason,
+                ))
             record = {
                 "time": time.time(),
                 "frame": snapshot.frame,
@@ -347,10 +524,10 @@ def run(args: argparse.Namespace) -> int:
                 "action": selected.name if selected is not None else None,
                 "reason": reason,
                 "solve_ms": solve_ms,
-                "policy": plugin.status(),
+                "policy": policy_status,
             }
             trace.write(json.dumps(record, separators=(",", ":")) + "\n")
-            if snapshot.frame % 60 == 0 or reason != "ok":
+            if snapshot.frame % 60 == 0 or reason not in ("ok", "stale-retry"):
                 print(
                     f"f={snapshot.frame} bullets={len(snapshot.bullets)} "
                     f"hard={hard_count} h={effort_horizon} "
@@ -374,21 +551,25 @@ def run(args: argparse.Namespace) -> int:
                 keyboard.release_all()
         finally:
             try:
-                if bridge is not None:
-                    bridge.close()
+                if recorder is not None:
+                    corpus_path = recorder.close()
             finally:
                 try:
-                    if args.stop_game:
-                        # A user/window-manager initiated exit can race the
-                        # controller cleanup. A signalled process handle means
-                        # the exact trial is already gone and needs no second
-                        # TerminateProcess call.
-                        if process.kernel32.WaitForSingleObject(
-                            process.handle, 0
-                        ) != 0:
-                            process.terminate()
+                    if bridge is not None:
+                        bridge.close()
                 finally:
-                    process.close()
+                    try:
+                        if args.stop_game:
+                            # A user/window-manager initiated exit can race the
+                            # controller cleanup. A signalled process handle means
+                            # the exact trial is already gone and needs no second
+                            # TerminateProcess call.
+                            if process.kernel32.WaitForSingleObject(
+                                process.handle, 0
+                            ) != 0:
+                                process.terminate()
+                    finally:
+                        process.close()
         print(
             "released input and restored bridge; "
             + (
@@ -398,6 +579,8 @@ def run(args: argparse.Namespace) -> int:
             ),
             flush=True,
         )
+        if corpus_path is not None:
+            print(f"complete corpus: {corpus_path}", flush=True)
     return exit_code
 
 
@@ -422,13 +605,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=r"D:\Entertainment\Game\Touhou\th06",
     )
     parser.add_argument("--armed", action="store_true")
-    parser.add_argument("--practice-stage", type=int, choices=(1,))
+    parser.add_argument("--practice-stage", type=int, choices=range(1, 7))
+    parser.add_argument("--expected-stage", type=int, choices=range(1, 7), default=1)
+    parser.add_argument("--difficulty", choices=tuple(DIFFICULTIES), default="hard")
     parser.add_argument("--stop-game", action="store_true")
     parser.add_argument("--seconds", type=float, default=0.0)
     parser.add_argument("--horizon", type=int, default=12)
     parser.add_argument("--control-delay", type=int, default=2)
     parser.add_argument("--action-hold", type=int, default=2)
     parser.add_argument("--beam-width", type=int, default=64)
+    parser.add_argument("--exploration-rate", type=float, default=0.03)
     parser.add_argument("--native-library", type=Path)
     parser.add_argument(
         "--policy-plugin",
@@ -438,13 +624,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--policy-state",
         type=Path,
-        default=repository / "artifacts/online_policy_state.json",
+        default=None,
     )
     parser.add_argument(
         "--trace",
         type=Path,
-        default=repository / "artifacts/th06_rl_live.jsonl",
+        default=None,
     )
+    parser.add_argument(
+        "--corpus-root",
+        type=Path,
+        default=repository / "artifacts/corpus",
+    )
+    parser.add_argument("--no-corpus", action="store_true")
     args = parser.parse_args(argv)
     if args.seconds < 0.0:
         parser.error("--seconds cannot be negative")
@@ -452,6 +644,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--horizon must cover Hard-4")
     if not 0 <= args.control_delay < args.horizon:
         parser.error("--control-delay must be inside the horizon")
+    if not 0.0 <= args.exploration_rate <= 1.0:
+        parser.error("--exploration-rate must be in [0, 1]")
+    expected_stage = args.practice_stage or args.expected_stage
+    label = f"{args.difficulty}_reimu_a_stage{expected_stage}"
+    if args.policy_state is None:
+        args.policy_state = repository / f"artifacts/policy/{label}.json"
+    if args.trace is None:
+        args.trace = repository / f"artifacts/live/{label}.jsonl"
+    args.repository = repository
     return args
 
 
