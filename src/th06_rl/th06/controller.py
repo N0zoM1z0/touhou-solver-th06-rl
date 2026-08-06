@@ -153,6 +153,7 @@ def run(args: argparse.Namespace) -> int:
     from th06.model import PLAYER_ALIVE, action_from_input
     from th06.native import (
         ADDR_LIFE_PATCH,
+        NativeDecodeError,
         TARGET_SHA256,
         attach_exact,
         read_game_frame,
@@ -174,6 +175,7 @@ def run(args: argparse.Namespace) -> int:
     stage_completed = False
     hit_count = 0
     control_dead_end_count = 0
+    capture_failure_count = 0
     termination_reason = "controller-interrupted"
     started = time.monotonic()
     try:
@@ -262,7 +264,36 @@ def run(args: argparse.Namespace) -> int:
                 time.sleep(0.001)
                 continue
             capture_started = time.perf_counter()
-            snapshot = read_snapshot(process)
+            try:
+                snapshot = read_snapshot(process)
+            except NativeDecodeError as error:
+                # A full source/corpus snapshot is intentionally strict and
+                # may lose its epoch while TH06 advances.  In continuous
+                # collection this is a missing observation, not a reason to
+                # destroy the physical Stage episode.  Fail closed until the
+                # next coherent snapshot; HIT remains observable after input
+                # is released because the verified life patch changes only
+                # the life decrement.
+                if not args.continuous_stage:
+                    raise
+                capture_failure_count += 1
+                if keyboard is not None:
+                    keyboard.release_all()
+                    lease.cleared()
+                trace.write(json.dumps({
+                    "time": time.time(),
+                    "event": "capture-incoherent",
+                    "count": capture_failure_count,
+                    "error": str(error),
+                }, separators=(",", ":")) + "\n")
+                if capture_failure_count == 1 or capture_failure_count % 60 == 0:
+                    print(
+                        "coherent snapshot unavailable; input released and "
+                        f"continuous Stage retained (count={capture_failure_count})",
+                        flush=True,
+                    )
+                time.sleep(0.001)
+                continue
             capture_ms = (time.perf_counter() - capture_started) * 1000.0
             if snapshot.frame == last_frame:
                 time.sleep(0.001)
@@ -654,6 +685,7 @@ def run(args: argparse.Namespace) -> int:
                         "controller_exit_code": exit_code,
                         "physical_hits": hit_count,
                         "control_dead_ends": control_dead_end_count,
+                        "capture_failures": capture_failure_count,
                         "elapsed_wall_seconds": time.monotonic() - started,
                     })
             finally:
