@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+
+# Physical artifacts never belong in Git.
+artifacts/
+corpus/
+logs/
+traces/
+reference/
+*.dat
+*.DAT
+*.exe
+*.rpy
+
