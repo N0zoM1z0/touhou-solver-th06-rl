@@ -58,3 +58,14 @@ new failure evidence improves play.
   and peak controller private memory was 80.8 MiB. Dense native replay checked
   57 samples with no divergence. Six focus-loss events were repaired and the
   Stage still completed. The compressed run was 280.4 MiB.
+- `20260806T140919Z-138042700` at `7e48836`: complete Stage 6 with 20 HIT,
+  zero capture and infrastructure failures, and a committed policy update.
+  Eighteen HITs followed a Hard-empty control dead end; two were classified as
+  latency observation gaps. Capture p95 was 7.43 ms, solve p95 was 1.37 ms,
+  solve p99 was 6.99 ms, and stale retry rate was 0.840%. Peak controller
+  private memory was 74.1 MiB and the compressed run was 317.1 MiB. Dense
+  native replay checked 61 samples with no divergence, and two focus-loss
+  events were repaired. The boss sub31 spell context exposed a concentrated
+  geometry hotspot: despite only 0--170 live bullets, it carried as many as 48
+  lasers, with solve p95 11.68 ms and stale retry rate 11.55% across 2,286
+  frames. This is the pre-optimization comparison for prepared hazard buffers.

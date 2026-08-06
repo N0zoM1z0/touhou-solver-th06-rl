@@ -111,6 +111,39 @@ class _PlanResult(ctypes.Structure):
     ]
 
 
+@dataclass(frozen=True)
+class PreparedHazards:
+    """One immutable ctypes packing with cheap horizon-prefix views."""
+
+    horizon: int
+    aabb_offsets: object
+    aabbs: object
+    laser_offsets: object
+    lasers: object
+
+    def prefix(self, horizon: int) -> PreparedHazards:
+        if not 1 <= horizon <= self.horizon:
+            raise ValueError(
+                f"prepared hazard prefix {horizon} is outside 1..{self.horizon}"
+            )
+        return PreparedHazards(
+            horizon,
+            self.aabb_offsets,
+            self.aabbs,
+            self.laser_offsets,
+            self.lasers,
+        )
+
+    @property
+    def native_args(self) -> tuple[object, object, object, object]:
+        return (
+            self.aabb_offsets,
+            self.aabbs,
+            self.laser_offsets,
+            self.lasers,
+        )
+
+
 def _action_mask(actions: Iterable[Action]) -> int:
     mask = 0
     for action in actions:
@@ -191,7 +224,9 @@ class NativeKernel:
         self.plan_function.restype = ctypes.c_int
 
     @staticmethod
-    def _pack(hazards: PackedHazards):
+    def _pack(
+        hazards: PackedHazards,
+    ) -> tuple[object, object, object, object]:
         aabbs = tuple(item for frame in hazards.aabb_frames for item in frame)
         lasers = tuple(item for frame in hazards.laser_frames for item in frame)
         aabb_array = (_Aabb * max(1, len(aabbs)))(
@@ -216,6 +251,10 @@ class NativeKernel:
             offset_type(*laser_offsets),
             laser_array,
         )
+
+    @classmethod
+    def prepare_hazards(cls, hazards: PackedHazards) -> PreparedHazards:
+        return PreparedHazards(hazards.horizon, *cls._pack(hazards))
 
     @staticmethod
     def _physical_args(
@@ -245,14 +284,18 @@ class NativeKernel:
         half_height: float,
         kinematics: Kinematics,
         current_action: Action,
-        hazards: PackedHazards,
+        hazards: PackedHazards | PreparedHazards,
         candidates: tuple[Action, ...] = ACTIONS,
         delivery_delays: tuple[int, ...] = (0, 1, 2, 3),
         collision_margin: float = 0.35,
     ) -> tuple[NativeCertifiedAction, ...]:
         if not delivery_delays:
             raise ValueError("delivery delays cannot be empty")
-        packed = self._pack(hazards)
+        prepared = (
+            hazards
+            if isinstance(hazards, PreparedHazards)
+            else self.prepare_hazards(hazards)
+        )
         delay_array = (ctypes.c_int32 * len(delivery_delays))(*delivery_delays)
         safe_mask = ctypes.c_uint32()
         minimum = (ctypes.c_float * len(ACTIONS))()
@@ -260,11 +303,11 @@ class NativeKernel:
         status = self.certify_function(
             *self._physical_args(x, y, half_width, half_height, kinematics),
             ACTION_INDEX[current_action],
-            hazards.horizon,
+            prepared.horizon,
             delay_array,
             len(delivery_delays),
             _action_mask(candidates),
-            *packed,
+            *prepared.native_args,
             collision_margin,
             ctypes.byref(safe_mask),
             minimum,
@@ -351,4 +394,3 @@ class NativeKernel:
             endpoint_count=output.endpoint_count,
             continuation_action_count=output.continuation_action_count,
         )
-

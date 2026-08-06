@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from ..core.model import Action, Kinematics, movement_actions
 from ..native import Aabb, LaserRect, PackedHazards
 from .donor import enable_donor_imports
+from .observed_lasers import laser_rects_by_frame
 
 
 HARD_HORIZON = 4
@@ -266,7 +267,6 @@ def lower_observed_hazards(
     enable_donor_imports()
     from th06.hazards.bullets import reachable_hazards_by_frame
     from th06.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
-    from th06.hazards.lasers import hazards_by_frame as laser_hazards_by_frame
 
     bullet_frames = reachable_hazards_by_frame(
         snapshot,
@@ -277,7 +277,7 @@ def lower_observed_hazards(
         snapshot.enemies,
         requested_horizon,
     )
-    laser_frames = laser_hazards_by_frame(
+    laser_frames = laser_rects_by_frame(
         snapshot.lasers,
         requested_horizon,
     )
@@ -296,17 +296,7 @@ def lower_observed_hazards(
                 tuple(Aabb(*hazard) for hazard in frame)
                 for frame in reachable_frames
             ),
-            laser_frames=tuple(
-                tuple(LaserRect(
-                    hazard.origin_x,
-                    hazard.origin_y,
-                    hazard.angle,
-                    hazard.center_offset,
-                    hazard.size_x,
-                    hazard.size_y,
-                ) for hazard in frame)
-                for frame in laser_frames
-            ),
+            laser_frames=laser_frames,
         ),
         hard_horizon=HARD_HORIZON,
         requested_horizon=requested_horizon,

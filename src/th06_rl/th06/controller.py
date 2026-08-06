@@ -20,7 +20,7 @@ from ..corpus import (
     FrameEvidence,
     RunMetadata,
 )
-from ..native import NativeKernel, PackedHazards
+from ..native import NativeKernel
 from ..policy_api import PolicyContext, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from ..policy_transaction import StagePolicyTransaction
@@ -51,13 +51,6 @@ HEALTH_TRACE_SECONDS = 10.0
 DIALOGUE_PROBE_SECONDS = 1.0 / 60.0
 LOW_COMMIT_EXIT_CODE = 75
 DIFFICULTIES = {"normal": 1, "hard": 2, "lunatic": 3}
-
-
-def _hazard_prefix(hazards: PackedHazards, horizon: int) -> PackedHazards:
-    return PackedHazards(
-        hazards.aabb_frames[:horizon],
-        hazards.laser_frames[:horizon],
-    )
 
 
 def _physical_bomb(snapshot) -> bool:
@@ -686,8 +679,10 @@ def run(args: argparse.Namespace) -> int:
                             snapshot,
                             args.horizon,
                         )
-                        hard_hazards = _hazard_prefix(
-                            forecast.hazards,
+                        prepared_forecast = kernel.prepare_hazards(
+                            forecast.hazards
+                        )
+                        prepared_hard = prepared_forecast.prefix(
                             forecast.hard_horizon,
                         )
                         hard = kernel.certify_actions(
@@ -697,7 +692,7 @@ def run(args: argparse.Namespace) -> int:
                             half_height=snapshot.half_height,
                             kinematics=kinematics,
                             current_action=current_core,
-                            hazards=hard_hazards,
+                            hazards=prepared_hard,
                         )
                         hard_count = len(hard)
                         if not hard:
@@ -709,7 +704,7 @@ def run(args: argparse.Namespace) -> int:
                             half_height=snapshot.half_height,
                             kinematics=kinematics,
                             current_action=current_core,
-                            hazards=forecast.hazards,
+                            hazards=prepared_forecast,
                             candidates=tuple(item.action for item in hard),
                         )
                         # A longer constant-action gate is advisory: when every
@@ -756,7 +751,7 @@ def run(args: argparse.Namespace) -> int:
                             half_height=snapshot.half_height,
                             kinematics=kinematics,
                             current_action=current_core,
-                            hazards=hard_hazards,
+                            hazards=prepared_hard,
                             candidates=(selected,),
                         )
                         if not fresh:
