@@ -30,3 +30,10 @@ new failure evidence improves play.
   controller failed closed and stopped the exact game PID, and the incomplete
   Stage policy transaction was rolled back. This is infrastructure evidence
   only and is not a learning or HIT comparison run.
+- `20260806T134224Z-637968400` at `a72d31a`: complete Stage 5 with 16 HIT,
+  zero capture and infrastructure failures, and a committed policy update.
+  Capture p95 was 5.76 ms, solve p95 was 0.97 ms, peak controller private
+  memory was 65.3 MiB, and the compressed run was 196.2 MiB. Dense native
+  replay checked 63 samples with no divergence. No focus-loss event occurred
+  in this run (`background_reactivations=0`). The reduction from 19 to 16 HIT
+  is chronological evidence, not yet a causal learning estimate.
