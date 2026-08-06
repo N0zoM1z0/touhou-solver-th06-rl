@@ -108,3 +108,21 @@ new failure evidence improves play.
   opportunity keys that did not participate in decisions; omitting that
   redundant checkpoint table retains every reward/trial and cuts the same
   packed state from 2.69 MiB to 1.20 MiB.
+- `20260806T151806Z-653426100` at `ddd762f`: complete Stage 6 with 12 HIT,
+  all after a Hard-empty control dead end, zero capture/infrastructure
+  failures, and a committed policy update. Capture p95 was 6.58 ms, solve p95
+  was 1.32 ms, solve p99 was 2.75 ms, and stale retry rate was 0.0408%.
+  The 500+ live-bullet stratum had control p95 8.90 ms and zero stale retries.
+  Dense native replay checked 60 samples with no divergence; four focus-loss
+  events were repaired. Peak controller private memory was 116.2 MiB after
+  the fine policy grew to 61,286 observations, the packed policy was 1.94 MiB,
+  and the compressed corpus was 309 MiB.
+
+  In the exact sub31/48-live-laser stratum, precomputed laser bases and
+  deferred exact distance evaluation reduced physical solve p50 from 3.71 to
+  2.52 ms, p95 from 8.84 to 3.71 ms, p99 from 10.43 to 6.33 ms, and stale
+  retry rate from 2.62% to 0.118% relative to the preceding hierarchical-v2
+  run. Overall solve p95 stayed nearly flat because ordinary frames already
+  dominated that percentile; overall solve p99 fell from 5.96 to 2.75 ms.
+  The 21-to-12 HIT change is chronological evidence only and was not used to
+  tune policy parameters.
