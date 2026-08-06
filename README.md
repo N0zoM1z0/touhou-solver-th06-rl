@@ -33,11 +33,14 @@ experiments. The
 `run_hard_stage4_learning.bat` entry point and its independent policy state are
 retained for baseline reproduction, not for the active data flywheel.
 
-Before launching each new Stage, both loops measure the complete `artifacts`
-tree and reserve the recorder's full 512 MiB per-run allowance. They stop
-before game launch if that reservation could cross the 45 GiB local budget;
-no corpus is deleted automatically. Complete, audited runs can later be
-mirrored into a Hugging Face dataset before any user-approved local pruning.
+Before launching each new Stage, both loops conservatively account the
+`artifacts` tree and reserve the recorder's full 512 MiB per-run allowance.
+Corpus usage comes from each atomic manifest plus a 2 MiB per-run metadata/open
+shard reserve; the few live traces and policy files are measured directly, so
+the Windows guard never performs a slow per-shard UNC scan. Collection stops
+before game launch if the reservation could cross the 45 GiB local budget; no
+corpus is deleted automatically. Complete, audited runs can later be mirrored
+into a Hugging Face dataset before any user-approved local pruning.
 
 Each control frame retains a coherent collision-authority root: player state,
 all live bullet motion/collision fields, lasers, lethal enemy bodies, RNG,
