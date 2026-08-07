@@ -154,3 +154,22 @@ new failure evidence improves play.
   middle support versus none at exact-fine; this is sparse descriptive
   evidence that the intended intermediate reuse path exists. It is not a
   causal interpretation of the 12-to-19 HIT change.
+- `20260807T033012Z-128212400` at `bd26231`: first complete physical Stage 6
+  using `survival-reserve-hit-trace-v2` after replaying 63 exact-scope,
+  complete logged-action runs into the same online UCB. It recorded 10 HIT,
+  zero capture/infrastructure failures, and a committed Stage policy update.
+  All 10 physical HIT events credited recent actions in the same source phase:
+  checkpoint counters moved from 745 to 755 physical HIT and from 728 to 738
+  credited HIT, while uncredited HIT remained 17. The prior interrupted run
+  `20260807T032052Z-684850600` was rolled back and is not learning evidence.
+
+  Capture p95 was 6.42 ms, solve p95 was 1.58 ms, observation-gap rate was
+  0.0514%, and stale-retry rate was 0.0857%. Dense native parity checked 52
+  samples with no unsafe or conservative divergence; the audit found no scope
+  pollution or integrity errors and classified the infrastructure as stable
+  for learning. Around the first HIT, the 59-frame inactive interval had a
+  maximum 32.85 ms controller gap and control resumed immediately afterward.
+  The next 60-second maintenance event was a 9.16 ms reload poll instead of
+  the former 6-second checkpoint write. This physically validates that HIT
+  feedback and ordinary maintenance no longer stall play. The 10-HIT result
+  is chronological evidence, not yet a frozen-checkpoint causal comparison.
