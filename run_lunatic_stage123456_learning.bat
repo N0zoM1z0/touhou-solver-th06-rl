@@ -22,11 +22,11 @@ if not exist "%NATIVE_DLL%" (
   exit /b 1
 )
 
-echo TH06-RL Lunatic / Reimu-A / Stage 1-2-3-4 rotation
+echo TH06-RL Lunatic / Reimu-A / Stage 1-2-3-4-5-6 rotation
 echo Each non-mastered Stage runs three complete trials before rotation.
 echo Three latest trustworthy no-HIT clears mark a Stage mastered and skipped.
 echo Every Stage owns an independent policy, trace, and corpus scope.
-echo Create artifacts\pause-lunatic-stage1234 to stop between complete Stages.
+echo Create artifacts\pause-lunatic-stage123456 to stop between complete Stages.
 
 :cycle
 set "ACTIVE_STAGES=0"
@@ -43,6 +43,14 @@ set "STATUS=%ERRORLEVEL%"
 if "%STATUS%"=="90" goto paused
 if not "%STATUS%"=="0" goto failed
 call :stage_block 4 %*
+set "STATUS=%ERRORLEVEL%"
+if "%STATUS%"=="90" goto paused
+if not "%STATUS%"=="0" goto failed
+call :stage_block 5 %*
+set "STATUS=%ERRORLEVEL%"
+if "%STATUS%"=="90" goto paused
+if not "%STATUS%"=="0" goto failed
+call :stage_block 6 %*
 set "STATUS=%ERRORLEVEL%"
 if "%STATUS%"=="90" goto paused
 if not "%STATUS%"=="0" goto failed
@@ -73,7 +81,7 @@ set "MENU_RETRIES=0"
 :trial_attempt
 "%TH06_PYTHON%" "%REPO%scripts\finalize_corpus_spool.py" "%TH06_CORPUS_SPOOL%" "%REPO%artifacts\corpus"
 if errorlevel 1 exit /b 78
-if exist "%REPO%artifacts\pause-lunatic-stage1234" exit /b 90
+if exist "%REPO%artifacts\pause-lunatic-stage123456" exit /b 90
 "%TH06_PYTHON%" "%REPO%scripts\check_storage_budget.py" "%REPO%artifacts" --limit-gib 45 --reserve-mib 512
 if errorlevel 1 exit /b 90
 "%TH06_PYTHON%" "%REPO%scripts\check_host_memory.py" --reserve-gib 4
@@ -108,13 +116,13 @@ timeout /t 2 /nobreak >nul
 goto trial_attempt
 
 :paused
-echo Stage 1-2-3-4 rotation paused before the next complete Stage.
+echo Stage 1-2-3-4-5-6 rotation paused before the next complete Stage.
 exit /b 0
 
 :all_mastered
-echo All Lunatic Practice Stages 1-4 have three consecutive trustworthy clears.
+echo All Lunatic Practice Stages 1-6 have three consecutive trustworthy clears.
 exit /b 0
 
 :failed
-echo Stage 1-2-3-4 rotation stopped on controller status %STATUS%.
+echo Stage 1-2-3-4-5-6 rotation stopped on controller status %STATUS%.
 exit /b %STATUS%

@@ -30,16 +30,14 @@ tests/                  synthetic and recorded focused tests
 docs/                   source contracts and physical evidence
 ```
 
-The active collection strata are Lunatic / Reimu-A / Stages 4, 5, and 6. From
-Windows, run `run_lunatic_stage456_learning.bat`; create
-`artifacts\pause-lunatic-stage456` to stop cleanly between trials. Every stage
-has independent policy and corpus scope. Hard remains preserved as non-sharing
-baseline evidence only.
-
-The current focused experiment repeatedly plays Lunatic Stage 6 via
-`run_lunatic_stage6_learning.bat`; its policy remains isolated from every
-other stage. Pre-hit-credit checkpoints are diagnostic history only and are
-not valid hot starts for the active online reward version.
+The active collection strata are Lunatic / Reimu-A / Stages 1 through 6. From
+Windows, run `run_lunatic_stage123456_learning.bat`; create
+`artifacts\pause-lunatic-stage123456` to stop cleanly between stages. Each
+non-mastered stage runs in a three-trial block; three latest trustworthy
+no-HIT clears mark it mastered and skip it on later cycles. Every stage has
+independent policy and corpus scope. Hard remains preserved as non-sharing
+baseline evidence only. Pre-hit-credit checkpoints are diagnostic history
+only and are not valid hot starts for the active online reward version.
 
 ## Donor policy
 
