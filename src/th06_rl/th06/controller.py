@@ -301,6 +301,7 @@ def run(args: argparse.Namespace) -> int:
                         "exploration_rate": args.exploration_rate,
                     },
                 ),
+                deferred_compression=args.defer_corpus_compression,
             )
         lease = InputLease()
         trial = PracticeTrial() if args.practice_stage is not None else None
@@ -1361,6 +1362,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--corpus-root",
         type=Path,
         default=repository / "artifacts/corpus",
+    )
+    parser.add_argument(
+        "--defer-corpus-compression",
+        action="store_true",
+        help=(
+            "write gzip-0 shards to a fast local spool during play; a "
+            "post-Stage finalizer must recompress and archive them"
+        ),
     )
     parser.add_argument("--no-corpus", action="store_true")
     parser.add_argument("--no-post-run-audit", action="store_true")

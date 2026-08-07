@@ -38,6 +38,7 @@ FRAME_BUDGET_MS = 1000.0 / 60.0
 DEFAULT_SHARD_RECORDS = 512
 DEFAULT_QUEUE_RECORDS = 512
 DEFAULT_MAX_RUN_BYTES = 512 * 1024 * 1024
+DEFAULT_SPOOL_MAX_RUN_BYTES = 4 * 1024 * 1024 * 1024
 
 SOURCE_OBJECT_FIELDS = (
     "timeline_instructions",
@@ -208,11 +209,20 @@ class _HashingWriter:
 
 
 class _ShardWriter:
-    def __init__(self, run_dir: Path, stream: str, records: int, on_shard) -> None:
+    def __init__(
+        self,
+        run_dir: Path,
+        stream: str,
+        records: int,
+        on_shard,
+        *,
+        compresslevel: int,
+    ) -> None:
         self.run_dir = run_dir
         self.stream = stream
         self.records = records
         self.on_shard = on_shard
+        self.compresslevel = compresslevel
         self.index = 0
         self.count = 0
         self.first_sequence: int | None = None
@@ -232,7 +242,7 @@ class _ShardWriter:
         self.gzip = gzip.GzipFile(
             fileobj=self.hashing,
             mode="wb",
-            compresslevel=3,
+            compresslevel=self.compresslevel,
             mtime=0,
             filename="",
         )
@@ -650,6 +660,7 @@ class CorpusRecorder:
         shard_records: int = DEFAULT_SHARD_RECORDS,
         queue_records: int = DEFAULT_QUEUE_RECORDS,
         max_run_bytes: int = DEFAULT_MAX_RUN_BYTES,
+        deferred_compression: bool = False,
     ) -> None:
         if min(shard_records, queue_records, max_run_bytes) <= 0:
             raise ValueError("corpus bounds must be positive")
@@ -661,7 +672,11 @@ class CorpusRecorder:
         self.run_dir = Path(root) / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=False)
         self.shard_records = shard_records
-        self.max_run_bytes = max_run_bytes
+        self.archive_max_run_bytes = max_run_bytes
+        self.max_run_bytes = (
+            DEFAULT_SPOOL_MAX_RUN_BYTES if deferred_compression else max_run_bytes
+        )
+        self.compresslevel = 0 if deferred_compression else 3
         self.sequence = 0
         self.anchor_sequence = 0
         self.enqueued = 0
@@ -703,7 +718,9 @@ class CorpusRecorder:
             "compressed_bytes": 0,
             "uncompressed_bytes": 0,
             "dropped_records": 0,
-            "max_run_bytes": max_run_bytes,
+            "max_run_bytes": self.max_run_bytes,
+            "archive_max_run_bytes": self.archive_max_run_bytes,
+            "storage_compression": f"gzip-{self.compresslevel}",
         }
         _atomic_json(self.run_dir / "run.json", {
             "schema_version": RUN_SCHEMA,
@@ -718,7 +735,7 @@ class CorpusRecorder:
                 "anchor": ANCHOR_SCHEMA,
             },
             "storage": {
-                "compression": "gzip-3",
+                "compression": f"gzip-{self.compresslevel}",
                 "source_objects": "sha256-content-addressed",
                 "repeated_dataclasses": DATACLASS_ROWS_CODEC,
                 "control_bullets": "raw-tail-plus-visual-map-v1",
@@ -951,7 +968,13 @@ class CorpusRecorder:
 
     def _worker(self) -> None:
         writers = {
-            stream: _ShardWriter(self.run_dir, stream, self.shard_records, self._on_shard)
+            stream: _ShardWriter(
+                self.run_dir,
+                stream,
+                self.shard_records,
+                self._on_shard,
+                compresslevel=self.compresslevel,
+            )
             for stream in ("objects", "frames", "transitions", "events", "anchors")
         }
         objects = _ObjectStore(writers["objects"])

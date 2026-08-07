@@ -26,7 +26,7 @@ character, shot type, stage, and automatically derived source context remain
 separate corpus/model scopes.
 
 `run_lunatic_stage456_learning.bat` rotates exact Practice Stages 4, 5, and 6,
-records one complete gzip-sharded stage trajectory at a time, checkpoints each
+records one complete sharded stage trajectory at a time, checkpoints each
 stage's independent bounded online model, cleans up the exact game PID, and
 starts the next full stage. The verified life patch prevents Game Over without
 hiding physical HIT:
@@ -59,6 +59,13 @@ the Windows guard never performs a slow per-shard UNC scan. Collection stops
 before game launch if the reservation could cross the 45 GiB local budget; no
 corpus is deleted automatically. Complete, audited runs can later be mirrored
 into a Hugging Face dataset before any user-approved local pruning.
+
+During physical play, the batch writes gzip-0 shards only to the fast local
+`D:\th06-rl-corpus-spool`; it does not deflate or transact manifests over WSL
+UNC. After the exact game PID has stopped, the batch recompresses those shards
+to gzip-3, verifies their content hashes while copying, atomically archives the
+run under `artifacts/corpus`, and only then permits the next Stage. A failed
+finalization returns status 78 and retains the local spool for retry.
 
 Mirror every closed run and the last Stage-committed policy states with:
 

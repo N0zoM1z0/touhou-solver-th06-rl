@@ -4,6 +4,7 @@ setlocal
 set "REPO=%~dp0"
 if not defined TH06_GAME_DIR set "TH06_GAME_DIR=D:\Entertainment\Game\Touhou\th06"
 if not defined TH06_PYTHON set "TH06_PYTHON=%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe"
+if not defined TH06_CORPUS_SPOOL set "TH06_CORPUS_SPOOL=D:\th06-rl-corpus-spool"
 set "GAME_EXE=%TH06_GAME_DIR%\th06.exe"
 set "NATIVE_DLL=%REPO%build\th06_rl_native.dll"
 set "PYTHONPATH=%REPO%src;%PYTHONPATH%"
@@ -27,6 +28,8 @@ echo Physical HIT is recorded and recovered in the same stage.
 echo Create artifacts\pause-hard-stage4 to stop between complete stages.
 
 :trial
+"%TH06_PYTHON%" "%REPO%scripts\finalize_corpus_spool.py" "%TH06_CORPUS_SPOOL%" "%REPO%artifacts\corpus"
+if errorlevel 1 exit /b 78
 if exist "%REPO%artifacts\pause-hard-stage4" (
   echo Paused before the next trial.
   exit /b 0
@@ -53,10 +56,14 @@ start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
   --exploration-rate 0.03 ^
   --patch-lives ^
   --continuous-stage ^
+  --corpus-root "%TH06_CORPUS_SPOOL%" ^
+  --defer-corpus-compression ^
   --armed ^
   --stop-game ^
   %*
 set "STATUS=%ERRORLEVEL%"
+"%TH06_PYTHON%" "%REPO%scripts\finalize_corpus_spool.py" "%TH06_CORPUS_SPOOL%" "%REPO%artifacts\corpus"
+if errorlevel 1 exit /b 78
 
 if "%STATUS%"=="0" (
   set "MENU_RETRIES=0"
