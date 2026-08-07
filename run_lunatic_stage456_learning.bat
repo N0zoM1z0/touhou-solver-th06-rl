@@ -43,18 +43,22 @@ if not "%STATUS%"=="0" goto failed
 goto cycle
 
 :trial
+set "TRIAL_STAGE=%1"
+set "MENU_RETRIES=0"
+
+:trial_attempt
 if exist "%REPO%artifacts\pause-lunatic-stage456" exit /b 90
 "%TH06_PYTHON%" "%REPO%scripts\check_storage_budget.py" "%REPO%artifacts" --limit-gib 45 --reserve-mib 512
 if errorlevel 1 exit /b 90
 "%TH06_PYTHON%" "%REPO%scripts\check_host_memory.py" --reserve-gib 4
 if errorlevel 1 exit /b 90
 
-echo Starting independent Lunatic Practice Stage %1.
+echo Starting independent Lunatic Practice Stage %TRIAL_STAGE%.
 start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
 "%TH06_PYTHON%" "%REPO%scripts\run_th06_rl.py" ^
   --game-dir "%TH06_GAME_DIR%" ^
   --native-library "%NATIVE_DLL%" ^
-  --practice-stage %1 ^
+  --practice-stage %TRIAL_STAGE% ^
   --difficulty lunatic ^
   --exploration-rate 0.03 ^
   --patch-lives ^
@@ -62,7 +66,16 @@ start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
   --armed ^
   --stop-game ^
   %2 %3 %4 %5 %6 %7 %8 %9
-exit /b %ERRORLEVEL%
+set "TRIAL_STATUS=%ERRORLEVEL%"
+if "%TRIAL_STATUS%"=="77" goto trial_menu_retry
+exit /b %TRIAL_STATUS%
+
+:trial_menu_retry
+set /a MENU_RETRIES+=1
+echo Retrying transient background menu attempt %MENU_RETRIES% of 4.
+if %MENU_RETRIES% GEQ 4 exit /b 77
+timeout /t 2 /nobreak >nul
+goto trial_attempt
 
 :paused
 echo Stage 4-5-6 learning cycle paused before the next complete Stage.

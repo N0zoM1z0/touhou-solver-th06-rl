@@ -70,3 +70,26 @@ def test_settled_menu_tap_waits_for_a_post_release_game_tick(monkeypatch) -> Non
     _settled_tap(object(), Keyboard(), "shoot")
 
     assert calls == [("shoot", BACKGROUND_TAP_SECONDS)]
+
+
+def test_settled_menu_tap_maintains_background_activity(monkeypatch) -> None:
+    states = iter(((1, 0, 61), (1, 0, 61), (1, 0, 62)))
+    maintained = []
+
+    class Keyboard:
+        def set_auxiliary(self, key, enabled):
+            auxiliary.append((key, enabled))
+
+    auxiliary = []
+    monkeypatch.setattr(menu, "read_menu_state", lambda _process: next(states))
+    monkeypatch.setattr(menu.time, "sleep", lambda _seconds: None)
+
+    _settled_tap(
+        object(),
+        Keyboard(),
+        "shoot",
+        maintain_activity=lambda: maintained.append(True),
+    )
+
+    assert len(maintained) >= 2
+    assert auxiliary == [("shoot", True), ("shoot", False)]

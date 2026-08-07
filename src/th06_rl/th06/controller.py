@@ -32,7 +32,7 @@ from .control_capture import (
     read_control_snapshot,
 )
 from .donor import enable_donor_imports
-from .menu import start_reimu_a_practice
+from .menu import MenuNavigationError, start_reimu_a_practice
 from .source import (
     AuthorityUnavailable,
     automatic_source_context,
@@ -50,6 +50,7 @@ HEALTH_SAMPLE_SECONDS = 1.0
 HEALTH_TRACE_SECONDS = 10.0
 DIALOGUE_PROBE_SECONDS = 1.0 / 60.0
 LOW_COMMIT_EXIT_CODE = 75
+MENU_RETRY_EXIT_CODE = 77
 DIFFICULTIES = {"normal": 1, "hard": 2, "lunatic": 3}
 
 
@@ -250,12 +251,25 @@ def run(args: argparse.Namespace) -> int:
             )
         if args.practice_stage is not None:
             assert keyboard is not None
-            start_reimu_a_practice(
-                process,
-                keyboard,
-                args.practice_stage,
-                difficulty=DIFFICULTIES[args.difficulty],
-            )
+            try:
+                start_reimu_a_practice(
+                    process,
+                    keyboard,
+                    args.practice_stage,
+                    difficulty=DIFFICULTIES[args.difficulty],
+                    maintain_activity=(
+                        activity.maintain if activity is not None else None
+                    ),
+                )
+            except MenuNavigationError as error:
+                termination_reason = "menu-navigation-retry"
+                exit_code = MENU_RETRY_EXIT_CODE
+                print(
+                    "transient menu navigation failure; exact process will "
+                    f"be cleaned up for a bounded fresh retry: {error}",
+                    flush=True,
+                )
+                return exit_code
 
         kernel = NativeKernel(args.native_library)
         policy_transaction = StagePolicyTransaction(args.policy_state)

@@ -7,6 +7,7 @@ if not defined TH06_PYTHON set "TH06_PYTHON=%LOCALAPPDATA%\Microsoft\WindowsApps
 set "GAME_EXE=%TH06_GAME_DIR%\th06.exe"
 set "NATIVE_DLL=%REPO%build\th06_rl_native.dll"
 set "PYTHONPATH=%REPO%src;%PYTHONPATH%"
+set "MENU_RETRIES=0"
 
 if not exist "%GAME_EXE%" (
   echo Missing exact TH06 executable: "%GAME_EXE%"
@@ -57,7 +58,22 @@ start "" /D "%TH06_GAME_DIR%" "%GAME_EXE%"
   %*
 set "STATUS=%ERRORLEVEL%"
 
-if "%STATUS%"=="0" goto trial
+if "%STATUS%"=="0" (
+  set "MENU_RETRIES=0"
+  goto trial
+)
+if "%STATUS%"=="77" goto menu_retry
 
 echo Learning loop stopped on controller status %STATUS%.
 exit /b %STATUS%
+
+:menu_retry
+set /a MENU_RETRIES+=1
+echo Retrying transient background menu attempt %MENU_RETRIES% of 4.
+if %MENU_RETRIES% GEQ 4 goto menu_failed
+timeout /t 2 /nobreak >nul
+goto trial
+
+:menu_failed
+echo Learning loop stopped after repeated background menu failures.
+exit /b 77
