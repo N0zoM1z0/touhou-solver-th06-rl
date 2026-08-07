@@ -34,7 +34,7 @@ each HIT is recorded as negative feedback, input is released through death and
 spawn, and play resumes in the same stage. A certified local control dead-end
 also becomes feedback rather than an external restart. Bomb or an
 input-backend failure still stops the loop. Transient capture, source-context,
-policy-checkpoint, trace, and corpus failures fail closed without destroying
+policy-reload, trace, and corpus failures fail closed without destroying
 the physical Stage episode. Create
 `artifacts\pause-lunatic-stage456` to pause between complete stages. The
 single-stage `run_lunatic_stage4_learning.bat` remains useful for focused
@@ -43,6 +43,13 @@ experiments. `run_lunatic_stage5_learning.bat` and
 entry points and retain the same complete-episode/storage/audit contracts. The
 `run_hard_stage4_learning.bat` entry point and its independent policy state are
 retained for baseline reproduction, not for the active data flywheel.
+
+Policy durability is a Stage-boundary operation: the full restart checkpoint
+is atomically written only after the complete Practice Stage, then committed
+by the Stage transaction. The quiet-window maintenance path polls only the
+small policy source signature. It never serializes the large learner while the
+game can recover from a HIT, so persistence I/O cannot consume respawn control
+frames.
 
 Before launching each new Stage, both loops conservatively account the
 `artifacts` tree and reserve the recorder's full 512 MiB per-run allowance.

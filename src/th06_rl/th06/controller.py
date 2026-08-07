@@ -45,7 +45,7 @@ from .system_health import GIB, below_commit_reserve, read_system_memory
 
 
 ACTIVE_PLAYER_STATES = (0, 3)
-CHECKPOINT_SECONDS = 60.0
+RELOAD_POLL_SECONDS = 60.0
 HEALTH_SAMPLE_SECONDS = 1.0
 HEALTH_TRACE_SECONDS = 10.0
 DIALOGUE_PROBE_SECONDS = 1.0 / 60.0
@@ -107,8 +107,8 @@ def _anchor_partition(source_context: str) -> str:
     return "timeline"
 
 
-def _checkpoint_window(snapshot) -> bool:
-    """Admit blocking durability work only outside active physical control."""
+def _reload_poll_window(snapshot) -> bool:
+    """Poll source metadata only outside active physical control."""
     return bool(
         snapshot.in_menu
         or snapshot.time_stopped
@@ -303,7 +303,7 @@ def run(args: argparse.Namespace) -> int:
         last_reported_reason = None
         dialogue_active = False
         next_dialogue_probe = started
-        next_checkpoint = started + CHECKPOINT_SECONDS
+        next_reload_poll = started + RELOAD_POLL_SECONDS
         next_health_sample = started
         next_health_trace = started
 
@@ -1109,24 +1109,26 @@ def run(args: argparse.Namespace) -> int:
             if reason.startswith("authority-stop:"):
                 break
             if (
-                time.monotonic() >= next_checkpoint
-                and _checkpoint_window(snapshot)
+                time.monotonic() >= next_reload_poll
+                and _reload_poll_window(snapshot)
             ):
-                checkpoint_started = time.perf_counter()
+                poll_started = time.perf_counter()
+                reloaded = False
                 try:
-                    plugin.checkpoint()
+                    reloaded = plugin.maybe_reload(0)
                 except (OSError, RuntimeError, TypeError, ValueError) as error:
-                    if not retain_continuous_stage("policy-checkpoint", error):
+                    if not retain_continuous_stage("policy-reload-poll", error):
                         raise
                 emit_trace({
                     "time": time.time(),
-                    "event": "policy-checkpoint",
+                    "event": "policy-reload-poll",
                     "frame": snapshot.frame,
+                    "reloaded": reloaded,
                     "duration_ms": (
-                        time.perf_counter() - checkpoint_started
+                        time.perf_counter() - poll_started
                     ) * 1000.0,
                 })
-                next_checkpoint = time.monotonic() + CHECKPOINT_SECONDS
+                next_reload_poll = time.monotonic() + RELOAD_POLL_SECONDS
         else:
             termination_reason = "time-limit"
     finally:
