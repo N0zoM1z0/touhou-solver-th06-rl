@@ -31,12 +31,12 @@ TRANSITION_SCHEMA = "th06-rl-transition-v5"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
-# Four seconds of burst tolerance is enough for the streaming writer while
-# keeping dense raw bullet roots from accumulating hundreds of frames in RAM.
-# Larger shards also avoid a manifest rename/fsync every ~2 seconds per stream
-# when Windows Python writes through the WSL UNC bridge.
+# Match one shard of burst tolerance.  A dense control root is bounded by 640
+# raw 122-byte bullet-tail records, so 512 queued roots remain tens of MiB,
+# while tolerating one transient UNC shard close/fsync without dropping a
+# physical trajectory.
 DEFAULT_SHARD_RECORDS = 512
-DEFAULT_QUEUE_RECORDS = 240
+DEFAULT_QUEUE_RECORDS = 512
 DEFAULT_MAX_RUN_BYTES = 512 * 1024 * 1024
 
 SOURCE_OBJECT_FIELDS = (
@@ -643,6 +643,7 @@ class CorpusRecorder:
         self.enqueued = 0
         self.written = 0
         self.dropped = 0
+        self.queue_high_watermark = 0
         self.closed = False
         self.error: BaseException | None = None
         self.capture_timings: list[float] = []
@@ -697,6 +698,7 @@ class CorpusRecorder:
                 "source_objects": "sha256-content-addressed",
                 "repeated_dataclasses": DATACLASS_ROWS_CODEC,
                 "frame_policy": "lossless-no-drop",
+                "queue_records": queue_records,
             },
         })
         _atomic_json(self.run_dir / "manifest.json", self.manifest)
@@ -882,6 +884,10 @@ class CorpusRecorder:
             raise CorpusBackpressure("corpus queue full; refusing partial evidence") from error
         self.sequence += 1
         self.enqueued += 1
+        self.queue_high_watermark = max(
+            self.queue_high_watermark,
+            self.queue.qsize(),
+        )
         return snapshot_id
 
     def record_anchor(
@@ -913,6 +919,10 @@ class CorpusRecorder:
                 "corpus queue full while retaining source anchor"
             ) from error
         self.anchor_sequence += 1
+        self.queue_high_watermark = max(
+            self.queue_high_watermark,
+            self.queue.qsize(),
+        )
 
     def _worker(self) -> None:
         writers = {
@@ -1014,6 +1024,8 @@ class CorpusRecorder:
                 "dropped_records": self.dropped,
                 "enqueued_frames": self.enqueued,
                 "written_frames": self.written,
+                "queue_high_watermark": self.queue_high_watermark,
+                "queue_capacity": self.queue.maxsize,
                 "closed_unix_ns": time.time_ns(),
                 "run_outcome": run_outcome,
                 "summary": self._metrics_summary(),

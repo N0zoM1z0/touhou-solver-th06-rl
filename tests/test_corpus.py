@@ -234,6 +234,10 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     )
     run_dir = recorder.close({"stage_completed": True})
     manifest = json.loads((run_dir / "manifest.json").read_text())
+    run = json.loads((run_dir / "run.json").read_text())
+    assert run["storage"]["queue_records"] == 512
+    assert manifest["queue_capacity"] == 512
+    assert 0 <= manifest["queue_high_watermark"] <= 512
     assert manifest["records"]["anchors"] == 1
     assert manifest["summary"]["observation_gap_rate"] == 0.5
     assert manifest["summary"]["dense_frame_samples"][0] == {
