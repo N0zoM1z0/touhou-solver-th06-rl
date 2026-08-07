@@ -284,6 +284,18 @@ def _spawn_transition_hazard_boxes(bullet, horizon: int, donor_hazard_boxes):
     possible completion update preserves that uncertainty without inventing
     arbitrary-direction motion.
     """
+    if int(bullet.ex_flags) & DYNAMIC_EX_FLAGS == SLOWDOWN_FLAG:
+        optimized = _spawn_slowdown_transition_hazard_boxes(bullet, horizon)
+        if optimized is not None:
+            return optimized
+    if int(bullet.ex_flags) & DYNAMIC_EX_FLAGS == ABSOLUTE_TURN_FLAG:
+        optimized = _spawn_unturned_absolute_transition_hazard_boxes(
+            bullet,
+            horizon,
+        )
+        if optimized is not None:
+            return optimized
+
     divisor = {2: 2.0, 3: 2.5, 4: 3.0}[int(bullet.state)]
     spawn_dx = _f32(_f32(bullet.vx) / divisor)
     spawn_dy = _f32(_f32(bullet.vy) / divisor)
@@ -322,6 +334,146 @@ def _spawn_transition_hazard_boxes(bullet, horizon: int, donor_hazard_boxes):
             min(box[1] for box in boxes),
             max(box[2] for box in boxes),
             max(box[3] for box in boxes),
+        ))
+    return result
+
+
+def _spawn_slowdown_transition_hazard_boxes(bullet, horizon: int):
+    """Batch the common spawn-effect + 0x01 uncertainty exactly once.
+
+    Stage 2 can have hundreds of state-2/3/4 bullets whose ANM completion
+    tick is deliberately unknown to the compact control snapshot.  The
+    generic enclosure above replays the identical fired slowdown velocity
+    prefix once for every possible completion tick.  Slowdown velocity is
+    translation invariant, so compute that prefix once while retaining the
+    source's float32 operation order for every branch position.
+    """
+    divisor = {2: 2.0, 3: 2.5, 4: 3.0}[int(bullet.state)]
+    spawn_dx = _f32(_f32(bullet.vx) / divisor)
+    spawn_dy = _f32(_f32(bullet.vy) / divisor)
+    spawn_x = _f32(bullet.x)
+    spawn_y = _f32(bullet.y)
+    spawn_positions = []
+    for _ in range(horizon):
+        spawn_x = _f32(spawn_x + spawn_dx)
+        spawn_y = _f32(spawn_y + spawn_dy)
+        spawn_positions.append((spawn_x, spawn_y))
+
+    angle = _f32(bullet.angle)
+    speed = _f32(bullet.speed)
+    cosine = _f32(math.cos(angle))
+    sine = _f32(math.sin(angle))
+    velocities = []
+    timer_float = _f32(0.0)
+    for _ in range(horizon):
+        slowdown = _f32(5.0 - _f32(timer_float * 5.0 / 16.0))
+        current_speed = _f32(slowdown + speed)
+        velocities.append((
+            _f32(cosine * current_speed),
+            _f32(sine * current_speed),
+        ))
+        timer_float = _f32(timer_float + 1.0)
+
+    if not _completion_order_is_robust(spawn_dx, spawn_dy, velocities):
+        return None
+
+    half_width = bullet.half_width
+    half_height = bullet.half_height
+    # Slowdown's fired speed is greater than the partial spawn speed and both
+    # vectors have the same source angle.  Therefore, at every future frame,
+    # the earliest and latest possible completion ticks are the two extrema;
+    # intermediate ticks lie on the segment between them.  Keep float32
+    # addition at both extrema exactly as the source branches would perform it.
+    earliest_x, earliest_y = spawn_positions[0]
+    first_vx, first_vy = velocities[0]
+    result = []
+    for frame, (vx, vy) in enumerate(velocities):
+        earliest_x = _f32(earliest_x + vx)
+        earliest_y = _f32(earliest_y + vy)
+        latest_x = _f32(spawn_positions[frame][0] + first_vx)
+        latest_y = _f32(spawn_positions[frame][1] + first_vy)
+        result.append((
+            min(earliest_x, latest_x) - half_width,
+            min(earliest_y, latest_y) - half_height,
+            max(earliest_x, latest_x) + half_width,
+            max(earliest_y, latest_y) + half_height,
+        ))
+    return result
+
+
+def _completion_order_is_robust(spawn_dx, spawn_dy, velocities) -> bool:
+    """Prove replacing a fired step by a spawn step is axis-monotone."""
+    for spawn_velocity, axis in ((spawn_dx, 0), (spawn_dy, 1)):
+        differences = [velocity[axis] - spawn_velocity for velocity in velocities]
+        ordered = all(value >= 0.0 for value in differences) or all(
+            value <= 0.0 for value in differences
+        )
+        if not ordered:
+            return False
+    return True
+
+
+def _spawn_unturned_absolute_transition_hazard_boxes(bullet, horizon: int):
+    """Batch 0x100 while its first source turn remains beyond the horizon."""
+    interval = int(bullet.direction_interval)
+    direction_num_times = int(bullet.direction_num_times)
+    threshold = interval * (direction_num_times + 1)
+    if interval <= 0 or horizon - 1 >= threshold:
+        return None
+
+    divisor = {2: 2.0, 3: 2.5, 4: 3.0}[int(bullet.state)]
+    spawn_dx = _f32(_f32(bullet.vx) / divisor)
+    spawn_dy = _f32(_f32(bullet.vy) / divisor)
+    spawn_x = _f32(bullet.x)
+    spawn_y = _f32(bullet.y)
+    spawn_positions = []
+    for _ in range(horizon):
+        spawn_x = _f32(spawn_x + spawn_dx)
+        spawn_y = _f32(spawn_y + spawn_dy)
+        spawn_positions.append((spawn_x, spawn_y))
+
+    angle = _f32(bullet.angle)
+    speed = _f32(bullet.speed)
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    timer_float = _f32(0.0)
+    velocities = []
+    for _ in range(horizon):
+        current_speed = _f32(
+            speed
+            - _f32(
+                (timer_float - interval * direction_num_times)
+                * speed
+                / interval
+            )
+        )
+        velocities.append((
+            _f32(cosine * current_speed),
+            _f32(sine * current_speed),
+        ))
+        timer_float = _f32(timer_float + 1.0)
+
+    # Replacing a fired update with one partial-spawn update must move both
+    # coordinates monotonically; otherwise an intermediate completion tick
+    # could be an extremum and the generic enumerator remains authoritative.
+    if not _completion_order_is_robust(spawn_dx, spawn_dy, velocities):
+        return None
+
+    half_width = bullet.half_width
+    half_height = bullet.half_height
+    earliest_x, earliest_y = spawn_positions[0]
+    first_vx, first_vy = velocities[0]
+    result = []
+    for frame, (vx, vy) in enumerate(velocities):
+        earliest_x = _f32(earliest_x + vx)
+        earliest_y = _f32(earliest_y + vy)
+        latest_x = _f32(spawn_positions[frame][0] + first_vx)
+        latest_y = _f32(spawn_positions[frame][1] + first_vy)
+        result.append((
+            min(earliest_x, latest_x) - half_width,
+            min(earliest_y, latest_y) - half_height,
+            max(earliest_x, latest_x) + half_width,
+            max(earliest_y, latest_y) + half_height,
         ))
     return result
 

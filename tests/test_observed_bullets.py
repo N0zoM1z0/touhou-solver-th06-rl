@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
+import struct
 
 import pytest
 
@@ -42,6 +44,41 @@ def _bullet(**changes) -> Bullet:
 
 def _center(box):
     return ((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0)
+
+
+def _f32(value):
+    return struct.unpack("<f", struct.pack("<f", value))[0]
+
+
+def _spawn_reference(bullet, horizon):
+    divisor = {2: 2.0, 3: 2.5, 4: 3.0}[bullet.state]
+    dx = _f32(_f32(bullet.vx) / divisor)
+    dy = _f32(_f32(bullet.vy) / divisor)
+    x, y = _f32(bullet.x), _f32(bullet.y)
+    possible = [[] for _ in range(horizon)]
+    for transition in range(1, horizon + 1):
+        x, y = _f32(x + dx), _f32(y + dy)
+        fired = replace(
+            bullet,
+            x=x,
+            y=y,
+            state=1,
+            timer=0,
+            timer_float=0.0,
+        )
+        for offset, box in enumerate(
+            hazard_boxes(fired, horizon - transition + 1)
+        ):
+            possible[transition - 1 + offset].append(box)
+    return [
+        (
+            min(box[0] for box in boxes),
+            min(box[1] for box in boxes),
+            max(box[2] for box in boxes),
+            max(box[3] for box in boxes),
+        )
+        for boxes in possible
+    ]
 
 
 def test_in_bounds_0xa00_needle_stays_small_and_linear() -> None:
@@ -152,3 +189,48 @@ def test_spawn_completion_uncertainty_uses_source_motion_not_radial_growth() -> 
     assert _center(first) == pytest.approx((104.0, 100.0), abs=2e-5)
     # Frame two encloses completion on either update: centers 105 and 107.
     assert second == pytest.approx((103.0, 98.0, 109.0, 102.0), abs=2e-5)
+
+
+def test_spawn_slowdown_batch_preserves_each_completion_branch() -> None:
+    bullet = _bullet(
+        x=208.43280029296875,
+        y=86.51250457763672,
+        vx=2.7388079166412354,
+        vy=-1.5812424421310425,
+        state=3,
+        ex_flags=0x5,
+        speed=3.1624984741210938,
+        angle=-0.5235962867736816,
+        timer=15,
+        timer_float=15.0,
+    )
+
+    boxes = hazard_boxes(bullet, 12)
+
+    assert boxes == _spawn_reference(bullet, 12)
+    # Later envelopes contain branches which stayed in the slower spawn
+    # animation longer; uncertainty must not collapse to one completion tick.
+    assert boxes[-1][2] - boxes[-1][0] > 2 * bullet.half_width
+    assert boxes[-1][3] - boxes[-1][1] > 2 * bullet.half_height
+
+
+def test_spawn_absolute_turn_batch_preserves_each_completion_branch() -> None:
+    bullet = _bullet(
+        x=170.4848175048828,
+        y=78.94924926757812,
+        vx=-4.137522220611572,
+        vy=-0.971293568611145,
+        state=3,
+        ex_flags=0x104,
+        speed=4.25,
+        turn_speed=1.399999976158142,
+        angle=-2.911015272140503,
+        direction_rotation=2.7488934993743896,
+        direction_interval=60,
+        direction_num_times=0,
+        direction_max_times=1,
+        timer=13,
+        timer_float=13.0,
+    )
+
+    assert hazard_boxes(bullet, 12) == _spawn_reference(bullet, 12)
