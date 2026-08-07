@@ -270,3 +270,14 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "next_source_context": "3/0/0/4/timeline:before-t100:op0:arg7",
         "failure": None,
     }
+    assert transition["policy_context"] == {
+        "current_action": "stay",
+        "hard_admissible_actions": ["stay"],
+        "phase_elapsed_frames": 0,
+        "player_x": 192.0,
+        "player_y": 400.0,
+        "power": 64,
+        "bullet_count": 0,
+        "laser_count": 0,
+        "hard_action_count": 1,
+    }

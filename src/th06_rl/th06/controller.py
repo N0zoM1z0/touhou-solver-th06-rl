@@ -949,6 +949,7 @@ def run(args: argparse.Namespace) -> int:
                     capture_attempts=snapshot.capture_attempts,
                     observation_gap=observation_gap,
                     snapshot_tier=CONTROL_CAPTURE_TIER,
+                    phase_elapsed_frames=phase_elapsed_frames,
                 )
                 try:
                     snapshot_ref = recorder.record(snapshot, evidence)

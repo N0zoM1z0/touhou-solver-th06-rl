@@ -96,6 +96,7 @@ class AdaptivePolicy:
             ]
         ] = deque()
         self.credit_trace_last_frame: int | None = None
+        self.replayed_decisions = 0
         self.physical_hit_events = 0
         self.credited_hit_events = 0
         self.uncredited_hit_events = 0
@@ -283,6 +284,37 @@ class AdaptivePolicy:
             self.exploratory_decisions += 1
         return PolicyDecision(chosen, self.name, max(1e-12, probabilities[chosen]))
 
+    def replay_logged_decision(self, context, action: str) -> None:
+        """Register one physically published corpus action for v2 replay."""
+        legal = tuple(sorted(set(context.locally_admissible_actions)))
+        if action not in legal:
+            raise ValueError("logged action is outside the recorded local set")
+        context_key = self._context_key(context)
+        middle_context_key = self._middle_context_key(context)
+        fine_context_key = self._fine_context_key(context)
+        for opportunity in legal:
+            self.opportunities[
+                self._action_key(context_key, opportunity)
+            ] += 1
+        key = self._action_key(context_key, action)
+        middle_key = self._action_key(middle_context_key, action)
+        fine_key = self._action_key(fine_context_key, action)
+        pending = (context.frame, action)
+        if pending in self.pending_keys:
+            raise ValueError("duplicate logged frame/action decision")
+        self.pending_keys[pending] = (key, middle_key, fine_key)
+        self.selected[key] += 1
+        # decide() consumes exactly one draw even at zero exploration. Keep
+        # restart RNG behavior deterministic after a corpus hot start.
+        self.random.random()
+        self.decisions += 1
+        self.replayed_decisions += 1
+
+    def reset_credit_episode(self) -> None:
+        """Separate complete physical Practice attempts during corpus replay."""
+        self.credit_trace.clear()
+        self.credit_trace_last_frame = None
+
     def observe(self, outcome) -> None:
         keys = self.pending_keys.pop((outcome.frame, outcome.action), None)
         # A resident controller may span a policy hot reload.  Outcomes made
@@ -414,6 +446,7 @@ class AdaptivePolicy:
             "reward_version": REWARD_VERSION,
             "decisions": self.decisions,
             "exploratory_decisions": self.exploratory_decisions,
+            "replayed_decisions": self.replayed_decisions,
             "selected": dict(self.selected),
             "opportunities": dict(self.opportunities),
             "trials": dict(self.trials),
@@ -446,6 +479,7 @@ class AdaptivePolicy:
             "reward_version": REWARD_VERSION,
             "decisions": self.decisions,
             "exploratory_decisions": self.exploratory_decisions,
+            "replayed_decisions": self.replayed_decisions,
             "trained_scope_actions": len(self.trials),
             "trained_middle_scope_actions": len(self.middle_trials),
             "trained_fine_scope_actions": len(self.fine_trials),
@@ -468,6 +502,9 @@ class AdaptivePolicy:
         self.decisions = max(0, int(state.get("decisions", 0)))
         self.exploratory_decisions = max(
             0, int(state.get("exploratory_decisions", 0))
+        )
+        self.replayed_decisions = max(
+            0, int(state.get("replayed_decisions", 0))
         )
         self.physical_hit_events = max(
             0, int(state.get("physical_hit_events", 0))

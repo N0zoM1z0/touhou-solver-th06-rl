@@ -128,6 +128,25 @@ episode trace. This is deliberately bounded: ordinary-frame work remains O(1)
 and the O(120) scan runs only on HIT. Checkpoints from the earlier reward
 version are rejected rather than silently mixed into these statistics.
 
+Faithful older corpus can hot-start that same online learner without fitting a
+different model or inventing outcomes for actions that were not taken:
+
+```bash
+PYTHONPATH=src python scripts/replay_online_ucb.py \
+  --difficulty 3 --stage 6 \
+  --code-commit COMMIT --native-kernel-sha256 SHA256 \
+  --output artifacts/policy/lunatic_reimu_a_stage6.json \
+  --report artifacts/replay/lunatic_reimu_a_stage6.json
+```
+
+The replay accepts only complete physical Stages in the exact requested
+scope, registers the logged proposal, consumes only the recorded eligible
+outcome, and delivers recorded HITs through the same bounded credit path as
+live play. Optional code/native filters keep pre-fix infrastructure out of a
+deployment hot start. Transition v5 stores the small exact UCB context beside
+each outcome, so future replay does not need to decode the large raw hazard
+root; older v4 runs remain usable through their lossless frame shards.
+
 Every batch invokes the post-Stage infra audit before starting the next game.
 It writes `infra-audit.json` inside the ignored run directory and classifies
 HITs as latency gaps, empty Hard sets, newly born hazards, possible geometry /

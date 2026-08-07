@@ -189,6 +189,40 @@ def test_delayed_physical_hit_credits_recent_same_phase_actions() -> None:
     assert not policy.credit_trace
 
 
+def test_logged_corpus_action_uses_same_online_statistics() -> None:
+    online = AdaptivePolicy()
+    replay = AdaptivePolicy()
+    value = context()
+    online_decision = online.decide(value)
+    assert online_decision.action == "stay"
+    replay.replay_logged_decision(value, online_decision.action)
+    outcome = PolicyOutcome(
+        frame=100,
+        scope=(2, 0, 0, 4),
+        source_context="timeline:test",
+        action=online_decision.action,
+        published=True,
+        elapsed_frames=1,
+        life_lost=False,
+        bomb_used=False,
+        control_dead_end=False,
+        authority_lost=False,
+        phase_changed=False,
+        next_hard_action_count=12,
+        next_player_x=192.0,
+        next_player_y=384.0,
+    )
+
+    online.observe(outcome)
+    replay.observe(outcome)
+
+    assert replay.trials == online.trials
+    assert replay.reward_sum == online.reward_sum
+    assert replay.middle_trials == online.middle_trials
+    assert replay.fine_trials == online.fine_trials
+    assert replay.replayed_decisions == 1
+
+
 def test_hit_credit_does_not_cross_source_phase() -> None:
     policy = AdaptivePolicy()
     decision = policy.decide(context(phase="boss:sub32", frame=100))
