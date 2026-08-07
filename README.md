@@ -120,6 +120,14 @@ present in the corpus; the restart checkpoint retains only observed fine
 counters so its RAM and disk cost scales with feedback actually consumed
 rather than every action that happened to be legal or merely selected.
 
+Online reward version `survival-reserve-hit-trace-v2` delivers a confirmed
+physical HIT independently of the one-step publication outcome. It assigns a
+discounted penalty to at most the prior 120 learning-eligible actions in the
+same difficulty/character/shot/stage/source-phase scope, then clears that
+episode trace. This is deliberately bounded: ordinary-frame work remains O(1)
+and the O(120) scan runs only on HIT. Checkpoints from the earlier reward
+version are rejected rather than silently mixed into these statistics.
+
 Every batch invokes the post-Stage infra audit before starting the next game.
 It writes `infra-audit.json` inside the ignored run directory and classifies
 HITs as latency gaps, empty Hard sets, newly born hazards, possible geometry /

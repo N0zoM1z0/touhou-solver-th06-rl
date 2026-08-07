@@ -55,3 +55,13 @@ class PolicyOutcome:
     next_player_x: float
     next_player_y: float
     learning_eligible: bool = True
+
+
+@dataclass(frozen=True)
+class PolicyFailureEvent:
+    """Confirmed physical failure delivered independently of publication."""
+
+    frame: int
+    scope: tuple[int, int, int, int]
+    source_context: str
+    kind: str

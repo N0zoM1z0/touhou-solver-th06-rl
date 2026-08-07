@@ -21,7 +21,7 @@ from ..corpus import (
     RunMetadata,
 )
 from ..native import NativeKernel
-from ..policy_api import PolicyContext, PolicyOutcome
+from ..policy_api import PolicyContext, PolicyFailureEvent, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from ..policy_transaction import StagePolicyTransaction
 from .background_activity import BackgroundActivityLease
@@ -861,6 +861,18 @@ def run(args: argparse.Namespace) -> int:
                     ),
                 ))
                 pending_learning = None
+            if hit:
+                # A HIT usually arrives after the controller has already
+                # stopped publishing (death/invulnerability transition), so
+                # it cannot reliably ride on the one-step PolicyOutcome.
+                # Deliver it separately for bounded delayed credit while the
+                # native gate remains the sole action authority.
+                plugin.observe_failure(PolicyFailureEvent(
+                    frame=snapshot.frame,
+                    scope=_snapshot_scope(snapshot),
+                    source_context=source_context,
+                    kind="physical-hit",
+                ))
             if policy is not None and published is None:
                 plugin.observe(PolicyOutcome(
                     frame=snapshot.frame,

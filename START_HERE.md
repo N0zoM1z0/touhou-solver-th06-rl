@@ -37,8 +37,9 @@ has independent policy and corpus scope. Hard remains preserved as non-sharing
 baseline evidence only.
 
 The current focused experiment repeatedly plays Lunatic Stage 6 via
-`run_lunatic_stage6_learning.bat`; its policy remains isolated from the
-preserved Stage 4 and Stage 5 checkpoints.
+`run_lunatic_stage6_learning.bat`; its policy remains isolated from every
+other stage. Pre-hit-credit checkpoints are diagnostic history only and are
+not valid hot starts for the active online reward version.
 
 ## Donor policy
 

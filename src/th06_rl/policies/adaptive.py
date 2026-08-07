@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from collections import Counter
+from collections import Counter, deque
 import json
 import math
 import random
@@ -12,16 +12,19 @@ import zlib
 from ..policy_api import POLICY_API_VERSION, PolicyDecision
 
 
-STATE_SCHEMA = "th06-rl-online-hierarchical-ucb-v3"
+STATE_SCHEMA = "th06-rl-online-hierarchical-ucb-v4"
 LEGACY_STATE_SCHEMAS = (
     "th06-rl-online-hierarchical-ucb-v2",
     "th06-rl-online-ucb-v1",
 )
 PACKED_STATE_SCHEMA = "th06-rl-online-ucb-packed-v1"
-REWARD_VERSION = "survival-reserve-v1"
+REWARD_VERSION = "survival-reserve-hit-trace-v2"
 MIDDLE_BACKOFF_WEIGHT = 4.0
 FINE_BACKOFF_WEIGHT = 4.0
 PHASE_CLOCK_BIN_FRAMES = 30
+HIT_CREDIT_HORIZON_FRAMES = 120
+HIT_CREDIT_DISCOUNT = 0.97
+HIT_CREDIT_PENALTY = 100.0
 ACTION_NAMES = (
     "stay",
     "up",
@@ -64,7 +67,7 @@ def unpack_state(state: dict[str, object]) -> dict[str, object]:
 
 class AdaptivePolicy:
     api_version = POLICY_API_VERSION
-    name = "phase-local-hierarchical-ucb-v3"
+    name = "phase-local-hierarchical-ucb-v4"
 
     def __init__(self) -> None:
         self.random = random.Random(6004)
@@ -82,6 +85,22 @@ class AdaptivePolicy:
             tuple[int, str],
             tuple[str, str, str],
         ] = {}
+        self.credit_trace: deque[
+            tuple[
+                int,
+                tuple[int, int, int, int],
+                str,
+                str,
+                str,
+                str,
+            ]
+        ] = deque()
+        self.credit_trace_last_frame: int | None = None
+        self.physical_hit_events = 0
+        self.credited_hit_events = 0
+        self.uncredited_hit_events = 0
+        self.credited_hit_actions = 0
+        self.credited_hit_penalty = 0.0
 
     @staticmethod
     def _threat_bin(bullets: int, lasers: int) -> str:
@@ -277,8 +296,11 @@ class AdaptivePolicy:
             return
         key, middle_key, fine_key = keys
         reward = 1.0
-        if outcome.life_lost:
-            reward -= 100.0
+        # Physical HIT credit is delivered by observe_failure().  In real
+        # play the HIT transition normally arrives after action publication
+        # has stopped, so one-step life_lost feedback is not a dependable
+        # signal and applying both paths would double-penalize rare adjacent
+        # transitions.
         if outcome.bomb_used:
             reward -= 100.0
         if outcome.control_dead_end:
@@ -307,6 +329,84 @@ class AdaptivePolicy:
         self.middle_reward_sum[middle_key] += reward
         self.fine_trials[fine_key] += 1
         self.fine_reward_sum[fine_key] += reward
+        scope = getattr(outcome, "scope", None)
+        source_context = getattr(outcome, "source_context", None)
+        if (
+            isinstance(scope, tuple)
+            and len(scope) == 4
+            and isinstance(source_context, str)
+        ):
+            self._remember_for_hit_credit(
+                int(outcome.frame),
+                scope,
+                source_context,
+                key,
+                middle_key,
+                fine_key,
+            )
+
+    def _remember_for_hit_credit(
+        self,
+        frame: int,
+        scope: tuple[int, int, int, int],
+        source_context: str,
+        key: str,
+        middle_key: str,
+        fine_key: str,
+    ) -> None:
+        if (
+            self.credit_trace_last_frame is not None
+            and frame < self.credit_trace_last_frame
+        ):
+            # Practice restarts reset the game frame. Never allow a prior
+            # attempt to receive credit in the next attempt.
+            self.credit_trace.clear()
+        while (
+            self.credit_trace
+            and frame - self.credit_trace[0][0] > HIT_CREDIT_HORIZON_FRAMES
+        ):
+            self.credit_trace.popleft()
+        self.credit_trace.append(
+            (frame, scope, source_context, key, middle_key, fine_key)
+        )
+        self.credit_trace_last_frame = frame
+
+    def observe_failure(self, event) -> None:
+        if getattr(event, "kind", None) != "physical-hit":
+            return
+        frame = int(event.frame)
+        self.physical_hit_events += 1
+        credited = 0
+        penalty_total = 0.0
+        for (
+            action_frame,
+            scope,
+            source_context,
+            key,
+            middle_key,
+            fine_key,
+        ) in self.credit_trace:
+            lag = frame - action_frame
+            if not 0 <= lag <= HIT_CREDIT_HORIZON_FRAMES:
+                continue
+            if scope != event.scope or source_context != event.source_context:
+                continue
+            penalty = HIT_CREDIT_PENALTY * HIT_CREDIT_DISCOUNT ** lag
+            self.reward_sum[key] -= penalty
+            self.middle_reward_sum[middle_key] -= penalty
+            self.fine_reward_sum[fine_key] -= penalty
+            credited += 1
+            penalty_total += penalty
+        # A HIT starts a new physical control episode. Clearing all phases is
+        # intentional: no pre-HIT action may be penalized by a later HIT.
+        self.credit_trace.clear()
+        self.credit_trace_last_frame = frame
+        if credited:
+            self.credited_hit_events += 1
+            self.credited_hit_actions += credited
+            self.credited_hit_penalty += penalty_total
+        else:
+            self.uncredited_hit_events += 1
 
     def export_state(self) -> dict[str, object]:
         state = {
@@ -322,6 +422,11 @@ class AdaptivePolicy:
             "middle_reward_sum": dict(self.middle_reward_sum),
             "fine_trials": dict(self.fine_trials),
             "fine_reward_sum": dict(self.fine_reward_sum),
+            "physical_hit_events": self.physical_hit_events,
+            "credited_hit_events": self.credited_hit_events,
+            "uncredited_hit_events": self.uncredited_hit_events,
+            "credited_hit_actions": self.credited_hit_actions,
+            "credited_hit_penalty": self.credited_hit_penalty,
         }
         payload = json.dumps(
             state,
@@ -346,6 +451,12 @@ class AdaptivePolicy:
             "trained_fine_scope_actions": len(self.fine_trials),
             "observed_trials": sum(self.trials.values()),
             "pending": len(self.pending_keys),
+            "hit_credit_trace_depth": len(self.credit_trace),
+            "physical_hit_events": self.physical_hit_events,
+            "credited_hit_events": self.credited_hit_events,
+            "uncredited_hit_events": self.uncredited_hit_events,
+            "credited_hit_actions": self.credited_hit_actions,
+            "credited_hit_penalty": self.credited_hit_penalty,
         }
 
     def import_state(self, state: dict[str, object]) -> None:
@@ -357,6 +468,21 @@ class AdaptivePolicy:
         self.decisions = max(0, int(state.get("decisions", 0)))
         self.exploratory_decisions = max(
             0, int(state.get("exploratory_decisions", 0))
+        )
+        self.physical_hit_events = max(
+            0, int(state.get("physical_hit_events", 0))
+        )
+        self.credited_hit_events = max(
+            0, int(state.get("credited_hit_events", 0))
+        )
+        self.uncredited_hit_events = max(
+            0, int(state.get("uncredited_hit_events", 0))
+        )
+        self.credited_hit_actions = max(
+            0, int(state.get("credited_hit_actions", 0))
+        )
+        self.credited_hit_penalty = max(
+            0.0, float(state.get("credited_hit_penalty", 0.0))
         )
         for counter, field, cast in (
             (self.selected, "selected", int),

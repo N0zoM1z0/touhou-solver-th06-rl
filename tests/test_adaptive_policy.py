@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from th06_rl.policies.adaptive import (
+    HIT_CREDIT_HORIZON_FRAMES,
     PACKED_STATE_SCHEMA,
     AdaptivePolicy,
     unpack_state,
 )
-from th06_rl.policy_api import PolicyContext, PolicyOutcome
+from th06_rl.policy_api import PolicyContext, PolicyFailureEvent, PolicyOutcome
 
 
-def context(*, phase: str = "timeline:test", stage: int = 4) -> PolicyContext:
+def context(
+    *,
+    phase: str = "timeline:test",
+    stage: int = 4,
+    frame: int = 100,
+) -> PolicyContext:
     return PolicyContext(
-        frame=100,
+        frame=frame,
         scope=(2, 0, 0, stage),
         source_context=phase,
         baseline_action="stay",
@@ -132,12 +138,120 @@ def test_physical_hit_is_consumed_as_negative_learning_feedback() -> None:
         next_player_x=192.0,
         next_player_y=384.0,
     ))
+    policy.observe_failure(PolicyFailureEvent(
+        frame=101,
+        scope=(2, 0, 0, 4),
+        source_context="timeline:test",
+        kind="physical-hit",
+    ))
 
     assert sum(policy.trials.values()) == 1
     assert sum(policy.middle_trials.values()) == 1
     assert sum(policy.fine_trials.values()) == 1
     assert sum(policy.reward_sum.values()) < 0.0
     assert not policy.pending_keys
+    assert policy.credited_hit_events == 1
+    assert policy.credited_hit_actions == 1
+
+
+def test_delayed_physical_hit_credits_recent_same_phase_actions() -> None:
+    policy = AdaptivePolicy()
+    for frame in (100, 101, 102):
+        decision = policy.decide(context(frame=frame))
+        policy.observe(PolicyOutcome(
+            frame=frame,
+            scope=(2, 0, 0, 4),
+            source_context="timeline:test",
+            action=decision.action,
+            published=True,
+            elapsed_frames=1,
+            life_lost=False,
+            bomb_used=False,
+            control_dead_end=False,
+            authority_lost=False,
+            phase_changed=False,
+            next_hard_action_count=12,
+            next_player_x=192.0,
+            next_player_y=384.0,
+        ))
+
+    policy.observe_failure(PolicyFailureEvent(
+        frame=107,
+        scope=(2, 0, 0, 4),
+        source_context="timeline:test",
+        kind="physical-hit",
+    ))
+
+    assert sum(policy.trials.values()) == 3
+    assert sum(policy.reward_sum.values()) < 0.0
+    assert policy.credited_hit_events == 1
+    assert policy.credited_hit_actions == 3
+    assert not policy.credit_trace
+
+
+def test_hit_credit_does_not_cross_source_phase() -> None:
+    policy = AdaptivePolicy()
+    decision = policy.decide(context(phase="boss:sub32", frame=100))
+    policy.observe(PolicyOutcome(
+        frame=100,
+        scope=(2, 0, 0, 4),
+        source_context="boss:sub32",
+        action=decision.action,
+        published=True,
+        elapsed_frames=1,
+        life_lost=False,
+        bomb_used=False,
+        control_dead_end=False,
+        authority_lost=False,
+        phase_changed=False,
+        next_hard_action_count=12,
+        next_player_x=192.0,
+        next_player_y=384.0,
+    ))
+    reward_before = sum(policy.reward_sum.values())
+
+    policy.observe_failure(PolicyFailureEvent(
+        frame=105,
+        scope=(2, 0, 0, 4),
+        source_context="boss:sub33",
+        kind="physical-hit",
+    ))
+
+    assert sum(policy.reward_sum.values()) == reward_before
+    assert policy.uncredited_hit_events == 1
+    assert not policy.credit_trace
+
+
+def test_hit_credit_expires_after_bounded_horizon() -> None:
+    policy = AdaptivePolicy()
+    decision = policy.decide(context(frame=100))
+    policy.observe(PolicyOutcome(
+        frame=100,
+        scope=(2, 0, 0, 4),
+        source_context="timeline:test",
+        action=decision.action,
+        published=True,
+        elapsed_frames=1,
+        life_lost=False,
+        bomb_used=False,
+        control_dead_end=False,
+        authority_lost=False,
+        phase_changed=False,
+        next_hard_action_count=12,
+        next_player_x=192.0,
+        next_player_y=384.0,
+    ))
+    reward_before = sum(policy.reward_sum.values())
+
+    policy.observe_failure(PolicyFailureEvent(
+        frame=100 + HIT_CREDIT_HORIZON_FRAMES + 1,
+        scope=(2, 0, 0, 4),
+        source_context="timeline:test",
+        kind="physical-hit",
+    ))
+
+    assert sum(policy.reward_sum.values()) == reward_before
+    assert policy.uncredited_hit_events == 1
 
 
 def test_latency_contaminated_outcome_is_retained_but_not_trained_online() -> None:
@@ -225,7 +339,7 @@ def test_restart_checkpoint_is_compact_and_lossless() -> None:
     assert restored.fine_reward_sum == policy.fine_reward_sum
 
 
-def test_legacy_checkpoint_hot_starts_coarse_backoff() -> None:
+def test_old_reward_checkpoint_is_not_mixed_into_hit_credit_v2() -> None:
     policy = AdaptivePolicy()
     key = policy._action_key(policy._context_key(context()), "stay")
     policy.import_state({
@@ -236,13 +350,13 @@ def test_legacy_checkpoint_hot_starts_coarse_backoff() -> None:
         "reward_sum": {key: 8.75},
     })
 
-    assert policy.trials[key] == 7
-    assert policy.reward_sum[key] == 8.75
+    assert not policy.trials
+    assert not policy.reward_sum
     assert not policy.fine_trials
     assert policy.decide(context()).action == "stay"
 
 
-def test_v2_checkpoint_losslessly_aggregates_middle_hot_start() -> None:
+def test_old_hierarchical_checkpoint_is_not_mixed_into_hit_credit_v2() -> None:
     policy = AdaptivePolicy()
     fine_key = policy._action_key(
         policy._fine_context_key(context()),
@@ -256,11 +370,7 @@ def test_v2_checkpoint_losslessly_aggregates_middle_hot_start() -> None:
         "fine_reward_sum": {fine_key: 6.25},
     })
 
-    assert policy.fine_trials[fine_key] == 5
-    assert policy.fine_reward_sum[fine_key] == 6.25
-    middle_key = policy._action_key(
-        policy._middle_context_key(context()),
-        "stay",
-    )
-    assert policy.middle_trials[middle_key] == 5
-    assert policy.middle_reward_sum[middle_key] == 6.25
+    assert not policy.fine_trials
+    assert not policy.fine_reward_sum
+    assert not policy.middle_trials
+    assert not policy.middle_reward_sum

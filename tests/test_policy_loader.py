@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from th06_rl.policy_loader import HotReloadPolicy
+from th06_rl.policy_api import PolicyFailureEvent
 
 
 POLICY = b"""
@@ -70,3 +71,20 @@ def test_checkpoint_is_the_reload_poll_boundary(tmp_path, monkeypatch) -> None:
     )
     assert loader.checkpoint() is False
     assert polls == [0]
+
+
+def test_optional_failure_feedback_does_not_require_policy_callback(
+    tmp_path,
+) -> None:
+    path = tmp_path / "policy.py"
+    path.write_bytes(POLICY)
+    loader = HotReloadPolicy(path)
+
+    loader.observe_failure(PolicyFailureEvent(
+        frame=101,
+        scope=(2, 0, 0, 6),
+        source_context="boss:sub33",
+        kind="physical-hit",
+    ))
+
+    assert loader.last_error is None

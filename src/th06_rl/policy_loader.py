@@ -13,6 +13,7 @@ from .policy_api import (
     POLICY_API_VERSION,
     PolicyContext,
     PolicyDecision,
+    PolicyFailureEvent,
     PolicyOutcome,
 )
 
@@ -213,6 +214,23 @@ class HotReloadPolicy:
             # surface the failure in status/checkpoint telemetry.
             self.reload_failures += 1
             self.last_error = f"observe {type(error).__name__}: {error}"
+
+    def observe_failure(self, event: PolicyFailureEvent) -> None:
+        """Deliver sparse physical feedback outside the action publish path."""
+        if self.policy is None:
+            return
+        callback = getattr(self.policy, "observe_failure", None)
+        if not callable(callback):
+            return
+        try:
+            callback(event)
+        except Exception as error:
+            # Failure credit is advisory learning state. It must never take
+            # input authority from the native gate or stop a continuous run.
+            self.reload_failures += 1
+            self.last_error = (
+                f"observe_failure {type(error).__name__}: {error}"
+            )
 
     def status(self) -> dict[str, object]:
         try:
