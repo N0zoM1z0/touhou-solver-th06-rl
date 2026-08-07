@@ -200,6 +200,42 @@ def _source_exact_positions(bullet, horizon: int) -> list[tuple[float, float]]:
     return result
 
 
+def _in_bounds_boundary_positions(bullet, horizon: int):
+    """Return the common no-reflection path, or ``None`` near an edge."""
+    dynamic = int(bullet.ex_flags) & DYNAMIC_EX_FLAGS
+    if dynamic not in (
+        REFLECT_ALL_EDGES_FLAG,
+        REFLECT_NO_BOTTOM_FLAG,
+        REFLECT_ALL_EDGES_FLAG | REFLECT_NO_BOTTOM_FLAG,
+    ):
+        return None
+    x, y = _f32(bullet.x), _f32(bullet.y)
+    vx, vy = _f32(bullet.vx), _f32(bullet.vy)
+    result = []
+    for _ in range(horizon):
+        # The source tests the visual sprite before this update's movement.
+        if not _is_in_bounds(
+            x,
+            y,
+            bullet.sprite_half_width,
+            bullet.sprite_half_height,
+        ):
+            return None
+        x = _f32(x + vx)
+        y = _f32(y + vy)
+        result.append((x, y))
+    return result
+
+
+def _local_exact_positions(bullet, horizon: int):
+    positions = _in_bounds_boundary_positions(bullet, horizon)
+    return (
+        positions
+        if positions is not None
+        else _source_exact_positions(bullet, horizon)
+    )
+
+
 def hazard_boxes(bullet, horizon: int):
     enable_donor_imports()
     from th06.hazards.bullets import hazard_boxes as donor_hazard_boxes
@@ -222,7 +258,7 @@ def hazard_boxes(bullet, horizon: int):
     half_height = bullet.half_height
     return [
         (x - half_width, y - half_height, x + half_width, y + half_height)
-        for x, y in _source_exact_positions(bullet, horizon)
+        for x, y in _local_exact_positions(bullet, horizon)
     ]
 
 
@@ -232,7 +268,7 @@ def _fired_hazard_boxes(bullet, horizon: int, donor_hazard_boxes):
         half_height = bullet.half_height
         return [
             (x - half_width, y - half_height, x + half_width, y + half_height)
-            for x, y in _source_exact_positions(bullet, horizon)
+            for x, y in _local_exact_positions(bullet, horizon)
         ]
     return donor_hazard_boxes(bullet, horizon)
 
