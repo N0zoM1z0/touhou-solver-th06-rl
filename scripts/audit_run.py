@@ -12,6 +12,7 @@ from pathlib import Path
 from th06_rl.corpus import expand_compact
 from th06_rl.th06.control_capture import decode_control_snapshot
 from th06_rl.th06.donor import enable_donor_imports
+from th06_rl.th06.observed_bullets import hazard_box
 
 
 def _rows(paths):
@@ -60,7 +61,6 @@ def _overlaps_player(snapshot, box) -> bool:
 
 def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
     enable_donor_imports()
-    from th06.hazards.bullets import hazard_box
     from th06.hazards.enemies import future_boxes
     from th06.hazards.lasers import future_hazards, signed_laser_clearance
 

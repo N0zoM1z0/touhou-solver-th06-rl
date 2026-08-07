@@ -161,6 +161,18 @@ HITs as latency gaps, empty Hard sets, newly born hazards, possible geometry /
 Hard-certificate counterexamples, missing publication, or unresolved local
 traces. It never edits policy parameters or route behavior.
 
+Audit every bullet EX-motion combination retained by complete corpus runs,
+including all occupied raw slots rather than only the online-reachable subset:
+
+```bash
+PYTHONPATH=src python scripts/audit_motion_flags.py artifacts/corpus
+```
+
+The report separates source-exact fired motion, source-bounded unknown
+spawn-animation completion, candidate-dependent player retargeting, and
+unknown fail-closed modes. This is an offline coverage census and adds no work
+to the resident controller.
+
 After a complete Lunatic Stage, verify the dense-frame control budget with:
 
 ```bash

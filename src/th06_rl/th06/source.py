@@ -146,7 +146,7 @@ def lower_source_forecast(
     if requested_horizon < HARD_HORIZON:
         raise ValueError("source forecast must cover Hard-4")
     enable_donor_imports()
-    from th06.hazards.bullets import reachable_hazards_by_frame
+    from .observed_bullets import reachable_hazards_by_frame
     from th06.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
     from th06.hazards.lasers import hazards_by_frame as laser_hazards_by_frame
     from th06.hazards.world import forecast_world_births
@@ -265,7 +265,7 @@ def lower_observed_hazards(
     if requested_horizon < HARD_HORIZON:
         raise ValueError("observed hazard gate must cover Hard-4")
     enable_donor_imports()
-    from th06.hazards.bullets import reachable_hazards_by_frame
+    from .observed_bullets import reachable_hazards_by_frame
     from th06.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
 
     bullet_frames = reachable_hazards_by_frame(
