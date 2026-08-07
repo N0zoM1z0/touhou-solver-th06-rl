@@ -171,14 +171,6 @@ def _content_id(value: object) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
 
 
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _atomic_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
@@ -197,6 +189,24 @@ def _atomic_json(path: Path, value: object) -> None:
             os.unlink(temporary)
 
 
+class _HashingWriter:
+    """Hash compressed bytes as gzip writes them to the UNC-backed file."""
+
+    def __init__(self, raw) -> None:
+        self.raw = raw
+        self.digest = hashlib.sha256()
+
+    def write(self, payload: bytes) -> int:
+        self.digest.update(payload)
+        return self.raw.write(payload)
+
+    def flush(self) -> None:
+        self.raw.flush()
+
+    def tell(self) -> int:
+        return self.raw.tell()
+
+
 class _ShardWriter:
     def __init__(self, run_dir: Path, stream: str, records: int, on_shard) -> None:
         self.run_dir = run_dir
@@ -209,6 +219,7 @@ class _ShardWriter:
         self.last_sequence: int | None = None
         self.uncompressed_bytes = 0
         self.raw = None
+        self.hashing = None
         self.gzip = None
         self.temporary: Path | None = None
 
@@ -217,8 +228,9 @@ class _ShardWriter:
             return
         self.temporary = self.run_dir / f".{self.stream}-{self.index:06d}.partial"
         self.raw = self.temporary.open("wb")
+        self.hashing = _HashingWriter(self.raw)
         self.gzip = gzip.GzipFile(
-            fileobj=self.raw,
+            fileobj=self.hashing,
             mode="wb",
             compresslevel=3,
             mtime=0,
@@ -241,9 +253,9 @@ class _ShardWriter:
             return
         self.gzip.close()
         self.raw.close()
-        # Avoid materializing a dense compressed shard a second time merely
-        # to name it. This path is a WSL UNC share during physical play.
-        digest = _file_sha256(self.temporary)
+        # The digest was accumulated over the exact compressed stream. Avoid
+        # rereading a dense shard through WSL UNC merely to name it.
+        digest = self.hashing.digest.hexdigest()
         final = self.run_dir / f"{self.stream}-{self.index:06d}-{digest[:16]}.jsonl.gz"
         self.temporary.replace(final)
         self.on_shard({
@@ -262,6 +274,7 @@ class _ShardWriter:
         self.last_sequence = None
         self.uncompressed_bytes = 0
         self.raw = None
+        self.hashing = None
         self.gzip = None
         self.temporary = None
 

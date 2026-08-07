@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 from dataclasses import replace
 
@@ -238,6 +239,9 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     assert run["storage"]["queue_records"] == 512
     assert manifest["queue_capacity"] == 512
     assert 0 <= manifest["queue_high_watermark"] <= 512
+    for shard in manifest["shards"]:
+        payload = (run_dir / shard["path"]).read_bytes()
+        assert hashlib.sha256(payload).hexdigest() == shard["sha256"]
     assert manifest["records"]["anchors"] == 1
     assert manifest["summary"]["observation_gap_rate"] == 0.5
     assert manifest["summary"]["dense_frame_samples"][0] == {
