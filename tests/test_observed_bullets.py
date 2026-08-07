@@ -140,7 +140,8 @@ def test_spawn_completion_uncertainty_uses_source_motion_not_radial_growth() -> 
         vx=3.0,
         vy=0.0,
         state=4,
-        ex_flags=0x8,
+        ex_flags=0x18,
+        acceleration_duration=999,
         speed=3.0,
         turn_speed=3.0,
     )

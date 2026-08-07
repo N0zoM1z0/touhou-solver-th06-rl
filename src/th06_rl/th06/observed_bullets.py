@@ -204,7 +204,13 @@ def hazard_boxes(bullet, horizon: int):
     enable_donor_imports()
     from th06.hazards.bullets import hazard_boxes as donor_hazard_boxes
 
-    if bullet.state in (2, 3, 4):
+    dynamic = int(bullet.ex_flags) & DYNAMIC_EX_FLAGS
+    if (
+        bullet.state in (2, 3, 4)
+        and dynamic
+        and not dynamic & PLAYER_AIM_TURN_FLAG
+        and not int(bullet.ex_flags) & ~KNOWN_EX_FLAGS
+    ):
         return _spawn_transition_hazard_boxes(
             bullet,
             horizon,
