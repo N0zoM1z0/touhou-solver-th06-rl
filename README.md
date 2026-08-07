@@ -68,9 +68,10 @@ python scripts/sync_hf_corpus.py
 
 The sync is incremental and excludes the currently open run. If a Stage is in
 progress, its transaction backup is uploaded instead of the live, uncommitted
-checkpoint. The private default dataset is
-`Joh1rreq/touhou-solver-th06-rl-corpus`. `--dry-run` performs local structural
-validation; add `--verify-content` when doing the slower full shard SHA-256
+checkpoint. The public default dataset is
+[`Joh1rreq/touhou-solver-th06-rl-corpus`](https://huggingface.co/datasets/Joh1rreq/touhou-solver-th06-rl-corpus).
+`--dry-run` performs local structural validation; add `--verify-content` when
+doing the slower full shard SHA-256
 audit before local pruning. Successful upload alone never deletes local data.
 
 Each control frame retains a coherent collision-authority root: player state,
