@@ -77,7 +77,12 @@ audit before local pruning. Successful upload alone never deletes local data.
 Each control frame retains a coherent collision-authority root: player state,
 all live bullet motion/collision fields, lasers, lethal enemy bodies, RNG,
 resources, source context, exact Hard/local sets, behavior probability, and
-decision diagnostics. Expensive player-attack, item/effect, sprite, callback,
+decision diagnostics. Frame schema v4 stores each occupied bullet once as its
+packed source tail plus a compact pointer-to-visual-size table; the redundant
+resident Python bullet rows are reconstructed offline. This is lossless for
+collision and boundary-reflection semantics while keeping the asynchronous
+writer comfortably ahead of the 60 Hz producer. Expensive player-attack,
+item/effect, sprite, callback,
 and complete ECL state is retained in exhaustive anchors admitted only during
 quiet/passive windows. Stable timeline/ECL tables are content-addressed.
 Transitions retain raw outcome and latency terms instead of only a reward, so
@@ -87,7 +92,7 @@ with a capture gap or over-budget root remains evidence but is excluded from
 the default online learner stratum.
 
 The trajectory unit is one complete physical Practice Stage. Transition
-schema v4 records that episode identity separately from source-context changes
+schema v5 records that episode identity separately from source-context changes
 and failure events: a life-patched HIT is negative evidence inside the same
 Stage, not an episode boundary. Offline phase-local learners may split on the
 source-context boundary, while a Stage-level learner can retain the full

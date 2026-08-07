@@ -21,7 +21,7 @@ import struct
 from .donor import enable_donor_imports
 
 
-CONTROL_CAPTURE_TIER = "control-v1"
+CONTROL_CAPTURE_TIER = "control-v2"
 MAX_CAPTURE_ATTEMPTS = 8
 DYNAMIC_BULLET_FLAGS = 0xDF1
 
@@ -110,6 +110,10 @@ class ControlSnapshot:
     bullets: tuple[object, ...]
     live_bullet_count: int
     raw_bullet_tails: bytes
+    # (AnmLoadedSprite pointer, width, height).  Boundary reflection uses
+    # visual sprite geometry rather than the much smaller collision box, so
+    # the pointer alone is not sufficient for source-exact offline decode.
+    bullet_sprite_dimensions: tuple[tuple[int, float, float], ...]
     bullets_are_reachable_subset: bool
     laser_count: int
     in_menu: bool
@@ -227,6 +231,23 @@ def _ensure_subroutines(process, stage: int, native) -> tuple[int, ...]:
         process.ecl_subroutines = native._read_ecl_subroutines(process)
         process._th06_rl_control_ecl_stage = stage
     return process.ecl_subroutines
+
+
+def _control_sprite_dimensions(
+    process,
+    native,
+    stage: int,
+    pointers: set[int],
+) -> dict[int, tuple[float, float]]:
+    """Resolve immutable visual geometry once per loaded stage resource."""
+    if getattr(process, "_th06_rl_control_sprite_stage", None) != stage:
+        process._th06_rl_control_sprite_stage = stage
+        process._th06_rl_control_sprite_dimensions = {}
+    cached = process._th06_rl_control_sprite_dimensions
+    missing = pointers - set(cached)
+    if missing:
+        cached.update(native._read_sprite_dimensions(process, missing))
+    return {pointer: cached[pointer] for pointer in pointers}
 
 
 def _source_context(
@@ -464,6 +485,7 @@ def _decode_control_once(
     bullets = []
     live_bullet_count = 0
     raw_bullet_tails = bytearray()
+    occupied_bullets = []
     player_speed = max(
         abs(normal_speed),
         abs(focus_speed),
@@ -490,6 +512,15 @@ def _decode_control_once(
         )[0]
         raw_bullet_tails.extend(struct.pack("<HI", slot, sprite_pointer))
         raw_bullet_tails.extend(tail)
+        occupied_bullets.append((slot, state, sprite_pointer, tail))
+
+    sprite_dimensions = _control_sprite_dimensions(
+        process,
+        native,
+        stage,
+        {item[2] for item in occupied_bullets},
+    )
+    for slot, state, sprite_pointer, tail in occupied_bullets:
         if state == 5 or not _tail_may_reach_player(
             tail,
             native,
@@ -502,7 +533,11 @@ def _decode_control_once(
             collision_margin=collision_margin,
         ):
             continue
-        bullet = native._decode_bullet_tail(tail, slot)
+        bullet = native._decode_bullet_tail(
+            tail,
+            slot,
+            sprite_dimensions[sprite_pointer],
+        )
         if bullet is not None:
             bullets.append(bullet)
 
@@ -641,7 +676,10 @@ def _decode_control_once(
         frame, stage, player_state, x, y, half_width, half_height,
         normal_speed, focus_speed, normal_diagonal, focus_diagonal,
         frame_multiplier, input_mask, tuple(bullets), live_bullet_count,
-        bytes(raw_bullet_tails), True, len(lasers), in_menu,
+        bytes(raw_bullet_tails), tuple(
+            (pointer, *sprite_dimensions[pointer])
+            for pointer in sorted(sprite_dimensions)
+        ), True, len(lasers), in_menu,
         time_stopped, bool(replay or demo_mode), tuple(lasers), tuple(enemies),
         difficulty, character, shot_type, bomb_active, spell_active,
         rank, subrank, max_rank, min_rank, rng_seed, rng_generation,
@@ -745,7 +783,27 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
     values = dict(raw)
     values.setdefault("live_bullet_count", len(values.get("bullets", ())))
     values.setdefault("raw_bullet_tails", b"")
+    values.setdefault("bullet_sprite_dimensions", ())
     values.setdefault("bullets_are_reachable_subset", False)
+    dimension_rows = values["bullet_sprite_dimensions"]
+    dimensions = {}
+    for row in dimension_rows:
+        if not isinstance(row, (tuple, list)) or len(row) != 3:
+            raise ValueError("invalid packed control sprite dimensions")
+        pointer, width, height = int(row[0]), float(row[1]), float(row[2])
+        if (
+            pointer in dimensions
+            or not 0x10000 <= pointer < 0x80000000
+            or not math.isfinite(width)
+            or not math.isfinite(height)
+            or not 0.0 < width <= 4096.0
+            or not 0.0 < height <= 4096.0
+        ):
+            raise ValueError("invalid packed control sprite dimensions")
+        dimensions[pointer] = (width, height)
+    values["bullet_sprite_dimensions"] = tuple(
+        (pointer, *dimensions[pointer]) for pointer in sorted(dimensions)
+    )
     raw_tails = values.get("raw_bullet_tails", b"")
     if raw_tails:
         import th06.native as native
@@ -756,9 +814,14 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
             raise ValueError("invalid packed control bullet tails")
         bullets = []
         for offset in range(0, len(raw_tails), record_size):
-            slot, _sprite_pointer = struct.unpack_from("<HI", raw_tails, offset)
+            slot, sprite_pointer = struct.unpack_from("<HI", raw_tails, offset)
             tail = raw_tails[offset + 6 : offset + record_size]
-            bullet = native._decode_bullet_tail(tail, slot)
+            sprite_size = dimensions.get(sprite_pointer)
+            if values.get("capture_tier") == CONTROL_CAPTURE_TIER and sprite_size is None:
+                raise ValueError(
+                    f"control-v2 bullet slot {slot} lacks visual sprite geometry"
+                )
+            bullet = native._decode_bullet_tail(tail, slot, sprite_size)
             if bullet is not None and bullet.state != 5:
                 bullets.append(bullet)
         values["bullets"] = tuple(bullets)

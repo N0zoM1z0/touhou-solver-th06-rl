@@ -26,7 +26,7 @@ from th06.model import BUTTON_BOMB  # noqa: E402
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v3"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v4"
 TRANSITION_SCHEMA = "th06-rl-transition-v5"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
@@ -419,7 +419,18 @@ def _serialize_snapshot(snapshot, objects: _ObjectStore) -> dict[str, object]:
     result = {}
     for field in fields(snapshot):
         value = getattr(snapshot, field.name)
-        if field.name in SOURCE_OBJECT_FIELDS:
+        if (
+            field.name == "bullets"
+            and getattr(snapshot, "capture_tier", None) == "control-v2"
+            and getattr(snapshot, "raw_bullet_tails", b"")
+        ):
+            # The packed source tail for every occupied slot plus the compact
+            # pointer->visual-size table reconstructs the complete Bullet
+            # tuple.  Re-encoding the resident reachable subset as hundreds
+            # of JSON dataclass rows duplicates information and made the
+            # asynchronous writer slower than the 60 Hz producer.
+            result[field.name] = []
+        elif field.name in SOURCE_OBJECT_FIELDS:
             result[field.name] = objects.reference(f"snapshot.{field.name}", value)
         elif field.name == "spawners":
             if value:
@@ -710,6 +721,7 @@ class CorpusRecorder:
                 "compression": "gzip-3",
                 "source_objects": "sha256-content-addressed",
                 "repeated_dataclasses": DATACLASS_ROWS_CODEC,
+                "control_bullets": "raw-tail-plus-visual-map-v1",
                 "frame_policy": "lossless-no-drop",
                 "queue_records": queue_records,
             },

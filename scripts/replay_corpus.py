@@ -118,7 +118,7 @@ def replay(args: argparse.Namespace) -> dict[str, object]:
         row = rows[index]
         try:
             raw_snapshot = _hydrate(row["snapshot"], objects)
-            if raw_snapshot.get("capture_tier") == "control-v1":
+            if str(raw_snapshot.get("capture_tier", "")).startswith("control-v"):
                 if args.forecast_mode != "observed":
                     raise RuntimeError(
                         "source-ecl replay requires authoritative anchor rows"

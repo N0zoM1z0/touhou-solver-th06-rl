@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import struct
 from dataclasses import replace
 
 from th06_rl.corpus import (
@@ -12,12 +13,31 @@ from th06_rl.corpus import (
     expand_compact,
 )
 from th06_rl.th06.donor import enable_donor_imports
-from th06_rl.th06.control_capture import ControlSnapshot
+from th06_rl.th06.control_capture import ControlSnapshot, decode_control_snapshot
 from th06_rl.th06.source import automatic_source_context
 
 
 enable_donor_imports()
 from th06.model import Bullet, Snapshot  # noqa: E402
+import th06.native as native  # noqa: E402
+
+
+def _packed_control_bullet(
+    *,
+    slot: int = 7,
+    sprite_pointer: int = 0x123456,
+    ex_flags: int = 0x800,
+) -> bytes:
+    tail = bytearray(native.BULLET_STRIDE - native.BULLET_SIZE_OFFSET)
+    relative = lambda absolute: absolute - native.BULLET_SIZE_OFFSET
+    struct.pack_into("<ff", tail, 0, 2.0, 2.0)
+    struct.pack_into("<ff", tail, relative(native.BULLET_POSITION_OFFSET), 100.0, 120.0)
+    struct.pack_into("<ff", tail, relative(native.BULLET_VELOCITY_OFFSET), 1.0, 0.0)
+    struct.pack_into("<f", tail, relative(native.BULLET_SPEED_OFFSET), 1.0)
+    struct.pack_into("<f", tail, relative(native.BULLET_TURN_SPEED_OFFSET), 1.0)
+    struct.pack_into("<H", tail, relative(native.BULLET_EX_FLAGS_OFFSET), ex_flags)
+    struct.pack_into("<H", tail, relative(native.BULLET_STATE_OFFSET), 1)
+    return struct.pack("<HI", slot, sprite_pointer) + tail
 
 
 def test_manifest_distinguishes_storage_from_complete_stage(tmp_path) -> None:
@@ -133,7 +153,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         RunMetadata("test", "exe", "native", "test", 3, 0, 0, 4, {}),
     )
     control = ControlSnapshot(
-        capture_tier="control-v1",
+        capture_tier="control-v2",
         frame=20,
         stage=4,
         player_state=0,
@@ -148,8 +168,9 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         frame_multiplier=1.0,
         input_mask=1,
         bullets=(),
-        live_bullet_count=0,
-        raw_bullet_tails=b"\x00\x01\x02",
+        live_bullet_count=1,
+        raw_bullet_tails=_packed_control_bullet(),
+        bullet_sprite_dimensions=((0x123456, 8.0, 16.0),),
         bullets_are_reachable_subset=True,
         laser_count=0,
         in_menu=False,
@@ -199,7 +220,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         capture_ms=2.0,
         solve_ms=0.1,
         reason="ok",
-        snapshot_tier="control-v1",
+        snapshot_tier="control-v2",
     )
     root_ref = recorder.record(control, evidence)
     recorder.record_anchor(
@@ -245,7 +266,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     assert manifest["records"]["anchors"] == 1
     assert manifest["summary"]["observation_gap_rate"] == 0.5
     assert manifest["summary"]["dense_frame_samples"][0] == {
-        "bullets": 0,
+        "bullets": 1,
         "sequence": 1,
         "frame": 22,
     }
@@ -260,7 +281,14 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
                 row = json.loads(line)
                 objects[row["object_id"]] = row["payload"]
     hydrated = expand_compact(frame["snapshot"], objects)
-    assert hydrated["raw_bullet_tails"] == b"\x00\x01\x02"
+    assert hydrated["bullets"] == []
+    assert hydrated["raw_bullet_tails"] == _packed_control_bullet()
+    decoded = decode_control_snapshot(hydrated)
+    assert len(decoded.bullets) == 1
+    assert decoded.bullets[0].slot == 7
+    assert decoded.bullets[0].ex_flags == 0x800
+    assert decoded.bullets[0].sprite_half_width == 4.0
+    assert decoded.bullets[0].sprite_half_height == 8.0
     transition_path = next(run_dir.glob("transitions-*.jsonl.gz"))
     with gzip.open(transition_path, "rt", encoding="utf-8") as source:
         transition = json.loads(next(source))
@@ -285,7 +313,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "player_x": 192.0,
         "player_y": 400.0,
         "power": 64,
-        "bullet_count": 0,
+        "bullet_count": 1,
         "laser_count": 0,
         "hard_action_count": 1,
     }

@@ -127,7 +127,7 @@ def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
 
 def _decode_frame(row: dict, objects: dict[str, object]):
     raw = expand_compact(row["snapshot"], objects)
-    if raw.get("capture_tier") != "control-v1":
+    if not str(raw.get("capture_tier", "")).startswith("control-v"):
         enable_donor_imports()
         from th06.barrage_lab.corpus import decode_snapshot
 
