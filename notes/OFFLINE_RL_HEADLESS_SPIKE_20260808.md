@@ -72,6 +72,8 @@ support and terminal-sparsity problem.
   (collision-complete observation v2), `d5e1737` (single-threaded headless
   runtime), `a87ada1` (stage-entry COW forkserver), and `034152c` (replayed
   checkpoints and terminal-only branches).
+  `4b8c90b` then adds raw timeline clock/next-instruction identity for automatic
+  offline partitioning without interpreting it as movement logic.
 - The release Linux ELF builds with SDL2/image/ttf and Premake 5 beta2. A
   no-display, no-asset fail-close smoke exits cleanly three times with about
   22.9 MiB RSS and no leftover process or config write.
@@ -165,6 +167,43 @@ commit `034152ca8f1635fbdc4d0e39dc6047a30d6d2e0c` plus binary SHA-256
 Artifacts remain ignored. This mechanism accelerates exact short-horizon
 teacher labels, Q targets, and hard-example mining. It does not accelerate
 gradient computation and has only modest benefit for a long whole-stage run.
+
+## Compact headless corpus result
+
+`scripts/generate_headless_corpus.py` drives the no-PTY step environment with a
+12-frame offline native teacher plus exact epsilon exploration. The teacher
+ranks only the current four-frame native-safe set. The same observation is
+revalidated immediately before the synchronous action step, Bomb is absent
+from the vocabulary, and the game still supplies the physical HIT terminal.
+Timeline/boss identity is automatically derived only for data partitioning;
+RNG state is retained by sparse source anchors but excluded from the compact
+deployable state features.
+
+Each compact row has a factual one-tick successor, canonical current/next
+observation SHA-256, exact marginal behavior probability, native legal set,
+per-candidate clearance/final-position/reserve data, teacher metadata, and
+primitive outcome terms. Full observation-v2 roots are gzip anchors every 120
+ticks and at initial/terminal/authority boundaries. Shards and their hashes are
+published transactionally through a manifest.
+
+Two real Lunatic/Reimu-A/Stage-6 seed-7 smoke trajectories were independently
+re-audited by `scripts/audit_headless_corpus.py`:
+
+- 1,798/1,798 rows have a consecutive factual successor, a selected native-
+  legal Bomb-free action, a valid behavior probability, and zero Bomb delta;
+- the digest chain and all 17 sparse anchors link back to the compact rows;
+- the 600-tick run has 599 rows and 21 automatic contexts in 152,451 compressed
+  bytes;
+- the 1,200-tick run has 1,199 rows and 96 automatic contexts in 503,910
+  compressed bytes; and
+- the 12-frame teacher reached tick 1,200 without HIT or authority failure,
+  passing the earlier generic fallback's tick-1,095 local dead end.
+
+The combined independent report is
+`artifacts/benchmarks/headless-corpus-audit.json`; generated data remains
+ignored. These are truncated smoke runs, not a Stage-clear or NMNB claim. For
+training support, collect multiple seeds and exploration rates per explicit
+scope rather than treating one deterministic seed as an episode population.
 
 The public source-only fork is
 [`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless), with

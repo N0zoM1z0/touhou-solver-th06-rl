@@ -10,7 +10,7 @@ Its accelerated Linux simulation and lockstep environment backend lives in
 [`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless). That
 source-only fork is for corpus generation, replay, and learning acceleration;
 the shipped Windows game remains this solver's final physical validation gate.
-The currently paired local runtime revision is `034152c` on the headless
+The currently paired local runtime revision is `4b8c90b` on the headless
 fork's `th06-rl-headless-spike` branch; solver clients and benchmark protocol
 changes are committed together with that dependency recorded in the evidence
 note.
@@ -41,6 +41,26 @@ forks all 18 Bomb-free actions from the resulting physical state, and compares
 every terminal observation against a cold full-prefix replay. It runs at nice
 15 / low I/O priority and writes a revisioned JSON report under ignored
 `artifacts/`; this is an offline teacher/benchmark path, never resident search.
+
+Generate a compact factual trajectory with the paired runtime, then audit it
+independently:
+
+```bash
+PYTHONPATH=src python scripts/generate_headless_corpus.py \
+  --seed 7 --difficulty 3 --character 0 --shot-type 0 --stage 6 \
+  --max-ticks 1200 --epsilon 0.02 --teacher-horizon 12
+PYTHONPATH=src python scripts/audit_headless_corpus.py artifacts/headless-corpus \
+  --output artifacts/benchmarks/headless-corpus-audit.json
+```
+
+The offline teacher may run bounded local search, but its selected action is
+rechecked against the four-frame native gate immediately before the synchronous
+step. Every compact row stores exact behavior probability, the native legal
+set, candidate clearance/reserve features, automatic source context, and both
+observation hashes. Full source observations are gzip anchors every 120 ticks
+and at terminal/failure boundaries. Neither timeline identity nor RNG selects
+a handwritten movement route, and RNG is excluded from deployable state
+features.
 
 `run_lunatic_stage123456_learning.bat` rotates exact Practice Stages 1 through 6,
 records one complete sharded stage trajectory at a time, checkpoints each
