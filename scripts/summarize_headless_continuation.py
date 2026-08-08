@@ -56,6 +56,12 @@ def summarize_transition_file(path: Path) -> dict[str, Any]:
         raw = json.loads(manifest_path.read_text(encoding="utf-8"))
         if isinstance(raw, Mapping):
             manifest = raw
+    intent: Mapping[str, Any] = {}
+    intent_path = run / "run-intent.json"
+    if intent_path.is_file():
+        raw_intent = json.loads(intent_path.read_text(encoding="utf-8"))
+        if isinstance(raw_intent, Mapping):
+            intent = raw_intent
 
     rows = 0
     first_tick: int | None = None
@@ -105,7 +111,7 @@ def summarize_transition_file(path: Path) -> dict[str, Any]:
     )
     start = first_tick or 0
     end = final_tick or start
-    ranker = manifest.get("ranker")
+    ranker = manifest.get("ranker") or intent.get("ranker")
     ranker_sha = ranker.get("sha256") if isinstance(ranker, Mapping) else None
     seed_match = re.search(r"-seed(\d+)$", run.name)
     inferred_seed = int(seed_match.group(1)) if seed_match else None
@@ -113,10 +119,13 @@ def summarize_transition_file(path: Path) -> dict[str, Any]:
         "run": str(run),
         "status": "interrupted-partial" if is_partial else "complete",
         "training_eligible": False if is_partial else manifest.get("training_eligible") is True,
-        "scope": dict(scope or manifest.get("scope") or {}),
-        "seed": manifest.get("initial_seed", inferred_seed),
+        "scope": dict(scope or manifest.get("scope") or intent.get("scope") or {}),
+        "seed": manifest.get("initial_seed", intent.get("initial_seed", inferred_seed)),
         "policy": policy or manifest.get("behavior_policy"),
         "ranker_sha256": ranker_sha,
+        "continue_after_hit": (
+            manifest.get("continue_after_hit") is True or intent.get("continue_after_hit") is True
+        ),
         "termination_reason": termination_reason,
         "rows": rows,
         "start_tick": first_tick,

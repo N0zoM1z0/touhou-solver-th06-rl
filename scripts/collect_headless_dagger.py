@@ -195,6 +195,15 @@ def collect(
         f"s{scope.shot_type}-stage{scope.stage}-seed{seed}"
     )
     writer = CompactHeadlessCorpusWriter(run, anchor_stride=anchor_stride)
+    model_sha256 = _sha256(model_path)
+    (run / "run-intent.json").write_text(json.dumps({
+        "schema": "th06-rl-headless-ranker-run-intent-v1",
+        "scope": expected_scope,
+        "initial_seed": seed,
+        "continue_after_hit": continue_after_hit,
+        "ranker": {"path": model_path.name, "sha256": model_sha256},
+        "source": provenance,
+    }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     kernel = NativeKernel()
     teacher = NativeOfflineTeacher(kernel=kernel, horizon=teacher_horizon)
     termination_reason = "generator-error"
@@ -346,7 +355,7 @@ def collect(
         "effective_transition_ratio": 1.0 if writer.transition_count else 0.0,
         "selected_actions_native_legal_ratio": 1.0 if writer.transition_count else 0.0,
         "source": provenance,
-        "ranker": {"path": model_path.name, "sha256": _sha256(model_path)},
+        "ranker": {"path": model_path.name, "sha256": model_sha256},
     })
 
 

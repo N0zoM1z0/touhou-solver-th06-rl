@@ -62,3 +62,22 @@ def test_summary_keeps_hit_and_forced_rates(tmp_path: Path) -> None:
     assert result["physical_hits"] == 1
     assert result["benchmark_forced_rows"] == 1
     assert result["hits_per_1000_ticks"] == 1000 / 3
+
+
+def test_partial_run_intent_preserves_full_ranker_identity(tmp_path: Path) -> None:
+    run = tmp_path / "run-seed23"
+    run.mkdir()
+    path = run / "transitions.jsonl.gz.partial"
+    path.write_bytes(gzip.compress(json.dumps(_row(0)).encode() + b"\n")[:-8])
+    (run / "run-intent.json").write_text(json.dumps({
+        "scope": _row(0)["scope"],
+        "initial_seed": 23,
+        "continue_after_hit": True,
+        "ranker": {"sha256": "a" * 64},
+    }), encoding="utf-8")
+
+    result = summarize_transition_file(path)
+
+    assert result["seed"] == 23
+    assert result["continue_after_hit"] is True
+    assert result["ranker_sha256"] == "a" * 64
