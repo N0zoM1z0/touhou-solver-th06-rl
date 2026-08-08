@@ -73,6 +73,26 @@ an explicit benchmark-only override: an empty native set releases movement as
 authority failure. Use `--max-ticks 0` for a natural stage termination rather
 than a shared timeout. Bomb remains forbidden in both modes.
 
+The same flag is available on `collect_headless_dagger.py`, so an immutable
+ranker weight can be measured by HIT count rather than only by its first
+failure point. Interrupted long runs remain valid benchmark evidence but never
+training data. Recover all complete newline-terminated rows and build the
+model-linked population archive with:
+
+```bash
+PYTHONPATH=.:src python scripts/summarize_headless_continuation.py \
+  artifacts/headless-hit-continuation-natural-stage \
+  --output artifacts/benchmarks/headless-hit-continuation-summary.json
+PYTHONPATH=.:src python scripts/build_headless_policy_population.py \
+  --models-root artifacts/models --rollouts-root artifacts \
+  --output artifacts/benchmarks/headless-policy-population.json
+```
+
+The archive keeps a per-scope Pareto population rather than selecting one
+offline winner. It separates offline-only, first-failure, and HIT-continuation
+evidence; only the last tier has an observed HIT rate. Population membership
+does not authorize Windows promotion.
+
 The offline teacher may run bounded local search, but its selected action is
 rechecked against the four-frame native gate immediately before the synchronous
 step. Every compact row stores exact behavior probability, the native legal

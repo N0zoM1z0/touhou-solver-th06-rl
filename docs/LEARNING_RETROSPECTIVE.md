@@ -235,6 +235,74 @@ Bomb use, and termination. Forced fail-close release rows and post-HIT states
 are benchmark-only and `training_eligible=false`; they may identify new COW
 neighborhoods but never enter the factual training corpus directly.
 
+## Preserve a policy population, not one offline winner
+
+The COW audit showed why a single argmax target is too narrow: 84.25%, 93.77%,
+and 86.02% of the sampled Stage 3/4/5 actions respectively survived the branch
+horizon, with roughly 15--17 survivable actions per checkpoint. A high-quality
+population should retain different safe tradeoffs instead of collapsing all of
+that support into one label.
+
+`scripts/build_headless_policy_population.py` links each immutable model hash
+to its exact scope, offline report, and closed-loop manifests. Within each
+difficulty/character/shot/stage scope it retains the non-dominated candidates
+over worst observed survival, tick-limit rate, authority-failure rate, and,
+when actually measured, HITs per 1000 ticks. Offline accuracy and action
+entropy explain and diversify the archive; they do not dominate a candidate or
+promote it. The online consumer may use consensus, uncertainty, or a
+contextual selector only to rank the current native safe set.
+
+Evidence tiers are intentionally strict:
+
+- `offline-only` has no rollout claim;
+- `first-failure-only` measures where a weight stopped but does not know its
+  full-stage HIT rate;
+- `continuation-evidenced` has HIT-counting rollouts after respawn;
+- Windows shadow/canary remains the only promotion gate.
+
+The current archive contains 41 model artifacts and eight first-failure Pareto
+members across Stages 1--6, but zero high-quality continuation-evidenced
+members. This is an evaluation gap, not a zero-HIT result. The eight candidates
+form the continuation evaluation queue; no new baseline rerun is required.
+
+| Stage | Weight (short SHA) | Candidate | Runs | Worst stop tick | Authority-failure rate | Tick-limit rate |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| 1 | `61c256375f68` | corrective-r1 | 2 | 2,999 | 0 | 1.0 |
+| 2 | `71726929362e` | corrective-r1 | 2 | 2,999 | 0 | 1.0 |
+| 3 | `5a5df4c75081` | COW profile | 2 | 1,284 | 0.5 | 0.5 |
+| 3 | `985fe927b832` | bootstrap | 1 | 1,585 | 1.0 | 0 |
+| 4 | `38c6cb48f49d` | COW spatial | 2 | 2,763 | 0.5 | 0.5 |
+| 5 | `0e7de641a0ed` | COW multiseed | 2 | 1,582 | 0.5 | 0.5 |
+| 5 | `d30ffdb8a37a` | bootstrap | 1 | 2,762 | 1.0 | 0 |
+| 6 | `5cbbe4dba599` | corrective-r4 | 2 | 2,999 | 0 | 1.0 |
+
+These are actual closed-loop weight outcomes, but they used the default
+first-failure protocol. Consequently their HIT count is unknown after the stop
+point; `tick-limit` means reaching the 3,000-tick evaluation budget, not stage
+clear. Future continuation runs fill that missing column without changing or
+overwriting the historical evidence.
+
+## Preserved Linux HIT-continuation baseline
+
+The six concurrent seed-23 teacher baselines were intentionally stopped and
+not rerun. `summarize_headless_continuation.py` recovered every complete JSON
+record from their interrupted gzip streams. All six remain
+`training_eligible=false` and termination is `interrupted-partial`.
+
+| Stage | Observed ticks | HITs | HIT ticks | HIT/1000 ticks | Longest no-HIT interval | Forced release rows |
+| --- | ---: | ---: | --- | ---: | ---: | ---: |
+| 1 | 88,296 | 2 | 11,302; 16,150 | 0.0227 | 72,147 | 25 |
+| 2 | 16,682 | 1 | 10,191 | 0.0599 | 10,190 | 34 |
+| 3 | 15,744 | 1 | 2,283 | 0.0635 | 13,462 | 6 |
+| 4 | 8,175 | 0 | -- | 0 | 8,175 | 1 |
+| 5 | 20,184 | 3 | 4,069; 16,545; 17,051 | 0.1486 | 12,476 | 18 |
+| 6 | 28,583 | 3 | 17,955; 20,104; 21,926 | 0.1050 | 17,954 | 6,672 |
+
+The aggregate is 177,664 transitions, 10 HITs, zero Bombs, and 6,756 forced
+release rows. Stage 4's zero means zero within 8,175 observed ticks, not a
+stage clear. Stage 6's large forced-release count is a strong model/authority
+improvement signal and must not be hidden by its relatively low HIT rate.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
@@ -251,6 +319,8 @@ boundary.
   ranking on at least two complete seeds.
 - Test COW-corrected imitation and value candidates on entirely unseen RNG
   seeds; keep best-by-rollout, not latest-by-training.
+- Run the per-stage Pareto queue with ranker HIT continuation; attach HIT ticks,
+  rates, forced-release counts, and immutable weight hashes to the archive.
 - Extend successful 3000-tick candidates to actual headless stage clears.
 - Compose independently promoted Stage 1–6 policies into the Reimu-A Lunatic
   route only after every stage clears headlessly without HIT/Bomb.
