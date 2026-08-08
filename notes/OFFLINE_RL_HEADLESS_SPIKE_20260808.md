@@ -67,7 +67,8 @@ support and terminal-sparsity problem.
 - Local branch `th06-rl-headless-spike` has commits `0846d41` (Ubuntu 22.04 SDL
   compatibility), `8c30fbe` (deterministic logic-headless mode), and `cb60bf6`
   (direct Practice action/step protocol), `d0f92aa` (physical tick progression
-  and fail-close terminal behavior), and `4501c65` (public-fork boundary).
+  and fail-close terminal behavior), `4501c65` (public-fork boundary), and
+  `294a478` (public usage and evidence documentation).
 - The release Linux ELF builds with SDL2/image/ttf and Premake 5 beta2. A
   no-display, no-asset fail-close smoke exits cleanly three times with about
   22.9 MiB RSS and no leftover process or config write.
