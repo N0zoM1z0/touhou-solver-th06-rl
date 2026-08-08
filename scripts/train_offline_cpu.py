@@ -13,6 +13,7 @@ from pathlib import Path
 import random
 import resource
 import time
+import warnings
 
 from th06_rl.offline import ACTION_NAMES, load_dataset_index
 from th06_rl.offline_learning import (
@@ -156,7 +157,16 @@ def _predict(model, encoder: Encoder, features: list[dict[str, str | float]], *,
             for index in (FEATURE_NAMES.index(name) for name in CATEGORICAL_FEATURES):
                 catboost_matrix[:, index] = matrix[:, index].astype(int).astype(str)
             matrix = catboost_matrix
-        values.append(np.asarray(model.predict(matrix), dtype=float))
+        with warnings.catch_warnings():
+            # LightGBM records synthetic feature names even when fitted from a
+            # NumPy matrix.  Candidate scoring deliberately uses the same
+            # ordered matrix contract, so this sklearn warning is inapplicable.
+            warnings.filterwarnings(
+                "ignore",
+                message="X does not have valid feature names",
+                category=UserWarning,
+            )
+            values.append(np.asarray(model.predict(matrix), dtype=float))
     return np.concatenate(values) if values else np.empty(0, dtype=float)
 
 
@@ -445,7 +455,7 @@ def main() -> int:
             "hit_120_ranking": hit_metrics,
             "policy_evaluation": policy_evaluation,
         }
-        module = algorithm.replace("-", "_")
+        module = "sklearn" if algorithm == "extra-trees" else algorithm.replace("-", "_")
         try:
             package = __import__(module)
             versions[algorithm] = str(package.__version__)
