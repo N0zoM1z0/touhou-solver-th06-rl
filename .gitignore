@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+.env
 build/
 dist/
 
@@ -18,4 +19,3 @@ reference/
 *.DAT
 *.exe
 *.rpy
-

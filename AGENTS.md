@@ -1,8 +1,8 @@
 # TH06-RL Working Rules
 
 Read `START_HERE.md` before changing code. The authoritative source clone is
-the ignored sibling checkout at
-`../th06/reference/GensokyoClub-th06/`. Source and shipped-game claims must be
+the ignored repository-local checkout at
+`reference/GensokyoClub-th06/`. Source and shipped-game claims must be
 traceable to it. Do not use REA, REA-provided tools, or LeanToken.
 
 ## Product boundary
