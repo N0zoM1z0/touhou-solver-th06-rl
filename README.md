@@ -20,12 +20,13 @@ specific phase/control prior before falling back to the heavily aliased coarse
 state. No level reads raw bullet geometry or runs a model in the resident hot
 path.
 
-The active learning target is Lunatic / Reimu-A / Stages 4, 5, and 6. Hard /
+The active learning target is Lunatic / Reimu-A / Stages 1 through 6. Hard /
 Reimu-A / Stage 4 is retained only as prior baseline evidence. Difficulty,
 character, shot type, stage, and automatically derived source context remain
-separate corpus/model scopes.
+separate corpus/model scopes. The 2026-08-08 offline snapshot predates this
+expansion and contains only Stages 4 through 6.
 
-`run_lunatic_stage456_learning.bat` rotates exact Practice Stages 4, 5, and 6,
+`run_lunatic_stage123456_learning.bat` rotates exact Practice Stages 1 through 6,
 records one complete sharded stage trajectory at a time, checkpoints each
 stage's independent bounded online model, cleans up the exact game PID, and
 starts the next full stage. The verified life patch prevents Game Over without
@@ -37,8 +38,10 @@ input-backend failure still stops the loop. Transient capture, source-context,
 policy-reload, trace, and corpus failures fail closed without destroying
 the physical Stage episode. Create
 `artifacts\pause-lunatic-stage456` to pause between complete stages. The
-single-stage `run_lunatic_stage4_learning.bat` remains useful for focused
-experiments. `run_lunatic_stage5_learning.bat` and
+Stages 4 through 6 can also be rotated with the older
+`run_lunatic_stage456_learning.bat`. The single-stage
+`run_lunatic_stage4_learning.bat` remains useful for focused experiments.
+`run_lunatic_stage5_learning.bat` and
 `run_lunatic_stage6_learning.bat` are the focused Stage 5 and Stage 6 training
 entry points and retain the same complete-episode/storage/audit contracts. The
 `run_hard_stage4_learning.bat` entry point and its independent policy state are
@@ -139,6 +142,23 @@ Fine legal-action opportunities and behavior choices are already losslessly
 present in the corpus; the restart checkpoint retains only observed fine
 counters so its RAM and disk cost scales with feedback actually consumed
 rather than every action that happened to be legal or merely selected.
+
+Run the immutable corpus audit and CPU-only offline policy zoo with:
+
+```bash
+PYTHONPATH=src python scripts/audit_offline_corpus.py CORPUS_DIR \
+  --revision HUGGING_FACE_COMMIT --output artifacts/offline/corpus-audit.json
+PYTHONPATH=src python scripts/train_offline_cpu.py CORPUS_DIR \
+  --revision HUGGING_FACE_COMMIT --scope 3/0/0/6 --view exact-v5 \
+  --threads 12 --output artifacts/offline/stage6-exact-policy-zoo
+```
+
+The trainer fits CatBoost, LightGBM, CPU XGBoost, and Extra Trees sequentially,
+uses chronological complete-Stage splits, and evaluates only native-safe action
+sets. Offline ranking never authorizes policy promotion. The source-grounded
+geometry/planning benchmark, recorded physical-frame coherence check, effective
+corpus ratios, exact fixed revision, and conservative VPS commands are recorded
+in [`notes/OFFLINE_TRAINING_BENCHMARK_20260808.md`](notes/OFFLINE_TRAINING_BENCHMARK_20260808.md).
 
 Online reward version `survival-reserve-hit-trace-v2` delivers a confirmed
 physical HIT independently of the one-step publication outcome. It assigns a
