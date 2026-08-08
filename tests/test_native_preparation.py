@@ -85,3 +85,24 @@ def test_native_collision_margin_keeps_exact_diagonal_boundary() -> None:
 
     assert len(outside) == 1
     assert not inside
+
+
+def test_native_action_profile_retains_checkpoint_clearance() -> None:
+    frames = [()] * 12
+    frames[7] = (Aabb(197.0, 390.0, 198.0, 391.0),)
+    profile = NativeKernel().profile_actions(
+        x=192.0,
+        y=384.0,
+        half_width=2.0,
+        half_height=2.0,
+        kinematics=KINEMATICS,
+        current_action=BY_NAME["stay"],
+        hazards=PackedHazards(
+            aabb_frames=tuple(frames),
+            laser_frames=((),) * 12,
+        ),
+        candidates=(BY_NAME["stay"],),
+    )[0]
+
+    assert math.isinf(profile.min_clearances[0])
+    assert profile.min_clearances[1:] == (5.0, 5.0)

@@ -27,7 +27,13 @@ from .headless_geometry import (
     reactive_headless_action,
     validate_headless_observation,
 )
-from .native import ACTIONS, NativeCertifiedAction, NativeKernel, PackedHazards
+from .native import (
+    ACTIONS,
+    NativeActionProfile,
+    NativeCertifiedAction,
+    NativeKernel,
+    PackedHazards,
+)
 
 
 TRANSITION_SCHEMA = "th06-rl-headless-transition-v1"
@@ -50,6 +56,10 @@ HAZARD_FEATURE_DEFAULTS = {
     },
 }
 HAZARD_FEATURE_NAMES = tuple(HAZARD_FEATURE_DEFAULTS)
+PROFILE_CHECKPOINTS = (4, 8, 12)
+PROFILE_FEATURE_NAMES = tuple(
+    f"profile_min_clearance_{checkpoint}" for checkpoint in PROFILE_CHECKPOINTS
+)
 
 
 def canonical_observation_sha256(observation: Mapping[str, Any]) -> str:
@@ -200,7 +210,13 @@ def compact_candidate_records(
     *,
     selected: str,
     teacher: str,
+    profiles: tuple[NativeActionProfile, ...] = (),
 ) -> list[dict[str, Any]]:
+    profile_by_action = {item.action: item for item in profiles}
+    if profiles and set(profile_by_action) != {item.action for item in certified}:
+        raise HeadlessAuthorityUnavailable(
+            "candidate profiles do not equal the native legal action set"
+        )
     return [
         {
             "action": item.action.name,
@@ -210,6 +226,18 @@ def compact_candidate_records(
             "final_boundary_reserve": _boundary_reserve(item.final_x, item.final_y),
             "selected": item.action.name == selected,
             "teacher": item.action.name == teacher,
+            **(
+                {
+                    f"profile_min_clearance_{checkpoint}": _optional_finite(clearance)
+                    for checkpoint, clearance in zip(
+                        profile_by_action[item.action].checkpoints,
+                        profile_by_action[item.action].min_clearances,
+                        strict=True,
+                    )
+                }
+                if profiles
+                else {}
+            ),
         }
         for item in certified
     ]
@@ -311,6 +339,7 @@ def build_transition(
     certified: tuple[NativeCertifiedAction, ...],
     behavior: BehaviorDecision,
     epsilon: float,
+    profiles: tuple[NativeActionProfile, ...] = (),
 ) -> dict[str, Any]:
     validate_headless_observation(observation)
     validate_headless_observation(next_observation)
@@ -344,6 +373,7 @@ def build_transition(
             certified,
             selected=behavior.selected_action,
             teacher=behavior.teacher.action,
+            profiles=profiles,
         ),
         "behavior": {
             "policy": behavior.policy,

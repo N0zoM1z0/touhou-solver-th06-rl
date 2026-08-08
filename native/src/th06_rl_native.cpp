@@ -520,6 +520,129 @@ extern "C" int th06_rl_certify_actions_v1(
     return 0;
 }
 
+extern "C" int th06_rl_profile_actions_v1(
+    float player_x,
+    float player_y,
+    float player_half_width,
+    float player_half_height,
+    float normal_speed,
+    float focus_speed,
+    float normal_diagonal_speed,
+    float focus_diagonal_speed,
+    std::int32_t current_action,
+    std::int32_t horizon,
+    const std::int32_t* delivery_delays,
+    std::int32_t delivery_delay_count,
+    std::uint32_t candidate_mask,
+    const std::uint32_t* aabb_frame_offsets,
+    const Th06RlAabb* aabbs,
+    const std::uint32_t* laser_frame_offsets,
+    const Th06RlLaserRect* lasers,
+    float collision_margin,
+    const std::int32_t* checkpoints,
+    std::int32_t checkpoint_count,
+    float* action_checkpoint_min_clearance) {
+    const Kinematics kinematics{
+        normal_speed,
+        focus_speed,
+        normal_diagonal_speed,
+        focus_diagonal_speed,
+    };
+    if (!valid_common_inputs(
+            player_half_width,
+            player_half_height,
+            kinematics,
+            current_action,
+            horizon,
+            aabb_frame_offsets,
+            laser_frame_offsets)
+        || delivery_delays == nullptr
+        || delivery_delay_count <= 0
+        || checkpoints == nullptr
+        || checkpoint_count <= 0
+        || action_checkpoint_min_clearance == nullptr) {
+        return 2;
+    }
+    for (std::int32_t index = 0; index < checkpoint_count; ++index) {
+        if (checkpoints[index] <= 0
+            || checkpoints[index] > horizon
+            || (index > 0 && checkpoints[index] <= checkpoints[index - 1])) {
+            return 2;
+        }
+    }
+    const auto laser_bases = prepare_laser_bases(
+        horizon,
+        laser_frame_offsets,
+        lasers);
+    const HazardView hazards{
+        horizon,
+        aabb_frame_offsets,
+        aabbs,
+        laser_frame_offsets,
+        lasers,
+        laser_bases.data(),
+    };
+    for (std::int32_t action = 0; action < kActionCount; ++action) {
+        for (std::int32_t checkpoint = 0;
+             checkpoint < checkpoint_count;
+             ++checkpoint) {
+            action_checkpoint_min_clearance[action * checkpoint_count + checkpoint]
+                = -std::numeric_limits<float>::infinity();
+        }
+        if ((candidate_mask & (1u << action)) == 0) continue;
+        for (std::int32_t checkpoint = 0;
+             checkpoint < checkpoint_count;
+             ++checkpoint) {
+            action_checkpoint_min_clearance[action * checkpoint_count + checkpoint]
+                = std::numeric_limits<float>::infinity();
+        }
+        for (std::int32_t delay_index = 0;
+             delay_index < delivery_delay_count;
+             ++delay_index) {
+            const auto delay = delivery_delays[delay_index];
+            if (delay < 0 || delay > horizon) return 2;
+            std::vector<std::int32_t> prefixes{-1};
+            if (delay > 0) {
+                const auto transition = transition_prefix_actions(
+                    current_action,
+                    action);
+                prefixes.insert(
+                    prefixes.end(), transition.begin(), transition.end());
+            }
+            for (const auto prefix : prefixes) {
+                Position position{player_x, player_y};
+                float running_minimum = std::numeric_limits<float>::infinity();
+                std::int32_t checkpoint_index = 0;
+                for (std::int32_t frame = 1; frame <= horizon; ++frame) {
+                    std::int32_t applied = action;
+                    if (prefix >= 0 && frame == delay) {
+                        applied = prefix;
+                    } else if (frame < delay || (prefix < 0 && frame <= delay)) {
+                        applied = current_action;
+                    }
+                    position = advance(position, applied, kinematics);
+                    const auto sample = sample_hazards(
+                        hazards,
+                        frame,
+                        position,
+                        player_half_width,
+                        player_half_height,
+                        collision_margin);
+                    running_minimum = std::min(running_minimum, sample.clearance);
+                    if (checkpoint_index < checkpoint_count
+                        && frame == checkpoints[checkpoint_index]) {
+                        auto& output = action_checkpoint_min_clearance[
+                            action * checkpoint_count + checkpoint_index];
+                        output = std::min(output, running_minimum);
+                        ++checkpoint_index;
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 extern "C" int th06_rl_local_plan_v1(
     float player_x,
     float player_y,

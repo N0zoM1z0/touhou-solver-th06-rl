@@ -21,6 +21,13 @@ A game-specific adapter must provide:
 TH06 implements reset with Linux COW replay checkpoints. TH08 may use a
 different simulator or snapshot mechanism; it need not copy the TH06 runtime.
 
+A game adapter may additionally expose fixed candidate-relative clearance
+profiles at declared checkpoints. TH06 computes worst-case clearance across
+input delivery delays and intermediate key-transition prefixes at ticks
+4/8/12. Profiles are ranker inputs only: they cannot certify an action, enlarge
+the native legal set, or replace fresh issue revalidation. A TH08 adapter may
+use different source physics while retaining the ordered profile contract.
+
 ## Portable outcome table
 
 Each checkpoint is one ranking group. It records the observation digest,

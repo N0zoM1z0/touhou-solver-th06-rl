@@ -70,6 +70,31 @@ TH06_RL_API int th06_rl_certify_actions_v1(
     float* action_min_clearance,
     float* action_final_xy);
 
+// Feature-only straight-action profiles. This API never certifies an action;
+// callers must intersect candidates with th06_rl_certify_actions_v1 first.
+TH06_RL_API int th06_rl_profile_actions_v1(
+    float player_x,
+    float player_y,
+    float player_half_width,
+    float player_half_height,
+    float normal_speed,
+    float focus_speed,
+    float normal_diagonal_speed,
+    float focus_diagonal_speed,
+    std::int32_t current_action,
+    std::int32_t horizon,
+    const std::int32_t* delivery_delays,
+    std::int32_t delivery_delay_count,
+    std::uint32_t candidate_mask,
+    const std::uint32_t* aabb_frame_offsets,
+    const Th06RlAabb* aabbs,
+    const std::uint32_t* laser_frame_offsets,
+    const Th06RlLaserRect* lasers,
+    float collision_margin,
+    const std::int32_t* checkpoints,
+    std::int32_t checkpoint_count,
+    float* action_checkpoint_min_clearance);
+
 TH06_RL_API int th06_rl_local_plan_v1(
     float player_x,
     float player_y,
@@ -102,4 +127,3 @@ TH06_RL_API int th06_rl_local_plan_v1(
     Th06RlPlanResult* result);
 
 }
-

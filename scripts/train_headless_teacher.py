@@ -16,7 +16,11 @@ import time
 from typing import Any, Iterable, Mapping
 
 from th06_rl.native import ACTIONS
-from th06_rl.headless_corpus import HAZARD_FEATURE_DEFAULTS, HAZARD_FEATURE_NAMES
+from th06_rl.headless_corpus import (
+    HAZARD_FEATURE_DEFAULTS,
+    HAZARD_FEATURE_NAMES,
+    PROFILE_FEATURE_NAMES,
+)
 
 
 ACTION_BY_NAME = {action.name: action for action in ACTIONS}
@@ -47,6 +51,7 @@ NUMERIC_FEATURES = (
     "reversed_direction",
     "changed_focus",
     *HAZARD_FEATURE_NAMES,
+    *PROFILE_FEATURE_NAMES,
 )
 FEATURE_NAMES = (*CATEGORICAL_FEATURES, *NUMERIC_FEATURES)
 
@@ -109,6 +114,10 @@ def candidate_features(decision: Decision, candidate: Mapping[str, Any]) -> dict
         **{
             name: float(decision.state.get(name, HAZARD_FEATURE_DEFAULTS[name]))
             for name in HAZARD_FEATURE_NAMES
+        },
+        **{
+            name: 1024.0 if candidate.get(name) is None else float(candidate[name])
+            for name in PROFILE_FEATURE_NAMES
         },
     }
 

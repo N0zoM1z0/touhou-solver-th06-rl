@@ -63,6 +63,13 @@ class NativeCertifiedAction:
 
 
 @dataclass(frozen=True)
+class NativeActionProfile:
+    action: Action
+    checkpoints: tuple[int, ...]
+    min_clearances: tuple[float, ...]
+
+
+@dataclass(frozen=True)
 class NativePlan:
     action: Action
     effort_horizon: int
@@ -203,6 +210,25 @@ class NativeKernel:
         ]
         self.certify_function.restype = ctypes.c_int
 
+        self.profile_function = self.library.th06_rl_profile_actions_v1
+        self.profile_function.argtypes = [
+            *floats8,
+            ctypes.c_int32,
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_int32),
+            ctypes.c_int32,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.POINTER(_Aabb),
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.POINTER(_LaserRect),
+            ctypes.c_float,
+            ctypes.POINTER(ctypes.c_int32),
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_float),
+        ]
+        self.profile_function.restype = ctypes.c_int
+
         self.plan_function = self.library.th06_rl_local_plan_v1
         self.plan_function.argtypes = [
             *floats8,
@@ -324,6 +350,63 @@ class NativeKernel:
             )
             for index, action in enumerate(ACTIONS)
             if safe_mask.value & (1 << index)
+        )
+
+    def profile_actions(
+        self,
+        *,
+        x: float,
+        y: float,
+        half_width: float,
+        half_height: float,
+        kinematics: Kinematics,
+        current_action: Action,
+        hazards: PackedHazards | PreparedHazards,
+        candidates: tuple[Action, ...],
+        checkpoints: tuple[int, ...] = (4, 8, 12),
+        delivery_delays: tuple[int, ...] = (0, 1, 2, 3),
+        collision_margin: float = 0.35,
+    ) -> tuple[NativeActionProfile, ...]:
+        if not candidates or not delivery_delays or not checkpoints:
+            raise ValueError("profile candidates, delays, and checkpoints cannot be empty")
+        if tuple(sorted(set(checkpoints))) != checkpoints:
+            raise ValueError("profile checkpoints must be strictly increasing")
+        prepared = (
+            hazards
+            if isinstance(hazards, PreparedHazards)
+            else self.prepare_hazards(hazards)
+        )
+        if checkpoints[-1] > prepared.horizon:
+            raise ValueError("profile checkpoint exceeds hazard horizon")
+        delay_array = (ctypes.c_int32 * len(delivery_delays))(*delivery_delays)
+        checkpoint_array = (ctypes.c_int32 * len(checkpoints))(*checkpoints)
+        clearances = (ctypes.c_float * (len(ACTIONS) * len(checkpoints)))()
+        status = self.profile_function(
+            *self._physical_args(x, y, half_width, half_height, kinematics),
+            ACTION_INDEX[current_action],
+            prepared.horizon,
+            delay_array,
+            len(delivery_delays),
+            _action_mask(candidates),
+            *prepared.native_args,
+            collision_margin,
+            checkpoint_array,
+            len(checkpoints),
+            clearances,
+        )
+        if status != 0:
+            raise RuntimeError(f"native profile kernel rejected input: {status}")
+        return tuple(
+            NativeActionProfile(
+                action=action,
+                checkpoints=checkpoints,
+                min_clearances=tuple(
+                    float(clearances[index * len(checkpoints) + checkpoint])
+                    for checkpoint in range(len(checkpoints))
+                ),
+            )
+            for index, action in enumerate(ACTIONS)
+            if action in candidates
         )
 
     def plan(

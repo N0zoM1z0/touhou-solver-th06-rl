@@ -185,6 +185,33 @@ source of long-horizon knowledge. A likely deployment is:
 UCB must not override collision geometry, add an action, request Bomb, select a
 handwritten phase route, or turn a failed authority check into exploration.
 
+## Success does not require a perfect solver
+
+NMNB is an existential route objective, not a requirement to identify the
+globally best action at every state. A policy may rank many COW checkpoints
+incorrectly yet clear because several actions remain survivable. Conversely,
+99% imitation accuracy can fail at the one irreversible corridor decision.
+The primary metric is therefore a complete no-HIT/no-Bomb stage clear, then
+repeatability across target seeds and worst-case reserve. COW top-1, teacher
+accuracy, and loss are diagnostic metrics only.
+
+The repository currently contains no committed Stage 1--3 physical clear IDs.
+`main:PHYSICAL_EVIDENCE.md` records complete Lunatic evidence for Stages 4--6,
+all with HITs, while the three-clear Stage 1--6 mastery logic in `START_HERE.md`
+defines a gate rather than proving it was met. Reports that older Stage 1--3
+behavior "basically cleared" remain useful historical context, but require the
+ignored Windows run artifacts or fresh paired trials before qualification.
+
+## Windows non-regression boundary
+
+Linux ranking never replaces the installed Windows policy. A candidate remains
+side-by-side with the incumbent until paired Windows stage trials show no
+regression in clears, HIT, authority failure, survival point, and control
+latency. Validation starts with shadow scoring, then one-stage canaries; the
+first HIT or authority anomaly stops the run and preserves the incumbent.
+This guarantees that an unvalidated offline model is not promoted, but it does
+not pretend Linux evidence can guarantee Windows performance equivalence.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:

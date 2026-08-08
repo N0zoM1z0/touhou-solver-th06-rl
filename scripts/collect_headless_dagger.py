@@ -33,7 +33,9 @@ from th06_rl.headless_corpus import (
 )
 from th06_rl.headless_geometry import (
     HARD_HORIZON,
+    KINEMATICS,
     HeadlessAuthorityUnavailable,
+    action_from_input,
     certify_lowered_headless_actions,
     lower_headless_hazards,
 )
@@ -114,9 +116,15 @@ class DistilledRanker:
         *,
         sequence: int,
         seed: int,
+        profiles=(),
     ) -> str:
         state = compact_state_features(observation)
-        candidates = tuple(compact_candidate_records(certified, selected="", teacher=""))
+        candidates = tuple(compact_candidate_records(
+            certified,
+            selected="",
+            teacher="",
+            profiles=profiles,
+        ))
         decision = Decision(
             run="dagger-rollout",
             seed=seed,
@@ -199,6 +207,17 @@ def collect(
                     if not certified:
                         raise HeadlessAuthorityUnavailable("headless native safe set is empty")
                     teacher_hazards = lower_headless_hazards(observation, teacher_horizon)
+                    player = observation["player"]
+                    profiles = kernel.profile_actions(
+                        x=float(player["x"]),
+                        y=float(player["y"]),
+                        half_width=float(player["half_width"]),
+                        half_height=float(player["half_height"]),
+                        kinematics=KINEMATICS,
+                        current_action=action_from_input(int(observation["input"])),
+                        hazards=teacher_hazards,
+                        candidates=tuple(item.action for item in certified),
+                    )
                     teacher_decision = teacher.rank(
                         observation,
                         certified,
@@ -209,6 +228,7 @@ def collect(
                         certified,
                         sequence=sequence,
                         seed=seed,
+                        profiles=profiles,
                     )
                     issue = certify_lowered_headless_actions(
                         observation,
@@ -242,6 +262,7 @@ def collect(
                     certified=certified,
                     behavior=behavior,
                     epsilon=0.0,
+                    profiles=profiles,
                 ))
                 sequence += 1
                 writer.anchor(next_observation, sequence=sequence, role="periodic")

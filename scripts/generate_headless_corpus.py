@@ -20,7 +20,9 @@ from th06_rl.headless_corpus import (
 )
 from th06_rl.headless_geometry import (
     HARD_HORIZON,
+    KINEMATICS,
     HeadlessAuthorityUnavailable,
+    action_from_input,
     certify_lowered_headless_actions,
     lower_headless_hazards,
 )
@@ -110,6 +112,17 @@ def generate_episode(
                     if not certified:
                         raise HeadlessAuthorityUnavailable("headless native safe set is empty")
                     teacher_hazards = lower_headless_hazards(observation, teacher_horizon)
+                    player = observation["player"]
+                    profiles = kernel.profile_actions(
+                        x=float(player["x"]),
+                        y=float(player["y"]),
+                        half_width=float(player["half_width"]),
+                        half_height=float(player["half_height"]),
+                        kinematics=KINEMATICS,
+                        current_action=action_from_input(int(observation["input"])),
+                        hazards=teacher_hazards,
+                        candidates=tuple(item.action for item in certified),
+                    )
                     teacher_decision = teacher.rank(
                         observation,
                         certified,
@@ -149,6 +162,7 @@ def generate_episode(
                     certified=certified,
                     behavior=behavior,
                     epsilon=epsilon,
+                    profiles=profiles,
                 )
                 if transition["outcome_terms"]["bombs_used_delta"] != 0:
                     raise HeadlessAuthorityUnavailable("Bomb use appeared in headless outcome")
