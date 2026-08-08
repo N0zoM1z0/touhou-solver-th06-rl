@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import gzip
 import json
 import math
@@ -61,6 +61,7 @@ class Decision:
     teacher_action: str
     selected_action: str
     observation_sha256: str = ""
+    authority_failure_distance: int | None = None
 
 
 def candidate_features(decision: Decision, candidate: Mapping[str, Any]) -> dict[str, str | float]:
@@ -121,6 +122,35 @@ def generic_choice(decision: Decision) -> str:
     return str(max(decision.candidates, key=key)["action"])
 
 
+def candidate_sample_weight(
+    decision: Decision,
+    candidate: Mapping[str, Any],
+    *,
+    failure_horizon: int,
+    failure_weight: float,
+) -> float:
+    """Emphasize the corrective pair before a demonstrated authority dead-end.
+
+    The terminal signal says that the behavior trajectory became uncertifiable;
+    it does not say that every locally legal action near the end was bad.  Only
+    weight the teacher/behavior pair when they disagree, leaving all other
+    candidates and teacher-agreeing failures at their ordinary imitation weight.
+    """
+    distance = decision.authority_failure_distance
+    if (
+        failure_horizon <= 0
+        or failure_weight <= 0.0
+        or distance is None
+        or distance <= 0
+        or distance > failure_horizon
+        or decision.teacher_action == decision.selected_action
+        or str(candidate["action"]) not in {decision.teacher_action, decision.selected_action}
+    ):
+        return 1.0
+    proximity = (failure_horizon - distance + 1) / failure_horizon
+    return 1.0 + failure_weight * proximity
+
+
 class Encoder:
     def __init__(self, decisions: Iterable[Decision]) -> None:
         values = {name: set() for name in CATEGORICAL_FEATURES}
@@ -166,7 +196,7 @@ def _run_directories(paths: Iterable[Path]) -> tuple[Path, ...]:
 
 def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any]]:
     decisions = []
-    labels_by_observation: dict[str, str] = {}
+    index_by_observation: dict[str, int] = {}
     duplicate_decisions = 0
     scope: Mapping[str, Any] | None = None
     source: Mapping[str, Any] | None = None
@@ -182,23 +212,44 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
         if manifest.get("source", {}).get("commit") != source.get("commit"):  # type: ignore[union-attr]
             raise ValueError("headless teacher data silently mixes source revisions")
         seed = int(manifest["initial_seed"])
+        authority_failure = manifest.get("termination_reason") == "authority-failure"
+        transition_count = int(manifest.get("transition_count", 0))
         with gzip.open(run / "transitions.jsonl.gz", "rt", encoding="utf-8") as stream:
             for line in stream:
                 row = json.loads(line)
                 behavior = row["behavior"]
                 digest = str(row["observation_sha256"])
                 teacher_action = str(behavior["teacher_action"])
-                previous_label = labels_by_observation.get(digest)
-                if previous_label is not None:
-                    if previous_label != teacher_action:
+                previous_index = index_by_observation.get(digest)
+                failure_distance = (
+                    transition_count - int(row["sequence"])
+                    if authority_failure
+                    else None
+                )
+                if previous_index is not None:
+                    previous = decisions[previous_index]
+                    if previous.teacher_action != teacher_action:
                         raise ValueError("identical observation has conflicting teacher labels")
+                    if (
+                        failure_distance is not None
+                        and (
+                            previous.authority_failure_distance is None
+                            or failure_distance < previous.authority_failure_distance
+                        )
+                    ):
+                        decisions[previous_index] = replace(
+                            previous,
+                            run=run.name,
+                            selected_action=str(behavior["selected_action"]),
+                            authority_failure_distance=failure_distance,
+                        )
                     duplicate_decisions += 1
                     continue
-                labels_by_observation[digest] = teacher_action
                 candidates = tuple(row["action_candidates"])
                 legal = tuple(row["legal_actions"])
                 if set(legal) != {str(candidate["action"]) for candidate in candidates}:
                     raise ValueError("candidate table does not equal the native legal set")
+                index_by_observation[digest] = len(decisions)
                 decisions.append(Decision(
                     run=run.name,
                     seed=seed,
@@ -210,6 +261,7 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
                     teacher_action=teacher_action,
                     selected_action=str(behavior["selected_action"]),
                     observation_sha256=digest,
+                    authority_failure_distance=failure_distance,
                 ))
     if not decisions or scope is None or source is None:
         raise ValueError("no eligible compact headless decisions found")
@@ -220,14 +272,37 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
     }
 
 
-def _candidate_matrix(decisions: Iterable[Decision]) -> tuple[list[dict[str, str | float]], list[int]]:
+def _candidate_matrix(
+    decisions: Iterable[Decision],
+    *,
+    failure_horizon: int,
+    failure_weight: float,
+) -> tuple[list[dict[str, str | float]], list[int], list[float], dict[str, Any]]:
     features = []
     labels = []
+    weights = []
+    corrective_decisions = 0
     for decision in decisions:
+        corrective = False
         for candidate in decision.candidates:
             features.append(candidate_features(decision, candidate))
             labels.append(int(candidate["action"] == decision.teacher_action))
-    return features, labels
+            weight = candidate_sample_weight(
+                decision,
+                candidate,
+                failure_horizon=failure_horizon,
+                failure_weight=failure_weight,
+            )
+            weights.append(weight)
+            corrective = corrective or weight > 1.0
+        corrective_decisions += int(corrective)
+    return features, labels, weights, {
+        "authority_failure_horizon": failure_horizon,
+        "corrective_pair_weight": failure_weight,
+        "corrective_decisions": corrective_decisions,
+        "weighted_candidate_rows": sum(weight > 1.0 for weight in weights),
+        "maximum_sample_weight": max(weights, default=1.0),
+    }
 
 
 def evaluate(
@@ -287,6 +362,12 @@ def main() -> int:
     parser.add_argument("--holdout-seed", type=int, action="append")
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--iterations", type=int, default=240)
+    parser.add_argument("--learning-rate", type=float, default=0.05)
+    parser.add_argument("--num-leaves", type=int, default=31)
+    parser.add_argument("--max-depth", type=int, default=10)
+    parser.add_argument("--min-child-samples", type=int, default=40)
+    parser.add_argument("--failure-horizon", type=int, default=0)
+    parser.add_argument("--failure-weight", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=6006)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -294,6 +375,12 @@ def main() -> int:
         parser.error("threads must be in 1..12 on the shared VPS")
     if args.iterations <= 0:
         parser.error("iterations must be positive")
+    if args.learning_rate <= 0.0:
+        parser.error("learning-rate must be positive")
+    if args.num_leaves < 2 or args.max_depth < 1 or args.min_child_samples < 1:
+        parser.error("tree capacity bounds must be positive")
+    if args.failure_horizon < 0 or args.failure_weight < 0.0:
+        parser.error("failure weighting bounds must be nonnegative")
     decisions, provenance = load_decisions(args.paths)
     seeds = sorted({decision.seed for decision in decisions})
     holdout = set(args.holdout_seed or seeds[-1:])
@@ -302,7 +389,11 @@ def main() -> int:
     if not train or not test:
         parser.error("seed-grouped train and holdout sets must both be nonempty")
     encoder = Encoder(train)
-    train_features, labels = _candidate_matrix(train)
+    train_features, labels, sample_weights, weighting = _candidate_matrix(
+        train,
+        failure_horizon=args.failure_horizon,
+        failure_weight=args.failure_weight,
+    )
     x_train = encoder.encode(train_features)
 
     from lightgbm import LGBMClassifier
@@ -312,10 +403,10 @@ def main() -> int:
     model = LGBMClassifier(
         objective="binary",
         n_estimators=args.iterations,
-        learning_rate=0.05,
-        num_leaves=31,
-        max_depth=10,
-        min_child_samples=40,
+        learning_rate=args.learning_rate,
+        num_leaves=args.num_leaves,
+        max_depth=args.max_depth,
+        min_child_samples=args.min_child_samples,
         subsample=0.9,
         colsample_bytree=0.9,
         reg_lambda=1.0,
@@ -328,6 +419,7 @@ def main() -> int:
     model.fit(
         x_train,
         np.asarray(labels, dtype=np.int8),
+        sample_weight=np.asarray(sample_weights, dtype=np.float32),
         categorical_feature=list(range(len(CATEGORICAL_FEATURES))),
     )
     elapsed = time.perf_counter() - started
@@ -363,6 +455,13 @@ def main() -> int:
         "candidate_training_rows": len(labels),
         "duplicate_decisions_skipped": provenance["duplicate_decisions_skipped"],
         "iterations": args.iterations,
+        "model_parameters": {
+            "learning_rate": args.learning_rate,
+            "num_leaves": args.num_leaves,
+            "max_depth": args.max_depth,
+            "min_child_samples": args.min_child_samples,
+        },
+        "failure_weighting": weighting,
         "threads": args.threads,
         "fit_seconds": elapsed,
         "peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0,

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from scripts.train_headless_teacher import Decision, candidate_features, generic_choice
+from scripts.train_headless_teacher import (
+    Decision,
+    candidate_features,
+    candidate_sample_weight,
+    generic_choice,
+)
 from th06_rl.headless_corpus import source_context_id
 
 
@@ -71,3 +76,45 @@ def test_ranker_context_contract_uses_derived_identity_not_raw_json() -> None:
     }
 
     assert source_context_id(observation) == decision().source_context
+
+
+def test_failure_weighting_only_emphasizes_disagreeing_corrective_pair() -> None:
+    failed = Decision(
+        **{
+            **decision().__dict__,
+            "selected_action": "stay",
+            "authority_failure_distance": 1,
+        }
+    )
+
+    teacher_weight = candidate_sample_weight(
+        failed,
+        failed.candidates[1],
+        failure_horizon=120,
+        failure_weight=8.0,
+    )
+    failed_behavior_weight = candidate_sample_weight(
+        failed,
+        failed.candidates[0],
+        failure_horizon=120,
+        failure_weight=8.0,
+    )
+
+    assert teacher_weight == 9.0
+    assert failed_behavior_weight == 9.0
+
+
+def test_failure_weighting_does_not_invent_a_counterfactual_on_agreement() -> None:
+    agreed = Decision(
+        **{
+            **decision().__dict__,
+            "authority_failure_distance": 1,
+        }
+    )
+
+    assert candidate_sample_weight(
+        agreed,
+        agreed.candidates[1],
+        failure_horizon=120,
+        failure_weight=8.0,
+    ) == 1.0
