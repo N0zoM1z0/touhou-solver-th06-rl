@@ -10,7 +10,7 @@ Its accelerated Linux simulation and lockstep environment backend lives in
 [`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless). That
 source-only fork is for corpus generation, replay, and learning acceleration;
 the shipped Windows game remains this solver's final physical validation gate.
-The currently paired local runtime revision is `4b8c90b` on the headless
+The currently paired local runtime revision is `8c3de1d` on the headless
 fork's `th06-rl-headless-spike` branch; solver clients and benchmark protocol
 changes are committed together with that dependency recorded in the evidence
 note.
@@ -41,6 +41,16 @@ forks all 18 Bomb-free actions from the resulting physical state, and compares
 every terminal observation against a cold full-prefix replay. It runs at nice
 15 / low I/O priority and writes a revisioned JSON report under ignored
 `artifacts/`; this is an offline teacher/benchmark path, never resident search.
+
+The paired runtime also supports dynamic `STEP` children from a replayed COW
+checkpoint. `scripts/label_headless_cow_counterfactuals.py` substitutes each
+native-legal first action and then re-runs the native gate plus teacher on every
+counterfactual tick. `scripts/audit_headless_counterfactuals.py` independently
+recomputes outcome rankings and useful-label yield, while
+`scripts/train_headless_cow_value.py` trains seed-grouped LambdaMART action
+values from every branch outcome. The portable schema and game-adapter boundary
+are documented in [docs/COUNTERFACTUAL_LEARNING.md](docs/COUNTERFACTUAL_LEARNING.md).
+None of these offline searches enters the resident control path.
 
 Generate a compact factual trajectory with the paired runtime, then audit it
 independently:
