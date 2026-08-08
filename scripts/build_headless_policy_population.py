@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import subprocess
 from typing import Any, Iterable, Mapping
 
 
@@ -24,6 +25,35 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _runtime_source(binary: Path) -> dict[str, Any]:
+    source = binary.resolve().parent
+    commit = subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    dirty = subprocess.run(
+        ["git", "-C", str(source), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return {"commit": commit, "clean": not dirty, "binary_sha256": _sha256(binary)}
+
+
+def _source_key(source: Mapping[str, Any]) -> tuple[str, str]:
+    return str(source.get("commit", "")), str(source.get("binary_sha256", ""))
+
+
+def _compatible_sources(report: Mapping[str, Any]) -> list[dict[str, Any]]:
+    raw = report.get("compatible_headless_sources")
+    if not isinstance(raw, list):
+        single = report.get("headless_source") or report.get("factual_source")
+        raw = [single] if isinstance(single, Mapping) else []
+    return [dict(source) for source in raw if isinstance(source, Mapping)]
 
 
 def _scope_key(scope: Mapping[str, Any]) -> tuple[int, int, int, int]:
@@ -129,7 +159,12 @@ def _dominates(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     return weak and strict
 
 
-def build_population(model_roots: Iterable[Path], rollout_roots: Iterable[Path]) -> dict[str, Any]:
+def build_population(
+    model_roots: Iterable[Path],
+    rollout_roots: Iterable[Path],
+    *,
+    runtime_source: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     model_files = sorted({
         path.resolve()
         for root in model_roots
@@ -174,6 +209,17 @@ def build_population(model_roots: Iterable[Path], rollout_roots: Iterable[Path])
         closed_loop = _closed_loop_metrics(runs)
         labels = report.get("counterfactual_labels")
         target = labels.get("target") if isinstance(labels, Mapping) else None
+        compatible_sources = _compatible_sources(report)
+        runtime_compatible = (
+            None
+            if runtime_source is None
+            else runtime_source.get("clean") is True
+            and any(
+                source.get("clean") is True
+                and _source_key(source) == _source_key(runtime_source)
+                for source in compatible_sources
+            )
+        )
         evidence_tier = (
             "continuation-evidenced"
             if closed_loop["continuation_runs"] > 0
@@ -188,6 +234,8 @@ def build_population(model_roots: Iterable[Path], rollout_roots: Iterable[Path])
             "scope": dict(scope),
             "algorithm": report.get("algorithm"),
             "objective_family": target or report.get("schema") or "unknown",
+            "compatible_headless_sources": compatible_sources,
+            "runtime_compatible": runtime_compatible,
             "offline_primary_metric": {"name": metric_name, "value": metric_value},
             "holdout_action_entropy": _action_entropy(holdout),
             "native_legal_action_ratio": holdout.get("native_legal_action_ratio"),
@@ -201,20 +249,38 @@ def build_population(model_roots: Iterable[Path], rollout_roots: Iterable[Path])
             "pareto_member": False,
         })
 
-    groups: dict[tuple[tuple[int, int, int, int], str], list[dict[str, Any]]] = defaultdict(list)
+    groups: dict[
+        tuple[tuple[int, int, int, int], str, tuple[tuple[str, str], ...]],
+        list[dict[str, Any]],
+    ] = defaultdict(list)
     for candidate in candidates:
         if candidate["closed_loop"]["runs"]:
-            groups[(_scope_key(candidate["scope"]), candidate["evidence_tier"])].append(candidate)
+            source_group = tuple(sorted(
+                _source_key(source) for source in candidate["compatible_headless_sources"]
+            ))
+            groups[(
+                _scope_key(candidate["scope"]),
+                candidate["evidence_tier"],
+                source_group,
+            )].append(candidate)
     for group in groups.values():
         for candidate in group:
             candidate["pareto_member"] = not any(
                 other is not candidate and _dominates(other, candidate) for other in group
             )
 
-    research = [
+    historical = [
         candidate["model_sha256"]
         for candidate in candidates
         if candidate["pareto_member"] and candidate["evidence_tier"] == "first-failure-only"
+    ]
+    active = lambda candidate: runtime_source is None or candidate["runtime_compatible"] is True
+    research = [
+        candidate["model_sha256"]
+        for candidate in candidates
+        if candidate["pareto_member"]
+        and candidate["evidence_tier"] == "first-failure-only"
+        and active(candidate)
     ]
     high_quality = [
         candidate["model_sha256"]
@@ -222,11 +288,14 @@ def build_population(model_roots: Iterable[Path], rollout_roots: Iterable[Path])
         if candidate["pareto_member"]
         and candidate["evidence_tier"] == "continuation-evidenced"
         and candidate["closed_loop"]["continuation_runs"] >= 2
+        and active(candidate)
     ]
     queue = [
         candidate["model_sha256"]
         for candidate in candidates
-        if candidate["pareto_member"] and candidate["evidence_tier"] != "continuation-evidenced"
+        if candidate["pareto_member"]
+        and candidate["evidence_tier"] != "continuation-evidenced"
+        and active(candidate)
     ]
     return {
         "schema": "th06-rl-headless-policy-population-v1",
@@ -243,6 +312,8 @@ def build_population(model_roots: Iterable[Path], rollout_roots: Iterable[Path])
             "windows_gate": "paired shadow/canary required before incumbent replacement",
         },
         "candidate_count": len(candidates),
+        "active_runtime_source": dict(runtime_source) if runtime_source is not None else None,
+        "historical_pareto_population": historical,
         "research_population": research,
         "high_quality_population": high_quality,
         "continuation_evaluation_queue": queue,
@@ -251,12 +322,24 @@ def build_population(model_roots: Iterable[Path], rollout_roots: Iterable[Path])
 
 
 def main() -> int:
+    root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--models-root", type=Path, action="append", required=True)
     parser.add_argument("--rollouts-root", type=Path, action="append", required=True)
+    parser.add_argument(
+        "--binary",
+        type=Path,
+        default=root / "reference/GensokyoClub-th06-portable/th06",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    result = build_population(args.models_root, args.rollouts_root)
+    if not args.binary.is_file():
+        parser.error(f"headless binary not found: {args.binary}")
+    result = build_population(
+        args.models_root,
+        args.rollouts_root,
+        runtime_source=_runtime_source(args.binary),
+    )
     rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)

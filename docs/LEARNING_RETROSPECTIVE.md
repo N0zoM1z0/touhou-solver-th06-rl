@@ -244,12 +244,14 @@ population should retain different safe tradeoffs instead of collapsing all of
 that support into one label.
 
 `scripts/build_headless_policy_population.py` links each immutable model hash
-to its exact scope, offline report, and closed-loop manifests. Within each
+to its exact scope, compatible clean source commit/binary, offline report, and
+closed-loop manifests. Within each exact source and
 difficulty/character/shot/stage scope it retains the non-dominated candidates
 over worst observed survival, tick-limit rate, authority-failure rate, and,
 when actually measured, HITs per 1000 ticks. Offline accuracy and action
 entropy explain and diversify the archive; they do not dominate a candidate or
-promote it. The online consumer may use consensus, uncertainty, or a
+promote it. Incompatible weights remain historical evidence and are rejected
+by the active queue. The online consumer may use consensus, uncertainty, or a
 contextual selector only to rank the current native safe set.
 
 Evidence tiers are intentionally strict:
@@ -260,21 +262,22 @@ Evidence tiers are intentionally strict:
 - `continuation-evidenced` has HIT-counting rollouts after respawn;
 - Windows shadow/canary remains the only promotion gate.
 
-The current archive contains 41 model artifacts and eight first-failure Pareto
-members across Stages 1--6, but zero high-quality continuation-evidenced
-members. This is an evaluation gap, not a zero-HIT result. The eight candidates
-form the continuation evaluation queue; no new baseline rerun is required.
+The current archive contains 41 model artifacts and 12 historical
+first-failure Pareto members across source builds. Only six Stage 3--5 members
+are compatible with the active `8c3de1de63fd` / `ca4b2e7cb05e` runtime; the
+older Stage 1/2/6 weights correctly fail the exact-source gate. There are still
+zero high-quality continuation-evidenced members. This is an evaluation gap,
+not a zero-HIT result. The six compatible candidates form the active
+continuation evaluation queue; no teacher-baseline rerun is required.
 
 | Stage | Weight (short SHA) | Candidate | Runs | Worst stop tick | Authority-failure rate | Tick-limit rate |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| 1 | `61c256375f68` | corrective-r1 | 2 | 2,999 | 0 | 1.0 |
-| 2 | `71726929362e` | corrective-r1 | 2 | 2,999 | 0 | 1.0 |
+| 3 | `1f029e289d8f` | COW survivable | 2 | 1,370 | 1.0 | 0 |
 | 3 | `5a5df4c75081` | COW profile | 2 | 1,284 | 0.5 | 0.5 |
-| 3 | `985fe927b832` | bootstrap | 1 | 1,585 | 1.0 | 0 |
 | 4 | `38c6cb48f49d` | COW spatial | 2 | 2,763 | 0.5 | 0.5 |
+| 4 | `6290afae140e` | COW corrective-r2 | 2 | 1,882 | 1.0 | 0 |
 | 5 | `0e7de641a0ed` | COW multiseed | 2 | 1,582 | 0.5 | 0.5 |
-| 5 | `d30ffdb8a37a` | bootstrap | 1 | 2,762 | 1.0 | 0 |
-| 6 | `5cbbe4dba599` | corrective-r4 | 2 | 2,999 | 0 | 1.0 |
+| 5 | `71a3688705dd` | COW survivable | 2 | 2,299 | 1.0 | 0 |
 
 These are actual closed-loop weight outcomes, but they used the default
 first-failure protocol. Consequently their HIT count is unknown after the stop

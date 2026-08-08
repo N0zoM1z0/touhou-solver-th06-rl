@@ -80,3 +80,25 @@ def test_high_quality_population_requires_multiple_continuation_runs(tmp_path: P
     assert candidate["closed_loop"]["continuation_runs"] == 2
     assert candidate["closed_loop"]["continuation_hits"] == 2
     assert candidate["closed_loop"]["continuation_hits_per_1000_ticks"] == 0.4
+
+
+def test_active_population_requires_exact_runtime_source(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    rollouts = tmp_path / "rollouts"
+    sha = _candidate(models, "candidate", b"candidate", 0.8)
+    report = models / "candidate" / "report.json"
+    raw = json.loads(report.read_text(encoding="utf-8"))
+    raw["compatible_headless_sources"] = [{
+        "commit": "old", "binary_sha256": "old-bin", "clean": True,
+    }]
+    report.write_text(json.dumps(raw), encoding="utf-8")
+    _rollout(rollouts, "seed1", sha, 2000, continuation=False)
+
+    result = build_population([models], [rollouts], runtime_source={
+        "commit": "current", "binary_sha256": "current-bin", "clean": True,
+    })
+
+    assert result["historical_pareto_population"] == [sha]
+    assert result["research_population"] == []
+    assert result["continuation_evaluation_queue"] == []
+    assert result["candidates"][0]["runtime_compatible"] is False

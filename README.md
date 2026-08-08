@@ -89,9 +89,11 @@ PYTHONPATH=.:src python scripts/build_headless_policy_population.py \
 ```
 
 The archive keeps a per-scope Pareto population rather than selecting one
-offline winner. It separates offline-only, first-failure, and HIT-continuation
-evidence; only the last tier has an observed HIT rate. Population membership
-does not authorize Windows promotion.
+offline winner. It also partitions candidates by exact clean source commit and
+binary hash; incompatible historical weights remain visible but cannot enter
+the active runtime queue. It separates offline-only, first-failure, and
+HIT-continuation evidence; only the last tier has an observed HIT rate.
+Population membership does not authorize Windows promotion.
 
 The offline teacher may run bounded local search, but its selected action is
 rechecked against the four-frame native gate immediately before the synchronous
