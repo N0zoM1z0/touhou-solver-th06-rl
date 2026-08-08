@@ -7,11 +7,10 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 from typing import Any
-
-import joblib
 
 from train_headless_teacher import Decision, Encoder, candidate_features
 from th06_rl.headless import HeadlessClient, HeadlessScope
@@ -62,8 +61,11 @@ def _source_provenance(binary: Path) -> dict[str, Any]:
 
 
 class DistilledRanker:
-    def __init__(self, artifact_path: Path) -> None:
+    def __init__(self, artifact_path: Path, *, threads: int) -> None:
+        import joblib
+
         self.path = artifact_path.resolve()
+        self.threads = threads
         artifact = joblib.load(self.path)
         self.model = artifact["model"]
         self.scope = artifact["scope"]
@@ -96,7 +98,10 @@ class DistilledRanker:
             selected_action="",
         )
         features = [candidate_features(decision, candidate) for candidate in candidates]
-        scores = self.model.booster_.predict(self.encoder.encode(features))
+        scores = self.model.booster_.predict(
+            self.encoder.encode(features),
+            num_threads=self.threads,
+        )
         return str(max(
             zip(candidates, scores, strict=True),
             key=lambda item: (float(item[1]), str(item[0]["action"])),
@@ -114,8 +119,9 @@ def collect(
     max_ticks: int,
     anchor_stride: int,
     teacher_horizon: int,
+    threads: int,
 ) -> Path:
-    ranker = DistilledRanker(model_path)
+    ranker = DistilledRanker(model_path, threads=threads)
     expected_scope = {
         "difficulty": scope.difficulty,
         "character": scope.character,
@@ -253,6 +259,7 @@ def main() -> int:
     parser.add_argument("--max-ticks", type=int, default=1200)
     parser.add_argument("--anchor-stride", type=int, default=120)
     parser.add_argument("--teacher-horizon", type=int, default=12)
+    parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--difficulty", type=int, default=3)
     parser.add_argument("--character", type=int, default=0)
     parser.add_argument("--shot-type", type=int, default=0)
@@ -275,6 +282,10 @@ def main() -> int:
     args = parser.parse_args()
     if min(args.max_ticks, args.anchor_stride, args.teacher_horizon) <= 0:
         parser.error("tick, anchor, and teacher bounds must be positive")
+    if not 1 <= args.threads <= 12:
+        parser.error("threads must be in 1..12 on the shared VPS")
+    os.environ["OMP_NUM_THREADS"] = str(args.threads)
+    os.environ["OMP_THREAD_LIMIT"] = str(args.threads)
     manifest = collect(
         binary=args.binary.resolve(),
         game_directory=args.game_directory.resolve(),
@@ -290,6 +301,7 @@ def main() -> int:
         max_ticks=args.max_ticks,
         anchor_stride=args.anchor_stride,
         teacher_horizon=args.teacher_horizon,
+        threads=args.threads,
     )
     print(json.dumps({"manifest": str(manifest)}, indent=2))
     return 0

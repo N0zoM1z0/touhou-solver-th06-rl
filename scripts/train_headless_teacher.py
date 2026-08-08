@@ -213,7 +213,13 @@ def _candidate_matrix(decisions: Iterable[Decision]) -> tuple[list[dict[str, str
     return features, labels
 
 
-def evaluate(model, encoder: Encoder, decisions: list[Decision]) -> dict[str, Any]:
+def evaluate(
+    model,
+    encoder: Encoder,
+    decisions: list[Decision],
+    *,
+    threads: int,
+) -> dict[str, Any]:
     teacher_matches = 0
     behavior_matches = 0
     generic_matches = 0
@@ -224,7 +230,7 @@ def evaluate(model, encoder: Encoder, decisions: list[Decision]) -> dict[str, An
         for decision in decisions
         for candidate in decision.candidates
     ]
-    probabilities = model.booster_.predict(encoder.encode(features))
+    probabilities = model.booster_.predict(encoder.encode(features), num_threads=threads)
     offset = 0
     for decision in decisions:
         count = len(decision.candidates)
@@ -342,8 +348,8 @@ def main() -> int:
         "threads": args.threads,
         "fit_seconds": elapsed,
         "peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0,
-        "train": evaluate(model, encoder, train),
-        "holdout": evaluate(model, encoder, test),
+        "train": evaluate(model, encoder, train, threads=args.threads),
+        "holdout": evaluate(model, encoder, test, threads=args.threads),
         "promotion_allowed": False,
         "promotion_blocker": (
             "teacher imitation is not an off-policy return estimate; require long multi-seed "
