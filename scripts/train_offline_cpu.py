@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import math
@@ -185,10 +186,20 @@ def _ope(rows: list[LabeledTransition], chosen: list[str], q_target, q_logged) -
     }
 
 
-def _policy_metrics(model, encoder: Encoder, rows: list[LabeledTransition]) -> dict[str, object]:
+def _policy_metrics(
+    model,
+    encoder: Encoder,
+    rows: list[LabeledTransition],
+    training_support: Counter[tuple[str, str]],
+) -> dict[str, object]:
     q_logged = _predict(model, encoder, [row.features for row in rows])
-    chosen = []
-    target_q = []
+    chosen: dict[str, list[str]] = {
+        "unconstrained": [],
+        "baseline_prior_0_18": [],
+        "support32_margin_0_5": [],
+        "support32_margin_1_0": [],
+    }
+    target_q: dict[str, list[float]] = {name: [] for name in chosen}
     baseline_q = []
     # Bound peak memory while scoring every native-safe counterfactual action.
     for row_start in range(0, len(rows), 2048):
@@ -208,32 +219,118 @@ def _policy_metrics(model, encoder: Encoder, rows: list[LabeledTransition]) -> d
                 range(len(scores)),
                 key=lambda item: (float(scores[item]), row.legal_actions[item]),
             )
-            chosen.append(row.legal_actions[index])
-            target_q.append(float(scores[index]))
             baseline_index = row.legal_actions.index(row.baseline_action)
-            baseline_q.append(float(scores[baseline_index]))
+            baseline_value = float(scores[baseline_index])
+            baseline_q.append(baseline_value)
+            unconstrained = row.legal_actions[index]
+            chosen["unconstrained"].append(unconstrained)
+            target_q["unconstrained"].append(float(scores[index]))
+            prior_index = max(
+                range(len(scores)),
+                key=lambda item: (
+                    float(scores[item])
+                    + (0.18 if row.legal_actions[item] == row.baseline_action else 0.0),
+                    row.legal_actions[item],
+                ),
+            )
+            chosen["baseline_prior_0_18"].append(row.legal_actions[prior_index])
+            target_q["baseline_prior_0_18"].append(float(scores[prior_index]))
+            supported = [
+                item for item, action in enumerate(row.legal_actions)
+                if action == row.baseline_action
+                or training_support[(row.source_context, action)] >= 32
+            ]
+            supported_index = max(
+                supported,
+                key=lambda item: (float(scores[item]), row.legal_actions[item]),
+            )
+            for margin in (0.5, 1.0):
+                name = f"support32_margin_{str(margin).replace('.', '_')}"
+                selected_index = (
+                    supported_index
+                    if float(scores[supported_index]) >= baseline_value + margin
+                    else baseline_index
+                )
+                chosen[name].append(row.legal_actions[selected_index])
+                target_q[name].append(float(scores[selected_index]))
     baseline = [row.baseline_action for row in rows]
+    evaluated = {
+        name: {
+            **_ope(rows, actions, target_q[name], q_logged),
+            "action_counts": dict(Counter(actions).most_common()),
+            "vs_baseline_disagreements": sum(
+                action != baseline_action
+                for action, baseline_action in zip(actions, baseline, strict=True)
+            ),
+        }
+        for name, actions in chosen.items()
+    }
     return {
-        "model_policy": _ope(rows, chosen, target_q, q_logged),
+        "logged_behavior": {
+            "mean_reconstructed_reward": sum(row.reward for row in rows) / len(rows),
+            "hit_within_120_rate": sum(row.hit_within_120 for row in rows) / len(rows),
+        },
+        "model_policy": evaluated["unconstrained"],
+        "policy_variants": evaluated,
         "reactive_baseline": _ope(rows, baseline, baseline_q, q_logged),
-        "model_vs_baseline_disagreements": sum(a != b for a, b in zip(chosen, baseline, strict=True)),
-        "model_selected_outside_native_safe_set": sum(
-            action not in row.legal_actions for action, row in zip(chosen, rows, strict=True)
+        "model_action_counts": dict(Counter(chosen["unconstrained"]).most_common()),
+        "baseline_action_counts": dict(Counter(baseline).most_common()),
+        "model_vs_baseline_disagreements": evaluated["unconstrained"]["vs_baseline_disagreements"],
+        "any_variant_selected_outside_native_safe_set": sum(
+            action not in row.legal_actions
+            for actions in chosen.values()
+            for action, row in zip(actions, rows, strict=True)
         ),
-        "bomb_selections": sum("bomb" in action.casefold() for action in chosen),
+        "bomb_selections_across_variants": sum(
+            "bomb" in action.casefold()
+            for actions in chosen.values()
+            for action in actions
+        ),
     }
 
 
-def _sample_training(rows: list[LabeledTransition], limit: int, seed: int) -> list[LabeledTransition]:
-    if len(rows) <= limit:
-        return rows
-    important = [row for row in rows if row.hit_within_120 or row.reward < 0.0]
+def _load_training_rows(
+    dataset: Path,
+    runs,
+    *,
+    exact_context_only: bool,
+    limit: int,
+    seed: int,
+) -> tuple[list[LabeledTransition], int, list[float]]:
+    """Keep every rare failure window and reservoir-sample ordinary rows."""
+    rng = random.Random(seed)
+    important: list[LabeledTransition] = []
+    ordinary: list[LabeledTransition] = []
+    ordinary_seen = 0
+    total = 0
+    for run in runs:
+        for row in load_labeled_run(
+            dataset,
+            run,
+            exact_context_only=exact_context_only,
+        ):
+            total += 1
+            if row.hit_within_120 or row.reward < 0.0:
+                important.append(row)
+                continue
+            ordinary_seen += 1
+            if len(ordinary) < limit:
+                ordinary.append(row)
+            else:
+                index = rng.randrange(ordinary_seen)
+                if index < limit:
+                    ordinary[index] = row
     if len(important) >= limit:
-        return important[:limit]
-    important_ids = {(row.run_id, row.sequence) for row in important}
-    ordinary = [row for row in rows if (row.run_id, row.sequence) not in important_ids]
-    random.Random(seed).shuffle(ordinary)
-    return important + ordinary[:limit - len(important)]
+        rng.shuffle(important)
+        selected = important[:limit]
+        return selected, total, [len(important) / len(selected)] * len(selected)
+    retained_ordinary = ordinary[:limit - len(important)]
+    ordinary_weight = ordinary_seen / len(retained_ordinary) if retained_ordinary else 1.0
+    return (
+        important + retained_ordinary,
+        total,
+        [1.0] * len(important) + [ordinary_weight] * len(retained_ordinary),
+    )
 
 
 def main() -> int:
@@ -268,23 +365,34 @@ def main() -> int:
     train_runs = runs[:-args.validation_runs]
     validation_runs = runs[-args.validation_runs:]
     exact = args.view == "exact-v5"
-    train_rows = [
-        row
-        for run in train_runs
-        for row in load_labeled_run(args.dataset, run, exact_context_only=exact)
-    ]
+    sampled_train, train_rows_before_cap, corpus_sampling_weights = _load_training_rows(
+        args.dataset,
+        train_runs,
+        exact_context_only=exact,
+        limit=args.max_train_rows,
+        seed=args.seed,
+    )
     validation_rows = [
         row
         for run in validation_runs
         for row in load_labeled_run(args.dataset, run, exact_context_only=exact)
     ]
-    sampled_train = _sample_training(train_rows, args.max_train_rows, args.seed)
     encoder = Encoder(sampled_train)
     x_train = encoder.encode([row.features for row in sampled_train])
     y_train = [row.reward for row in sampled_train]
     # Temper inverse propensity to reduce behavior-policy bias without letting
     # rare exploratory rows dominate a small physical-run split.
-    weights = [math.sqrt(min(20.0, 1.0 / row.behavior_probability)) for row in sampled_train]
+    weights = [
+        corpus_weight * math.sqrt(min(20.0, 1.0 / row.behavior_probability))
+        for row, corpus_weight in zip(
+            sampled_train,
+            corpus_sampling_weights,
+            strict=True,
+        )
+    ]
+    training_support = Counter(
+        (row.source_context, row.action) for row in sampled_train
+    )
     y_validation = [row.reward for row in validation_rows]
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "encoder.json").write_text(
@@ -321,7 +429,12 @@ def main() -> int:
                 "average_precision_from_negative_q": float(average_precision_score(hit_actual, [-value for value in predicted])),
                 "roc_auc_from_negative_q": float(roc_auc_score(hit_actual, [-value for value in predicted])),
             }
-        policy_evaluation = _policy_metrics(model, encoder, validation_rows)
+        policy_evaluation = _policy_metrics(
+            model,
+            encoder,
+            validation_rows,
+            training_support,
+        )
         results[algorithm] = {
             "model_file": model_path.name,
             "model_sha256": _sha256(model_path),
@@ -350,9 +463,16 @@ def main() -> int:
             "kind": "chronological-complete-practice-stage",
             "train_runs": [run.run_id for run in train_runs],
             "validation_runs": [run.run_id for run in validation_runs],
-            "train_rows_before_cap": len(train_rows),
+            "train_rows_before_cap": train_rows_before_cap,
             "train_rows": len(sampled_train),
             "validation_rows": len(validation_rows),
+            "train_hit_within_120_rate": (
+                sum(row.hit_within_120 for row in sampled_train) / len(sampled_train)
+            ),
+            "validation_hit_within_120_rate": (
+                sum(row.hit_within_120 for row in validation_rows) / len(validation_rows)
+            ),
+            "maximum_corpus_sampling_weight": max(corpus_sampling_weights),
         },
         "resource_limits": {"threads": args.threads, "sequential_models": True, "max_train_rows": args.max_train_rows},
         "libraries": versions,
