@@ -6,6 +6,11 @@ movement set, lets a lightweight learned policy rank that set, and freshly
 certifies the selected action immediately before publication. It performs no
 timeline/ECL expansion or combinatorial beam search in the resident hot path.
 
+Its accelerated Linux simulation and lockstep environment backend lives in
+[`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless). That
+source-only fork is for corpus generation, replay, and learning acceleration;
+the shipped Windows game remains this solver's final physical validation gate.
+
 Online UCB and future imitation/RL policies own long-horizon/global-local
 tradeoffs but cannot enlarge the native safe set, change collision physics,
 lower margins, request Bomb, or bypass fail-close behavior. Cold start uses
