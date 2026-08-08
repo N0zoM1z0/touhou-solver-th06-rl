@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import selectors
 import signal
 import shutil
 import subprocess
+import time
 
 from .headless import HeadlessProtocolError, HeadlessScope
 
@@ -26,6 +28,14 @@ class ForkCheckpointResult:
     child_pid: int
     status: int
     restored_tick: int
+
+
+@dataclass(frozen=True)
+class ForkStepResult:
+    child_pid: int
+    status: int
+    terminal_observation: dict[str, object]
+    aborted: bool
 
 
 class HeadlessForkserver:
@@ -51,9 +61,12 @@ class HeadlessForkserver:
         self.seed = seed
         self.auto_shoot = auto_shoot
         self.read_timeout = read_timeout
-        self.process: subprocess.Popen[str] | None = None
+        self.process: subprocess.Popen[bytes] | None = None
+        self._read_buffer = bytearray()
         self.checkpoint_tick: int | None = None
         self.checkpoint_parent_tick: int | None = None
+        self.step_child_active = False
+        self.step_child_terminal: dict[str, object] | None = None
 
     def _command(self) -> list[str]:
         command = [
@@ -85,18 +98,35 @@ class HeadlessForkserver:
         process = self.process
         if process is None or process.stdout is None:
             raise HeadlessProtocolError("forkserver process is not running")
-        with selectors.DefaultSelector() as selector:
-            selector.register(process.stdout, selectors.EVENT_READ)
-            if not selector.select(self.read_timeout):
+        deadline = time.monotonic() + self.read_timeout
+        while b"\n" not in self._read_buffer:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
                 raise HeadlessProtocolError(
                     f"forkserver response timed out; process status={process.poll()}"
                 )
-        line = process.stdout.readline()
-        if not line:
-            raise HeadlessProtocolError(
-                f"forkserver ended before a response; status={process.poll()}"
-            )
-        return line.strip()
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                if not selector.select(remaining):
+                    raise HeadlessProtocolError(
+                        f"forkserver response timed out; process status={process.poll()}"
+                    )
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk:
+                raise HeadlessProtocolError(
+                    f"forkserver ended before a response; status={process.poll()}"
+                )
+            self._read_buffer.extend(chunk)
+        raw, _, remainder = self._read_buffer.partition(b"\n")
+        self._read_buffer = bytearray(remainder)
+        return raw.decode("utf-8").strip()
+
+    @staticmethod
+    def _write(process: subprocess.Popen[bytes], line: str) -> None:
+        if process.stdin is None:
+            raise HeadlessProtocolError("forkserver control input is closed")
+        process.stdin.write(line.encode("utf-8"))
+        process.stdin.flush()
 
     def start(self) -> int:
         if self.process is not None:
@@ -111,8 +141,8 @@ class HeadlessForkserver:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=None,
-            text=True,
-            bufsize=1,
+            text=False,
+            bufsize=0,
             start_new_session=True,
         )
         ready = self._readline().split()
@@ -153,8 +183,7 @@ class HeadlessForkserver:
             raise FileNotFoundError(actions)
         trace.parent.mkdir(parents=True, exist_ok=True)
         command = "RUN_FINAL" if summary_only else "RUN"
-        process.stdin.write(f"{command} {terminal_tick} {actions} {trace}\n")
-        process.stdin.flush()
+        self._write(process, f"{command} {terminal_tick} {actions} {trace}\n")
         response = self._readline().split()
         if response and response[0] == "ERROR":
             raise HeadlessProtocolError(f"forkserver rejected run: {' '.join(response[1:])}")
@@ -175,6 +204,91 @@ class HeadlessForkserver:
             raise HeadlessProtocolError("forked headless child produced no trace")
         return ForkRunResult(child_pid, status, trace, summary_only)
 
+    def _read_step_observation(self) -> dict[str, object]:
+        line = self._readline()
+        try:
+            observation = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise HeadlessProtocolError(
+                f"invalid fork STEP JSON observation: {error}"
+            ) from error
+        if not isinstance(observation, dict):
+            raise HeadlessProtocolError("fork STEP observation is not a JSON object")
+        if observation.get("terminal_reason") is not None:
+            self.step_child_terminal = observation
+        return observation
+
+    def begin_step_session(self, *, terminal_tick: int) -> dict[str, object]:
+        """Fork an interactive child from the current immutable checkpoint."""
+        process = self.process
+        checkpoint = self.checkpoint_tick
+        if process is None or process.stdin is None or checkpoint is None:
+            raise HeadlessProtocolError("forkserver process is not running")
+        if self.step_child_active:
+            raise HeadlessProtocolError("fork STEP child is already active")
+        if terminal_tick <= checkpoint:
+            raise ValueError("fork STEP terminal tick must follow its checkpoint")
+        self._write(process, f"STEP {terminal_tick}\n")
+        self.step_child_active = True
+        self.step_child_terminal = None
+        return self._read_step_observation()
+
+    def step_session(self, action: str) -> dict[str, object]:
+        """Advance one Bomb-free action in the active interactive child."""
+        from .offline import ACTION_SET
+
+        process = self.process
+        if process is None or process.stdin is None or not self.step_child_active:
+            raise HeadlessProtocolError("no fork STEP child is active")
+        if self.step_child_terminal is not None:
+            raise HeadlessProtocolError("fork STEP child is already terminal")
+        if action not in ACTION_SET:
+            raise ValueError(f"unknown or forbidden fork STEP action: {action}")
+        self._write(process, action + "\n")
+        return self._read_step_observation()
+
+    def _finish_step_session(self, *, aborted: bool, allow_error: bool) -> ForkStepResult:
+        if not self.step_child_active or self.step_child_terminal is None:
+            raise HeadlessProtocolError("fork STEP child has no terminal observation")
+        response = self._readline().split()
+        terminal = self.step_child_terminal
+        self.step_child_active = False
+        self.step_child_terminal = None
+        if len(response) != 3 or response[0] != "DONE":
+            raise HeadlessProtocolError(
+                f"invalid fork STEP completion: {' '.join(response)}"
+            )
+        try:
+            child_pid = int(response[1])
+            status = int(response[2])
+        except ValueError as error:
+            raise HeadlessProtocolError(
+                f"non-numeric fork STEP completion: {' '.join(response)}"
+            ) from error
+        if status != 0 and not allow_error:
+            raise HeadlessProtocolError(
+                f"fork STEP child {child_pid} failed with status {status}"
+            )
+        return ForkStepResult(child_pid, status, terminal, aborted)
+
+    def finish_step_session(self) -> ForkStepResult:
+        """Consume DONE after a physical terminal or requested tick limit."""
+        return self._finish_step_session(aborted=False, allow_error=False)
+
+    def abort_step_session(self) -> ForkStepResult:
+        """Fail-close a branch whose external native authority became empty."""
+        process = self.process
+        if process is None or process.stdin is None or not self.step_child_active:
+            raise HeadlessProtocolError("no fork STEP child is active")
+        if self.step_child_terminal is None:
+            # Deliberately outside the movement vocabulary. The runtime emits
+            # one input-error terminal observation and never publishes Bomb.
+            self._write(process, "__authority_abort__\n")
+            terminal = self._read_step_observation()
+            if terminal.get("terminal_reason") != "input-error":
+                raise HeadlessProtocolError("fork STEP authority abort did not fail closed")
+        return self._finish_step_session(aborted=True, allow_error=True)
+
     def enter_checkpoint(
         self,
         *,
@@ -193,8 +307,7 @@ class HeadlessForkserver:
         actions = self._protocol_path(actions_path)
         if not actions.is_file():
             raise FileNotFoundError(actions)
-        process.stdin.write(f"CHECKPOINT {terminal_tick} {actions}\n")
-        process.stdin.flush()
+        self._write(process, f"CHECKPOINT {terminal_tick} {actions}\n")
         response = self._readline().split()
         if response and response[0] == "ERROR":
             raise HeadlessProtocolError(
@@ -222,8 +335,7 @@ class HeadlessForkserver:
         parent_tick = self.checkpoint_parent_tick
         if process is None or process.stdin is None or parent_tick is None:
             raise HeadlessProtocolError("no nested forkserver checkpoint is active")
-        process.stdin.write("QUIT\n")
-        process.stdin.flush()
+        self._write(process, "QUIT\n")
         response = self._readline().split()
         self.checkpoint_parent_tick = None
         self.checkpoint_tick = parent_tick
@@ -248,6 +360,11 @@ class HeadlessForkserver:
         process = self.process
         if process is None:
             return
+        if process.poll() is None and self.step_child_active:
+            try:
+                self.abort_step_session()
+            except (BrokenPipeError, HeadlessProtocolError):
+                pass
         try:
             if process.poll() is None and self.checkpoint_parent_tick is not None:
                 self.leave_checkpoint()
@@ -255,8 +372,7 @@ class HeadlessForkserver:
             pass
         if process.poll() is None and process.stdin is not None:
             try:
-                process.stdin.write("QUIT\n")
-                process.stdin.flush()
+                self._write(process, "QUIT\n")
             except BrokenPipeError:
                 pass
         try:
@@ -284,6 +400,9 @@ class HeadlessForkserver:
         self.process = None
         self.checkpoint_tick = None
         self.checkpoint_parent_tick = None
+        self.step_child_active = False
+        self.step_child_terminal = None
+        self._read_buffer.clear()
 
     def __enter__(self) -> HeadlessForkserver:
         self.start()

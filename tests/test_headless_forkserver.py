@@ -33,6 +33,15 @@ def _fake_forkserver(path: Path) -> Path:
                     nested = True
                     print(f"READY {fields[1]}", flush=True)
                     continue
+                if fields == ["STEP", "10"]:
+                    print('{"tick":1,"terminal_reason":null}', flush=True)
+                    action = sys.stdin.readline().strip()
+                    terminal = "input-error" if action == "__authority_abort__" else "tick-limit"
+                    print(f'{{"tick":2,"terminal_reason":"{terminal}"}}', flush=True)
+                    child += 1
+                    status = 1 if terminal == "input-error" else 0
+                    print(f"DONE {child} {status}", flush=True)
+                    continue
                 if len(fields) != 4 or fields[0] not in {"RUN", "RUN_FINAL"}:
                     print("ERROR bad-command", flush=True)
                     continue
@@ -144,5 +153,43 @@ def test_forkserver_replays_one_prefix_for_multiple_summary_branches(
         restored = server.leave_checkpoint()
         assert restored.restored_tick == 1
         assert server.checkpoint_tick == 1
+    finally:
+        server.close()
+
+
+def test_forkserver_interactive_child_reuses_control_pipes(tmp_path: Path) -> None:
+    server = HeadlessForkserver(
+        binary=_fake_forkserver(tmp_path / "fake-forkserver"),
+        game_directory=tmp_path,
+        scope=HeadlessScope(3, 0, 0, 6),
+        seed=7,
+    )
+    try:
+        server.start()
+        assert server.begin_step_session(terminal_tick=10)["tick"] == 1
+        terminal = server.step_session("stay")
+        assert terminal["terminal_reason"] == "tick-limit"
+        result = server.finish_step_session()
+        assert result.status == 0
+        assert result.aborted is False
+        assert result.terminal_observation == terminal
+    finally:
+        server.close()
+
+
+def test_forkserver_interactive_child_can_fail_close_authority(tmp_path: Path) -> None:
+    server = HeadlessForkserver(
+        binary=_fake_forkserver(tmp_path / "fake-forkserver"),
+        game_directory=tmp_path,
+        scope=HeadlessScope(3, 0, 0, 6),
+        seed=7,
+    )
+    try:
+        server.start()
+        server.begin_step_session(terminal_tick=10)
+        result = server.abort_step_session()
+        assert result.status == 1
+        assert result.aborted is True
+        assert result.terminal_observation["terminal_reason"] == "input-error"
     finally:
         server.close()
