@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from scripts.train_headless_teacher import (
     Decision,
+    apply_counterfactual_labels,
     candidate_features,
     candidate_sample_weight,
     generic_choice,
@@ -118,3 +119,37 @@ def test_failure_weighting_does_not_invent_a_counterfactual_on_agreement() -> No
         failure_horizon=120,
         failure_weight=8.0,
     ) == 1.0
+
+
+def test_dynamic_counterfactual_can_override_local_teacher_label(tmp_path) -> None:
+    current = decision()
+    current = Decision(**{**current.__dict__, "observation_sha256": "abc"})
+    label = tmp_path / "label.json"
+    label.write_text(
+        __import__("json").dumps({
+            "schema": "th06-rl-headless-cow-counterfactual-v1",
+            "scope": {"stage": 6},
+            "input_source": {"commit": "source"},
+            "runtime_source": {"commit": "runtime", "clean": True},
+            "checkpoints": [{"observation_sha256": "abc", "best_actions": ["stay"]}],
+        }),
+        encoding="utf-8",
+    )
+
+    updated, report = apply_counterfactual_labels(
+        [current],
+        {"scope": {"stage": 6}, "source": {"commit": "source"}},
+        [label],
+    )
+
+    assert updated[0].teacher_action == "stay"
+    assert updated[0].counterfactual_original_action == "left"
+    assert report["changed_local_teacher_labels"] == 1
+    weight = candidate_sample_weight(
+        updated[0],
+        updated[0].candidates[0],
+        failure_horizon=0,
+        failure_weight=0.0,
+        counterfactual_weight=16.0,
+    )
+    assert weight == 17.0

@@ -62,6 +62,7 @@ class Decision:
     selected_action: str
     observation_sha256: str = ""
     authority_failure_distance: int | None = None
+    counterfactual_original_action: str | None = None
 
 
 def candidate_features(decision: Decision, candidate: Mapping[str, Any]) -> dict[str, str | float]:
@@ -128,6 +129,7 @@ def candidate_sample_weight(
     *,
     failure_horizon: int,
     failure_weight: float,
+    counterfactual_weight: float = 0.0,
 ) -> float:
     """Emphasize the corrective pair before a demonstrated authority dead-end.
 
@@ -136,8 +138,16 @@ def candidate_sample_weight(
     weight the teacher/behavior pair when they disagree, leaving all other
     candidates and teacher-agreeing failures at their ordinary imitation weight.
     """
-    distance = decision.authority_failure_distance
+    weight = 1.0
     if (
+        counterfactual_weight > 0.0
+        and decision.counterfactual_original_action is not None
+        and str(candidate["action"])
+        in {decision.teacher_action, decision.counterfactual_original_action}
+    ):
+        weight = max(weight, 1.0 + counterfactual_weight)
+    distance = decision.authority_failure_distance
+    if not (
         failure_horizon <= 0
         or failure_weight <= 0.0
         or distance is None
@@ -146,9 +156,9 @@ def candidate_sample_weight(
         or decision.teacher_action == decision.selected_action
         or str(candidate["action"]) not in {decision.teacher_action, decision.selected_action}
     ):
-        return 1.0
-    proximity = (failure_horizon - distance + 1) / failure_horizon
-    return 1.0 + failure_weight * proximity
+        proximity = (failure_horizon - distance + 1) / failure_horizon
+        weight = max(weight, 1.0 + failure_weight * proximity)
+    return weight
 
 
 class Encoder:
@@ -272,16 +282,92 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
     }
 
 
+def _counterfactual_files(paths: Iterable[Path]) -> tuple[Path, ...]:
+    result = []
+    for path in paths:
+        if path.is_file():
+            result.append(path)
+        elif path.is_dir():
+            result.extend(sorted(path.rglob("*.json")))
+    return tuple(dict.fromkeys(item.resolve() for item in result))
+
+
+def apply_counterfactual_labels(
+    decisions: list[Decision],
+    provenance: Mapping[str, Any],
+    paths: Iterable[Path],
+) -> tuple[list[Decision], dict[str, Any]]:
+    files = _counterfactual_files(paths)
+    if not files:
+        raise ValueError("no counterfactual label files found")
+    labels: dict[str, str] = {}
+    ambiguous = 0
+    checkpoints = 0
+    runtime_sources = set()
+    for path in files:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if document.get("schema") != "th06-rl-headless-cow-counterfactual-v1":
+            raise ValueError(f"unsupported counterfactual schema: {path}")
+        if document.get("scope") != provenance["scope"]:
+            raise ValueError("counterfactual labels silently mix scopes")
+        if document.get("input_source", {}).get("commit") != provenance["source"].get("commit"):
+            raise ValueError("counterfactual labels use a different factual source revision")
+        runtime_sources.add(json.dumps(document.get("runtime_source"), sort_keys=True))
+        for checkpoint in document.get("checkpoints", []):
+            checkpoints += 1
+            best = tuple(str(action) for action in checkpoint.get("best_actions", []))
+            if len(best) != 1:
+                ambiguous += 1
+                continue
+            digest = str(checkpoint["observation_sha256"])
+            previous = labels.get(digest)
+            if previous is not None and previous != best[0]:
+                raise ValueError("counterfactual checkpoints disagree on a unique best action")
+            labels[digest] = best[0]
+
+    matched = 0
+    changed = 0
+    output = []
+    for decision in decisions:
+        action = labels.get(decision.observation_sha256)
+        if action is None:
+            output.append(decision)
+            continue
+        if action not in decision.legal_actions:
+            raise ValueError("counterfactual best action escaped the factual native legal set")
+        matched += 1
+        changed += action != decision.teacher_action
+        output.append(replace(
+            decision,
+            teacher_action=action,
+            counterfactual_original_action=(
+                decision.teacher_action if action != decision.teacher_action else None
+            ),
+        ))
+    return output, {
+        "files": len(files),
+        "checkpoints": checkpoints,
+        "unique_unambiguous_labels": len(labels),
+        "ambiguous_checkpoints_skipped": ambiguous,
+        "matched_decisions": matched,
+        "changed_local_teacher_labels": changed,
+        "unmatched_labels": len(labels) - matched,
+        "runtime_sources": [json.loads(item) for item in sorted(runtime_sources)],
+    }
+
+
 def _candidate_matrix(
     decisions: Iterable[Decision],
     *,
     failure_horizon: int,
     failure_weight: float,
+    counterfactual_weight: float,
 ) -> tuple[list[dict[str, str | float]], list[int], list[float], dict[str, Any]]:
     features = []
     labels = []
     weights = []
     corrective_decisions = 0
+    counterfactual_decisions = 0
     for decision in decisions:
         corrective = False
         for candidate in decision.candidates:
@@ -292,14 +378,18 @@ def _candidate_matrix(
                 candidate,
                 failure_horizon=failure_horizon,
                 failure_weight=failure_weight,
+                counterfactual_weight=counterfactual_weight,
             )
             weights.append(weight)
             corrective = corrective or weight > 1.0
         corrective_decisions += int(corrective)
+        counterfactual_decisions += int(decision.counterfactual_original_action is not None)
     return features, labels, weights, {
         "authority_failure_horizon": failure_horizon,
         "corrective_pair_weight": failure_weight,
         "corrective_decisions": corrective_decisions,
+        "counterfactual_pair_weight": counterfactual_weight,
+        "counterfactual_decisions": counterfactual_decisions,
         "weighted_candidate_rows": sum(weight > 1.0 for weight in weights),
         "maximum_sample_weight": max(weights, default=1.0),
     }
@@ -368,6 +458,8 @@ def main() -> int:
     parser.add_argument("--min-child-samples", type=int, default=40)
     parser.add_argument("--failure-horizon", type=int, default=0)
     parser.add_argument("--failure-weight", type=float, default=0.0)
+    parser.add_argument("--counterfactual-labels", type=Path, action="append")
+    parser.add_argument("--counterfactual-weight", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=6006)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -379,9 +471,16 @@ def main() -> int:
         parser.error("learning-rate must be positive")
     if args.num_leaves < 2 or args.max_depth < 1 or args.min_child_samples < 1:
         parser.error("tree capacity bounds must be positive")
-    if args.failure_horizon < 0 or args.failure_weight < 0.0:
+    if min(args.failure_horizon, args.failure_weight, args.counterfactual_weight) < 0:
         parser.error("failure weighting bounds must be nonnegative")
     decisions, provenance = load_decisions(args.paths)
+    counterfactuals = None
+    if args.counterfactual_labels:
+        decisions, counterfactuals = apply_counterfactual_labels(
+            decisions,
+            provenance,
+            args.counterfactual_labels,
+        )
     seeds = sorted({decision.seed for decision in decisions})
     holdout = set(args.holdout_seed or seeds[-1:])
     train = [decision for decision in decisions if decision.seed not in holdout]
@@ -393,6 +492,7 @@ def main() -> int:
         train,
         failure_horizon=args.failure_horizon,
         failure_weight=args.failure_weight,
+        counterfactual_weight=args.counterfactual_weight,
     )
     x_train = encoder.encode(train_features)
 
@@ -462,6 +562,7 @@ def main() -> int:
             "min_child_samples": args.min_child_samples,
         },
         "failure_weighting": weighting,
+        "counterfactual_labels": counterfactuals,
         "threads": args.threads,
         "fit_seconds": elapsed,
         "peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0,
