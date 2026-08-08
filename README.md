@@ -51,6 +51,9 @@ recomputes outcome rankings and useful-label yield, while
 values from every branch outcome. The portable schema and game-adapter boundary
 are documented in [docs/COUNTERFACTUAL_LEARNING.md](docs/COUNTERFACTUAL_LEARNING.md).
 None of these offline searches enters the resident control path.
+The evidence and decision history behind the transition from online UCB-only
+learning to this hybrid design is maintained in
+[docs/LEARNING_RETROSPECTIVE.md](docs/LEARNING_RETROSPECTIVE.md).
 
 Generate a compact factual trajectory with the paired runtime, then audit it
 independently:
