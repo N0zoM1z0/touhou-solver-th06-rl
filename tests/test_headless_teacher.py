@@ -202,6 +202,51 @@ def test_dynamic_counterfactual_can_override_local_teacher_label(tmp_path) -> No
     assert weight == 17.0
 
 
+def test_survivable_counterfactual_target_keeps_all_full_horizon_actions(tmp_path) -> None:
+    current = Decision(**{**decision().__dict__, "observation_sha256": "abc"})
+    label = tmp_path / "survivable.json"
+    label.write_text(
+        __import__("json").dumps({
+            "schema": "th06-rl-headless-cow-counterfactual-v1",
+            "scope": {"stage": 6},
+            "input_source": {"commit": "source"},
+            "runtime_source": {"commit": "runtime", "clean": True},
+            "checkpoints": [{
+                "observation_sha256": "abc",
+                "branch_frames": 180,
+                "best_actions": ["stay"],
+                "outcomes": [
+                    {
+                        "first_action": "stay",
+                        "survival_ticks": 180,
+                        "physical_deaths_delta": 0,
+                        "termination_reason": "tick-limit",
+                    },
+                    {
+                        "first_action": "left",
+                        "survival_ticks": 180,
+                        "physical_deaths_delta": 0,
+                        "termination_reason": "tick-limit",
+                    },
+                ],
+            }],
+        }),
+        encoding="utf-8",
+    )
+
+    updated, report = apply_counterfactual_labels(
+        [current],
+        {"scope": {"stage": 6}, "source": {"commit": "source"}},
+        [label],
+        target="survivable",
+    )
+
+    assert updated[0].teacher_action == "left"
+    assert updated[0].counterfactual_acceptable_actions == ("stay", "left")
+    assert updated[0].counterfactual_original_action is None
+    assert report["mean_acceptable_actions"] == 2.0
+
+
 def test_runtime_compatibility_requires_exact_clean_commit_and_binary() -> None:
     allowed = [{"commit": "new", "binary_sha256": "abc", "clean": True}]
 

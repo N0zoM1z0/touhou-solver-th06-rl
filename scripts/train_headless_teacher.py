@@ -70,6 +70,7 @@ class Decision:
     observation_sha256: str = ""
     authority_failure_distance: int | None = None
     counterfactual_original_action: str | None = None
+    counterfactual_acceptable_actions: tuple[str, ...] | None = None
 
 
 def candidate_features(decision: Decision, candidate: Mapping[str, Any]) -> dict[str, str | float]:
@@ -154,11 +155,15 @@ def candidate_sample_weight(
     candidates and teacher-agreeing failures at their ordinary imitation weight.
     """
     weight = 1.0
+    counterfactual_actions = decision.counterfactual_acceptable_actions
     if (
         counterfactual_weight > 0.0
-        and decision.counterfactual_original_action is not None
+        and counterfactual_actions is not None
         and str(candidate["action"])
-        in {decision.teacher_action, decision.counterfactual_original_action}
+        in set(counterfactual_actions).union(
+            {decision.counterfactual_original_action}
+            if decision.counterfactual_original_action is not None else set()
+        )
     ):
         weight = max(weight, 1.0 + counterfactual_weight)
     distance = decision.authority_failure_distance
@@ -322,11 +327,15 @@ def apply_counterfactual_labels(
     decisions: list[Decision],
     provenance: Mapping[str, Any],
     paths: Iterable[Path],
+    *,
+    target: str = "unique-best",
 ) -> tuple[list[Decision], dict[str, Any]]:
+    if target not in {"unique-best", "survivable"}:
+        raise ValueError("counterfactual target must be unique-best or survivable")
     files = _counterfactual_files(paths)
     if not files:
         raise ValueError("no counterfactual label files found")
-    labels: dict[str, str] = {}
+    labels: dict[str, tuple[str, ...]] = {}
     ambiguous = 0
     checkpoints = 0
     runtime_sources = set()
@@ -342,33 +351,47 @@ def apply_counterfactual_labels(
         for checkpoint in document.get("checkpoints", []):
             checkpoints += 1
             best = tuple(str(action) for action in checkpoint.get("best_actions", []))
-            if len(best) != 1:
+            if target == "survivable":
+                branch_frames = int(checkpoint["branch_frames"])
+                selected = tuple(
+                    str(outcome["first_action"])
+                    for outcome in checkpoint["outcomes"]
+                    if int(outcome["survival_ticks"]) == branch_frames
+                    and int(outcome["physical_deaths_delta"]) == 0
+                    and outcome["termination_reason"] in {"tick-limit", "chain-exit-success"}
+                )
+                selected = selected or best
+            else:
+                selected = best
+            if not selected or (target == "unique-best" and len(selected) != 1):
                 ambiguous += 1
                 continue
             digest = str(checkpoint["observation_sha256"])
             previous = labels.get(digest)
-            if previous is not None and previous != best[0]:
-                raise ValueError("counterfactual checkpoints disagree on a unique best action")
-            labels[digest] = best[0]
+            if previous is not None and previous != selected:
+                raise ValueError("counterfactual checkpoints disagree on target actions")
+            labels[digest] = selected
 
     matched = 0
     changed = 0
     output = []
     for decision in decisions:
-        action = labels.get(decision.observation_sha256)
-        if action is None:
+        acceptable = labels.get(decision.observation_sha256)
+        if acceptable is None:
             output.append(decision)
             continue
-        if action not in decision.legal_actions:
-            raise ValueError("counterfactual best action escaped the factual native legal set")
+        if not set(acceptable).issubset(decision.legal_actions):
+            raise ValueError("counterfactual target action escaped the factual native legal set")
+        action = decision.teacher_action if decision.teacher_action in acceptable else acceptable[0]
         matched += 1
-        changed += action != decision.teacher_action
+        changed += decision.teacher_action not in acceptable
         output.append(replace(
             decision,
             teacher_action=action,
             counterfactual_original_action=(
                 decision.teacher_action if action != decision.teacher_action else None
             ),
+            counterfactual_acceptable_actions=acceptable,
         ))
     return output, {
         "files": len(files),
@@ -379,6 +402,10 @@ def apply_counterfactual_labels(
         "changed_local_teacher_labels": changed,
         "unmatched_labels": len(labels) - matched,
         "runtime_sources": [json.loads(item) for item in sorted(runtime_sources)],
+        "target": target,
+        "mean_acceptable_actions": (
+            sum(len(actions) for actions in labels.values()) / len(labels) if labels else 0.0
+        ),
     }
 
 
@@ -398,7 +425,12 @@ def _candidate_matrix(
         corrective = False
         for candidate in decision.candidates:
             features.append(candidate_features(decision, candidate))
-            labels.append(int(candidate["action"] == decision.teacher_action))
+            acceptable = decision.counterfactual_acceptable_actions
+            labels.append(int(
+                candidate["action"] in acceptable
+                if acceptable is not None
+                else candidate["action"] == decision.teacher_action
+            ))
             weight = candidate_sample_weight(
                 decision,
                 candidate,
@@ -409,7 +441,7 @@ def _candidate_matrix(
             weights.append(weight)
             corrective = corrective or weight > 1.0
         corrective_decisions += int(corrective)
-        counterfactual_decisions += int(decision.counterfactual_original_action is not None)
+        counterfactual_decisions += int(decision.counterfactual_acceptable_actions is not None)
     return features, labels, weights, {
         "authority_failure_horizon": failure_horizon,
         "corrective_pair_weight": failure_weight,
@@ -432,6 +464,8 @@ def evaluate(
     behavior_matches = 0
     generic_matches = 0
     reciprocal_ranks = []
+    acceptable_matches = 0
+    acceptable_reciprocal_ranks = []
     action_counts: Counter[str] = Counter()
     features = [
         candidate_features(decision, candidate)
@@ -452,6 +486,8 @@ def evaluate(
         selected = str(ranked[0][0]["action"])
         action_counts[selected] += 1
         teacher_matches += selected == decision.teacher_action
+        acceptable = decision.counterfactual_acceptable_actions or (decision.teacher_action,)
+        acceptable_matches += selected in acceptable
         behavior_matches += selected == decision.selected_action
         generic_matches += generic_choice(decision) == decision.teacher_action
         rank = next(
@@ -459,11 +495,18 @@ def evaluate(
             if item[0]["action"] == decision.teacher_action
         )
         reciprocal_ranks.append(1.0 / rank)
+        acceptable_rank = next(
+            index for index, item in enumerate(ranked, 1)
+            if item[0]["action"] in acceptable
+        )
+        acceptable_reciprocal_ranks.append(1.0 / acceptable_rank)
     count = len(decisions)
     return {
         "decisions": count,
         "teacher_top1_accuracy": teacher_matches / count,
         "teacher_mean_reciprocal_rank": sum(reciprocal_ranks) / count,
+        "acceptable_top1_accuracy": acceptable_matches / count,
+        "acceptable_mean_reciprocal_rank": sum(acceptable_reciprocal_ranks) / count,
         "behavior_action_match": behavior_matches / count,
         "generic_teacher_top1_accuracy": generic_matches / count,
         "native_legal_action_ratio": 1.0,
@@ -485,6 +528,11 @@ def main() -> int:
     parser.add_argument("--failure-horizon", type=int, default=0)
     parser.add_argument("--failure-weight", type=float, default=0.0)
     parser.add_argument("--counterfactual-labels", type=Path, action="append")
+    parser.add_argument(
+        "--counterfactual-target",
+        choices=("unique-best", "survivable"),
+        default="unique-best",
+    )
     parser.add_argument("--counterfactual-weight", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=6006)
     parser.add_argument("--output", type=Path, required=True)
@@ -506,6 +554,7 @@ def main() -> int:
             decisions,
             provenance,
             args.counterfactual_labels,
+            target=args.counterfactual_target,
         )
     seeds = sorted({decision.seed for decision in decisions})
     holdout = set(args.holdout_seed or seeds[-1:])

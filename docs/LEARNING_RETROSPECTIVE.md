@@ -171,6 +171,22 @@ retained as a bounded portable primitive, not claimed as a solution. The next
 experiment should expose candidate-relative multi-time clearance profiles or
 a fixed hazard field instead of increasing tree capacity.
 
+The multi-time profile experiment confirmed that unique-best is also the wrong
+primary target. Across the 360 checkpoints, 84.2% / 93.8% / 86.0% of candidate
+actions survived the full 180-tick branch in Stages 3 / 4 / 5. The local
+teacher survived at 83.3% / 93.3% / 86.7% even though it was lexicographically
+best at only 7.5% / 7.5% / 8.3%. A survivable-set classifier raised held-out
+COW survivable top-1 to 86.7% / 93.3% / 73.3%.
+
+That label correction was necessary but not sufficient. On unseen seeds 23/24
+the survivable-set candidates still failed closed at ticks 2198/1371,
+2003/1394, and 2452/2300 for Stages 3/4/5. They remain rejected. The next
+policy experiment should retain a quality-diverse archive and allow a COW
+correction only under physical-support and cross-model agreement, keeping the
+incumbent elsewhere. Archive membership is decided by full-stage clear/HIT,
+worst survival, reserve, seed coverage, diversity, and CPU latency rather than
+latest training time.
+
 ## Intended role of UCB after offline training
 
 UCB should remain as a small, safe online correction layer rather than the sole
