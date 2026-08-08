@@ -60,6 +60,7 @@ class Decision:
     candidates: tuple[Mapping[str, Any], ...]
     teacher_action: str
     selected_action: str
+    observation_sha256: str = ""
 
 
 def candidate_features(decision: Decision, candidate: Mapping[str, Any]) -> dict[str, str | float]:
@@ -165,6 +166,8 @@ def _run_directories(paths: Iterable[Path]) -> tuple[Path, ...]:
 
 def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any]]:
     decisions = []
+    labels_by_observation: dict[str, str] = {}
+    duplicate_decisions = 0
     scope: Mapping[str, Any] | None = None
     source: Mapping[str, Any] | None = None
     for run in _run_directories(paths):
@@ -183,6 +186,15 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
             for line in stream:
                 row = json.loads(line)
                 behavior = row["behavior"]
+                digest = str(row["observation_sha256"])
+                teacher_action = str(behavior["teacher_action"])
+                previous_label = labels_by_observation.get(digest)
+                if previous_label is not None:
+                    if previous_label != teacher_action:
+                        raise ValueError("identical observation has conflicting teacher labels")
+                    duplicate_decisions += 1
+                    continue
+                labels_by_observation[digest] = teacher_action
                 candidates = tuple(row["action_candidates"])
                 legal = tuple(row["legal_actions"])
                 if set(legal) != {str(candidate["action"]) for candidate in candidates}:
@@ -195,12 +207,17 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
                     state=row["state"],
                     legal_actions=legal,
                     candidates=candidates,
-                    teacher_action=str(behavior["teacher_action"]),
+                    teacher_action=teacher_action,
                     selected_action=str(behavior["selected_action"]),
+                    observation_sha256=digest,
                 ))
     if not decisions or scope is None or source is None:
         raise ValueError("no eligible compact headless decisions found")
-    return decisions, {"scope": scope, "source": source}
+    return decisions, {
+        "scope": scope,
+        "source": source,
+        "duplicate_decisions_skipped": duplicate_decisions,
+    }
 
 
 def _candidate_matrix(decisions: Iterable[Decision]) -> tuple[list[dict[str, str | float]], list[int]]:
@@ -344,6 +361,7 @@ def main() -> int:
         "train_decisions": len(train),
         "holdout_decisions": len(test),
         "candidate_training_rows": len(labels),
+        "duplicate_decisions_skipped": provenance["duplicate_decisions_skipped"],
         "iterations": args.iterations,
         "threads": args.threads,
         "fit_seconds": elapsed,
