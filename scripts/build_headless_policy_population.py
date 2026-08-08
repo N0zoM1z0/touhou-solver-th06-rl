@@ -18,6 +18,11 @@ from pathlib import Path
 import subprocess
 from typing import Any, Iterable, Mapping
 
+try:
+    from summarize_headless_continuation import summarize_transition_file
+except ModuleNotFoundError:  # Imported as scripts.build_headless_policy_population in tests.
+    from scripts.summarize_headless_continuation import summarize_transition_file
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -96,6 +101,7 @@ def _manifest_run(path: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
     termination = str(manifest.get("termination_reason", "unknown"))
     return {
         "manifest": str(path),
+        "status": "complete",
         "seed": manifest.get("initial_seed"),
         "ticks": ticks,
         "termination_reason": termination,
@@ -106,6 +112,23 @@ def _manifest_run(path: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
         "authority_failure_events": int(manifest.get("authority_failure_events", 0)),
         "benchmark_forced_actions": int(manifest.get("benchmark_forced_actions", 0)),
         "nmnb_stage_clear": manifest.get("nmnb_stage_clear") is True,
+    }
+
+
+def _partial_run(path: Path, summary: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "manifest": str(path),
+        "status": "interrupted-partial",
+        "seed": summary.get("seed"),
+        "ticks": int(summary.get("observed_ticks", 0)),
+        "termination_reason": "interrupted-partial",
+        "physical_hits": int(summary.get("physical_hits", 0)),
+        "physical_hit_ticks": summary.get("physical_hit_ticks", []),
+        "continue_after_hit": summary.get("continue_after_hit") is True,
+        "authority_failure": False,
+        "authority_failure_events": int(summary.get("benchmark_forced_rows", 0)),
+        "benchmark_forced_actions": int(summary.get("benchmark_forced_rows", 0)),
+        "nmnb_stage_clear": False,
     }
 
 
@@ -172,6 +195,7 @@ def build_population(
         if path.is_file() and path.suffix == ".joblib"
     })
     manifests_by_ranker: dict[str, list[tuple[Path, Mapping[str, Any]]]] = defaultdict(list)
+    partials_by_ranker: dict[str, list[tuple[Path, Mapping[str, Any]]]] = defaultdict(list)
     for root in rollout_roots:
         paths = root.rglob("manifest.json") if root.is_dir() else [root]
         for path in paths:
@@ -182,6 +206,12 @@ def build_population(
             sha = ranker.get("sha256") if isinstance(ranker, Mapping) else None
             if isinstance(sha, str):
                 manifests_by_ranker[sha].append((path.resolve(), raw))
+        partial_paths = root.rglob("transitions.jsonl.gz.partial") if root.is_dir() else []
+        for path in partial_paths:
+            summary = summarize_transition_file(path)
+            sha = summary.get("ranker_sha256")
+            if isinstance(sha, str):
+                partials_by_ranker[sha].append((path.resolve(), summary))
 
     candidates: list[dict[str, Any]] = []
     for model in model_files:
@@ -206,6 +236,12 @@ def build_population(
             if isinstance(manifest.get("scope"), Mapping)
             and _scope_key(manifest["scope"]) == _scope_key(scope)
         ]
+        runs.extend(
+            _partial_run(path, summary)
+            for path, summary in partials_by_ranker.get(sha, [])
+            if isinstance(summary.get("scope"), Mapping)
+            and _scope_key(summary["scope"]) == _scope_key(scope)
+        )
         closed_loop = _closed_loop_metrics(runs)
         labels = report.get("counterfactual_labels")
         target = labels.get("target") if isinstance(labels, Mapping) else None
@@ -272,7 +308,7 @@ def build_population(
     historical = [
         candidate["model_sha256"]
         for candidate in candidates
-        if candidate["pareto_member"] and candidate["evidence_tier"] == "first-failure-only"
+        if candidate["pareto_member"]
     ]
     active = lambda candidate: runtime_source is None or candidate["runtime_compatible"] is True
     research = [
@@ -290,12 +326,13 @@ def build_population(
         and candidate["closed_loop"]["continuation_runs"] >= 2
         and active(candidate)
     ]
+    high_quality_set = set(high_quality)
     queue = [
         candidate["model_sha256"]
         for candidate in candidates
         if candidate["pareto_member"]
-        and candidate["evidence_tier"] != "continuation-evidenced"
         and active(candidate)
+        and candidate["model_sha256"] not in high_quality_set
     ]
     return {
         "schema": "th06-rl-headless-policy-population-v1",

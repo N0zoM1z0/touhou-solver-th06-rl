@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import gzip
 import json
 from pathlib import Path
 
@@ -102,3 +103,40 @@ def test_active_population_requires_exact_runtime_source(tmp_path: Path) -> None
     assert result["research_population"] == []
     assert result["continuation_evaluation_queue"] == []
     assert result["candidates"][0]["runtime_compatible"] is False
+
+
+def test_interrupted_continuation_is_linked_by_run_intent(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    rollouts = tmp_path / "rollouts"
+    sha = _candidate(models, "candidate", b"candidate", 0.8)
+    run = rollouts / "partial"
+    run.mkdir(parents=True)
+    (run / "run-intent.json").write_text(json.dumps({
+        "scope": SCOPE,
+        "initial_seed": 23,
+        "continue_after_hit": True,
+        "ranker": {"sha256": sha},
+    }), encoding="utf-8")
+    row = {
+        "sequence": 0,
+        "tick": 1,
+        "next_tick": 2,
+        "scope": SCOPE,
+        "source_context": "timeline:1",
+        "behavior": {"policy": "ranker", "selected_action": "stay_fast"},
+        "benchmark_forced_action": False,
+        "outcome_terms": {"deaths_delta": 1, "bombs_used_delta": 0},
+    }
+    (run / "transitions.jsonl.gz.partial").write_bytes(
+        gzip.compress(json.dumps(row).encode() + b"\n")[:-8]
+    )
+
+    result = build_population([models], [rollouts])
+
+    candidate = result["candidates"][0]
+    assert candidate["evidence_tier"] == "continuation-evidenced"
+    assert candidate["closed_loop"]["continuation_runs"] == 1
+    assert candidate["closed_loop"]["continuation_hits"] == 1
+    assert candidate["closed_loop"]["runs_detail"][0]["status"] == "interrupted-partial"
+    assert result["high_quality_population"] == []
+    assert result["continuation_evaluation_queue"] == [sha]
