@@ -16,7 +16,14 @@ import struct
 from typing import Any, Iterable, Mapping
 
 from .core.model import Action, Kinematics
-from .native import ACTIONS, Aabb, NativeCertifiedAction, NativeKernel, PackedHazards
+from .native import (
+    ACTIONS,
+    Aabb,
+    NativeCertifiedAction,
+    NativeKernel,
+    PackedHazards,
+    PreparedHazards,
+)
 from .th06.observed_lasers import laser_rects_by_frame
 
 
@@ -491,6 +498,17 @@ def certify_headless_actions(
     horizon: int = HARD_HORIZON,
 ) -> tuple[NativeCertifiedAction, ...]:
     hazards = lower_headless_hazards(observation, horizon)
+    return certify_lowered_headless_actions(observation, hazards, kernel=kernel)
+
+
+def certify_lowered_headless_actions(
+    observation: Mapping[str, Any],
+    hazards: PackedHazards | PreparedHazards,
+    *,
+    kernel: NativeKernel | None = None,
+) -> tuple[NativeCertifiedAction, ...]:
+    """Run Hard on one already-lowered immutable physical snapshot."""
+    validate_headless_observation(observation)
     player = observation["player"]
     assert isinstance(player, Mapping)
     return (kernel or NativeKernel()).certify_actions(
@@ -532,4 +550,3 @@ def reactive_headless_action(
             item.action.name,
         ),
     ).action
-

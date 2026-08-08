@@ -19,8 +19,10 @@ from th06_rl.headless_corpus import (
     build_transition,
 )
 from th06_rl.headless_geometry import (
+    HARD_HORIZON,
     HeadlessAuthorityUnavailable,
-    certify_headless_actions,
+    certify_lowered_headless_actions,
+    lower_headless_hazards,
 )
 from th06_rl.native import NativeKernel
 
@@ -98,15 +100,30 @@ def generate_episode(
             sequence = 0
             while observation.get("terminal_reason") is None:
                 try:
-                    certified = certify_headless_actions(observation, kernel=kernel)
+                    hard_hazards = lower_headless_hazards(observation, HARD_HORIZON)
+                    prepared_hard = kernel.prepare_hazards(hard_hazards)
+                    certified = certify_lowered_headless_actions(
+                        observation,
+                        prepared_hard,
+                        kernel=kernel,
+                    )
                     if not certified:
                         raise HeadlessAuthorityUnavailable("headless native safe set is empty")
-                    teacher_decision = teacher.rank(observation, certified)
+                    teacher_hazards = lower_headless_hazards(observation, teacher_horizon)
+                    teacher_decision = teacher.rank(
+                        observation,
+                        certified,
+                        hazards=teacher_hazards,
+                    )
                     behavior = behavior_policy.select(teacher_decision, certified)
 
                     # The step process cannot advance asynchronously, but keep
                     # the same explicit issue-gate boundary as the real agent.
-                    issue_certified = certify_headless_actions(observation, kernel=kernel)
+                    issue_certified = certify_lowered_headless_actions(
+                        observation,
+                        prepared_hard,
+                        kernel=kernel,
+                    )
                     if behavior.selected_action not in {
                         item.action.name for item in issue_certified
                     }:

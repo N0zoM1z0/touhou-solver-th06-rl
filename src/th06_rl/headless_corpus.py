@@ -23,12 +23,11 @@ from .headless_geometry import (
     KINEMATICS,
     HeadlessAuthorityUnavailable,
     action_from_input,
-    certify_headless_actions,
     lower_headless_hazards,
     reactive_headless_action,
     validate_headless_observation,
 )
-from .native import ACTIONS, NativeCertifiedAction, NativeKernel
+from .native import ACTIONS, NativeCertifiedAction, NativeKernel, PackedHazards
 
 
 TRANSITION_SCHEMA = "th06-rl-headless-transition-v1"
@@ -154,13 +153,15 @@ class NativeOfflineTeacher:
         self,
         observation: Mapping[str, Any],
         certified: tuple[NativeCertifiedAction, ...],
+        *,
+        hazards: PackedHazards | None = None,
     ) -> TeacherDecision:
         if not certified:
             raise HeadlessAuthorityUnavailable("headless native safe set is empty")
         player = observation["player"]
         assert isinstance(player, Mapping)
         try:
-            hazards = lower_headless_hazards(observation, self.horizon)
+            hazards = hazards or lower_headless_hazards(observation, self.horizon)
             plan = self.kernel.plan(
                 x=float(player["x"]),
                 y=float(player["y"]),
