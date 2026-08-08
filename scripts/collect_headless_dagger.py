@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -26,6 +27,7 @@ from th06_rl.headless_corpus import (
     BehaviorDecision,
     CompactHeadlessCorpusWriter,
     NativeOfflineTeacher,
+    TeacherDecision,
     build_transition,
     compact_candidate_records,
     compact_state_features,
@@ -43,6 +45,20 @@ from th06_rl.native import NativeCertifiedAction, NativeKernel
 
 
 POLICY_NAME = "distilled-ranker-dagger-v1"
+
+
+def _benchmark_release_behavior() -> BehaviorDecision:
+    return BehaviorDecision(
+        selected_action="stay_fast",
+        probability=1.0,
+        teacher=TeacherDecision(
+            action="stay_fast",
+            kind="benchmark-authority-release",
+            effort_horizon=0,
+            surviving_actions=(),
+        ),
+        policy="benchmark-authority-release-v1",
+    )
 
 
 def source_compatible(
@@ -159,6 +175,7 @@ def collect(
     anchor_stride: int,
     teacher_horizon: int,
     threads: int,
+    continue_after_hit: bool = False,
 ) -> Path:
     ranker = DistilledRanker(model_path, threads=threads)
     expected_scope = {
@@ -182,6 +199,11 @@ def collect(
     teacher = NativeOfflineTeacher(kernel=kernel, horizon=teacher_horizon)
     termination_reason = "generator-error"
     authority_failure: str | None = None
+    authority_failure_events = 0
+    authority_failure_reasons: Counter[str] = Counter()
+    benchmark_forced_actions = 0
+    physical_hits = 0
+    physical_hit_ticks: list[int] = []
     terminal: dict[str, Any] | None = None
     try:
         client = HeadlessClient(
@@ -190,12 +212,14 @@ def collect(
             scope=scope,
             seed=seed,
             max_ticks=max_ticks,
+            continue_after_hit=continue_after_hit,
         )
         try:
             observation = client.start()
             writer.anchor(observation, sequence=0, role="initial", force=True)
             sequence = 0
             while observation.get("terminal_reason") is None:
+                benchmark_forced = False
                 try:
                     hard_hazards = lower_headless_hazards(observation, HARD_HORIZON)
                     prepared_hard = kernel.prepare_hazards(hard_hazards)
@@ -238,24 +262,34 @@ def collect(
                     if selected not in {item.action.name for item in issue}:
                         raise HeadlessAuthorityUnavailable("ranker failed the immediate issue gate")
                 except HeadlessAuthorityUnavailable as error:
-                    authority_failure = str(error)
-                    termination_reason = "authority-failure"
-                    writer.anchor(
-                        observation,
-                        sequence=sequence,
-                        role="authority-failure",
-                        force=True,
+                    if continue_after_hit:
+                        reason = str(error)
+                        authority_failure_events += 1
+                        authority_failure_reasons[reason] += 1
+                        benchmark_forced_actions += 1
+                        benchmark_forced = True
+                        certified = ()
+                        profiles = ()
+                        behavior = _benchmark_release_behavior()
+                    else:
+                        authority_failure = str(error)
+                        termination_reason = "authority-failure"
+                        writer.anchor(
+                            observation,
+                            sequence=sequence,
+                            role="authority-failure",
+                            force=True,
+                        )
+                        break
+                else:
+                    behavior = BehaviorDecision(
+                        selected_action=selected,
+                        probability=1.0,
+                        teacher=teacher_decision,
+                        policy=POLICY_NAME,
                     )
-                    break
-
-                behavior = BehaviorDecision(
-                    selected_action=selected,
-                    probability=1.0,
-                    teacher=teacher_decision,
-                    policy=POLICY_NAME,
-                )
-                next_observation = client.step(selected)
-                writer.transition(build_transition(
+                next_observation = client.step(behavior.selected_action)
+                transition = build_transition(
                     sequence=sequence,
                     observation=observation,
                     next_observation=next_observation,
@@ -263,7 +297,14 @@ def collect(
                     behavior=behavior,
                     epsilon=0.0,
                     profiles=profiles,
-                ))
+                    benchmark_forced_action=benchmark_forced,
+                )
+                deaths_delta = max(int(transition["outcome_terms"]["deaths_delta"]), 0)
+                physical_hits += deaths_delta
+                physical_hit_ticks.extend([int(transition["next_tick"])] * deaths_delta)
+                if transition["outcome_terms"]["bombs_used_delta"] != 0:
+                    raise HeadlessAuthorityUnavailable("Bomb use appeared in ranker rollout")
+                writer.transition(transition)
                 sequence += 1
                 writer.anchor(next_observation, sequence=sequence, role="periodic")
                 observation = next_observation
@@ -279,7 +320,7 @@ def collect(
         raise
     return writer.close({
         "transaction_complete": True,
-        "training_eligible": writer.transition_count > 0,
+        "training_eligible": writer.transition_count > 0 and not continue_after_hit,
         "scope": expected_scope,
         "initial_seed": seed,
         "behavior_policy": POLICY_NAME,
@@ -289,10 +330,16 @@ def collect(
         "anchor_stride": anchor_stride,
         "termination_reason": termination_reason,
         "authority_failure": authority_failure,
-        "physical_hit": termination_reason == "physical-hit",
+        "authority_failure_events": authority_failure_events,
+        "authority_failure_reasons": dict(sorted(authority_failure_reasons.items())),
+        "benchmark_forced_actions": benchmark_forced_actions,
+        "continue_after_hit": continue_after_hit,
+        "physical_hit": physical_hits > 0,
+        "physical_hits": physical_hits,
+        "physical_hit_ticks": physical_hit_ticks,
         "nmnb_stage_clear": bool(
             terminal is not None
-            and termination_reason == "chain-exit-success"
+            and termination_reason in {"chain-exit-success", "stage-clear-success"}
             and int(terminal["deaths"]) == 0
             and int(terminal["bombs_used"]) == 0
         ),
@@ -312,6 +359,7 @@ def main() -> int:
     parser.add_argument("--anchor-stride", type=int, default=120)
     parser.add_argument("--teacher-horizon", type=int, default=12)
     parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--continue-after-hit", action="store_true")
     parser.add_argument("--difficulty", type=int, default=3)
     parser.add_argument("--character", type=int, default=0)
     parser.add_argument("--shot-type", type=int, default=0)
@@ -332,8 +380,8 @@ def main() -> int:
         default=root / "artifacts/headless-corpus-dagger",
     )
     args = parser.parse_args()
-    if min(args.max_ticks, args.anchor_stride, args.teacher_horizon) <= 0:
-        parser.error("tick, anchor, and teacher bounds must be positive")
+    if args.max_ticks < 0 or min(args.anchor_stride, args.teacher_horizon) <= 0:
+        parser.error("max ticks must be nonnegative; anchor and teacher bounds must be positive")
     if not 1 <= args.threads <= 12:
         parser.error("threads must be in 1..12 on the shared VPS")
     os.environ["OMP_NUM_THREADS"] = str(args.threads)
@@ -354,6 +402,7 @@ def main() -> int:
         anchor_stride=args.anchor_stride,
         teacher_horizon=args.teacher_horizon,
         threads=args.threads,
+        continue_after_hit=args.continue_after_hit,
     )
     print(json.dumps({"manifest": str(manifest)}, indent=2))
     return 0
