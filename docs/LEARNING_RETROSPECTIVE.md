@@ -137,6 +137,40 @@ perfectly but generalized poorly to the other seed: Stage 3 held-out top-1 was
 deployed. The response is to expand complete seed groups, not to report the
 training score or weaken the rollout gate.
 
+### 2026-08-08 multi-seed COW result
+
+The formal expansion used eight complete factual seeds per stage (15--22) and
+the final 600 transitions of each trajectory at stride 40. All 360 COW files
+passed an independent audit: 360 checkpoints, 6340 native-legal action
+outcomes, and no missing action branches. A unique best action existed at
+82.2% of checkpoints, while the factual/local-teacher action was in the best
+set at only 7.8%. Per-stage factual-best ratios were 7.5%, 7.5%, and 8.3% for
+Stages 3, 4, and 5.
+
+Complete-seed holdout exposed severe generalization error despite perfect
+training ranking. The plain-feature LambdaMART held-out top-1 results were
+23.3% / 3.3% / 0% for Stages 3 / 4 / 5. COW-corrected imitation did not rescue
+closed-loop behavior:
+
+- Stage 3 unseen seeds 23/24 failed closed at ticks 2484/1216;
+- Stage 4 unseen seeds 23/24 failed closed at ticks 838/895;
+- Stage 5 unseen seed 23 reached the 3000-tick bound, but seed 24 failed closed
+  at tick 1583.
+
+All runs remained HIT-free and Bomb-free because native authority failed
+closed. None of these candidates was promoted.
+
+The first representation response added a fixed 8-sector summary of already
+observed bullets (near/approaching counts and current/projected surface
+distance). Replaying the same 24 runs produced 64,820 audited transitions with
+identical physical termination distribution: 11 authority failures and 13
+tick-limit runs. It modestly raised value top-1 to 23.3% / 6.7% / 6.7%, but
+unseen-seed rollouts still failed at Stage 3 ticks 1216/1210, Stage 4 tick 2764
+and one 3000-tick run, and Stage 5 ticks 2452/1837. This representation is
+retained as a bounded portable primitive, not claimed as a solution. The next
+experiment should expose candidate-relative multi-time clearance profiles or
+a fixed hazard field instead of increasing tree capacity.
+
 ## Intended role of UCB after offline training
 
 UCB should remain as a small, safe online correction layer rather than the sole

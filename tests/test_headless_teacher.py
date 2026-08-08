@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from scripts.train_headless_teacher import (
     Decision,
+    Encoder,
     apply_counterfactual_labels,
     candidate_features,
     candidate_sample_weight,
     generic_choice,
 )
-from th06_rl.headless_corpus import source_context_id
+from th06_rl.headless_corpus import (
+    HAZARD_FEATURE_NAMES,
+    compact_hazard_sector_features,
+    source_context_id,
+)
 from scripts.collect_headless_dagger import source_compatible
 
 
@@ -62,6 +67,47 @@ def test_teacher_features_exclude_seed_rng_and_supervision_leakage() -> None:
     assert not any("rng" in name for name in value)
     assert not any("teacher" in name for name in value)
     assert not any("selected" in name for name in value)
+    assert all(name in value for name in HAZARD_FEATURE_NAMES)
+
+
+def test_hazard_sector_features_retain_position_and_approach_without_authority() -> None:
+    observation = {
+        "player": {
+            "x": 100.0,
+            "y": 100.0,
+            "half_width": 1.25,
+            "half_height": 1.25,
+        },
+        "bullets": [
+            {
+                "x": 140.0,
+                "y": 100.0,
+                "vx": -2.0,
+                "vy": 0.0,
+                "half_width": 2.5,
+                "half_height": 2.5,
+            }
+        ],
+    }
+
+    features = compact_hazard_sector_features(observation)
+
+    assert sum(features[name] for name in features if name.endswith("near_count")) == 1.0
+    assert sum(
+        features[name] for name in features if name.endswith("approaching_count")
+    ) == 1.0
+    assert min(
+        features[name] for name in features if name.endswith("min_projected_surface")
+    ) == 0.0
+
+
+def test_encoder_can_replay_an_older_prefix_feature_schema() -> None:
+    names = ("action", "previous_action", "source_context", "player_x")
+    encoder = Encoder([decision()], feature_names=names)
+
+    matrix = encoder.encode([candidate_features(decision(), decision().candidates[0])])
+
+    assert matrix.shape == (1, len(names))
 
 
 def test_generic_choice_prefers_unbounded_clearance() -> None:

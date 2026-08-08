@@ -16,6 +16,7 @@ import time
 from typing import Any, Iterable, Mapping
 
 from th06_rl.native import ACTIONS
+from th06_rl.headless_corpus import HAZARD_FEATURE_DEFAULTS, HAZARD_FEATURE_NAMES
 
 
 ACTION_BY_NAME = {action.name: action for action in ACTIONS}
@@ -45,6 +46,7 @@ NUMERIC_FEATURES = (
     "changed_direction",
     "reversed_direction",
     "changed_focus",
+    *HAZARD_FEATURE_NAMES,
 )
 FEATURE_NAMES = (*CATEGORICAL_FEATURES, *NUMERIC_FEATURES)
 
@@ -104,6 +106,10 @@ def candidate_features(decision: Decision, candidate: Mapping[str, Any]) -> dict
             and (action.dx, action.dy) == (-previous.dx, -previous.dy)
         ),
         "changed_focus": float(action.focused != previous.focused),
+        **{
+            name: float(decision.state.get(name, HAZARD_FEATURE_DEFAULTS[name]))
+            for name in HAZARD_FEATURE_NAMES
+        },
     }
 
 
@@ -162,7 +168,18 @@ def candidate_sample_weight(
 
 
 class Encoder:
-    def __init__(self, decisions: Iterable[Decision]) -> None:
+    def __init__(
+        self,
+        decisions: Iterable[Decision],
+        *,
+        feature_names: Iterable[str] = FEATURE_NAMES,
+    ) -> None:
+        self.feature_names = tuple(feature_names)
+        if not self.feature_names or not set(CATEGORICAL_FEATURES).issubset(self.feature_names):
+            raise ValueError("feature schema must retain all categorical features")
+        unknown = set(self.feature_names) - set(FEATURE_NAMES)
+        if unknown:
+            raise ValueError(f"feature schema contains unsupported fields: {sorted(unknown)}")
         values = {name: set() for name in CATEGORICAL_FEATURES}
         for decision in decisions:
             values["previous_action"].add(str(decision.state["previous_action"]))
@@ -178,8 +195,8 @@ class Encoder:
     def encode(self, features: list[dict[str, str | float]]):
         import numpy as np
 
-        output = np.empty((len(features), len(FEATURE_NAMES)), dtype=np.float32)
-        for column, name in enumerate(FEATURE_NAMES):
+        output = np.empty((len(features), len(self.feature_names)), dtype=np.float32)
+        for column, name in enumerate(self.feature_names):
             if name in self.categories:
                 mapping = self.categories[name]
                 output[:, column] = [mapping.get(str(row[name]), -1) for row in features]

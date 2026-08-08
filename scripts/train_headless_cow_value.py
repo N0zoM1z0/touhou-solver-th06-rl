@@ -18,6 +18,7 @@ try:
         CATEGORICAL_FEATURES,
         Decision,
         Encoder,
+        FEATURE_NAMES,
         candidate_features,
         load_decisions,
     )
@@ -27,6 +28,7 @@ except ModuleNotFoundError:
         CATEGORICAL_FEATURES,
         Decision,
         Encoder,
+        FEATURE_NAMES,
         candidate_features,
         load_decisions,
     )
@@ -217,6 +219,7 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     artifact = {
         "model": model,
+        "feature_names": FEATURE_NAMES,
         "categories": encoder.manifest(),
         "scope": provenance["scope"],
         "headless_source": provenance["source"],

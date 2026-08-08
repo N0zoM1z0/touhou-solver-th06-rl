@@ -33,6 +33,23 @@ from .native import ACTIONS, NativeCertifiedAction, NativeKernel, PackedHazards
 TRANSITION_SCHEMA = "th06-rl-headless-transition-v1"
 MANIFEST_SCHEMA = "th06-rl-headless-corpus-v1"
 BEHAVIOR_POLICY = "epsilon-native-offline-teacher-v1"
+HAZARD_SECTOR_COUNT = 8
+HAZARD_FEATURE_DEFAULTS = {
+    **{f"hazard_sector_{index}_near_count": 0.0 for index in range(HAZARD_SECTOR_COUNT)},
+    **{
+        f"hazard_sector_{index}_approaching_count": 0.0
+        for index in range(HAZARD_SECTOR_COUNT)
+    },
+    **{
+        f"hazard_sector_{index}_min_surface": 512.0
+        for index in range(HAZARD_SECTOR_COUNT)
+    },
+    **{
+        f"hazard_sector_{index}_min_projected_surface": 512.0
+        for index in range(HAZARD_SECTOR_COUNT)
+    },
+}
+HAZARD_FEATURE_NAMES = tuple(HAZARD_FEATURE_DEFAULTS)
 
 
 def canonical_observation_sha256(observation: Mapping[str, Any]) -> str:
@@ -85,6 +102,71 @@ def _boundary_reserve(x: float, y: float) -> float:
     return min(x - 8.0, 376.0 - x, y - 16.0, 432.0 - y)
 
 
+def _finite_feature(item: Mapping[str, Any], name: str) -> float:
+    try:
+        value = float(item[name])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HeadlessAuthorityUnavailable(f"headless feature {name} is invalid") from error
+    if not math.isfinite(value):
+        raise HeadlessAuthorityUnavailable(f"headless feature {name} is non-finite")
+    return value
+
+
+def compact_hazard_sector_features(observation: Mapping[str, Any]) -> dict[str, float]:
+    """Summarize observed bullets without becoming collision authority.
+
+    Eight fixed angular sectors retain local spatial and velocity information
+    that a global bullet count discards. The work is one bounded pass over the
+    already-observed physical bullet snapshot. These approximate descriptors
+    are model inputs only; native certification remains the sole safety gate.
+    """
+    player = observation.get("player")
+    bullets = observation.get("bullets")
+    if not isinstance(player, Mapping) or not isinstance(bullets, list):
+        raise HeadlessAuthorityUnavailable("headless hazard feature input is incoherent")
+    player_x = _finite_feature(player, "x")
+    player_y = _finite_feature(player, "y")
+    player_half_width = _finite_feature(player, "half_width")
+    player_half_height = _finite_feature(player, "half_height")
+    values = dict(HAZARD_FEATURE_DEFAULTS)
+    for bullet in bullets:
+        if not isinstance(bullet, Mapping):
+            raise HeadlessAuthorityUnavailable("headless bullet feature is incoherent")
+        dx = _finite_feature(bullet, "x") - player_x
+        dy = _finite_feature(bullet, "y") - player_y
+        vx = _finite_feature(bullet, "vx")
+        vy = _finite_feature(bullet, "vy")
+        combined_x = player_half_width + _finite_feature(bullet, "half_width")
+        combined_y = player_half_height + _finite_feature(bullet, "half_height")
+        combined_radius = math.hypot(combined_x, combined_y)
+        center_distance = math.hypot(dx, dy)
+        surface = max(center_distance - combined_radius, 0.0)
+        angle = math.atan2(dy, dx)
+        sector = min(
+            int((angle + math.pi) * HAZARD_SECTOR_COUNT / (2.0 * math.pi)),
+            HAZARD_SECTOR_COUNT - 1,
+        )
+        near_name = f"hazard_sector_{sector}_near_count"
+        approaching_name = f"hazard_sector_{sector}_approaching_count"
+        surface_name = f"hazard_sector_{sector}_min_surface"
+        projected_name = f"hazard_sector_{sector}_min_projected_surface"
+        values[surface_name] = min(values[surface_name], surface, 512.0)
+        if surface <= 160.0:
+            values[near_name] += 1.0
+        speed_squared = vx * vx + vy * vy
+        closest_tick = 0.0
+        if speed_squared > 1e-9:
+            closest_tick = max(0.0, min(60.0, -(dx * vx + dy * vy) / speed_squared))
+        projected_surface = max(
+            math.hypot(dx + vx * closest_tick, dy + vy * closest_tick) - combined_radius,
+            0.0,
+        )
+        values[projected_name] = min(values[projected_name], projected_surface, 512.0)
+        if closest_tick > 0.0 and projected_surface <= 128.0:
+            values[approaching_name] += 1.0
+    return values
+
+
 def compact_state_features(observation: Mapping[str, Any]) -> dict[str, Any]:
     player = observation["player"]
     assert isinstance(player, Mapping)
@@ -109,6 +191,7 @@ def compact_state_features(observation: Mapping[str, Any]) -> dict[str, Any]:
             isinstance(enemy, Mapping) and enemy.get("boss") is True
             for enemy in enemies
         ),
+        **compact_hazard_sector_features(observation),
     }
 
 

@@ -13,9 +13,14 @@ import subprocess
 from typing import Any
 
 try:
-    from train_headless_teacher import Decision, Encoder, candidate_features
+    from train_headless_teacher import Decision, Encoder, FEATURE_NAMES, candidate_features
 except ModuleNotFoundError:  # Imported as scripts.collect_headless_dagger in tests.
-    from scripts.train_headless_teacher import Decision, Encoder, candidate_features
+    from scripts.train_headless_teacher import (
+        Decision,
+        Encoder,
+        FEATURE_NAMES,
+        candidate_features,
+    )
 from th06_rl.headless import HeadlessClient, HeadlessScope
 from th06_rl.headless_corpus import (
     BehaviorDecision,
@@ -90,7 +95,13 @@ class DistilledRanker:
             "compatible_headless_sources",
             [self.headless_source],
         )
-        self.encoder = Encoder([])
+        stored_features = artifact.get("feature_names")
+        if stored_features is None:
+            feature_count = int(self.model.booster_.num_feature())
+            if feature_count > len(FEATURE_NAMES):
+                raise ValueError("ranker uses an unsupported feature schema")
+            stored_features = FEATURE_NAMES[:feature_count]
+        self.encoder = Encoder([], feature_names=stored_features)
         self.encoder.categories = {
             name: {value: index for index, value in enumerate(values)}
             for name, values in artifact["categories"].items()
