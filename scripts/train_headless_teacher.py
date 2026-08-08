@@ -219,11 +219,19 @@ def evaluate(model, encoder: Encoder, decisions: list[Decision]) -> dict[str, An
     generic_matches = 0
     reciprocal_ranks = []
     action_counts: Counter[str] = Counter()
+    features = [
+        candidate_features(decision, candidate)
+        for decision in decisions
+        for candidate in decision.candidates
+    ]
+    probabilities = model.booster_.predict(encoder.encode(features))
+    offset = 0
     for decision in decisions:
-        features = [candidate_features(decision, candidate) for candidate in decision.candidates]
-        probabilities = model.predict_proba(encoder.encode(features))[:, 1]
+        count = len(decision.candidates)
+        decision_probabilities = probabilities[offset:offset + count]
+        offset += count
         ranked = sorted(
-            zip(decision.candidates, probabilities, strict=True),
+            zip(decision.candidates, decision_probabilities, strict=True),
             key=lambda item: (float(item[1]), str(item[0]["action"])),
             reverse=True,
         )

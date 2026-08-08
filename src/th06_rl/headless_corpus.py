@@ -85,7 +85,7 @@ def _boundary_reserve(x: float, y: float) -> float:
     return min(x - 8.0, 376.0 - x, y - 16.0, 432.0 - y)
 
 
-def _state_features(observation: Mapping[str, Any]) -> dict[str, Any]:
+def compact_state_features(observation: Mapping[str, Any]) -> dict[str, Any]:
     player = observation["player"]
     assert isinstance(player, Mapping)
     enemies = observation["enemies"]
@@ -112,7 +112,7 @@ def _state_features(observation: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _candidate_features(
+def compact_candidate_records(
     certified: tuple[NativeCertifiedAction, ...],
     *,
     selected: str,
@@ -191,6 +191,7 @@ class BehaviorDecision:
     selected_action: str
     probability: float
     teacher: TeacherDecision
+    policy: str = BEHAVIOR_POLICY
 
 
 class EpsilonTeacherBehavior:
@@ -216,7 +217,7 @@ class EpsilonTeacherBehavior:
         probability = self.epsilon / len(names)
         if selected == teacher.action:
             probability += 1.0 - self.epsilon
-        return BehaviorDecision(selected, probability, teacher)
+        return BehaviorDecision(selected, probability, teacher, BEHAVIOR_POLICY)
 
 
 def build_transition(
@@ -254,15 +255,15 @@ def build_transition(
         "next_source_context": source_context_id(next_observation),
         "observation_sha256": canonical_observation_sha256(observation),
         "next_observation_sha256": canonical_observation_sha256(next_observation),
-        "state": _state_features(observation),
+        "state": compact_state_features(observation),
         "legal_actions": list(legal),
-        "action_candidates": _candidate_features(
+        "action_candidates": compact_candidate_records(
             certified,
             selected=behavior.selected_action,
             teacher=behavior.teacher.action,
         ),
         "behavior": {
-            "policy": BEHAVIOR_POLICY,
+            "policy": behavior.policy,
             "epsilon": epsilon,
             "probability": behavior.probability,
             "selected_action": behavior.selected_action,

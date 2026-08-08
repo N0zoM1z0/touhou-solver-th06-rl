@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from scripts.train_headless_teacher import Decision, candidate_features, generic_choice
+from th06_rl.headless_corpus import source_context_id
 
 
 def decision() -> Decision:
@@ -58,3 +59,15 @@ def test_teacher_features_exclude_seed_rng_and_supervision_leakage() -> None:
 
 def test_generic_choice_prefers_unbounded_clearance() -> None:
     assert generic_choice(decision()) == "stay"
+
+
+def test_ranker_context_contract_uses_derived_identity_not_raw_json() -> None:
+    observation = {
+        "enemies": [],
+        "source_context": {
+            "timeline_time": 100,
+            "next": {"time": 440, "opcode": 0, "arg0": 1},
+        },
+    }
+
+    assert source_context_id(observation) == decision().source_context
