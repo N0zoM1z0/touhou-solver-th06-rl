@@ -5,6 +5,7 @@ import hashlib
 import json
 
 from th06_rl.offline import audit_dataset, iter_run_transitions, load_dataset_index
+from th06_rl.offline_learning import HIT_CREDIT_DISCOUNT, label_transitions
 
 
 def _canonical(value: object) -> bytes:
@@ -116,3 +117,17 @@ def test_audit_separates_complete_run_and_transition_eligibility(tmp_path) -> No
     assert overall["ratios"]["factual_trainable_per_processed"] == 0.5
     assert overall["hit_window_exposures"]["120"]["positive_rows"] == 1
     assert overall["action_coverage"]["left"]["clipped_ipw_ess"] == 1.0
+
+
+def test_label_reconstructs_delayed_physical_hit_credit(tmp_path) -> None:
+    root = _fixture(tmp_path)
+    _, runs = load_dataset_index(root)
+    raw = list(iter_run_transitions(root, runs[0]))
+
+    labeled = label_transitions(raw, runs[0], exact_context_only=True)
+
+    assert len(labeled) == 1
+    assert labeled[0].hit_within_30 is True
+    immediate = 1.0
+    assert labeled[0].reward == immediate - 100.0 * HIT_CREDIT_DISCOUNT ** 2
+    assert labeled[0].features["context_quality"] == "exact-v5"

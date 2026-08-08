@@ -297,6 +297,7 @@ class _AuditAccumulator:
                 and row.get("learning_eligible") is True
                 and action in ACTION_SET
                 and action in legal
+                and proposal == action
                 and not outcome.get("bomb_used")
                 and 0.0 < probability <= 1.0
             )
