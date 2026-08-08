@@ -13,9 +13,11 @@ from typing import Any
 
 from th06_rl.headless import HeadlessClient, HeadlessScope
 from th06_rl.headless_corpus import (
+    BehaviorDecision,
     CompactHeadlessCorpusWriter,
     EpsilonTeacherBehavior,
     NativeOfflineTeacher,
+    TeacherDecision,
     build_transition,
 )
 from th06_rl.headless_geometry import (
@@ -78,6 +80,7 @@ def generate_episode(
     max_ticks: int,
     anchor_stride: int,
     teacher_horizon: int,
+    continue_after_hit: bool,
     provenance: dict[str, Any],
 ) -> Path:
     run_directory = output_root / _run_id(scope, seed)
@@ -87,6 +90,10 @@ def generate_episode(
     behavior_policy = EpsilonTeacherBehavior(epsilon=epsilon, seed=behavior_seed)
     termination_reason = "generator-error"
     authority_failure: str | None = None
+    authority_failure_events = 0
+    benchmark_forced_actions = 0
+    physical_hits = 0
+    physical_hit_ticks: list[int] = []
     terminal_observation: dict[str, Any] | None = None
     try:
         client = HeadlessClient(
@@ -95,6 +102,7 @@ def generate_episode(
             scope=scope,
             seed=seed,
             max_ticks=max_ticks,
+            continue_after_hit=continue_after_hit,
         )
         try:
             observation = client.start()
@@ -109,40 +117,58 @@ def generate_episode(
                         prepared_hard,
                         kernel=kernel,
                     )
-                    if not certified:
+                    benchmark_forced = not certified
+                    if benchmark_forced and not continue_after_hit:
                         raise HeadlessAuthorityUnavailable("headless native safe set is empty")
-                    teacher_hazards = lower_headless_hazards(observation, teacher_horizon)
-                    player = observation["player"]
-                    profiles = kernel.profile_actions(
-                        x=float(player["x"]),
-                        y=float(player["y"]),
-                        half_width=float(player["half_width"]),
-                        half_height=float(player["half_height"]),
-                        kinematics=KINEMATICS,
-                        current_action=action_from_input(int(observation["input"])),
-                        hazards=teacher_hazards,
-                        candidates=tuple(item.action for item in certified),
-                    )
-                    teacher_decision = teacher.rank(
-                        observation,
-                        certified,
-                        hazards=teacher_hazards,
-                    )
-                    behavior = behavior_policy.select(teacher_decision, certified)
+                    if benchmark_forced:
+                        authority_failure_events += 1
+                        benchmark_forced_actions += 1
+                        profiles = ()
+                        behavior = BehaviorDecision(
+                            selected_action="stay_fast",
+                            probability=1.0,
+                            teacher=TeacherDecision(
+                                action="stay_fast",
+                                kind="benchmark-authority-release",
+                                effort_horizon=0,
+                                surviving_actions=(),
+                            ),
+                            policy="benchmark-authority-release-v1",
+                        )
+                    else:
+                        teacher_hazards = lower_headless_hazards(observation, teacher_horizon)
+                        player = observation["player"]
+                        profiles = kernel.profile_actions(
+                            x=float(player["x"]),
+                            y=float(player["y"]),
+                            half_width=float(player["half_width"]),
+                            half_height=float(player["half_height"]),
+                            kinematics=KINEMATICS,
+                            current_action=action_from_input(int(observation["input"])),
+                            hazards=teacher_hazards,
+                            candidates=tuple(item.action for item in certified),
+                        )
+                        teacher_decision = teacher.rank(
+                            observation,
+                            certified,
+                            hazards=teacher_hazards,
+                        )
+                        behavior = behavior_policy.select(teacher_decision, certified)
 
                     # The step process cannot advance asynchronously, but keep
                     # the same explicit issue-gate boundary as the real agent.
-                    issue_certified = certify_lowered_headless_actions(
-                        observation,
-                        prepared_hard,
-                        kernel=kernel,
-                    )
-                    if behavior.selected_action not in {
-                        item.action.name for item in issue_certified
-                    }:
-                        raise HeadlessAuthorityUnavailable(
-                            "selected action failed the immediate issue gate"
+                    if not benchmark_forced:
+                        issue_certified = certify_lowered_headless_actions(
+                            observation,
+                            prepared_hard,
+                            kernel=kernel,
                         )
+                        if behavior.selected_action not in {
+                            item.action.name for item in issue_certified
+                        }:
+                            raise HeadlessAuthorityUnavailable(
+                                "selected action failed the immediate issue gate"
+                            )
                 except HeadlessAuthorityUnavailable as error:
                     authority_failure = str(error)
                     termination_reason = "authority-failure"
@@ -163,7 +189,11 @@ def generate_episode(
                     behavior=behavior,
                     epsilon=epsilon,
                     profiles=profiles,
+                    benchmark_forced_action=benchmark_forced,
                 )
+                deaths_delta = max(int(transition["outcome_terms"]["deaths_delta"]), 0)
+                physical_hits += deaths_delta
+                physical_hit_ticks.extend([int(transition["next_tick"])] * deaths_delta)
                 if transition["outcome_terms"]["bombs_used_delta"] != 0:
                     raise HeadlessAuthorityUnavailable("Bomb use appeared in headless outcome")
                 writer.transition(transition)
@@ -192,7 +222,7 @@ def generate_episode(
 
     manifest = writer.close({
         "transaction_complete": True,
-        "training_eligible": writer.transition_count > 0,
+        "training_eligible": writer.transition_count > 0 and not continue_after_hit,
         "scope": {
             "difficulty": scope.difficulty,
             "character": scope.character,
@@ -208,7 +238,12 @@ def generate_episode(
         "anchor_stride": anchor_stride,
         "termination_reason": termination_reason,
         "authority_failure": authority_failure,
-        "physical_hit": termination_reason == "physical-hit",
+        "authority_failure_events": authority_failure_events,
+        "benchmark_forced_actions": benchmark_forced_actions,
+        "continue_after_hit": continue_after_hit,
+        "physical_hit": physical_hits > 0,
+        "physical_hits": physical_hits,
+        "physical_hit_ticks": physical_hit_ticks,
         "nmnb_stage_clear": bool(
             terminal_observation is not None
             and termination_reason == "chain-exit-success"
@@ -250,6 +285,7 @@ def main() -> int:
     parser.add_argument("--character", type=int, default=0)
     parser.add_argument("--shot-type", type=int, default=0)
     parser.add_argument("--stage", type=int, default=6)
+    parser.add_argument("--continue-after-hit", action="store_true")
     args = parser.parse_args()
     if not 0.0 <= args.epsilon <= 1.0:
         parser.error("epsilon must be in 0..1")
@@ -286,6 +322,7 @@ def main() -> int:
             max_ticks=args.max_ticks,
             anchor_stride=args.anchor_stride,
             teacher_horizon=args.teacher_horizon,
+            continue_after_hit=args.continue_after_hit,
             provenance=provenance,
         ))
     print(json.dumps({"manifests": [str(path) for path in manifests]}, indent=2))

@@ -47,6 +47,7 @@ class HeadlessClient:
         seed: int,
         max_ticks: int = 0,
         auto_shoot: bool = True,
+        continue_after_hit: bool = False,
         read_timeout: float = 30.0,
     ) -> None:
         if seed not in range(1 << 16):
@@ -61,6 +62,7 @@ class HeadlessClient:
         self.seed = seed
         self.max_ticks = max_ticks
         self.auto_shoot = auto_shoot
+        self.continue_after_hit = continue_after_hit
         self.read_timeout = read_timeout
         self.process: subprocess.Popen[str] | None = None
         self.terminal = False
@@ -85,6 +87,8 @@ class HeadlessClient:
         ]
         if self.auto_shoot:
             command.append("--auto-shoot")
+        if self.continue_after_hit:
+            command.append("--continue-after-hit")
         nice = shutil.which("nice")
         ionice = shutil.which("ionice")
         if nice is not None:

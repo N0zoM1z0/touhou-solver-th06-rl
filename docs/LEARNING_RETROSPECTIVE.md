@@ -212,6 +212,13 @@ first HIT or authority anomaly stops the run and preserves the incumbent.
 This guarantees that an unvalidated offline model is not promoted, but it does
 not pretend Linux evidence can guarantee Windows performance equivalence.
 
+Every candidate also receives a secondary per-stage continuation benchmark,
+matching the Windows learning loop's ability to respawn and finish after a
+HIT. It reports total HITs, clear status, HIT ticks, authority-empty frames,
+Bomb use, and termination. Forced fail-close release rows and post-HIT states
+are benchmark-only and `training_eligible=false`; they may identify new COW
+neighborhoods but never enter the factual training corpus directly.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:

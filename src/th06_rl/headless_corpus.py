@@ -340,6 +340,7 @@ def build_transition(
     behavior: BehaviorDecision,
     epsilon: float,
     profiles: tuple[NativeActionProfile, ...] = (),
+    benchmark_forced_action: bool = False,
 ) -> dict[str, Any]:
     validate_headless_observation(observation)
     validate_headless_observation(next_observation)
@@ -351,10 +352,13 @@ def build_transition(
     if next_tick != tick + 1:
         raise HeadlessAuthorityUnavailable("headless transition is not one physical tick")
     legal = tuple(item.action.name for item in certified)
-    if behavior.selected_action not in legal:
+    if behavior.selected_action not in legal and not benchmark_forced_action:
         raise HeadlessAuthorityUnavailable("behavior action escaped the native safe set")
+    if benchmark_forced_action and (legal or behavior.selected_action != "stay_fast"):
+        raise HeadlessAuthorityUnavailable("invalid benchmark authority-release action")
     terminal_reason = next_observation.get("terminal_reason")
-    hit = terminal_reason == "physical-hit"
+    deaths_delta = int(next_observation["deaths"]) - int(observation["deaths"])
+    hit = terminal_reason == "physical-hit" or deaths_delta > 0
     next_player = next_observation["player"]
     assert isinstance(next_player, Mapping)
     return {
@@ -375,6 +379,7 @@ def build_transition(
             teacher=behavior.teacher.action,
             profiles=profiles,
         ),
+        "benchmark_forced_action": benchmark_forced_action,
         "behavior": {
             "policy": behavior.policy,
             "epsilon": epsilon,
@@ -396,7 +401,7 @@ def build_transition(
                 float(next_player["x"]),
                 float(next_player["y"]),
             ),
-            "deaths_delta": int(next_observation["deaths"]) - int(observation["deaths"]),
+            "deaths_delta": deaths_delta,
             "bombs_used_delta": int(next_observation["bombs_used"])
             - int(observation["bombs_used"]),
         },

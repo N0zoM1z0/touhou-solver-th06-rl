@@ -83,6 +83,10 @@ def audit_run(run: Path) -> dict[str, Any]:
     valid_legal = 0
     valid_probability = 0
     valid_bombless = 0
+    benchmark_forced_rows = 0
+    physical_hits = 0
+    physical_hit_ticks: list[int] = []
+    benchmark_mode = manifest.get("continue_after_hit") is True
     contexts: set[str] = set()
     actions: Counter[str] = Counter()
     for index, row in enumerate(transitions):
@@ -108,8 +112,11 @@ def audit_run(run: Path) -> dict[str, Any]:
         legal = row.get("legal_actions")
         behavior = row.get("behavior")
         action = behavior.get("selected_action") if isinstance(behavior, Mapping) else None
-        if isinstance(legal, list) and action in legal and "bomb" not in legal:
+        forced = row.get("benchmark_forced_action") is True
+        if isinstance(legal, list) and action in legal and "bomb" not in legal and not forced:
             valid_legal += 1
+        elif benchmark_mode and forced and legal == [] and action == "stay_fast":
+            benchmark_forced_rows += 1
         else:
             errors.append(f"{prefix}: selected action is not Bomb-free native legal")
         try:
@@ -125,6 +132,16 @@ def audit_run(run: Path) -> dict[str, Any]:
             valid_bombless += 1
         else:
             errors.append(f"{prefix}: Bomb delta is not zero")
+        if isinstance(outcome, Mapping):
+            try:
+                deaths_delta = int(outcome.get("deaths_delta", 0))
+            except (TypeError, ValueError):
+                errors.append(f"{prefix}: invalid deaths delta")
+            else:
+                if deaths_delta < 0:
+                    errors.append(f"{prefix}: negative deaths delta")
+                physical_hits += max(deaths_delta, 0)
+                physical_hit_ticks.extend([int(row.get("next_tick", -1))] * max(deaths_delta, 0))
         if isinstance(row.get("source_context"), str):
             contexts.add(row["source_context"])
         if isinstance(action, str):
@@ -157,6 +174,12 @@ def audit_run(run: Path) -> dict[str, Any]:
             continue
         valid_anchors += 1
 
+    if benchmark_forced_rows != int(manifest.get("benchmark_forced_actions", 0)):
+        errors.append("benchmark forced-action count mismatch")
+    if physical_hits != int(manifest.get("physical_hits", physical_hits)):
+        errors.append("physical HIT count mismatch")
+    if "physical_hit_ticks" in manifest and physical_hit_ticks != manifest["physical_hit_ticks"]:
+        errors.append("physical HIT tick list mismatch")
     rows = len(transitions)
     return {
         "run": str(run),
@@ -168,6 +191,10 @@ def audit_run(run: Path) -> dict[str, Any]:
         "rows": rows,
         "factual_successor_rows": valid_successors,
         "native_legal_rows": valid_legal,
+        "native_gate_rows": rows - benchmark_forced_rows,
+        "benchmark_forced_rows": benchmark_forced_rows,
+        "physical_hits": physical_hits,
+        "physical_hit_ticks": physical_hit_ticks,
         "valid_propensity_rows": valid_probability,
         "bombless_rows": valid_bombless,
         "valid_anchors": valid_anchors,
@@ -197,6 +224,9 @@ def summarize(runs: list[dict[str, Any]]) -> dict[str, Any]:
         for name in (
             "factual_successor_rows",
             "native_legal_rows",
+            "native_gate_rows",
+            "benchmark_forced_rows",
+            "physical_hits",
             "valid_propensity_rows",
             "bombless_rows",
         )
@@ -208,7 +238,10 @@ def summarize(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "rows": rows,
         **field_totals,
         "factual_successor_ratio": field_totals["factual_successor_rows"] / rows if rows else 0.0,
-        "native_legal_ratio": field_totals["native_legal_rows"] / rows if rows else 0.0,
+        "native_legal_ratio": (
+            field_totals["native_legal_rows"] / field_totals["native_gate_rows"]
+            if field_totals["native_gate_rows"] else 1.0
+        ),
         "valid_propensity_ratio": field_totals["valid_propensity_rows"] / rows if rows else 0.0,
         "bombless_ratio": field_totals["bombless_rows"] / rows if rows else 0.0,
         "compressed_bytes": sum(int(run.get("compressed_bytes", 0)) for run in runs),

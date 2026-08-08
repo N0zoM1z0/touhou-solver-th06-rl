@@ -54,3 +54,15 @@ def test_headless_client_steps_without_a_pty_and_rejects_bomb(tmp_path: Path) ->
 def test_headless_scope_does_not_silently_mix_learning_keys() -> None:
     with pytest.raises(ValueError, match="stage"):
         HeadlessScope(3, 0, 0, 7)
+
+
+def test_continue_after_hit_is_an_explicit_headless_flag(tmp_path: Path) -> None:
+    client = HeadlessClient(
+        binary=_fake_headless(tmp_path / "fake-headless"),
+        game_directory=tmp_path,
+        scope=HeadlessScope(3, 0, 0, 1),
+        seed=7,
+        continue_after_hit=True,
+    )
+
+    assert "--continue-after-hit" in client._command()

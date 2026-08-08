@@ -6,6 +6,7 @@ from pathlib import Path
 
 from scripts.audit_headless_corpus import audit_run
 from th06_rl.headless_corpus import (
+    BehaviorDecision,
     CompactHeadlessCorpusWriter,
     EpsilonTeacherBehavior,
     TeacherDecision,
@@ -19,7 +20,12 @@ from th06_rl.native import ACTIONS, NativeCertifiedAction
 BY_NAME = {action.name: action for action in ACTIONS}
 
 
-def observation(*, tick: int = 10, terminal: str | None = None) -> dict[str, object]:
+def observation(
+    *,
+    tick: int = 10,
+    terminal: str | None = None,
+    deaths: int | None = None,
+) -> dict[str, object]:
     return {
         "schema": "th06-headless-observation-v2",
         "tick": tick,
@@ -41,7 +47,7 @@ def observation(*, tick: int = 10, terminal: str | None = None) -> dict[str, obj
         "score": 1000,
         "power": 64,
         "rank": 32,
-        "deaths": int(terminal == "physical-hit"),
+        "deaths": int(terminal == "physical-hit") if deaths is None else deaths,
         "bombs_used": 0,
         "graze": 4,
         "source_context": {
@@ -100,6 +106,33 @@ def test_transition_has_a_factual_successor_and_native_legal_action() -> None:
     assert transition["observation_sha256"] == canonical_observation_sha256(current)
     assert transition["next_observation_sha256"] == canonical_observation_sha256(following)
     assert transition["outcome_terms"]["physical_hit"] is True
+
+
+def test_benchmark_forced_release_records_nonterminal_hit_without_training_authority() -> None:
+    transition = build_transition(
+        sequence=0,
+        observation=observation(deaths=0),
+        next_observation=observation(tick=11, deaths=1),
+        certified=(),
+        behavior=BehaviorDecision(
+            selected_action="stay_fast",
+            probability=1.0,
+            teacher=TeacherDecision(
+                "stay_fast",
+                "benchmark-authority-release",
+                0,
+                (),
+            ),
+            policy="benchmark-authority-release-v1",
+        ),
+        epsilon=0.0,
+        benchmark_forced_action=True,
+    )
+
+    assert transition["legal_actions"] == []
+    assert transition["benchmark_forced_action"] is True
+    assert transition["outcome_terms"]["physical_hit"] is True
+    assert transition["outcome_terms"]["deaths_delta"] == 1
 
 
 def test_compact_writer_commits_gzip_shards_and_manifest(tmp_path: Path) -> None:
