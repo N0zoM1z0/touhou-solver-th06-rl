@@ -523,6 +523,11 @@ def main() -> int:
         categorical_feature=list(range(len(CATEGORICAL_FEATURES))),
     )
     elapsed = time.perf_counter() - started
+    compatible_sources = [provenance["source"]]
+    if counterfactuals is not None:
+        for compatible in counterfactuals["runtime_sources"]:
+            if compatible not in compatible_sources:
+                compatible_sources.append(compatible)
     args.output.mkdir(parents=True, exist_ok=True)
     joblib.dump(
         {
@@ -531,6 +536,7 @@ def main() -> int:
             "categories": encoder.manifest(),
             "scope": provenance["scope"],
             "headless_source": provenance["source"],
+            "compatible_headless_sources": compatible_sources,
         },
         args.output / "teacher-ranker.joblib",
         compress=3,
@@ -547,6 +553,7 @@ def main() -> int:
         "authority": "rank-native-legal-set-only",
         "scope": provenance["scope"],
         "headless_source": provenance["source"],
+        "compatible_headless_sources": compatible_sources,
         "code_commit": code_commit,
         "train_seeds": sorted(set(seeds) - holdout),
         "holdout_seeds": sorted(holdout),

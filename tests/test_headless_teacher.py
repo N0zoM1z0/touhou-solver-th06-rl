@@ -8,6 +8,7 @@ from scripts.train_headless_teacher import (
     generic_choice,
 )
 from th06_rl.headless_corpus import source_context_id
+from scripts.collect_headless_dagger import source_compatible
 
 
 def decision() -> Decision:
@@ -153,3 +154,20 @@ def test_dynamic_counterfactual_can_override_local_teacher_label(tmp_path) -> No
         counterfactual_weight=16.0,
     )
     assert weight == 17.0
+
+
+def test_runtime_compatibility_requires_exact_clean_commit_and_binary() -> None:
+    allowed = [{"commit": "new", "binary_sha256": "abc", "clean": True}]
+
+    assert source_compatible(
+        allowed,
+        {"commit": "new", "binary_sha256": "abc", "clean": True},
+    )
+    assert not source_compatible(
+        allowed,
+        {"commit": "new", "binary_sha256": "different", "clean": True},
+    )
+    assert not source_compatible(
+        allowed,
+        {"commit": "new", "binary_sha256": "abc", "clean": False},
+    )

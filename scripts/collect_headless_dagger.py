@@ -12,7 +12,10 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from train_headless_teacher import Decision, Encoder, candidate_features
+try:
+    from train_headless_teacher import Decision, Encoder, candidate_features
+except ModuleNotFoundError:  # Imported as scripts.collect_headless_dagger in tests.
+    from scripts.train_headless_teacher import Decision, Encoder, candidate_features
 from th06_rl.headless import HeadlessClient, HeadlessScope
 from th06_rl.headless_corpus import (
     BehaviorDecision,
@@ -33,6 +36,19 @@ from th06_rl.native import NativeCertifiedAction, NativeKernel
 
 
 POLICY_NAME = "distilled-ranker-dagger-v1"
+
+
+def source_compatible(
+    allowed: list[dict[str, Any]],
+    runtime: dict[str, Any],
+) -> bool:
+    """Require an exact clean commit+binary pair, never a loose revision range."""
+    return runtime.get("clean") is True and any(
+        source.get("clean") is True
+        and source.get("commit") == runtime.get("commit")
+        and source.get("binary_sha256") == runtime.get("binary_sha256")
+        for source in allowed
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -70,6 +86,10 @@ class DistilledRanker:
         self.model = artifact["model"]
         self.scope = artifact["scope"]
         self.headless_source = artifact["headless_source"]
+        self.compatible_headless_sources = artifact.get(
+            "compatible_headless_sources",
+            [self.headless_source],
+        )
         self.encoder = Encoder([])
         self.encoder.categories = {
             name: {value: index for index, value in enumerate(values)}
@@ -131,8 +151,8 @@ def collect(
     if ranker.scope != expected_scope:
         raise ValueError("ranker scope does not match requested rollout scope")
     provenance = _source_provenance(binary)
-    if ranker.headless_source.get("commit") != provenance["commit"]:
-        raise ValueError("ranker and runtime use different headless source revisions")
+    if not source_compatible(ranker.compatible_headless_sources, provenance):
+        raise ValueError("ranker and runtime do not share an exact compatible source build")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run = output_root / (
         f"{timestamp}-dagger-d{scope.difficulty}-c{scope.character}-"
