@@ -10,6 +10,10 @@ Its accelerated Linux simulation and lockstep environment backend lives in
 [`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless). That
 source-only fork is for corpus generation, replay, and learning acceleration;
 the shipped Windows game remains this solver's final physical validation gate.
+The currently paired local runtime revision is `034152c` on the headless
+fork's `th06-rl-headless-spike` branch; solver clients and benchmark protocol
+changes are committed together with that dependency recorded in the evidence
+note.
 
 Online UCB and future imitation/RL policies own long-horizon/global-local
 tradeoffs but cannot enlarge the native safe set, change collision physics,
@@ -30,6 +34,13 @@ Reimu-A / Stage 4 is retained only as prior baseline evidence. Difficulty,
 character, shot type, stage, and automatically derived source context remain
 separate corpus/model scopes. The 2026-08-08 offline snapshot predates this
 expansion and contains only Stages 4 through 6.
+
+For source-simulator counterfactual evaluation,
+`scripts/benchmark_headless_branches.py` replays one generic action prefix once,
+forks all 18 Bomb-free actions from the resulting physical state, and compares
+every terminal observation against a cold full-prefix replay. It runs at nice
+15 / low I/O priority and writes a revisioned JSON report under ignored
+`artifacts/`; this is an offline teacher/benchmark path, never resident search.
 
 `run_lunatic_stage123456_learning.bat` rotates exact Practice Stages 1 through 6,
 records one complete sharded stage trajectory at a time, checkpoints each

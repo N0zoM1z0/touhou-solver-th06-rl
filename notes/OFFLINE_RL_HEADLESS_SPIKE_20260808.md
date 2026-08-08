@@ -68,7 +68,10 @@ support and terminal-sparsity problem.
   compatibility), `8c30fbe` (deterministic logic-headless mode), and `cb60bf6`
   (direct Practice action/step protocol), `d0f92aa` (physical tick progression
   and fail-close terminal behavior), `4501c65` (public-fork boundary), and
-  `294a478` (public usage and evidence documentation).
+  `294a478` (public usage and evidence documentation), `6e84840`
+  (collision-complete observation v2), `d5e1737` (single-threaded headless
+  runtime), `a87ada1` (stage-entry COW forkserver), and `034152c` (replayed
+  checkpoints and terminal-only branches).
 - The release Linux ELF builds with SDL2/image/ttf and Premake 5 beta2. A
   no-display, no-asset fail-close smoke exits cleanly three times with about
   22.9 MiB RSS and no leftover process or config write.
@@ -131,6 +134,37 @@ same workload with a 61,621,511-byte exported-hazard JSONL state trace takes 3.6
 seconds: 1,385 ticks/s, or 23.1 times real time. Both stay below 38 MiB process
 RSS. These are one-process measurements on a loaded shared VPS, not a claim
 about multi-process scaling.
+
+## COW counterfactual result
+
+The Linux runtime now stays single threaded before a COW checkpoint: headless
+sound initialization is skipped, and an actual loaded-DAT `/proc` audit found
+one thread at the stage-entry boundary. A root server may fork one child to
+replay any generic action prefix, stop at the requested physical tick, and then
+fork serial short branches from that immutable state. `RUN_FINAL` writes only
+the terminal observation so counterfactual labeling does not serialize every
+intermediate hazard frame.
+
+`scripts/benchmark_headless_branches.py` validates both speed and identity. In
+Lunatic/Reimu-A/Stage 6, seed 7, a tick-600 checkpoint and all 18 constant-action
+60-tick branches were compared against 18 cold full-prefix processes for three
+repetitions:
+
+- all 54 COW terminal observations matched their cold-replay counterpart byte
+  for byte;
+- each repetition found the same eight physical-HIT branches and ten branches
+  surviving to tick 660;
+- median COW time, including root startup and the one common prefix, was 0.2674
+  seconds; median cold-replay time was 2.0932 seconds; and
+- median per-repetition speedup was 7.87x on the loaded shared VPS.
+
+The report is
+`artifacts/benchmarks/headless-branches-stage6-seed7.json` and records source
+commit `034152ca8f1635fbdc4d0e39dc6047a30d6d2e0c` plus binary SHA-256
+`304c8aec5af50e1bb60c7c45522378c4e5722d9fcb6835eaae79a0beaa400f34`.
+Artifacts remain ignored. This mechanism accelerates exact short-horizon
+teacher labels, Q targets, and hard-example mining. It does not accelerate
+gradient computation and has only modest benefit for a long whole-stage run.
 
 The public source-only fork is
 [`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless), with
