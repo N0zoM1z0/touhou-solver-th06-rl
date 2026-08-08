@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -68,6 +69,20 @@ def _run_id(scope: HeadlessScope, seed: int) -> str:
     )
 
 
+def _benchmark_release_behavior() -> BehaviorDecision:
+    return BehaviorDecision(
+        selected_action="stay_fast",
+        probability=1.0,
+        teacher=TeacherDecision(
+            action="stay_fast",
+            kind="benchmark-authority-release",
+            effort_horizon=0,
+            surviving_actions=(),
+        ),
+        policy="benchmark-authority-release-v1",
+    )
+
+
 def generate_episode(
     *,
     binary: Path,
@@ -91,6 +106,7 @@ def generate_episode(
     termination_reason = "generator-error"
     authority_failure: str | None = None
     authority_failure_events = 0
+    authority_failure_reasons: Counter[str] = Counter()
     benchmark_forced_actions = 0
     physical_hits = 0
     physical_hit_ticks: list[int] = []
@@ -122,19 +138,10 @@ def generate_episode(
                         raise HeadlessAuthorityUnavailable("headless native safe set is empty")
                     if benchmark_forced:
                         authority_failure_events += 1
+                        authority_failure_reasons["headless native safe set is empty"] += 1
                         benchmark_forced_actions += 1
                         profiles = ()
-                        behavior = BehaviorDecision(
-                            selected_action="stay_fast",
-                            probability=1.0,
-                            teacher=TeacherDecision(
-                                action="stay_fast",
-                                kind="benchmark-authority-release",
-                                effort_horizon=0,
-                                surviving_actions=(),
-                            ),
-                            policy="benchmark-authority-release-v1",
-                        )
+                        behavior = _benchmark_release_behavior()
                     else:
                         teacher_hazards = lower_headless_hazards(observation, teacher_horizon)
                         player = observation["player"]
@@ -170,15 +177,25 @@ def generate_episode(
                                 "selected action failed the immediate issue gate"
                             )
                 except HeadlessAuthorityUnavailable as error:
-                    authority_failure = str(error)
-                    termination_reason = "authority-failure"
-                    writer.anchor(
-                        observation,
-                        sequence=sequence,
-                        role="authority-failure",
-                        force=True,
-                    )
-                    break
+                    if continue_after_hit:
+                        reason = str(error)
+                        authority_failure_events += 1
+                        authority_failure_reasons[reason] += 1
+                        benchmark_forced_actions += 1
+                        benchmark_forced = True
+                        certified = ()
+                        profiles = ()
+                        behavior = _benchmark_release_behavior()
+                    else:
+                        authority_failure = str(error)
+                        termination_reason = "authority-failure"
+                        writer.anchor(
+                            observation,
+                            sequence=sequence,
+                            role="authority-failure",
+                            force=True,
+                        )
+                        break
 
                 next_observation = client.step(behavior.selected_action)
                 transition = build_transition(
@@ -239,6 +256,7 @@ def generate_episode(
         "termination_reason": termination_reason,
         "authority_failure": authority_failure,
         "authority_failure_events": authority_failure_events,
+        "authority_failure_reasons": dict(sorted(authority_failure_reasons.items())),
         "benchmark_forced_actions": benchmark_forced_actions,
         "continue_after_hit": continue_after_hit,
         "physical_hit": physical_hits > 0,
@@ -289,8 +307,8 @@ def main() -> int:
     args = parser.parse_args()
     if not 0.0 <= args.epsilon <= 1.0:
         parser.error("epsilon must be in 0..1")
-    if min(args.max_ticks, args.anchor_stride, args.teacher_horizon) <= 0:
-        parser.error("tick, anchor, and teacher bounds must be positive")
+    if args.max_ticks < 0 or min(args.anchor_stride, args.teacher_horizon) <= 0:
+        parser.error("max ticks must be nonnegative; anchor and teacher bounds must be positive")
     scope = HeadlessScope(
         args.difficulty,
         args.character,

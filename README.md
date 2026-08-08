@@ -70,7 +70,8 @@ For Windows-style full-stage HIT counting, add `--continue-after-hit`. This is
 an explicit benchmark-only override: an empty native set releases movement as
 `stay_fast`, every death delta is counted, and the entire run is marked
 `training_eligible=false`. Default collection still stops on the first HIT or
-authority failure. Bomb remains forbidden in both modes.
+authority failure. Use `--max-ticks 0` for a natural stage termination rather
+than a shared timeout. Bomb remains forbidden in both modes.
 
 The offline teacher may run bounded local search, but its selected action is
 rechecked against the four-frame native gate immediately before the synchronous
