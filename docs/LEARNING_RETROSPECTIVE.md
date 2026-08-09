@@ -1028,6 +1028,46 @@ the ECL-time 36/38/39 observations where an anticipatory ranker can act. The
 scheme is event-relative and phase-agnostic; it does not key movement to this
 seed, tick, or boss.
 
+### 2026-08-09 exact repair versus unseen-seed regression
+
+The first long-horizon source-context repair produced a real but local
+closed-loop breakthrough. Binary COW-survivable weight
+`8139244e758e` changed the incumbent's seed-128/131 authority failures at
+4,191/4,205 decisions into natural Stage 2 clears at 21,381/21,360 decisions.
+Both 42,741-row runs audited native-legal and Bomb-free with zero physical
+HIT. On the same pair, unique-best LambdaRank cleared seed 131 but still failed
+seed 128 at 4,285; survivable LambdaRank failed both near 3,483. Binary is the
+best targeted member, but the fixed pair alone was not a global promotion.
+
+Fresh seeds 133/134 supplied the necessary falsification. The old compatible
+incumbent `737d1d6f19d2` naturally cleared them at 21,350/21,100 decisions with
+zero HIT/Bomb. The targeted binary stopped at only 1,625/3,440. It therefore
+remains a specialized population member and cannot replace the incumbent.
+Exact COW replay of its seed-133 failure found a constructive boundary at
+sequence 1,620: only `down_right_fast` plus dynamic h12 continuation survived
+the full 1,200 ticks, while the factual `up_left_fast` and every other first
+action failed after five ticks. The later empty set was caused by earlier
+policy selection, not geometry authority.
+
+Simply folding those states into another global classifier did not solve the
+distribution shift. Multi-seed binary weight `3b8dc75ae6da` ranked the
+sequence-1,620 correction first, yet new trajectories failed on seeds
+131/133/134 at 3,412/3,418/4,163 decisions. Its deduplicated exact-value audit
+selected the strict ordinal best action on only 4/17 checkpoints. A
+behavior-regularized ordinal value fit similarly reached 100% on seven
+seed-128 train groups but 0% top-1 on three seed-131 holdout groups. Sparse
+failure labels can memorize a repair while a global tree perturbs many
+well-supported decisions upstream.
+
+The next collection generation is therefore balanced rather than another
+high-weight patch. It samples both failure neighborhoods and uniform states
+from natural successful incumbent routes across multiple RNG seeds, then uses
+complete-seed holdouts. The incumbent remains the behavior fallback; a future
+residual/selector may override it only in a generic feature region with
+cross-seed COW support. Captured frame, seed, counterexample identity, and
+handwritten phase actions remain forbidden. Closed-loop same-seed and fresh-
+seed panels remain authoritative over offline fit.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:

@@ -245,3 +245,22 @@ does not affect the current state or any forked successor. It remains lossless
 in sparse anchors but is excluded from transition/COW digests. Every new
 manifest, transition, anchor, COW table, and feasibility artifact declares the
 digest contract, and corpus audit rejects silent contract drift.
+
+The first source-context binary correction then separated local feasibility
+from global generalization. It naturally cleared the former bad seeds 128 and
+131, but failed unseen seeds 133 and 134 much earlier than the incumbent. At
+seed 133 sequence 1,620, exact 1,200-tick COW replay found one constructive
+action, `down_right_fast`; all other native-legal first actions survived only
+five ticks under the same dynamic continuation. The corrective ranker had
+selected `up_left_fast`. This is a policy-selection witness and a useful new
+label, not evidence that the native set should be widened.
+
+Eleven checkpoints over the preceding 256 decisions produced 168 structurally
+valid 240-tick outcomes. Seven were learning-informative; the factual action
+was best at 2/11 and the local teacher at 3/11. Late checkpoints with only
+one-to-three ticks of survival remain diagnostics, while sequence 1,620 is the
+earliest retained long witness. Because retraining on this witness created new
+failure trajectories elsewhere, subsequent value batches also sample
+successful-route states and use complete unseen-seed splits. Exact witnesses
+diagnose and supervise local decisions; only full natural rollouts establish
+whole-route improvement.

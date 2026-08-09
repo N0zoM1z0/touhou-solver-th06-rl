@@ -141,6 +141,21 @@ and records every file SHA-256 plus a deterministic set digest in the model
 report. A directory that grows during fitting therefore affects only a later
 model, never the already declared training snapshot.
 
+When the same exact observation is extended at several horizons, value
+training keeps only the longest complete label. A shorter 240-tick probe and
+its later 1,200-tick extension must not silently count as two independent
+groups or overweight one state. Equal-horizon duplicates must agree exactly;
+the report records duplicate and longer-horizon replacement counts.
+
+`scripts/audit_headless_ranker_counterfactuals.py` evaluates any frozen
+compatible ranker or Borda ensemble against the same deduplicated ordinal
+groups. It reports the predicted action, complete native-set order, rank of a
+best action, and per-seed top-1 result, after checking scope, clean source
+build, delivery, and observation-digest contracts. This is a fast diagnostic
+between fitting and rollout. It never changes native authority, and even 100%
+exact-checkpoint accuracy is not promotion evidence without unseen-seed
+closed-loop play.
+
 The factual side is frozen as well. Every eligible compact-run manifest
 already commits to the compressed transition SHA-256; teacher reports retain
 that digest together with the manifest SHA-256, resolved run path, byte count,
