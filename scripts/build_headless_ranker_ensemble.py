@@ -34,6 +34,14 @@ def _source_key(source: Mapping[str, Any]) -> tuple[str, str, bool]:
     )
 
 
+def validate_output_directory(path: Path) -> None:
+    """Reject the common mistake of passing the artifact filename itself."""
+    if path.name.endswith(".joblib"):
+        raise ValueError(
+            "--output is a directory; do not append ensemble-ranker.joblib"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("models", nargs="+", type=Path)
@@ -41,6 +49,10 @@ def main() -> int:
     args = parser.parse_args()
     if len(args.models) < 2:
         parser.error("an ensemble requires at least two model artifacts")
+    try:
+        validate_output_directory(args.output)
+    except ValueError as error:
+        parser.error(str(error))
 
     import joblib
 
