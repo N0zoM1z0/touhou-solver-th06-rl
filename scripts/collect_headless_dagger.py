@@ -124,6 +124,21 @@ def borda_consensus(actions: list[str], member_scores: list[list[float]]) -> str
     return borda_ranking(actions, member_scores)[0]
 
 
+def supported_residual_ranking(
+    base: tuple[str, ...],
+    correction: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Accept a correction only when it ranks the identical native-safe set."""
+    if (
+        not base
+        or len(base) != len(set(base))
+        or len(correction) != len(set(correction))
+        or set(base) != set(correction)
+    ):
+        raise ValueError("residual members must rank the same nonempty native-safe set")
+    return correction
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -156,10 +171,6 @@ class DistilledRanker:
         self.path = artifact_path.resolve()
         self.threads = threads
         artifact = joblib.load(self.path)
-        raw_members = artifact.get("ensemble_members")
-        members = raw_members if isinstance(raw_members, list) else [artifact]
-        if not members:
-            raise ValueError("ranker ensemble has no members")
         self.scope = artifact["scope"]
         self.headless_source = artifact["headless_source"]
         self.compatible_headless_sources = artifact.get(
@@ -184,20 +195,61 @@ class DistilledRanker:
         ):
             raise ValueError("ranker uses an incompatible delivery contract")
         self.members = []
-        for member in members:
-            model = member["model"]
-            stored_features = member.get("feature_names")
-            if stored_features is None:
-                feature_count = int(model.booster_.num_feature())
-                if feature_count > len(FEATURE_NAMES):
-                    raise ValueError("ranker uses an unsupported feature schema")
-                stored_features = FEATURE_NAMES[:feature_count]
-            encoder = Encoder([], feature_names=stored_features)
-            encoder.categories = {
+        self.residual = None
+        residual = artifact.get("supported_residual")
+        if isinstance(residual, dict):
+            gate = residual["gate"]
+            gate_encoder = Encoder([], feature_names=gate["feature_names"])
+            gate_encoder.categories = {
                 name: {value: index for index, value in enumerate(values)}
-                for name, values in member["categories"].items()
+                for name, values in gate["categories"].items()
             }
-            self.members.append((model, encoder))
+            self.residual = {
+                "base": self._load_member(residual["base"]),
+                "correction": self._load_member(residual["correction"]),
+                "gate_model": gate["model"],
+                "gate_encoder": gate_encoder,
+                "threshold": float(gate["threshold"]),
+            }
+        else:
+            raw_members = artifact.get("ensemble_members")
+            members = raw_members if isinstance(raw_members, list) else [artifact]
+            if not members:
+                raise ValueError("ranker ensemble has no members")
+            self.members = [self._load_member(member) for member in members]
+
+    @staticmethod
+    def _load_member(member):
+        model = member["model"]
+        stored_features = member.get("feature_names")
+        if stored_features is None:
+            feature_count = int(model.booster_.num_feature())
+            if feature_count > len(FEATURE_NAMES):
+                raise ValueError("ranker uses an unsupported feature schema")
+            stored_features = FEATURE_NAMES[:feature_count]
+        encoder = Encoder([], feature_names=stored_features)
+        encoder.categories = {
+            name: {value: index for index, value in enumerate(values)}
+            for name, values in member["categories"].items()
+        }
+        return model, encoder
+
+    def _rank_member(self, member, decision: Decision) -> tuple[str, ...]:
+        model, encoder = member
+        candidates = tuple(decision.candidates)
+        actions = [str(candidate["action"]) for candidate in candidates]
+        features = [candidate_features(decision, candidate) for candidate in candidates]
+        scores = [float(score) for score in model.booster_.predict(
+            encoder.encode(features),
+            num_threads=self.threads,
+        )]
+        return tuple(
+            action for action, _ in sorted(
+                zip(actions, scores, strict=True),
+                key=lambda item: (float(item[1]), item[0]),
+                reverse=True,
+            )
+        )
 
     def rank_decision(self, decision: Decision) -> tuple[str, ...]:
         """Return the complete Borda order for one recorded native-safe set."""
@@ -205,6 +257,23 @@ class DistilledRanker:
         actions = [str(candidate["action"]) for candidate in candidates]
         if len(actions) != len(set(actions)) or set(actions) != set(decision.legal_actions):
             raise ValueError("ranker decision candidates do not equal the native-safe set")
+        if self.residual is not None:
+            base = self._rank_member(self.residual["base"], decision)
+            candidate_by_action = {
+                str(candidate["action"]): candidate for candidate in candidates
+            }
+            gate_features = candidate_features(
+                decision,
+                candidate_by_action[base[0]],
+            )
+            risk_probability = float(self.residual["gate_model"].booster_.predict(
+                self.residual["gate_encoder"].encode([gate_features]),
+                num_threads=self.threads,
+            )[0])
+            if risk_probability >= self.residual["threshold"]:
+                correction = self._rank_member(self.residual["correction"], decision)
+                return supported_residual_ranking(base, correction)
+            return base
         features = [candidate_features(decision, candidate) for candidate in candidates]
         member_scores = [
             [float(score) for score in model.booster_.predict(
