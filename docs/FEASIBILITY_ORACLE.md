@@ -102,6 +102,22 @@ SHA-256, terminal exact-observation fingerprint, tick, player position, and
 hazard counts. This makes an authority failure reproducible as another exact
 checkpoint instead of leaving only a vague final-frame label.
 
+Replay one such closure and compare configured Hard, margin-zero Hard, and all
+18 source-executed constant actions over the exact four-tick window with:
+
+```bash
+PYTHONPATH=.:src .venv/bin/python \
+  scripts/audit_headless_authority_failure.py ORACLE.json \
+  --checkpoint-sequence SEQUENCE \
+  --first-action ACTION --continuation CONTINUATION \
+  --output artifacts/benchmarks/authority-failure-differential.json
+```
+
+Agreement between margin-zero Hard and source execution isolates a configured
+conservative-margin closure; disagreement is a geometry-model counterexample.
+No source-safe constant action is only a four-tick constant-action dead end,
+not a proof against a changing-action sequence or earlier avoidance.
+
 The independent artifact audit recomputes branch feasibility,
 action/continuation coverage, trace integrity, best-action summaries, policy
 verdicts, Bomb deltas, bounds, and source identity. It rejects a missing branch
