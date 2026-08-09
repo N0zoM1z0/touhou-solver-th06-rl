@@ -86,6 +86,7 @@ def main() -> int:
     joblib.dump(artifact, model_path, compress=3)
     code_commit = subprocess.run(
         ["git", "rev-parse", "HEAD"],
+        cwd=Path(__file__).resolve().parents[1],
         check=True,
         capture_output=True,
         text=True,
