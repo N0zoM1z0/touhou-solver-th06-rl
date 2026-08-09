@@ -642,6 +642,17 @@ policy correction target. Continuation summaries now aggregate
 `benchmark_forced_reason_rows` and separately count unattributed rows from
 interrupted partial streams.
 
+The authoritative source rules out a tempting headless-only shortcut. `Laser`
+stores its current `angle` but no angular-velocity field; ordinary laser
+updates extend `endOffset` and use that angle unchanged. ECL
+`LASERROTATE` and `LASERROTATEFROMPLAYER` instructions instead mutate the angle
+directly. Therefore there is no hidden physical velocity field to expose at
+birth. Treating a newborn laser as zero-rotation would assume that no future
+ECL mutation occurs, while interpreting future ECL in the resident safety path
+would violate the fixed online boundary. The correct result is to preserve the
+fail-close gap and investigate earlier coherent capture/delivery coverage,
+not patch a source-only oracle into the Linux benchmark.
+
 Increasing the same correction weight from 32 to 128 did not close this gap.
 The strong-weight survivable member reached 2/2 HIT with 40/84 forced rows,
 and its unique-best sibling reached 3/1 HIT with 103/41. A Borda ensemble of
