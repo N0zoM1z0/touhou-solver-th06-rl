@@ -400,7 +400,7 @@ for each stage is still a research incumbent, not a promoted policy:
 
 | Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
 | --- | --- | --- | --- | --- |
-| 1 | `a887bb79e54a` | 43 / 44 | 1 / 1 | 24 / 8 |
+| 1 | `7a816b1f4e3e` | 73 / 74 | 2 / 0 | 24 / 4 |
 | 2 | `a4245bdfc8d3` | 71 / 72 | 0 / 0 | 20 / 14 |
 | 3 | `b9b3c842d98e` | 53 / 54 | 3 / 2 | 21 / 30 |
 | 4 | `f8a94d1689c4` | 47 / 48 | 2 / 7 | 8 / 78 |
@@ -526,6 +526,12 @@ Repeating that Stage 1 incumbent on fresh seeds 71/72 produced 3/2 HIT and
 earlier 1/1 pair had nearly solved the stage. The corresponding first-failure
 runs still contributed 10,779 and 15,762 trustworthy pre-failure decisions,
 and their first event neighborhoods entered a separate 1200-tick COW batch.
+The following 445,904-decision survivable model changed 11 of 14 long-COW
+labels and reached 2/0 HIT with 24/4 forced rows on seeds 73/74. It preserves
+the population's two-HIT total while reducing aggregate forced rows from 32 to
+28, so it becomes the aggregate table member; the old 1/1 split remains the
+more balanced robustness member. The sibling unique-best model reached 1/1
+HIT with 22/10 forced rows.
 
 The next Stage 2 live-snapshot corrections also regressed and were rejected:
 the survivable target produced 2/3 HIT with 46/88 forced rows on seeds 69/70,
@@ -536,15 +542,43 @@ was substantially worse at 30/33 HIT and 333/384 forced rows. These outcomes
 reinforce that COW fit and offline top-1 only order experiments; closed-loop
 continuation remains the decision criterion.
 
+The subsequent Stage 2 45-file snapshots reached 2/1 HIT with 69/31 forced
+rows (survivable) and 1/0 HIT with 54/21 forced rows (unique-best). Their
+56-file siblings reached 1/1 HIT with 59/62 forced rows and 2/2 HIT with 66/57
+forced rows. All four are rejected relative to the same incumbent's fresh
+0/0-HIT, 20/14-forced pair. Most labels in those directories occurred after
+the first benchmark-forced action and correctly remained unmatched by the
+trainer.
+
+Stage 3's next unique-source siblings reached 2/4 HIT with 14/35 forced rows
+and 3/2 HIT with 29/27 forced rows. The latter matches the incumbent's five
+total HIT but has five more aggregate forced rows; the former trades one extra
+HIT for two fewer forced rows and remains diversity evidence only. Stage 4's
+siblings reached 3/9 HIT with 17/105 forced rows and 8/5 HIT with 61/40 forced
+rows, both worse than the existing 2/7-HIT, 8/78-forced table member. Stage 5
+reached 15/10 HIT with 101/74 forced rows and 15/7 HIT with 109/54 forced rows;
+the unique model ties the old 22-HIT total but has 17 more forced rows. Stage 6
+reached 15/18 HIT with 147/152 forced rows and 18/20 HIT with 233/169 forced
+rows. None is promoted.
+
 ### First-HIT reconstruction boundary
 
 The first continuation-derived event selector included every HIT in a run.
 That was invalid for correction: the forkserver's factual prefix stops at the
 first physical HIT, so checkpoints after it cannot be reconstructed from the
-same physical trajectory. Those old partial directories remain diagnostic-only
-and are not training inputs. Event selection now stops at the first physical
-HIT while retaining preceding native-authority events. Post-HIT rows remain
-useful only for HIT-continuation evaluation.
+same physical trajectory. A later audit tightened the same rule around native
+authority: once the benchmark publishes its first forced release, every later
+state depends on that evaluation-only action. Event selection therefore stops
+at whichever occurs first: a physical HIT or forced authority release. The old
+partial directories remain diagnostic-only and are not training inputs.
+
+Two model rollouts can also have identical timestamp/stage/seed basenames.
+The first multi-model batch consequently reported 16 successful tasks while
+only eight files survived: different factual runs had overwritten the same
+output path. Those directories are diagnostic-only. Conflicting basenames now
+receive a stable full-run-path digest, and worker submission is round-robin
+across runs so an early frozen snapshot covers multiple seeds rather than one
+long run prefix.
 
 The first repaired `prehit-v2` batches completed without a replay failure and
 passed independent native-action-table audits:
@@ -562,6 +596,14 @@ Stage 2 also shows why an event count is not the same as trainable yield. Only
 remaining post-authority states are preserved as diagnostics rather than
 silently treated as factual training data. Exact COW file paths and hashes are
 frozen in every new training report before decoding begins.
+
+The zero-HIT Stage 2 seeds 71/72 made the efficiency gap especially visible.
+The old selector launched 118 valid but mostly post-forced diagnostic branches;
+the corrected first-failure selector retained eight balanced, trainable
+checkpoints with 134 complete outcomes. A unique best existed at 87.5%, while
+the local teacher and factual action were best at 0%. Both ordinary and
+strong-weight corrective populations are evaluated independently rather than
+assuming that more correction weight must improve a route.
 
 ## Portability to TH08
 
