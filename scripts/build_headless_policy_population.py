@@ -143,9 +143,13 @@ def _partial_run(path: Path, summary: Mapping[str, Any]) -> dict[str, Any]:
 
 def _closed_loop_metrics(runs: list[dict[str, Any]]) -> dict[str, Any]:
     ticks = sum(run["ticks"] for run in runs)
+    forced_actions = sum(run["benchmark_forced_actions"] for run in runs)
     continuation = [run for run in runs if run["continue_after_hit"]]
     continuation_ticks = sum(run["ticks"] for run in continuation)
     continuation_hits = sum(run["physical_hits"] for run in continuation)
+    continuation_forced_actions = sum(
+        run["benchmark_forced_actions"] for run in continuation
+    )
     continuation_seeds = sorted({
         run["seed"] for run in continuation if isinstance(run["seed"], int)
     })
@@ -162,6 +166,10 @@ def _closed_loop_metrics(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "runs": len(runs),
         "seeds": sorted({run["seed"] for run in runs if isinstance(run["seed"], int)}),
         "total_ticks": ticks,
+        "benchmark_forced_actions": forced_actions,
+        "benchmark_forced_actions_per_1000_ticks": (
+            forced_actions * 1000.0 / ticks if ticks else None
+        ),
         "minimum_ticks_before_stop": min((run["ticks"] for run in runs), default=0),
         "mean_ticks_before_stop": ticks / len(runs) if runs else 0.0,
         "authority_failure_rate": (
@@ -182,6 +190,11 @@ def _closed_loop_metrics(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "continuation_hits_per_1000_ticks": (
             continuation_hits * 1000.0 / continuation_ticks if continuation_ticks else None
         ),
+        "continuation_forced_actions": continuation_forced_actions,
+        "continuation_forced_actions_per_1000_ticks": (
+            continuation_forced_actions * 1000.0 / continuation_ticks
+            if continuation_ticks else None
+        ),
         "hit_rate_evidence_complete": bool(continuation),
         "runs_detail": runs,
     }
@@ -197,7 +210,10 @@ def _dominates(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     maximize = ("minimum_ticks_before_stop", "tick_limit_rate")
     minimize = ("authority_failure_rate",)
     if left_metrics["hit_rate_evidence_complete"]:
-        minimize += ("continuation_hits_per_1000_ticks",)
+        minimize += (
+            "continuation_hits_per_1000_ticks",
+            "continuation_forced_actions_per_1000_ticks",
+        )
     weak = all(left_metrics[name] >= right_metrics[name] for name in maximize) and all(
         left_metrics[name] <= right_metrics[name] for name in minimize
     )

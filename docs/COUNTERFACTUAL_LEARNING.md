@@ -91,3 +91,8 @@ native-safe set with its own feature categories; rank positions are aggregated
 without assuming that LightGBM scores are calibrated across objectives. The
 ensemble remains phase-agnostic and cannot inspect seed identity or publish an
 action outside the native gate.
+
+The population's continuation Pareto front minimizes both physical HITs and
+forced-release rows per 1,000 ticks. A life-patched stage clear with fewer HITs
+but more native-authority gaps is retained only when it is genuinely
+non-dominated; forced play can never enter the strict NMNB population.

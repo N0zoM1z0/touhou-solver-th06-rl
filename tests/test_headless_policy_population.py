@@ -97,6 +97,41 @@ def test_hit_continuations_are_evidence_but_not_high_quality(tmp_path: Path) -> 
     assert candidate["closed_loop"]["continuation_hits_per_1000_ticks"] == 0.4
 
 
+def test_continuation_pareto_front_minimizes_forced_release_rate(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    rollouts = tmp_path / "rollouts"
+    clean_sha = _candidate(models, "clean", b"clean", 0.8)
+    forced_sha = _candidate(models, "forced", b"forced", 0.8)
+    _rollout(
+        rollouts,
+        "clean",
+        clean_sha,
+        3000,
+        continuation=True,
+        forced_actions=0,
+    )
+    _rollout(
+        rollouts,
+        "forced",
+        forced_sha,
+        3000,
+        continuation=True,
+        forced_actions=30,
+    )
+
+    result = build_population([models], [rollouts])
+    candidates = {row["model_sha256"]: row for row in result["candidates"]}
+
+    assert candidates[clean_sha]["pareto_member"] is True
+    assert candidates[forced_sha]["pareto_member"] is False
+    assert (
+        candidates[forced_sha]["closed_loop"][
+            "continuation_forced_actions_per_1000_ticks"
+        ]
+        == 10.0
+    )
+
+
 def test_high_quality_requires_multi_seed_natural_nmnb_stage_clears(tmp_path: Path) -> None:
     models = tmp_path / "models"
     rollouts = tmp_path / "rollouts"
