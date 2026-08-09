@@ -23,6 +23,8 @@ from th06_rl.headless_corpus import (
 )
 from th06_rl.headless_geometry import (
     HARD_HORIZON,
+    HEADLESS_DELIVERY_CONTRACT,
+    HEADLESS_DELIVERY_DELAYS,
     KINEMATICS,
     HeadlessAuthorityUnavailable,
     action_from_input,
@@ -256,6 +258,8 @@ def generate_episode(
         "behavior_epsilon": epsilon,
         "teacher_horizon": teacher_horizon,
         "native_gate_horizon": 4,
+        "native_delivery_contract": HEADLESS_DELIVERY_CONTRACT,
+        "native_delivery_delays": list(HEADLESS_DELIVERY_DELAYS),
         "anchor_stride": anchor_stride,
         "termination_reason": termination_reason,
         "authority_failure": authority_failure,

@@ -31,6 +31,8 @@ from .th06.observed_lasers import laser_rects_by_frame
 OBSERVATION_SCHEMA = "th06-headless-observation-v2"
 HARD_HORIZON = 4
 COLLISION_MARGIN = 0.35
+HEADLESS_DELIVERY_DELAYS = (0,)
+HEADLESS_DELIVERY_CONTRACT = "synchronous-step-v1"
 KINEMATICS = Kinematics(4.0, 2.0, 2.8284270763397217, 1.4142135381698608)
 BY_NAME = {action.name: action for action in ACTIONS}
 
@@ -774,6 +776,10 @@ def certify_lowered_headless_actions(
         kinematics=KINEMATICS,
         current_action=action_from_input(_integer(observation, "input")),
         hazards=hazards,
+        # The headless STEP protocol publishes one action before the same
+        # physical RunTick. Its complete delivery set is exactly {0}; the
+        # asynchronous Windows adapter retains its separate bounded delays.
+        delivery_delays=HEADLESS_DELIVERY_DELAYS,
         collision_margin=COLLISION_MARGIN,
     )
 

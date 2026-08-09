@@ -7,6 +7,8 @@ import pytest
 
 from th06_rl.headless_geometry import (
     HeadlessAuthorityUnavailable,
+    HEADLESS_DELIVERY_CONTRACT,
+    HEADLESS_DELIVERY_DELAYS,
     OBSERVATION_SCHEMA,
     certify_headless_actions,
     lower_headless_hard_hazards,
@@ -185,6 +187,11 @@ def test_hard_lowering_routes_final_player_aim_to_native_candidate_paths() -> No
 
     assert len(hazards.player_aimed_bullets) == 1
     assert all(not frame for frame in hazards.aabb_frames)
+
+
+def test_headless_step_delivery_contract_is_exactly_synchronous() -> None:
+    assert HEADLESS_DELIVERY_CONTRACT == "synchronous-step-v1"
+    assert HEADLESS_DELIVERY_DELAYS == (0,)
 
 
 def test_hard_lowering_keeps_multiturn_player_aim_fail_closed() -> None:

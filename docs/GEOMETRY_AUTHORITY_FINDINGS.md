@@ -121,6 +121,44 @@ false negatives while reducing this Python-path benchmark by 11.2%; native
 candidate certification itself took about 0.65 ms for 72 aimed bullets. The
 remaining absolute cost is common Python lowering for other hazard classes.
 
+## Third differential: headless delivery is not Windows delivery
+
+The 1,200-tick extension of the corrected seed-113 branch did not remain a
+witness: `up_left` plus generic clearance reached 133 ticks before Hard became
+empty at tick 3440. Replaying that exact 260-bullet state in the authoritative
+runtime found 13/18 immediate constant actions source-safe for four ticks.
+The factor audit was exact:
+
+- delay 0, margin 0 certified the same 13 actions as source replay;
+- delay 0, margin 0.35 retained 10 actions;
+- delays 0--3 certified no actions even with margin 0;
+- 224 ordinary fired bullets (`ex_flags` motion mask zero) caused the closure;
+  the 36 candidate-coupled player-aim bullets did not.
+
+This is not another bullet-geometry error. The Linux `STEP` protocol receives
+one action and publishes it before the same authoritative `RunTick`, so its
+complete delivery set is exactly `{0}`. Reusing the asynchronous Windows
+0--3-frame pickup envelope in that synchronous environment invented delivery
+paths which cannot occur and stopped otherwise source-valid learning runs.
+
+Headless Hard now declares `synchronous-step-v1` and certifies delay 0 only.
+The collision margin, fresh issue check, native ownership, unknown-state
+fail-close behavior, and Bomb prohibition remain unchanged. The Windows
+adapter retains its measured bounded delivery envelope and input-lease checks;
+a learned action is still intersected with that physical native set before it
+can be published. Corpus, feasibility, DAgger, and model manifests record the
+delivery contract, and training/auditing refuses to silently mix contracts.
+
+This authority correction does not by itself improve the existing fallback.
+With the same initial `up_left`, generic clearance over the enlarged exact set
+survived only 16 ticks instead of the former 133 because its later choices
+changed. The old 0--3 envelope had accidentally acted as a ranking regularizer;
+it was never a valid source-physical restriction for synchronous headless play.
+Any useful robust-delivery preference must therefore be an explicitly logged
+non-authoritative feature or ranker term, while the exact delay-0 set remains
+the collision authority. Promotion requires oracle and held-out route evidence
+over that exact set rather than the smaller-set trajectory.
+
 ## Consequences for collection and learning
 
 Last-frame corrective labels can be unsatisfiable or dominated by authority

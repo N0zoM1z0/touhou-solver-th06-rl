@@ -256,6 +256,8 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
     input_runs: list[dict[str, Any]] = []
     scope: Mapping[str, Any] | None = None
     source: Mapping[str, Any] | None = None
+    delivery_contract: str | None = None
+    delivery_delays: tuple[int, ...] | None = None
     for run in _run_directories(paths):
         manifest_path = run / "manifest.json"
         manifest_bytes = manifest_path.read_bytes()
@@ -275,10 +277,37 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
         if scope is None:
             scope = manifest["scope"]
             source = manifest["source"]
+            delivery_contract = str(manifest.get(
+                "native_delivery_contract",
+                "legacy-unspecified-v0",
+            ))
+            raw_delays = manifest.get("native_delivery_delays")
+            delivery_delays = (
+                tuple(int(value) for value in raw_delays)
+                if isinstance(raw_delays, list)
+                else ()
+            )
         if manifest.get("scope") != scope:
             raise ValueError("headless teacher data silently mixes scopes")
         if manifest.get("source", {}).get("commit") != source.get("commit"):  # type: ignore[union-attr]
             raise ValueError("headless teacher data silently mixes source revisions")
+        current_contract = str(manifest.get(
+            "native_delivery_contract",
+            "legacy-unspecified-v0",
+        ))
+        raw_delays = manifest.get("native_delivery_delays")
+        current_delays = (
+            tuple(int(value) for value in raw_delays)
+            if isinstance(raw_delays, list)
+            else ()
+        )
+        if (
+            current_contract != delivery_contract
+            or current_delays != delivery_delays
+        ):
+            raise ValueError(
+                "headless teacher data silently mixes delivery contracts"
+            )
         seed = int(manifest["initial_seed"])
         terminal_failure = manifest.get("termination_reason") in CORRECTIVE_TERMINATIONS
         transition_count = int(manifest.get("transition_count", 0))
@@ -342,6 +371,8 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
     return decisions, {
         "scope": scope,
         "source": source,
+        "native_delivery_contract": delivery_contract,
+        "native_delivery_delays": list(delivery_delays or ()),
         "duplicate_decisions_skipped": duplicate_decisions,
         "factual_corpus": {
             "runs": len(input_runs),
@@ -702,6 +733,8 @@ def main() -> int:
             "scope": provenance["scope"],
             "headless_source": provenance["source"],
             "compatible_headless_sources": compatible_sources,
+            "native_delivery_contract": provenance["native_delivery_contract"],
+            "native_delivery_delays": provenance["native_delivery_delays"],
         },
         args.output / "teacher-ranker.joblib",
         compress=3,
@@ -713,6 +746,8 @@ def main() -> int:
         "scope": provenance["scope"],
         "headless_source": provenance["source"],
         "compatible_headless_sources": compatible_sources,
+        "native_delivery_contract": provenance["native_delivery_contract"],
+        "native_delivery_delays": provenance["native_delivery_delays"],
         "code_commit": code_commit,
         "train_seeds": sorted(set(seeds) - holdout),
         "holdout_seeds": sorted(holdout),

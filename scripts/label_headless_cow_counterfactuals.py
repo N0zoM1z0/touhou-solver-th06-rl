@@ -17,6 +17,8 @@ from th06_rl.headless_corpus import NativeOfflineTeacher, canonical_observation_
 from th06_rl.headless_forkserver import HeadlessForkserver
 from th06_rl.headless_geometry import (
     HARD_HORIZON,
+    HEADLESS_DELIVERY_CONTRACT,
+    HEADLESS_DELIVERY_DELAYS,
     HeadlessAuthorityUnavailable,
     certify_lowered_headless_actions,
     lower_headless_hard_hazards,
@@ -271,6 +273,8 @@ def main() -> int:
         "input_run": str(run),
         "input_source": manifest["source"],
         "runtime_source": _runtime_provenance(binary),
+        "runtime_delivery_contract": HEADLESS_DELIVERY_CONTRACT,
+        "runtime_delivery_delays": list(HEADLESS_DELIVERY_DELAYS),
         "teacher_horizon": args.teacher_horizon,
         "branch_frames": args.branch_frames,
         "checkpoints": labels,

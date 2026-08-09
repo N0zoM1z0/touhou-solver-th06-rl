@@ -252,6 +252,9 @@ search or source-only features into the resident controller.
 Confirmed source-physical geometry failures and their before/after authority
 evidence are recorded in
 [`docs/GEOMETRY_AUTHORITY_FINDINGS.md`](docs/GEOMETRY_AUTHORITY_FINDINGS.md).
+Headless corpora declare the synchronous `STEP` delivery contract explicitly;
+training and audits refuse to mix it silently with legacy or Windows delivery
+semantics.
 
 Online reward version `survival-reserve-hit-trace-v2` delivers a confirmed
 physical HIT independently of the one-step publication outcome. It assigns a

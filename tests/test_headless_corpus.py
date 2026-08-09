@@ -174,12 +174,17 @@ def test_independent_auditor_rechecks_digest_chain_and_file_hashes(tmp_path: Pat
     writer.anchor(current, sequence=0, role="initial", force=True)
     writer.transition(transition)
     writer.anchor(following, sequence=1, role="terminal", force=True)
-    writer.close({"termination_reason": "physical-hit"})
+    writer.close({
+        "termination_reason": "physical-hit",
+        "native_delivery_contract": "synchronous-step-v1",
+        "native_delivery_delays": [0],
+    })
 
     result = audit_run(run)
     assert result["valid"] is True
     assert result["factual_successor_rows"] == 1
     assert result["native_legal_rows"] == 1
+    assert result["native_delivery_contract"] == "synchronous-step-v1"
 
     manifest_path = run / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -188,3 +193,17 @@ def test_independent_auditor_rechecks_digest_chain_and_file_hashes(tmp_path: Pat
     damaged = audit_run(run)
     assert damaged["valid"] is False
     assert "transitions SHA-256 mismatch" in damaged["errors"]
+
+
+def test_independent_auditor_rejects_false_synchronous_delivery(tmp_path: Path) -> None:
+    run = tmp_path / "bad-delivery"
+    writer = CompactHeadlessCorpusWriter(run, anchor_stride=120)
+    writer.close({
+        "native_delivery_contract": "synchronous-step-v1",
+        "native_delivery_delays": [0, 1],
+    })
+
+    result = audit_run(run)
+
+    assert result["valid"] is False
+    assert "delivery" in " ".join(result["errors"])

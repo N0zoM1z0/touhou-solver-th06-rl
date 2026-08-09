@@ -36,6 +36,8 @@ from th06_rl.headless_corpus import (
 from th06_rl.headless_forkserver import HeadlessForkserver
 from th06_rl.headless_geometry import (
     HARD_HORIZON,
+    HEADLESS_DELIVERY_CONTRACT,
+    HEADLESS_DELIVERY_DELAYS,
     KINEMATICS,
     HeadlessAuthorityUnavailable,
     action_from_input,
@@ -675,6 +677,8 @@ def main() -> int:
         "code_source": code_source,
         "runtime_source": runtime_source,
         "branch_frames": args.branch_frames,
+        "runtime_delivery_contract": HEADLESS_DELIVERY_CONTRACT,
+        "runtime_delivery_delays": list(HEADLESS_DELIVERY_DELAYS),
         "native_set_revision_allowed": args.allow_native_set_revision,
         "continuations": [item.describe() for item in continuations],
         "checkpoints": labels,

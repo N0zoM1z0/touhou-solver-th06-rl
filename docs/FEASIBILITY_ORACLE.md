@@ -78,6 +78,11 @@ the revised set, while retaining the original corpus records separately. This
 keeps newly exposed actions available to representation probes and later
 offline supervision instead of silently dropping them from the feature table.
 
+The runtime artifact also records `runtime_delivery_contract` and
+`runtime_delivery_delays`. Linux `STEP` is synchronous (`[0]`); this must not be
+silently mixed with an asynchronous Windows pickup envelope. Both remain
+native-gated contracts rather than policy-controlled uncertainty settings.
+
 The independent audit recomputes branch feasibility, action/continuation
 coverage, best-action summaries, policy verdicts, Bomb deltas, bounds, and
 source identity. It rejects a missing branch or a summary that does not match

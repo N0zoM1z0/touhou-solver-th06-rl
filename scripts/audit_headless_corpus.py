@@ -78,6 +78,16 @@ def audit_run(run: Path) -> dict[str, Any]:
         errors.append("transition count mismatch")
     if manifest.get("anchor_count") != len(anchors):
         errors.append("anchor count mismatch")
+    delivery_contract = manifest.get(
+        "native_delivery_contract",
+        "legacy-unspecified-v0",
+    )
+    delivery_delays = manifest.get("native_delivery_delays")
+    if delivery_contract == "synchronous-step-v1":
+        if delivery_delays != [0]:
+            errors.append("synchronous headless delivery must be exactly [0]")
+    elif delivery_contract != "legacy-unspecified-v0":
+        errors.append("unsupported native delivery contract")
 
     valid_successors = 0
     valid_legal = 0
@@ -188,6 +198,8 @@ def audit_run(run: Path) -> dict[str, Any]:
         "scope": manifest.get("scope"),
         "initial_seed": manifest.get("initial_seed"),
         "termination_reason": manifest.get("termination_reason"),
+        "native_delivery_contract": delivery_contract,
+        "native_delivery_delays": delivery_delays,
         "rows": rows,
         "factual_successor_rows": valid_successors,
         "native_legal_rows": valid_legal,
@@ -231,6 +243,9 @@ def summarize(runs: list[dict[str, Any]]) -> dict[str, Any]:
             "bombless_rows",
         )
     }
+    delivery_contracts = Counter(
+        str(run.get("native_delivery_contract")) for run in runs
+    )
     return {
         "schema": "th06-rl-headless-corpus-audit-v1",
         "runs": len(runs),
@@ -245,6 +260,8 @@ def summarize(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "valid_propensity_ratio": field_totals["valid_propensity_rows"] / rows if rows else 0.0,
         "bombless_ratio": field_totals["bombless_rows"] / rows if rows else 0.0,
         "compressed_bytes": sum(int(run.get("compressed_bytes", 0)) for run in runs),
+        "native_delivery_contracts": dict(sorted(delivery_contracts.items())),
+        "mixed_native_delivery_contracts": len(delivery_contracts) > 1,
         "terminations": dict(sorted(Counter(
             str(run.get("termination_reason")) for run in runs
         ).items())),
@@ -266,7 +283,10 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
-    return 0 if result["valid_runs"] == result["runs"] else 1
+    return 0 if (
+        result["valid_runs"] == result["runs"]
+        and not result["mixed_native_delivery_contracts"]
+    ) else 1
 
 
 if __name__ == "__main__":

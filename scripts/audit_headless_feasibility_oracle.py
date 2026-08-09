@@ -65,6 +65,13 @@ def audit_file(path: Path) -> dict[str, Any]:
     code_source = document.get("code_source")
     if not isinstance(code_source, Mapping) or not isinstance(code_source.get("commit"), str):
         errors.append("oracle implementation provenance missing")
+    delivery_contract = document.get("runtime_delivery_contract")
+    delivery_delays = document.get("runtime_delivery_delays")
+    if delivery_contract is not None and (
+        delivery_contract != "synchronous-step-v1"
+        or delivery_delays != [0]
+    ):
+        errors.append("invalid runtime delivery contract")
     input_corpus = document.get("input_corpus")
     if (
         not isinstance(input_corpus, Mapping)

@@ -35,6 +35,8 @@ from th06_rl.headless_corpus import (
 )
 from th06_rl.headless_geometry import (
     HARD_HORIZON,
+    HEADLESS_DELIVERY_CONTRACT,
+    HEADLESS_DELIVERY_DELAYS,
     KINEMATICS,
     HeadlessAuthorityUnavailable,
     action_from_input,
@@ -152,6 +154,19 @@ class DistilledRanker:
             "compatible_headless_sources",
             [self.headless_source],
         )
+        self.native_delivery_contract = artifact.get(
+            "native_delivery_contract",
+            "legacy-unspecified-v0",
+        )
+        self.native_delivery_delays = artifact.get("native_delivery_delays", [])
+        if self.native_delivery_contract not in {
+            "legacy-unspecified-v0",
+            HEADLESS_DELIVERY_CONTRACT,
+        } or (
+            self.native_delivery_contract == HEADLESS_DELIVERY_CONTRACT
+            and self.native_delivery_delays != list(HEADLESS_DELIVERY_DELAYS)
+        ):
+            raise ValueError("ranker uses an incompatible delivery contract")
         self.members = []
         for member in members:
             model = member["model"]
@@ -394,6 +409,8 @@ def collect(
         "teacher_horizon": teacher_horizon,
         "teacher_labels_recorded": teacher is not None,
         "native_gate_horizon": HARD_HORIZON,
+        "native_delivery_contract": HEADLESS_DELIVERY_CONTRACT,
+        "native_delivery_delays": list(HEADLESS_DELIVERY_DELAYS),
         "anchor_stride": anchor_stride,
         "termination_reason": termination_reason,
         "authority_failure": authority_failure,

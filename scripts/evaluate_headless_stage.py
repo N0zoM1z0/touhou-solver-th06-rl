@@ -108,6 +108,7 @@ def main() -> int:
     runs = []
     source_commits = set()
     ranker_hashes = set()
+    delivery_contracts = set()
     for directory in directories:
         manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         audited = audit_run(directory)
@@ -119,10 +120,16 @@ def main() -> int:
         })
         source_commits.add(manifest.get("source", {}).get("commit"))
         ranker_hashes.add(manifest.get("ranker", {}).get("sha256"))
+        delivery_contracts.add((
+            manifest.get("native_delivery_contract", "legacy-unspecified-v0"),
+            tuple(manifest.get("native_delivery_delays", ())),
+        ))
     if len(source_commits) != 1:
         parser.error("headless stage evaluation refuses mixed source revisions")
     if len(ranker_hashes) != 1:
         parser.error("headless stage evaluation refuses mixed ranker artifacts")
+    if len(delivery_contracts) != 1:
+        parser.error("headless stage evaluation refuses mixed delivery contracts")
     try:
         result = classify_stage_runs(
             runs,
@@ -133,6 +140,9 @@ def main() -> int:
         parser.error(str(error))
     result["source_commit"] = next(iter(source_commits))
     result["ranker_sha256"] = next(iter(ranker_hashes))
+    delivery_contract, delivery_delays = next(iter(delivery_contracts))
+    result["native_delivery_contract"] = delivery_contract
+    result["native_delivery_delays"] = list(delivery_delays)
     result["run_results"] = runs
     rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
