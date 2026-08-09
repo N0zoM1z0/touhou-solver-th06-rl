@@ -402,8 +402,8 @@ for each stage is still a research incumbent, not a promoted policy:
 | --- | --- | --- | --- | --- |
 | 1 | `7a816b1f4e3e` | 73 / 74 | 2 / 0 | 24 / 4 |
 | 2 | `a4245bdfc8d3` | 71 / 72 | 0 / 0 | 20 / 14 |
-| 3 | `b9b3c842d98e` | 53 / 54 | 3 / 2 | 21 / 30 |
-| 4 | `f8a94d1689c4` | 47 / 48 | 2 / 7 | 8 / 78 |
+| 3 | `4b4e9235f816` | 75 / 76 | 1 / 2 | 4 / 9 |
+| 4 | `02a85a9fdf7d` | 75 / 76 | 3 / 3 | 27 / 17 |
 | 5 | `88b334b4ad78` | 59 / 60 | 8 / 14 | 58 / 88 |
 | 6 | `3bc9e35ea979` | 51 / 52 | 9 / 12 | 83 / 146 |
 
@@ -432,11 +432,13 @@ HIT, 27/48 forced) remains a different per-seed trade-off, and `ac7edd49d803`
 (3/1 HIT, 53/62 forced) retains additional trajectory diversity. The preceding
 `8c7a94fd3b4f` Stage 4 member
 (7/10 HIT, 54/70 forced) retains trajectory diversity but no longer leads
-either closed-loop objective. The new Stage 4 HIT-primary row has 2/7 HIT and
-8/78 forced rows. Its sibling `3763b2518d4a` has 7/5 HIT and 39/42 forced
-rows: it strictly improves the former 9/5-HIT, 59/72-forced incumbent, while
-trading four additional total HITs for five fewer total forced rows relative
-to the new table member. Both siblings therefore remain on the Pareto front.
+either closed-loop objective. The later Stage 4 HIT-primary member
+`f8a94d1689c4` had 2/7 HIT and 8/78 forced rows. Its sibling
+`3763b2518d4a` had 7/5 HIT and 39/42 forced rows. The repaired first-failure
+unique-best successor `02a85a9fdf7d` then reached 3/3 HIT and 27/17 forced
+rows. It reduces aggregate HIT from nine to six and forced rows from 86 to 44,
+so it supersedes both older table members on aggregate metrics. The older
+2-HIT single-seed mode remains population diversity rather than being deleted.
 These are explicit trade-offs, not overwritten checkpoints.
 The corresponding full-label Stage 4 candidates regressed to 4/11 HIT with
 14/73 forced rows and 6/11 HIT with 65/83 forced rows. More labels at the same
@@ -445,12 +447,14 @@ counterfactual weight therefore did not dominate the partial correction.
 The Stage 3 bootstrap-DAgger COW member `d8472ed568fe` is a strict closed-loop
 improvement over the preceding bootstrap on these metrics: total HIT fell from
 13 to 9 and total forced releases from 118 to 56 on its unseen seed pair. It
-is now superseded in both metrics by `b9b3c842d98e`, which reduced the pair to
+was superseded in both metrics by `b9b3c842d98e`, which reduced the pair to
 3/2 HIT and 21/30 forced rows. A sibling `07eadef52e0b` unique-best candidate
 also had five total HITs, including a zero-HIT seed, but that seed still
 required one forced-release row and its pair required 61. It is retained as a
-different feasible mode rather than mistaken for a strict clear; the table
-uses the sibling with the lower forced rate.
+different feasible mode rather than mistaken for a strict clear. The repaired
+survivable-source successor `4b4e9235f816` then reduced the pair to 1/2 HIT
+and 4/9 forced rows. It strictly improves the preceding table row on both
+aggregate closed-loop metrics and becomes the current Stage 3 incumbent.
 
 The Stage 6 bootstrap-DAgger COW member `3d4f9b3e5599` first reduced its
 unseen-pair HIT total from 37 to 32 (13/19 rather than 18/19), but raised forced
@@ -604,6 +608,21 @@ checkpoints with 134 complete outcomes. A unique best existed at 87.5%, while
 the local teacher and factual action were best at 0%. Both ordinary and
 strong-weight corrective populations are evaluated independently rather than
 assuming that more correction weight must improve a route.
+
+The ordinary corrected Stage 2 r8 population illustrates why the strict gate
+also counts forced releases. Its survivable member reached 3/0 HIT with 67/22
+forced rows on seeds 77/78. The unique-best member reached 0/0 HIT but still
+needed 27/16 forced rows. It is retained as a second reproducible zero-HIT
+population member, but it does not replace the 0/0-HIT incumbent because its
+aggregate forced count is 43 rather than 34. The native authority gap remains
+the limiting objective; zero observed collision alone is not NMNB evidence.
+
+The repaired Stage 5 r5-pair COW batch contributed 16/16 valid checkpoints
+and 240 complete branches. A unique strict best action existed at 87.5% of
+checkpoints, while both the local teacher and factual action were best at only
+18.75%. These labels entered separate survivable-set and unique-best r6
+training jobs; they are not promoted until both natural unseen-seed
+continuations complete.
 
 ## Portability to TH08
 
