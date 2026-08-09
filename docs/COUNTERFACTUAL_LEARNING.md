@@ -27,11 +27,12 @@ the same dynamic COW labeler with a fixed worker ceiling. It always includes
 the final reconstructable state and resumes only from a complete JSON label
 whose recorded input run and checkpoint sequence set match exactly; an
 interrupted or mismatched output is recomputed. Besides a terminal window, the
-driver can select real HIT rows and the last native-legal state before each
-contiguous benchmark authority-release event. Event neighborhoods make
-continued-HIT evaluation useful for offline diagnosis without treating forced
-or post-HIT rows as factual training data. A default fail-close trajectory has
-no forced transition to select: publication stops after its last legal row.
+driver can select the first real HIT row and the last native-legal state before
+each earlier contiguous benchmark authority-release event. Selection stops at
+that first HIT. Later HITs and all post-HIT rows remain lossless evaluation
+evidence but are never factual training targets. A default fail-close
+trajectory has no forced transition to select: publication stops after its
+last legal row.
 For `authority-failure` and `physical-hit` manifests the event selector
 therefore also samples backward from that final reconstructable state. The
 batch driver changes scheduling only, not branch authority.
