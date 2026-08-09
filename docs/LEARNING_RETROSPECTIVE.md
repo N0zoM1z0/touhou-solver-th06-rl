@@ -448,6 +448,27 @@ while the local teacher and factual action were strict-best at only 20.0% and
 and did not improve Stage 5 or 6 continuation HITs, motivating event-centered
 600/1200-tick branches rather than more short-horizon imitation weight.
 
+The first event-centered 600-tick cycle then sharded each two-seed failure
+pair into 14 independently resumable checkpoint tasks. Every completed file
+passed the same dynamic-branch audit:
+
+| Stage | Checkpoints | Outcomes | Unique strict best | Local teacher best | Factual best |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 14 | 200 | 78.6% | 28.6% | 35.7% |
+| 2 | 14 | 233 | 100.0% | 7.1% | 7.1% |
+| 3 | 14 | 232 | 92.9% | 7.1% | 0.0% |
+| 4 | 14 | 229 | 92.9% | 7.1% | 7.1% |
+| 5 | 14 | 221 | 92.9% | 0.0% | 14.3% |
+| 6 | 14 | 229 | 92.9% | 0.0% | 0.0% |
+
+These are deliberately failure-neighborhood yields, not corpus-wide action
+accuracy. They show that the native-factual/local choices are especially weak
+near irreversible failures and justify collecting more such neighborhoods.
+They do not show that a pointwise strict-best classifier will improve a whole
+stage: Stage 4 first-failure checks regressed despite 92.9% unique targets, so
+both survivable-set and unique-best candidates still require complete unseen
+seed continuation rollout.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
