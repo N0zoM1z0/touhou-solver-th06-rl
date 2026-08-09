@@ -18,6 +18,15 @@ ALLOWED_NEWBORN_LASER_SOURCE_PATHS = frozenset({
     "src/HeadlessRuntime.cpp",
     "src/HeadlessRuntime.hpp",
 })
+ALLOWED_EVENT_SOURCE_PATHS = frozenset({
+    "HEADLESS.md",
+    "src/BulletManager.cpp",
+    "src/EnemyManager.cpp",
+    "src/GameWindow.cpp",
+    "src/HeadlessRuntime.cpp",
+    "src/HeadlessRuntime.hpp",
+    "src/Player.cpp",
+})
 
 
 def _sha256(path: Path) -> str:
@@ -49,6 +58,40 @@ def validate_upgrade_evidence(
     old_sources: Iterable[Mapping[str, Any]],
     changed_paths: Iterable[str],
 ) -> None:
+    if evidence.get("schema") == "th06-rl-headless-event-observation-differential-v1":
+        if evidence.get("authority") != "additive-diagnostics-only-no-native-set-revision":
+            raise ValueError("event evidence does not preserve native-set authority")
+        if evidence.get("removed_observation_members") != ["events"]:
+            raise ValueError("event evidence removed more than the additive event member")
+        if evidence.get("physical_observations_equal") is not True:
+            raise ValueError("event upgrade changed a physical observation")
+        expected_actions = {action.name for action in ACTIONS}
+        if set(evidence.get("actions", ())) != expected_actions:
+            raise ValueError("event evidence does not replay every ordinary action")
+        branches = evidence.get("branches")
+        if not isinstance(branches, list) or len(branches) != len(expected_actions):
+            raise ValueError("event evidence has an incomplete branch set")
+        if {str(branch.get("action")) for branch in branches} != expected_actions:
+            raise ValueError("event evidence has duplicate or missing action branches")
+        if any(
+            branch.get("physical_observations_equal") is not True
+            or branch.get("mismatch_offsets") != []
+            or int(branch.get("old_observation_count", 0)) <= 0
+            or branch.get("old_observation_count") != branch.get("new_observation_count")
+            or branch.get("old_physical_sha256") != branch.get("new_physical_sha256")
+            for branch in branches
+        ):
+            raise ValueError("event evidence contains a physical branch mismatch")
+        if int(evidence.get("eventful_observation_count", 0)) <= 0:
+            raise ValueError("event evidence did not exercise the diagnostic extension")
+        if "enemy" not in evidence.get("hit_kinds", ()):
+            raise ValueError("event evidence did not retain the audited enemy collision")
+        old_keys = {_source_key(source) for source in old_sources}
+        if _source_key(evidence.get("old_runtime_source", {})) not in old_keys:
+            raise ValueError("event evidence does not use the model's old runtime")
+        if set(changed_paths) != ALLOWED_EVENT_SOURCE_PATHS:
+            raise ValueError("runtime upgrade differs from the audited event-only source patch")
+        return
     if evidence.get("schema") != "th06-rl-headless-authority-failure-differential-v1":
         raise ValueError("compatibility evidence has an unsupported schema")
     if evidence.get("classification") != "source-safe-but-native-observation-incomplete":
@@ -107,7 +150,12 @@ def main() -> int:
     if not new_source["clean"]:
         parser.error("new headless runtime source is dirty")
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-    evidence_source = evidence.get("runtime_source", {})
+    if evidence.get("schema") == "th06-rl-headless-event-observation-differential-v1":
+        if _source_key(evidence.get("new_runtime_source", {})) != _source_key(new_source):
+            parser.error("event evidence does not use the requested new runtime")
+        evidence_source = evidence.get("old_runtime_source", {})
+    else:
+        evidence_source = evidence.get("runtime_source", {})
     old_commit = str(evidence_source.get("commit", ""))
     ancestor = subprocess.run(
         ["git", "-C", str(source_root), "merge-base", "--is-ancestor", old_commit, new_commit],

@@ -45,3 +45,52 @@ def test_compatibility_extension_requires_all_source_safe_actions() -> None:
             old_sources=[OLD],
             changed_paths=["src/HeadlessRuntime.cpp"],
         )
+
+
+def event_evidence() -> dict[str, object]:
+    actions = [action.name for action in ACTIONS]
+    return {
+        "schema": "th06-rl-headless-event-observation-differential-v1",
+        "authority": "additive-diagnostics-only-no-native-set-revision",
+        "removed_observation_members": ["events"],
+        "physical_observations_equal": True,
+        "actions": actions,
+        "branches": [
+            {
+                "action": action,
+                "physical_observations_equal": True,
+                "mismatch_offsets": [],
+                "old_observation_count": 2,
+                "new_observation_count": 2,
+                "old_physical_sha256": action,
+                "new_physical_sha256": action,
+            }
+            for action in actions
+        ],
+        "eventful_observation_count": 1,
+        "hit_kinds": ["enemy"],
+        "old_runtime_source": OLD,
+    }
+
+
+def test_event_compatibility_requires_physical_equivalence_and_exact_patch() -> None:
+    paths = [
+        "HEADLESS.md",
+        "src/BulletManager.cpp",
+        "src/EnemyManager.cpp",
+        "src/GameWindow.cpp",
+        "src/HeadlessRuntime.cpp",
+        "src/HeadlessRuntime.hpp",
+        "src/Player.cpp",
+    ]
+    validate_upgrade_evidence(event_evidence(), old_sources=[OLD], changed_paths=paths)
+
+    mismatched = event_evidence()
+    mismatched["physical_observations_equal"] = False
+    with pytest.raises(ValueError, match="physical observation"):
+        validate_upgrade_evidence(mismatched, old_sources=[OLD], changed_paths=paths)
+
+    with pytest.raises(ValueError, match="event-only"):
+        validate_upgrade_evidence(
+            event_evidence(), old_sources=[OLD], changed_paths=paths[:-1]
+        )
