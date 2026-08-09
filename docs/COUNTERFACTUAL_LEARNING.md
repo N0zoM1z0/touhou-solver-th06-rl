@@ -71,6 +71,14 @@ Outcomes are ordered lexicographically by:
 4. minimum future native-legal action count;
 5. terminal boundary reserve.
 
+The learner applies the last two tie breakers only to branches that complete
+the requested horizon or stage. Equal-tick failed branches remain tied even
+when their final legal-set width or position differs. In particular, an
+action-independent fail-close cannot manufacture a corrective label merely
+because one one-tick branch ended slightly farther from the wall. A checkpoint
+whose learning ranks are all tied is audited as outcome coverage but excluded
+from the value fit.
+
 This ordering is independent of TH06 phase names, boss identities, captured
 frames, or hand-authored routes. A game may add raw outcome fields, but it may
 not weaken collision authority or silently reinterpret an unknown terminal.

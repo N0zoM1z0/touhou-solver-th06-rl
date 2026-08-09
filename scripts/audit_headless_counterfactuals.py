@@ -10,9 +10,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 try:
-    from label_headless_cow_counterfactuals import outcome_rank
+    from label_headless_cow_counterfactuals import learning_outcome_rank, outcome_rank
 except ModuleNotFoundError:
-    from scripts.label_headless_cow_counterfactuals import outcome_rank
+    from scripts.label_headless_cow_counterfactuals import (
+        learning_outcome_rank,
+        outcome_rank,
+    )
 
 
 SCHEMA = "th06-rl-headless-cow-counterfactual-v1"
@@ -63,6 +66,8 @@ def audit_file(path: Path) -> dict[str, Any]:
         checkpoints = []
     outcomes_count = 0
     unique_best = 0
+    learning_informative = 0
+    learning_unique_best = 0
     local_best = 0
     factual_best = 0
     terminations: Counter[str] = Counter()
@@ -99,6 +104,10 @@ def audit_file(path: Path) -> dict[str, Any]:
         if checkpoint.get("best_actions") != expected_best:
             errors.append(f"{prefix}: best action summary mismatch")
         unique_best += len(expected_best) == 1
+        learning_ranks = [learning_outcome_rank(outcome) for outcome in outcomes]
+        learning_informative += len(set(learning_ranks)) > 1
+        if len(set(learning_ranks)) > 1:
+            learning_unique_best += learning_ranks.count(max(learning_ranks)) == 1
         expected_local = checkpoint.get("local_teacher_action") in expected_best
         expected_factual = checkpoint.get("factual_action") in expected_best
         if checkpoint.get("local_teacher_action_is_best") != expected_local:
@@ -118,6 +127,8 @@ def audit_file(path: Path) -> dict[str, Any]:
         "checkpoints": len(checkpoints),
         "outcomes": outcomes_count,
         "unique_best_checkpoints": unique_best,
+        "learning_informative_checkpoints": learning_informative,
+        "learning_unique_best_checkpoints": learning_unique_best,
         "local_teacher_best_checkpoints": local_best,
         "factual_best_checkpoints": factual_best,
         "terminations": dict(sorted(terminations.items())),
@@ -135,6 +146,8 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         checkpoints = sum(int(row["checkpoints"]) for row in rows)
         outcomes = sum(int(row["outcomes"]) for row in rows)
         unique = sum(int(row["unique_best_checkpoints"]) for row in rows)
+        informative = sum(int(row["learning_informative_checkpoints"]) for row in rows)
+        learning_unique = sum(int(row["learning_unique_best_checkpoints"]) for row in rows)
         local = sum(int(row["local_teacher_best_checkpoints"]) for row in rows)
         factual = sum(int(row["factual_best_checkpoints"]) for row in rows)
         return {
@@ -144,6 +157,12 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             "outcomes": outcomes,
             "unique_best_checkpoints": unique,
             "unique_best_ratio": unique / checkpoints if checkpoints else 0.0,
+            "learning_informative_checkpoints": informative,
+            "learning_informative_ratio": informative / checkpoints if checkpoints else 0.0,
+            "learning_unique_best_checkpoints": learning_unique,
+            "learning_unique_best_ratio": (
+                learning_unique / informative if informative else 0.0
+            ),
             "local_teacher_best_ratio": local / checkpoints if checkpoints else 0.0,
             "factual_action_best_ratio": factual / checkpoints if checkpoints else 0.0,
         }

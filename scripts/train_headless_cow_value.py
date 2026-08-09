@@ -13,7 +13,7 @@ import time
 from typing import Any, Iterable, Mapping
 
 try:
-    from label_headless_cow_counterfactuals import outcome_rank
+    from label_headless_cow_counterfactuals import learning_outcome_rank
     from train_headless_teacher import (
         CATEGORICAL_FEATURES,
         Decision,
@@ -24,7 +24,7 @@ try:
         repository_commit,
     )
 except ModuleNotFoundError:
-    from scripts.label_headless_cow_counterfactuals import outcome_rank
+    from scripts.label_headless_cow_counterfactuals import learning_outcome_rank
     from scripts.train_headless_teacher import (
         CATEGORICAL_FEATURES,
         Decision,
@@ -68,7 +68,7 @@ def _file_records(files: Iterable[Path]) -> tuple[list[dict[str, str]], str]:
 
 
 def ordinal_outcome_labels(outcomes: Iterable[Mapping[str, Any]]) -> tuple[int, ...]:
-    ranks = tuple(outcome_rank(outcome) for outcome in outcomes)
+    ranks = tuple(learning_outcome_rank(outcome) for outcome in outcomes)
     ordered = {rank: index for index, rank in enumerate(sorted(set(ranks)))}
     return tuple(ordered[rank] for rank in ranks)
 
@@ -104,6 +104,7 @@ def load_value_groups(
         tuple(int(value) for value in provenance.get("native_delivery_delays", ())),
     )
     unmatched = 0
+    uninformative = 0
     for path in files:
         document = json.loads(path.read_text(encoding="utf-8"))
         if document.get("schema") != "th06-rl-headless-cow-counterfactual-v1":
@@ -130,6 +131,9 @@ def load_value_groups(
                 raise ValueError("COW outcomes do not equal the native legal action set")
             ordered_outcomes = tuple(by_action[action] for action in actions)
             labels = ordinal_outcome_labels(ordered_outcomes)
+            if len(set(labels)) == 1:
+                uninformative += 1
+                continue
             best_label = max(labels)
             groups.append(ValueGroup(
                 seed=seed,
@@ -151,6 +155,8 @@ def load_value_groups(
         "groups": len(groups),
         "candidate_outcomes": sum(len(group.actions) for group in groups),
         "unmatched_checkpoints": unmatched,
+        "uninformative_checkpoints": uninformative,
+        "value_target": "completed-maneuverability-or-failed-survival-v2",
         "runtime_sources": [json.loads(item) for item in sorted(runtime_sources)],
         "native_delivery_contract": expected_delivery[0],
         "native_delivery_delays": list(expected_delivery[1]),

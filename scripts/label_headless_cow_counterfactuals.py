@@ -93,6 +93,21 @@ def outcome_rank(outcome: Mapping[str, Any]) -> tuple[int, int, int, int, float]
     )
 
 
+def learning_outcome_rank(
+    outcome: Mapping[str, Any],
+) -> tuple[int, int, int, int, float]:
+    """Retain failed survival without inventing value inside equal dead ends."""
+    terminal = str(outcome["termination_reason"])
+    completed = terminal in {"tick-limit", "chain-exit-success", "stage-clear-success"}
+    return (
+        int(completed),
+        int(terminal != "physical-hit"),
+        int(outcome["survival_ticks"]),
+        int(outcome["minimum_native_legal_actions"]) if completed else 0,
+        float(outcome["terminal_boundary_reserve"]) if completed else 0.0,
+    )
+
+
 def _certify(observation: Mapping[str, Any], kernel: NativeKernel):
     hazards = lower_headless_hard_hazards(observation, HARD_HORIZON)
     prepared = kernel.prepare_hazards(hazards)

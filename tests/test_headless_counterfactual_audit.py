@@ -53,6 +53,32 @@ def test_counterfactual_audit_accepts_complete_native_action_table(tmp_path) -> 
     assert result["valid"] is True
     assert result["outcomes"] == 2
     assert result["unique_best_checkpoints"] == 1
+    assert result["learning_informative_checkpoints"] == 1
+
+
+def test_counterfactual_audit_reports_equal_dead_end_as_uninformative(tmp_path) -> None:
+    value = document()
+    outcomes = value["checkpoints"][0]["outcomes"]  # type: ignore[index]
+    for index, row in enumerate(outcomes):
+        row.update({  # type: ignore[union-attr]
+            "termination_reason": "authority-failure",
+            "survival_ticks": 1,
+            "actions_issued": 1,
+            "minimum_native_legal_actions": 18 - index,
+            "terminal_boundary_reserve": 10.0 + index,
+        })
+    value["checkpoints"][0].update({  # type: ignore[index]
+        "best_actions": ["up"],
+        "local_teacher_action_is_best": False,
+        "factual_action_is_best": False,
+    })
+    path = tmp_path / "dead-end.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    result = audit_file(path)
+
+    assert result["valid"] is True
+    assert result["learning_informative_checkpoints"] == 0
 
 
 def test_counterfactual_audit_rejects_summary_tampering(tmp_path) -> None:
