@@ -351,6 +351,39 @@ exactly three battle HITs before Game Over, then idled in menu/empty state.
 Their first-HIT ticks and forced rows remain useful diagnostics, but their
 post-Game-Over HIT rate is not policy evidence.
 
+## Current-source six-stage baseline and corpus yield
+
+Runtime `1350819` generated eight factual seed runs (15--22) per exact
+Reimu-A/Lunatic stage scope. All 48 runs and 210,180 transitions passed the
+independent compact-corpus audit: factual successor, native-legal action,
+propensity, and Bomb-free ratios were all 100%. This is row validity, not route
+coverage. With a 6,000-tick collection bound, native authority stopped 0 / 4 /
+5 / 4 / 8 / 6 runs in Stages 1--6 respectively. In particular, every Stage 5
+factual run ended at an early authority dead-end, so the corpus supplies no
+teacher-supported late-stage distribution.
+
+The first current-source distilled weights were then run with HIT continuation
+to natural stage completion on unseen seeds 23/24. Every run reached
+`stage-clear-success` and used zero Bombs, but none qualified as a two-seed
+NMNB stage candidate:
+
+| Stage | Natural ticks (seed 23 / 24) | HITs | Forced release rows |
+| --- | --- | --- | --- |
+| 1 | 18,306 / 18,306 | 6 / 6 | 98 / 97 |
+| 2 | 21,455 / 20,650 | 5 / 5 | 75 / 80 |
+| 3 | 29,638 / 29,370 | 7 / 6 | 71 / 47 |
+| 4 | 35,055 / 35,263 | 14 / 15 | 126 / 104 |
+| 5 | 33,135 / 32,961 | 22 / 16 | 202 / 143 |
+| 6 | 44,236 / 44,236 | 25 / 25 | 270 / 407 |
+
+The bootstrap policies are substantially better than the fixed stationary
+infrastructure baseline, but imitation accuracy did not solve the sparse
+irreversible decisions. The first iterative Stage 1 DAgger weight moved one
+new seed from six HITs to a full 18,306-tick no-HIT/no-Bomb clear; its other
+new seed still had four HITs. This is useful causal evidence for iterative
+failure-neighborhood aggregation, but one seed is not promotion or
+high-quality-population evidence.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
