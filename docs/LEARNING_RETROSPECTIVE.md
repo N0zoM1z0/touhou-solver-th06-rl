@@ -861,6 +861,13 @@ safe set before any laser-history failure, so their pre-dead-end states remain
 valid targets for a 720-tick, 1200-branch COW batch. Later post-forced states
 remain evaluation-only.
 
+That Stage 2 batch completed all 14 checkpoints and 218 branch outcomes. A
+unique strict best existed at 85.7%, while both the local teacher and factual
+action were best at only 14.3%. Deterministic first-failure reruns of seeds
+113/114 make those pre-dead-end observations training-eligible without
+weakening the continuation-corpus boundary. They feed a grouped-ranking
+experiment; the yield alone is not promotion evidence.
+
 The authoritative ECL implementation also excludes a generic newborn-laser
 angular bound. `LASERROTATE` adds a runtime `GetVarFloat` argument directly to
 the laser angle, while `LASERROTATEFROMPLAYER` replaces it with the current
@@ -868,6 +875,27 @@ player-facing angle plus another runtime float. Without interpreting future
 ECL there is neither a fixed per-tick delta nor a source-independent direction
 bound. Newborn lasers therefore continue to fail closed; learned ranking or a
 headless-only zero-rotation assumption may not bypass that authority gap.
+
+The first all-history LambdaRank experiment showed why a modern loss is not a
+guarantee. Two Stage 1 models trained on 620,123 snapshots and reached 90.19%
+and 90.37% acceptable top-1 on held-out seeds, versus 91.06% for the incumbent
+binary model. More importantly, on the incumbent's exact seeds 113/114,
+LambdaRank survivable reached 6/4 HIT with 72/48 forced rows and unique-best
+reached 3/3 with 101/10. The incumbent remained 3/1 with 46/13, aggregately
+dominating both and seedwise dominating survivable. Both grouped rankers are
+rejected; their offline fit does not supersede closed-loop evidence.
+
+Stage 4 consensus likewise failed independent replication. On seeds 111/112
+the incumbent reached 5/3 HIT with 45/23 forced rows, while consensus reached
+7/5 with 40/66. The incumbent lowers paired totals from 12 HIT and 106 forced
+rows to 8 and 68, reversing the favorable seeds 103/104 aggregate ordering.
+Consensus remains diversity only and does not replace the table row.
+
+The Stage 6 fixed panel also retained its incumbent. On seeds 109/110 it
+reached 9/12 HIT with 97/145 forced rows. The older lower-forced member reached
+15/13 with 127/127, and their Borda consensus reached 14/13 with 162/136. The
+incumbent aggregately dominates both at 21 HIT and 242 forced rows, though the
+other members preserve a lower-forced mode on seed 110. None is NMNB.
 
 ## Portability to TH08
 
