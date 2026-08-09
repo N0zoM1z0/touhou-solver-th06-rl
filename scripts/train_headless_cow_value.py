@@ -141,7 +141,7 @@ def load_value_groups(
         raise ValueError("no COW value label files found")
     file_records, file_set_sha256 = _file_records(files)
     decision_by_digest = {decision.observation_sha256: decision for decision in decisions}
-    groups = []
+    groups_by_checkpoint: dict[tuple[int, str], tuple[int, ValueGroup]] = {}
     runtime_sources = set()
     expected_delivery = (
         str(provenance.get("native_delivery_contract", "legacy-unspecified-v0")),
@@ -153,6 +153,8 @@ def load_value_groups(
     ))
     unmatched = 0
     uninformative = 0
+    duplicate_checkpoints = 0
+    longer_horizon_replacements = 0
     for path in files:
         document = json.loads(path.read_text(encoding="utf-8"))
         if document.get("schema") != "th06-rl-headless-cow-counterfactual-v1":
@@ -188,7 +190,7 @@ def load_value_groups(
                 uninformative += 1
                 continue
             best_label = max(labels)
-            groups.append(ValueGroup(
+            group = ValueGroup(
                 seed=seed,
                 observation_sha256=digest,
                 decision=decision,
@@ -198,7 +200,24 @@ def load_value_groups(
                     action for action, label in zip(actions, labels, strict=True)
                     if label == best_label
                 ),
-            ))
+            )
+            key = (seed, digest)
+            branch_frames = int(checkpoint["branch_frames"])
+            previous = groups_by_checkpoint.get(key)
+            if previous is not None:
+                duplicate_checkpoints += 1
+                previous_horizon, previous_group = previous
+                if branch_frames < previous_horizon:
+                    continue
+                if branch_frames == previous_horizon:
+                    if group != previous_group:
+                        raise ValueError(
+                            "duplicate COW checkpoints disagree at the same horizon"
+                        )
+                    continue
+                longer_horizon_replacements += 1
+            groups_by_checkpoint[key] = (branch_frames, group)
+    groups = [entry[1] for entry in groups_by_checkpoint.values()]
     if not groups:
         raise ValueError("no COW value groups matched compact corpus observations")
     return groups, {
@@ -209,6 +228,8 @@ def load_value_groups(
         "candidate_outcomes": sum(len(group.actions) for group in groups),
         "unmatched_checkpoints": unmatched,
         "uninformative_checkpoints": uninformative,
+        "duplicate_checkpoints": duplicate_checkpoints,
+        "longer_horizon_replacements": longer_horizon_replacements,
         "value_target": "completed-quality-buckets-or-failed-survival-v3",
         "runtime_sources": [json.loads(item) for item in sorted(runtime_sources)],
         "native_delivery_contract": expected_delivery[0],

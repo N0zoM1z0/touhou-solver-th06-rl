@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+
 from scripts.train_headless_cow_value import (
     behavior_value_groups,
     delivery_contract,
+    load_value_groups,
     ordinal_outcome_labels,
 )
 from scripts.train_headless_teacher import Decision
@@ -87,3 +90,66 @@ def test_behavior_regularization_yields_to_cow_observation() -> None:
         [decision],
         excluded_observations=frozenset({"digest"}),
     ) == []
+
+
+def test_longer_duplicate_cow_horizon_supersedes_shorter(tmp_path) -> None:
+    decision = Decision(
+        run="run",
+        seed=7,
+        sequence=4,
+        source_context="boss:0/1",
+        state={},
+        legal_actions=("left", "right"),
+        candidates=(),
+        teacher_action="left",
+        selected_action="left",
+        observation_sha256="digest",
+    )
+    provenance = {
+        "scope": {"difficulty": 3, "character": 0, "shot_type": 0, "stage": 2},
+        "source": {"commit": "source", "clean": True, "binary_sha256": "binary"},
+        "native_delivery_contract": "synchronous-step-v1",
+        "native_delivery_delays": [0],
+        "observation_digest_contract": "physical-v1",
+    }
+
+    def document(branch_frames: int, completed_action: str):
+        outcomes = []
+        for action in decision.legal_actions:
+            completed = action == completed_action
+            outcomes.append({
+                "first_action": action,
+                "termination_reason": "tick-limit" if completed else "authority-failure",
+                "survival_ticks": branch_frames if completed else 5,
+                "minimum_native_legal_actions": 8 if completed else 1,
+                "terminal_boundary_reserve": 32.0 if completed else 0.0,
+            })
+        return {
+            "schema": "th06-rl-headless-cow-counterfactual-v1",
+            "scope": provenance["scope"],
+            "input_source": provenance["source"],
+            "runtime_source": provenance["source"],
+            "runtime_delivery_contract": "synchronous-step-v1",
+            "runtime_delivery_delays": [0],
+            "observation_digest_contract": "physical-v1",
+            "initial_seed": 7,
+            "checkpoints": [{
+                "observation_sha256": "digest",
+                "branch_frames": branch_frames,
+                "outcomes": outcomes,
+            }],
+        }
+
+    (tmp_path / "a-short.json").write_text(
+        json.dumps(document(240, "left")), encoding="utf-8"
+    )
+    (tmp_path / "b-long.json").write_text(
+        json.dumps(document(1200, "right")), encoding="utf-8"
+    )
+
+    groups, report = load_value_groups([decision], provenance, [tmp_path])
+
+    assert groups[0].best_actions == ("right",)
+    assert report["groups"] == 1
+    assert report["duplicate_checkpoints"] == 1
+    assert report["longer_horizon_replacements"] == 1
