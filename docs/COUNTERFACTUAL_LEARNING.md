@@ -109,6 +109,11 @@ and a deterministic digest of the ordered run set. This makes a many-root
 all-history fit auditable without hashing the large transition streams a
 second time.
 
+The trainer resolves its repository commit before decoding or fitting. An
+unrelated commit may advance the working branch during a long CPU job, but it
+cannot make the already loaded process claim the later HEAD as its training
+implementation.
+
 When independently useful candidates make different safe tradeoffs,
 `scripts/build_headless_ranker_ensemble.py` can package them as an immutable
 Borda consensus artifact. Each member encodes and ranks the same current

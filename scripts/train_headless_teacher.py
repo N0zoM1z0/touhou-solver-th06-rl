@@ -610,6 +610,10 @@ def main() -> int:
         parser.error("tree capacity bounds must be positive")
     if min(args.failure_horizon, args.failure_weight, args.counterfactual_weight) < 0:
         parser.error("failure weighting bounds must be nonnegative")
+    # Resolve code provenance before any long decode/fit. The branch may move
+    # while an offline trainer is running; the loaded process must never claim
+    # the commit that happened to be checked out only when fitting ended.
+    code_commit = repository_commit()
     # Counterfactual generation may continue in parallel. Freeze its input
     # file set before corpus decoding so one model never consumes an
     # accidental mid-training mixture that cannot be reconstructed later.
@@ -702,7 +706,6 @@ def main() -> int:
         args.output / "teacher-ranker.joblib",
         compress=3,
     )
-    code_commit = repository_commit()
     report = {
         "schema": "th06-rl-headless-teacher-distillation-v1",
         "algorithm": f"lightgbm-{args.objective}-candidate-ranker",
