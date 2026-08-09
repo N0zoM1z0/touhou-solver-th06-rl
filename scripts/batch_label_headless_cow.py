@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import gzip
 import json
 from pathlib import Path
 import subprocess
@@ -42,6 +43,53 @@ def checkpoint_sequences(
     return tuple(sequences)
 
 
+def event_checkpoint_sequences(
+    rows: list[dict[str, Any]],
+    *,
+    event_window: int,
+    stride: int,
+) -> tuple[int, ...]:
+    """Sample legal states leading into observed HIT or authority-release events."""
+    event_rows = []
+    previous_forced = False
+    for index, row in enumerate(rows):
+        forced = row.get("benchmark_forced_action") is True
+        outcome = row.get("outcome_terms")
+        hit = isinstance(outcome, dict) and int(outcome.get("deaths_delta", 0)) > 0
+        if hit or (forced and not previous_forced):
+            target = index
+            while target >= 1 and not row_is_labelable(rows[target]):
+                target -= 1
+            if target >= 1:
+                event_rows.append(target)
+        previous_forced = forced
+    selected = set()
+    for target in event_rows:
+        lower = max(1, target - event_window)
+        for sequence in range(target, lower - 1, -stride):
+            if row_is_labelable(rows[sequence]):
+                selected.add(sequence)
+        if row_is_labelable(rows[lower]):
+            selected.add(lower)
+    return tuple(sorted(selected))
+
+
+def row_is_labelable(row: dict[str, Any]) -> bool:
+    legal = row.get("legal_actions")
+    return (
+        isinstance(legal, list)
+        and bool(legal)
+        and row.get("benchmark_forced_action") is not True
+    )
+
+
+def _transition_rows(run: Path) -> list[dict[str, Any]]:
+    rows = []
+    with gzip.open(run / "transitions.jsonl.gz", "rt", encoding="utf-8") as stream:
+        rows.extend(json.loads(line) for line in stream)
+    return rows
+
+
 def _output_path(output_root: Path, run: Path, manifest: dict[str, Any]) -> Path:
     scope = manifest["scope"]
     return output_root / (
@@ -50,7 +98,7 @@ def _output_path(output_root: Path, run: Path, manifest: dict[str, Any]) -> Path
     )
 
 
-def _completed_output(path: Path, run: Path) -> bool:
+def _completed_output(path: Path, run: Path, sequences: tuple[int, ...]) -> bool:
     if not path.is_file():
         return False
     try:
@@ -61,7 +109,16 @@ def _completed_output(path: Path, run: Path) -> bool:
         recorded = Path(str(document.get("input_run", ""))).resolve()
     except OSError:
         return False
-    return document.get("schema") == SCHEMA and recorded == run.resolve()
+    recorded_sequences = tuple(
+        int(checkpoint.get("sequence", -1))
+        for checkpoint in document.get("checkpoints", [])
+        if isinstance(checkpoint, dict)
+    )
+    return (
+        document.get("schema") == SCHEMA
+        and recorded == run.resolve()
+        and recorded_sequences == sequences
+    )
 
 
 def main() -> int:
@@ -70,7 +127,13 @@ def main() -> int:
     parser.add_argument("paths", nargs="+", type=Path)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--tail-transitions", type=int, default=600)
+    parser.add_argument("--event-window", type=int, default=240)
     parser.add_argument("--stride", type=int, default=80)
+    parser.add_argument(
+        "--selection",
+        choices=("tail", "events", "hybrid"),
+        default="tail",
+    )
     parser.add_argument("--branch-frames", type=int, default=180)
     parser.add_argument("--teacher-horizon", type=int, default=12)
     parser.add_argument("--workers", type=int, default=12)
@@ -88,6 +151,7 @@ def main() -> int:
     args = parser.parse_args()
     if min(
         args.tail_transitions,
+        args.event_window,
         args.stride,
         args.branch_frames,
         args.teacher_horizon,
@@ -108,15 +172,21 @@ def main() -> int:
         manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
         if manifest.get("transaction_complete") is not True:
             continue
-        sequences = checkpoint_sequences(
+        tail = checkpoint_sequences(
             int(manifest.get("transition_count", 0)),
             tail_transitions=args.tail_transitions,
             stride=args.stride,
-        )
+        ) if args.selection in {"tail", "hybrid"} else ()
+        events = event_checkpoint_sequences(
+            _transition_rows(run),
+            event_window=args.event_window,
+            stride=args.stride,
+        ) if args.selection in {"events", "hybrid"} else ()
+        sequences = tuple(sorted(set(tail).union(events)))
         if not sequences:
             continue
         output = _output_path(output_root, run, manifest)
-        if _completed_output(output, run):
+        if _completed_output(output, run, sequences):
             skipped.append(str(output))
             continue
         command = [
@@ -177,6 +247,8 @@ def main() -> int:
         "failed_runs": len(failures),
         "workers": args.workers,
         "tail_transitions": args.tail_transitions,
+        "event_window": args.event_window,
+        "selection": args.selection,
         "stride": args.stride,
         "branch_frames": args.branch_frames,
         "teacher_horizon": args.teacher_horizon,

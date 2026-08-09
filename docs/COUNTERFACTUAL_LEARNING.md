@@ -25,8 +25,13 @@ For multi-run experiments, `scripts/batch_label_headless_cow.py` enumerates
 complete compact runs, samples a bounded terminal neighborhood, and invokes
 the same dynamic COW labeler with a fixed worker ceiling. It always includes
 the final reconstructable state and resumes only from a complete JSON label
-whose recorded input run matches exactly; an interrupted or mismatched output
-is recomputed. The batch driver changes scheduling only, not branch authority.
+whose recorded input run and checkpoint sequence set match exactly; an
+interrupted or mismatched output is recomputed. Besides a terminal window, the
+driver can select real HIT rows and the last native-legal state before each
+contiguous benchmark authority-release event. Event neighborhoods make
+continued-HIT evaluation useful for offline diagnosis without treating forced
+or post-HIT rows as factual training data. The batch driver changes scheduling
+only, not branch authority.
 
 A game adapter may additionally expose fixed candidate-relative clearance
 profiles at declared checkpoints. TH06 computes worst-case clearance across
