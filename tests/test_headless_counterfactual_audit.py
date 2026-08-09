@@ -13,6 +13,8 @@ def document() -> dict[str, object]:
         "initial_seed": 9,
         "branch_frames": 180,
         "runtime_source": {"clean": True},
+        "runtime_delivery_contract": "synchronous-step-v1",
+        "runtime_delivery_delays": [0],
         "checkpoints": [{
             "native_legal_actions": ["up", "stay_fast"],
             "local_teacher_action": "stay_fast",
@@ -63,3 +65,15 @@ def test_counterfactual_audit_rejects_summary_tampering(tmp_path) -> None:
 
     assert result["valid"] is False
     assert "best action summary mismatch" in " ".join(result["errors"])
+
+
+def test_counterfactual_audit_rejects_false_synchronous_delivery(tmp_path) -> None:
+    value = document()
+    value["runtime_delivery_delays"] = [0, 1]
+    path = tmp_path / "bad-delivery.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    result = audit_file(path)
+
+    assert result["valid"] is False
+    assert "delivery" in " ".join(result["errors"])

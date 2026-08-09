@@ -46,6 +46,16 @@ def audit_file(path: Path) -> dict[str, Any]:
         errors.append("invalid authority contract")
     if document.get("runtime_source", {}).get("clean") is not True:
         errors.append("counterfactual runtime source was dirty")
+    delivery_contract = document.get(
+        "runtime_delivery_contract",
+        "legacy-unspecified-v0",
+    )
+    delivery_delays = document.get("runtime_delivery_delays")
+    if delivery_contract == "synchronous-step-v1":
+        if delivery_delays != [0]:
+            errors.append("synchronous COW delivery must be exactly [0]")
+    elif delivery_contract != "legacy-unspecified-v0":
+        errors.append("unsupported COW delivery contract")
     branch_frames = int(document.get("branch_frames", 0))
     checkpoints = document.get("checkpoints")
     if branch_frames <= 0 or not isinstance(checkpoints, list) or not checkpoints:
@@ -103,6 +113,8 @@ def audit_file(path: Path) -> dict[str, Any]:
         "errors": errors,
         "scope": document.get("scope"),
         "initial_seed": document.get("initial_seed"),
+        "runtime_delivery_contract": delivery_contract,
+        "runtime_delivery_delays": delivery_delays,
         "checkpoints": len(checkpoints),
         "outcomes": outcomes_count,
         "unique_best_checkpoints": unique_best,
@@ -136,9 +148,14 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             "factual_action_best_ratio": factual / checkpoints if checkpoints else 0.0,
         }
 
+    delivery_contracts = Counter(
+        str(result.get("runtime_delivery_contract")) for result in results
+    )
     return {
         "schema": "th06-rl-headless-cow-counterfactual-audit-v1",
         **aggregate(results),
+        "runtime_delivery_contracts": dict(sorted(delivery_contracts.items())),
+        "mixed_runtime_delivery_contracts": len(delivery_contracts) > 1,
         "by_stage": [
             {"stage": stage, **aggregate(rows)}
             for stage, rows in sorted(by_stage.items())
@@ -161,7 +178,10 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
-    return 0 if result["valid_files"] == result["files"] else 1
+    return 0 if (
+        result["valid_files"] == result["files"]
+        and not result["mixed_runtime_delivery_contracts"]
+    ) else 1
 
 
 if __name__ == "__main__":
