@@ -659,6 +659,21 @@ and 9/4 with 107/27. Stage 5 r6 kept 22 aggregate HITs in both modes, at
 their completed first-failure trajectories remain eligible inputs for the
 next causal-label generation.
 
+Stage 1 r8 also failed its unseen-seed continuation gate. Its survivable
+member reached 3/3 HIT with 58/54 forced rows on seeds 77/78, while the
+unique-best sibling reached 2/2 HIT with 40/41 forced rows. Both are dominated
+by the 2-HIT, 28-forced incumbent and remain archived only as corrective-data
+sources and diversity evidence.
+
+An exact ordinal action-return experiment then trained LambdaMART on 56 Stage
+1 COW groups and 913 complete branch outcomes. Splitting by seed rather than
+by checkpoint exposed severe generalization failure: the model achieved 100%
+top-1 and 1.0 MRR on seeds 73/74, but only 17.9% top-1 and 0.305 MRR on held-out
+seeds 75/76. This is a useful modern offline-RL negative result, not a rollout
+candidate. Exact simulated return is still too sparse and seed-specific to
+override the corrective classifiers, and it will not be promoted or ensembled
+without materially better complete-seed validation.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
