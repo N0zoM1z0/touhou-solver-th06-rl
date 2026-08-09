@@ -61,6 +61,19 @@ def checkpoint_groups(
     )
 
 
+def round_robin_task_groups(groups: Iterable[Iterable[Any]]) -> tuple[Any, ...]:
+    """Interleave run-local tasks so early snapshots cover multiple runs."""
+    materialized = tuple(tuple(group) for group in groups)
+    if not materialized:
+        return ()
+    return tuple(
+        group[index]
+        for index in range(max(map(len, materialized), default=0))
+        for group in materialized
+        if index < len(group)
+    )
+
+
 def event_checkpoint_sequences(
     rows: list[dict[str, Any]],
     *,
@@ -223,9 +236,10 @@ def main() -> int:
         parser.error("no compact headless corpus manifests found")
     output_root = args.output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
-    tasks = []
+    task_groups = []
     skipped = []
     for run in runs:
+        run_tasks = []
         manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
         if manifest.get("transaction_complete") is not True:
             continue
@@ -277,7 +291,11 @@ def main() -> int:
                 "--output",
                 str(output),
             ))
-            tasks.append((run, output, command, len(group)))
+            run_tasks.append((run, output, command, len(group)))
+        if run_tasks:
+            task_groups.append(run_tasks)
+
+    tasks = list(round_robin_task_groups(task_groups))
 
     results = []
     failures = []

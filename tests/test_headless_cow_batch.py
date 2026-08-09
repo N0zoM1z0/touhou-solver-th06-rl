@@ -2,6 +2,7 @@ from scripts.batch_label_headless_cow import (
     checkpoint_groups,
     checkpoint_sequences,
     event_checkpoint_sequences,
+    round_robin_task_groups,
 )
 
 
@@ -28,6 +29,17 @@ def test_checkpoint_groups_preserve_order_and_default_to_one_replay():
         (161,),
     )
     assert checkpoint_groups((), checkpoints_per_task=2) == ()
+
+
+def test_round_robin_task_groups_balances_early_run_coverage() -> None:
+    assert round_robin_task_groups((("a1", "a2", "a3"), ("b1", "b2"))) == (
+        "a1",
+        "b1",
+        "a2",
+        "b2",
+        "a3",
+    )
+    assert round_robin_task_groups(()) == ()
 
 
 def _row(*, hit: bool = False, forced: bool = False, legal: bool = True):
