@@ -727,6 +727,23 @@ Stage 5 r7 COW batch completed 16 valid checkpoints and 250 outcomes, with
 68.75% unique strict best, 18.75% local-teacher best, and only 6.25% factual
 best. Its r8 descendants remain behind the natural-continuation gate.
 
+Three further rolling-seed generations did not improve their experiment-order
+incumbents. Stage 1 r9 reached 2/4 HIT with 45/57 forced rows (survivable) and
+2/1 with 25/35 (unique-best). Stage 2 r11 reached 1/2 with 38/47 and 1/1 with
+29/57. Stage 3 r9 reached 2/1 with 24/8 and 4/1 with 42/4. Every run completed
+naturally with zero Bombs. The Stage 3 survivable member matches its incumbent
+at three aggregate HITs but has 32 rather than 13 aggregate forced rows, so it
+is retained only as a more balanced HIT-split diversity member. None is a
+promotion.
+
+Fixed same-seed panels now accompany the rolling queue. The first panels
+compare the old and provisional Stage 5 incumbents on seeds 91/92, the Stage 2
+incumbent against r11 unique on 93/94, the Stage 1 incumbent against an
+incumbent-plus-r9 Borda consensus on 95/96, and the Stage 3 incumbent against
+r9 survivable on 97/98. These panels isolate the policy delta from seed
+difficulty; their natural results, not cross-seed aggregate ordering, decide
+whether an apparent gain is repeatable.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
