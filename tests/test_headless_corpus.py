@@ -12,6 +12,7 @@ from th06_rl.headless_corpus import (
     TeacherDecision,
     build_transition,
     canonical_observation_sha256,
+    compact_source_context_features,
     source_context_id,
 )
 from th06_rl.native import ACTIONS, NativeCertifiedAction
@@ -73,6 +74,34 @@ def test_source_context_uses_automatic_timeline_or_boss_identity() -> None:
 
     value["enemies"] = [{"slot": 3, "boss": True, "ecl_sub": 17}]
     assert source_context_id(value) == "boss:3/17"
+
+
+def test_compact_source_context_retains_boss_clock_without_movement_script() -> None:
+    value = observation()
+    value["player"]["x"] = 350.75
+    value["player"]["y"] = 93.875
+    value["enemies"] = [{
+        "slot": 0,
+        "boss": True,
+        "ecl_sub": 17,
+        "ecl_time": 40,
+        "x": 85.625,
+        "y": 96.0,
+        "vx": 0.0,
+        "vy": 0.0,
+        "hitbox_width": 30.0,
+        "hitbox_height": 37.3333321,
+        "contact_active": False,
+    }]
+
+    features = compact_source_context_features(value)
+
+    assert features["boss_present"] == 1.0
+    assert features["boss_ecl_time"] == 40.0
+    assert features["boss_relative_x"] == 85.625 - 350.75
+    assert features["boss_contact_active"] == 0.0
+    assert features["timeline_time"] == 10.0
+    assert features["timeline_next_time_delta"] == 430.0
 
 
 def test_epsilon_teacher_logs_the_marginal_behavior_probability() -> None:

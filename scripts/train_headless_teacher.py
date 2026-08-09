@@ -21,6 +21,8 @@ from th06_rl.headless_corpus import (
     HAZARD_FEATURE_DEFAULTS,
     HAZARD_FEATURE_NAMES,
     PROFILE_FEATURE_NAMES,
+    SOURCE_CONTEXT_FEATURE_DEFAULTS,
+    SOURCE_CONTEXT_FEATURE_NAMES,
 )
 
 
@@ -51,6 +53,7 @@ NUMERIC_FEATURES = (
     "changed_direction",
     "reversed_direction",
     "changed_focus",
+    *SOURCE_CONTEXT_FEATURE_NAMES,
     *HAZARD_FEATURE_NAMES,
     *PROFILE_FEATURE_NAMES,
 )
@@ -126,6 +129,10 @@ def candidate_features(decision: Decision, candidate: Mapping[str, Any]) -> dict
             and (action.dx, action.dy) == (-previous.dx, -previous.dy)
         ),
         "changed_focus": float(action.focused != previous.focused),
+        **{
+            name: float(decision.state.get(name, SOURCE_CONTEXT_FEATURE_DEFAULTS[name]))
+            for name in SOURCE_CONTEXT_FEATURE_NAMES
+        },
         **{
             name: float(decision.state.get(name, HAZARD_FEATURE_DEFAULTS[name]))
             for name in HAZARD_FEATURE_NAMES

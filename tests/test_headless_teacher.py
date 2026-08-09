@@ -14,6 +14,7 @@ from scripts.train_headless_teacher import (
 )
 from th06_rl.headless_corpus import (
     HAZARD_FEATURE_NAMES,
+    SOURCE_CONTEXT_FEATURE_NAMES,
     compact_hazard_sector_features,
     source_context_id,
 )
@@ -74,6 +75,7 @@ def test_teacher_features_exclude_seed_rng_and_supervision_leakage() -> None:
     assert not any("teacher" in name for name in value)
     assert not any("selected" in name for name in value)
     assert all(name in value for name in HAZARD_FEATURE_NAMES)
+    assert all(name in value for name in SOURCE_CONTEXT_FEATURE_NAMES)
 
 
 def test_repository_commit_is_independent_of_caller_working_directory(

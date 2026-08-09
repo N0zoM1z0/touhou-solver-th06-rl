@@ -60,6 +60,20 @@ PROFILE_CHECKPOINTS = (4, 8, 12)
 PROFILE_FEATURE_NAMES = tuple(
     f"profile_min_clearance_{checkpoint}" for checkpoint in PROFILE_CHECKPOINTS
 )
+SOURCE_CONTEXT_FEATURE_DEFAULTS = {
+    "boss_present": 0.0,
+    "boss_ecl_time": -1.0,
+    "boss_relative_x": 0.0,
+    "boss_relative_y": 0.0,
+    "boss_velocity_x": 0.0,
+    "boss_velocity_y": 0.0,
+    "boss_hitbox_width": 0.0,
+    "boss_hitbox_height": 0.0,
+    "boss_contact_active": 0.0,
+    "timeline_time": -1.0,
+    "timeline_next_time_delta": -1.0,
+}
+SOURCE_CONTEXT_FEATURE_NAMES = tuple(SOURCE_CONTEXT_FEATURE_DEFAULTS)
 
 
 def canonical_observation_sha256(observation: Mapping[str, Any]) -> str:
@@ -177,6 +191,72 @@ def compact_hazard_sector_features(observation: Mapping[str, Any]) -> dict[str, 
     return values
 
 
+def compact_source_context_features(observation: Mapping[str, Any]) -> dict[str, float]:
+    """Retain bounded automatic source context as policy input only.
+
+    Source ECL identity never certifies collision and never selects a scripted
+    action.  The numeric clock and current boss geometry let an offline ranker
+    distinguish visually similar snapshots around source-driven movement,
+    while the native gate remains limited to already-observed physical hazards.
+    """
+    player = observation.get("player")
+    enemies = observation.get("enemies")
+    raw_context = observation.get("source_context")
+    if (
+        not isinstance(player, Mapping)
+        or not isinstance(enemies, list)
+        or not isinstance(raw_context, Mapping)
+    ):
+        raise HeadlessAuthorityUnavailable("headless source feature input is incoherent")
+    player_x = _finite_feature(player, "x")
+    player_y = _finite_feature(player, "y")
+    values = dict(SOURCE_CONTEXT_FEATURE_DEFAULTS)
+    try:
+        timeline_time = int(raw_context["timeline_time"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HeadlessAuthorityUnavailable("headless timeline clock is invalid") from error
+    values["timeline_time"] = float(timeline_time)
+    next_instruction = raw_context.get("next")
+    if next_instruction is not None:
+        if not isinstance(next_instruction, Mapping):
+            raise HeadlessAuthorityUnavailable("headless next timeline instruction is incoherent")
+        try:
+            next_time = int(next_instruction["time"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise HeadlessAuthorityUnavailable("headless next timeline time is invalid") from error
+        values["timeline_next_time_delta"] = float(next_time - timeline_time)
+
+    bosses = sorted(
+        (
+            enemy for enemy in enemies
+            if isinstance(enemy, Mapping) and enemy.get("boss") is True
+        ),
+        key=lambda enemy: int(enemy.get("slot", -1)),
+    )
+    if not bosses:
+        return values
+    boss = bosses[0]
+    contact_active = boss.get("contact_active")
+    if not isinstance(contact_active, bool):
+        raise HeadlessAuthorityUnavailable("headless boss contact state is incoherent")
+    try:
+        ecl_time = int(boss["ecl_time"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HeadlessAuthorityUnavailable("headless boss ECL clock is invalid") from error
+    values.update({
+        "boss_present": 1.0,
+        "boss_ecl_time": float(ecl_time),
+        "boss_relative_x": _finite_feature(boss, "x") - player_x,
+        "boss_relative_y": _finite_feature(boss, "y") - player_y,
+        "boss_velocity_x": _finite_feature(boss, "vx"),
+        "boss_velocity_y": _finite_feature(boss, "vy"),
+        "boss_hitbox_width": _finite_feature(boss, "hitbox_width"),
+        "boss_hitbox_height": _finite_feature(boss, "hitbox_height"),
+        "boss_contact_active": float(contact_active),
+    })
+    return values
+
+
 def compact_state_features(observation: Mapping[str, Any]) -> dict[str, Any]:
     player = observation["player"]
     assert isinstance(player, Mapping)
@@ -201,6 +281,7 @@ def compact_state_features(observation: Mapping[str, Any]) -> dict[str, Any]:
             isinstance(enemy, Mapping) and enemy.get("boss") is True
             for enemy in enemies
         ),
+        **compact_source_context_features(observation),
         **compact_hazard_sector_features(observation),
     }
 
