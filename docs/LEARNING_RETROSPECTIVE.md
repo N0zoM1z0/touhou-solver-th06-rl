@@ -818,6 +818,26 @@ member dominates consensus on both aggregate objectives, so the ensemble is
 rejected. The later Stage 4 r10 COW batch remains data-only despite 16 valid
 checkpoints, 240 outcomes, and 87.5% unique strict best.
 
+The next Stage 4 fixed panel supplied a new, but not yet replicated, aggregate
+trade-off. On seeds 103/104 the incumbent reached 7/8 HIT with 47/88 forced
+rows, while its Borda consensus with the r9 unique member reached 7/5 with
+52/33. Consensus lowers the paired totals from 15 HIT and 135 forced rows to
+12 and 85, but is not seedwise dominant because seed 103's forced count rises
+from 47 to 52. It therefore enters an independent paired replication on
+seeds 111/112 rather than replacing the Stage 4 table row.
+
+Stage 5 r9 also produced encouraging rolling evidence without a cross-seed
+promotion. Its survivable model reached 12/10 HIT with 94/70 forced rows on
+seeds 83/84; unique-best reached 12/7 with 90/55. Both completed naturally
+with zero Bombs. The unique model's 19 aggregate HIT and 145 forced rows merit
+an exact panel against the `911a325c4468` incumbent on the same seeds, but do
+not by themselves dominate the incumbent's different 79/80 or 91/92 panels.
+The corresponding r9 COW batch completed 16/16 valid checkpoints and 214
+outcomes: 68.75% had a unique strict best, while the local teacher and factual
+action were each best at 25%. These labels are frozen for a later generation;
+rollout evidence, not the 68.75% label statistic, decides whether to train or
+promote that generation.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
