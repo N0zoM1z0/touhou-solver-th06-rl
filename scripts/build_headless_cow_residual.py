@@ -191,11 +191,23 @@ def main() -> int:
     parser.add_argument("--max-behavior-activation", type=float, default=0.005)
     parser.add_argument("--threads", type=int, default=12)
     parser.add_argument("--iterations", type=int, default=400)
+    parser.add_argument("--num-leaves", type=int, default=31)
+    parser.add_argument("--max-depth", type=int, default=10)
+    parser.add_argument("--min-child-samples", type=int, default=10)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not 1 <= args.threads <= 12:
         parser.error("threads must be in 1..12 on the shared VPS")
-    if args.behavior_stride <= 0 or args.cow_weight <= 0 or args.iterations <= 0:
+    if (
+        args.behavior_stride <= 0
+        or args.cow_weight <= 0
+        or min(
+            args.iterations,
+            args.num_leaves,
+            args.max_depth,
+            args.min_child_samples,
+        ) <= 0
+    ):
         parser.error("stride, COW weight, and iterations must be positive")
     if not 0 < args.min_train_precision <= 1:
         parser.error("minimum precision must be in (0, 1]")
@@ -281,9 +293,9 @@ def main() -> int:
         objective="binary",
         n_estimators=args.iterations,
         learning_rate=0.04,
-        num_leaves=31,
-        max_depth=10,
-        min_child_samples=10,
+        num_leaves=args.num_leaves,
+        max_depth=args.max_depth,
+        min_child_samples=args.min_child_samples,
         colsample_bytree=0.9,
         reg_lambda=1.0,
         random_state=6006,
@@ -398,6 +410,9 @@ def main() -> int:
             correction=correction,
         ),
         "iterations": args.iterations,
+        "num_leaves": args.num_leaves,
+        "max_depth": args.max_depth,
+        "min_child_samples": args.min_child_samples,
         "threads": args.threads,
         "fit_seconds": elapsed,
         "peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0,
