@@ -44,6 +44,22 @@ def checkpoint_sequences(
     return tuple(sequences)
 
 
+def checkpoint_groups(
+    sequences: tuple[int, ...],
+    *,
+    checkpoints_per_task: int,
+) -> tuple[tuple[int, ...], ...]:
+    """Optionally shard one replay into bounded parallel checkpoint groups."""
+    if not sequences:
+        return ()
+    if checkpoints_per_task <= 0 or checkpoints_per_task >= len(sequences):
+        return (sequences,)
+    return tuple(
+        sequences[offset:offset + checkpoints_per_task]
+        for offset in range(0, len(sequences), checkpoints_per_task)
+    )
+
+
 def event_checkpoint_sequences(
     rows: list[dict[str, Any]],
     *,
@@ -104,12 +120,22 @@ def _transition_rows(run: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _output_path(output_root: Path, run: Path, manifest: dict[str, Any]) -> Path:
+def _output_path(
+    output_root: Path,
+    run: Path,
+    manifest: dict[str, Any],
+    *,
+    group_index: int = 0,
+    group_count: int = 1,
+) -> Path:
     scope = manifest["scope"]
-    return output_root / (
+    stem = (
         f"stage{int(scope['stage'])}-seed{int(manifest['initial_seed'])}-"
-        f"{run.name}.json"
+        f"{run.name}"
     )
+    if group_count > 1:
+        stem += f"-part{group_index + 1:04d}-of{group_count:04d}"
+    return output_root / f"{stem}.json"
 
 
 def _completed_output(path: Path, run: Path, sequences: tuple[int, ...]) -> bool:
@@ -152,6 +178,15 @@ def main() -> int:
     parser.add_argument("--teacher-horizon", type=int, default=12)
     parser.add_argument("--workers", type=int, default=12)
     parser.add_argument(
+        "--checkpoints-per-task",
+        type=int,
+        default=0,
+        help=(
+            "split each run into replay tasks of this many checkpoints; 0 keeps "
+            "one efficient sequential replay per run"
+        ),
+    )
+    parser.add_argument(
         "--binary",
         type=Path,
         default=root / "reference/GensokyoClub-th06-portable/th06",
@@ -174,6 +209,8 @@ def main() -> int:
         parser.error("batch, branch, teacher, and worker bounds must be positive")
     if args.workers > 64:
         parser.error("workers must be at most 64 on the shared VPS")
+    if args.checkpoints_per_task < 0:
+        parser.error("checkpoints per task must be nonnegative")
 
     runs = _run_directories(args.paths)
     if not runs:
@@ -200,30 +237,41 @@ def main() -> int:
         sequences = tuple(sorted(set(tail).union(events)))
         if not sequences:
             continue
-        output = _output_path(output_root, run, manifest)
-        if _completed_output(output, run, sequences):
-            skipped.append(str(output))
-            continue
-        command = [
-            sys.executable,
-            str(root / "scripts/label_headless_cow_counterfactuals.py"),
-            str(run),
-        ]
-        for sequence in sequences:
-            command.extend(("--checkpoint-sequence", str(sequence)))
-        command.extend((
-            "--branch-frames",
-            str(args.branch_frames),
-            "--teacher-horizon",
-            str(args.teacher_horizon),
-            "--binary",
-            str(args.binary.resolve()),
-            "--game-directory",
-            str(args.game_directory.resolve()),
-            "--output",
-            str(output),
-        ))
-        tasks.append((run, output, command, len(sequences)))
+        groups = checkpoint_groups(
+            sequences,
+            checkpoints_per_task=args.checkpoints_per_task,
+        )
+        for group_index, group in enumerate(groups):
+            output = _output_path(
+                output_root,
+                run,
+                manifest,
+                group_index=group_index,
+                group_count=len(groups),
+            )
+            if _completed_output(output, run, group):
+                skipped.append(str(output))
+                continue
+            command = [
+                sys.executable,
+                str(root / "scripts/label_headless_cow_counterfactuals.py"),
+                str(run),
+            ]
+            for sequence in group:
+                command.extend(("--checkpoint-sequence", str(sequence)))
+            command.extend((
+                "--branch-frames",
+                str(args.branch_frames),
+                "--teacher-horizon",
+                str(args.teacher_horizon),
+                "--binary",
+                str(args.binary.resolve()),
+                "--game-directory",
+                str(args.game_directory.resolve()),
+                "--output",
+                str(output),
+            ))
+            tasks.append((run, output, command, len(group)))
 
     results = []
     failures = []
@@ -254,13 +302,15 @@ def main() -> int:
                 print(f"DONE {run.name} checkpoints={checkpoints}", flush=True)
 
     summary = {
-        "schema": "th06-rl-headless-cow-batch-v1",
+        "schema": "th06-rl-headless-cow-batch-v2",
         "requested_runs": len(runs),
-        "launched_runs": len(tasks),
-        "completed_runs": sum(record["returncode"] == 0 for record in results),
-        "skipped_completed_runs": len(skipped),
-        "failed_runs": len(failures),
+        "requested_tasks": len(tasks) + len(skipped),
+        "launched_tasks": len(tasks),
+        "completed_tasks": sum(record["returncode"] == 0 for record in results),
+        "skipped_completed_tasks": len(skipped),
+        "failed_tasks": len(failures),
         "workers": args.workers,
+        "checkpoints_per_task": args.checkpoints_per_task,
         "tail_transitions": args.tail_transitions,
         "event_window": args.event_window,
         "selection": args.selection,

@@ -1,4 +1,5 @@
 from scripts.batch_label_headless_cow import (
+    checkpoint_groups,
     checkpoint_sequences,
     event_checkpoint_sequences,
 )
@@ -16,6 +17,17 @@ def test_checkpoint_sequences_include_terminal_neighborhood_and_final_row():
 def test_checkpoint_sequences_bound_short_runs_and_reject_unusable_runs():
     assert checkpoint_sequences(42, tail_transitions=600, stride=80) == (1, 41)
     assert checkpoint_sequences(1, tail_transitions=600, stride=80) == ()
+
+
+def test_checkpoint_groups_preserve_order_and_default_to_one_replay():
+    sequences = (1, 41, 81, 121, 161)
+    assert checkpoint_groups(sequences, checkpoints_per_task=0) == (sequences,)
+    assert checkpoint_groups(sequences, checkpoints_per_task=2) == (
+        (1, 41),
+        (81, 121),
+        (161,),
+    )
+    assert checkpoint_groups((), checkpoints_per_task=2) == ()
 
 
 def _row(*, hit: bool = False, forced: bool = False, legal: bool = True):

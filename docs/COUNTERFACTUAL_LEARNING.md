@@ -36,6 +36,13 @@ For `authority-failure` and `physical-hit` manifests the event selector
 therefore also samples backward from that final reconstructable state. The
 batch driver changes scheduling only, not branch authority.
 
+The default keeps all checkpoints from one run in a single sequential replay,
+which minimizes total CPU work. On a high-core offline host,
+`--checkpoints-per-task N` may split that replay into independently resumable
+label files and let the worker pool process checkpoint groups concurrently.
+This deliberately trades repeated prefix replay and higher aggregate CPU for
+lower wall-clock latency; the outcome schema and audit contract are unchanged.
+
 A game adapter may additionally expose fixed candidate-relative clearance
 profiles at declared checkpoints. TH06 computes worst-case clearance across
 input delivery delays and intermediate key-transition prefixes at ticks
