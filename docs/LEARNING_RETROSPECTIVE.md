@@ -306,6 +306,32 @@ release rows. Stage 4's zero means zero within 8,175 observed ticks, not a
 stage clear. Stage 6's large forced-release count is a strong model/authority
 improvement signal and must not be hidden by its relatively low HIT rate.
 
+## Natural Practice completion and continuation semantics
+
+Headless runtime `1350819` exports the authoritative message interpreter's
+`STAGERESULTS` event as `stage-clear-success`. It does not infer a phase, boss,
+frame, or route. A Stage 1--6 × seeds 7/23 differential compared the preceding
+runtime over 3,000 ticks per case: all 12 physical-observation streams and
+timeline clocks were identical. The same audit found that the old diagnostic
+`source_context.next` could read beyond the coherent timeline section; the new
+runtime validates the ECL section boundary/opcode/size and emits `null` for an
+unknown next instruction.
+
+`--continue-after-hit` now reserves one simulation-only life before Game Over.
+Every `Player::Die` still increments the physical death counter; the reserve
+only lets the authoritative respawn path reach the end of the same Practice
+stage. A fixed stationary action cleared all six infrastructure trials at
+18,306 / 21,455 / 29,467 / 33,734 / 33,135 / 44,236 ticks while recording
+32 / 41 / 54 / 60 / 47 / 73 HITs and zero Bombs. Default mode remained
+first-HIT fail-close. Continued-HIT runs are evaluation-only and never factual
+training data.
+
+This also invalidates the apparent millions-of-ticks survival denominator in
+the deadline-stopped old-runtime runs. Each of those six weights incurred
+exactly three battle HITs before Game Over, then idled in menu/empty state.
+Their first-HIT ticks and forced rows remain useful diagnostics, but their
+post-Game-Over HIT rate is not policy evidence.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:

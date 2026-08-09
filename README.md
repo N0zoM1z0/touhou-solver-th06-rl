@@ -10,7 +10,7 @@ Its accelerated Linux simulation and lockstep environment backend lives in
 [`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless). That
 source-only fork is for corpus generation, replay, and learning acceleration;
 the shipped Windows game remains this solver's final physical validation gate.
-The currently paired local runtime revision is `8c3de1d` on the headless
+The currently paired local runtime revision is `1350819` on the headless
 fork's `th06-rl-headless-spike` branch; solver clients and benchmark protocol
 changes are committed together with that dependency recorded in the evidence
 note.

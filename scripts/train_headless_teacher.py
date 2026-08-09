@@ -358,7 +358,8 @@ def apply_counterfactual_labels(
                     for outcome in checkpoint["outcomes"]
                     if int(outcome["survival_ticks"]) == branch_frames
                     and int(outcome["physical_deaths_delta"]) == 0
-                    and outcome["termination_reason"] in {"tick-limit", "chain-exit-success"}
+                    and outcome["termination_reason"]
+                    in {"tick-limit", "chain-exit-success", "stage-clear-success"}
                 )
                 selected = selected or best
             else:

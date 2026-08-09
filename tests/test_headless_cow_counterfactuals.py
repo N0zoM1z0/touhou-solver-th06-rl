@@ -29,3 +29,10 @@ def test_counterfactual_rank_prefers_maneuverability_after_equal_survival() -> N
     cornered = outcome("tick-limit", 240, 3, 100.0)
 
     assert outcome_rank(flexible) > outcome_rank(cornered)
+
+
+def test_counterfactual_rank_treats_stage_clear_as_completed() -> None:
+    cleared = outcome("stage-clear-success", 180, 4, 20.0)
+    dead_end = outcome("authority-failure", 180, 18, 100.0)
+
+    assert outcome_rank(cleared) > outcome_rank(dead_end)

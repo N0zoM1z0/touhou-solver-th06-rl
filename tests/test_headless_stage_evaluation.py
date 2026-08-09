@@ -42,3 +42,17 @@ def test_authority_failure_rejects_the_candidate() -> None:
 def test_stage_evaluation_refuses_scope_mixing() -> None:
     with pytest.raises(ValueError, match="mix scopes"):
         classify_stage_runs([run(seed=7, stage=5), run(seed=12)], required_seeds=2, minimum_ticks=3000)
+
+
+def test_two_audited_nmnb_stage_clears_qualify() -> None:
+    cleared = {
+        **run(seed=7, rows=18000),
+        "termination_reason": "stage-clear-success",
+        "nmnb_stage_clear": True,
+    }
+    second = {**cleared, "initial_seed": 12}
+
+    result = classify_stage_runs([cleared, second], required_seeds=2, minimum_ticks=3000)
+
+    assert result["headless_nmnb_stage_clear_qualified"] is True
+    assert result["headless_status"] == "headless-nmnb-stage-clear-candidate"

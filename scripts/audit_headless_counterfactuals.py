@@ -22,6 +22,7 @@ TERMINATIONS = {
     "physical-hit",
     "tick-limit",
     "chain-exit-success",
+    "stage-clear-success",
     "chain-exit-error",
 }
 

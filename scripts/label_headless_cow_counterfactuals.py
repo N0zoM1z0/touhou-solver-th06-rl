@@ -80,7 +80,7 @@ def _boundary_reserve(observation: Mapping[str, Any]) -> float:
 def outcome_rank(outcome: Mapping[str, Any]) -> tuple[int, int, int, int, float]:
     """Order physical survival first, then retain future maneuverability."""
     terminal = str(outcome["termination_reason"])
-    completed = terminal in {"tick-limit", "chain-exit-success"}
+    completed = terminal in {"tick-limit", "chain-exit-success", "stage-clear-success"}
     return (
         int(completed),
         int(terminal != "physical-hit"),

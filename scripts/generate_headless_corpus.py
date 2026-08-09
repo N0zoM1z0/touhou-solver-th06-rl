@@ -264,7 +264,7 @@ def generate_episode(
         "physical_hit_ticks": physical_hit_ticks,
         "nmnb_stage_clear": bool(
             terminal_observation is not None
-            and termination_reason == "chain-exit-success"
+            and termination_reason in {"chain-exit-success", "stage-clear-success"}
             and int(terminal_observation["deaths"]) == 0
             and int(terminal_observation["bombs_used"]) == 0
         ),
