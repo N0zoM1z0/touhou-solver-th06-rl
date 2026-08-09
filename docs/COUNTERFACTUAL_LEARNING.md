@@ -42,6 +42,9 @@ which minimizes total CPU work. On a high-core offline host,
 label files and let the worker pool process checkpoint groups concurrently.
 This deliberately trades repeated prefix replay and higher aggregate CPU for
 lower wall-clock latency; the outcome schema and audit contract are unchanged.
+Batch-v2 summaries report requested/launched/completed/skipped/failed task and
+checkpoint counts plus elapsed wall time, so that trade-off can be benchmarked
+and interrupted batches remain distinguishable from complete ones.
 
 A game adapter may additionally expose fixed candidate-relative clearance
 profiles at declared checkpoints. TH06 computes worst-case clearance across

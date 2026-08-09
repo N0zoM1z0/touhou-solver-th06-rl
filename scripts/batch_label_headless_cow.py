@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 from typing import Any, Iterable
 
 
@@ -162,6 +163,7 @@ def _completed_output(path: Path, run: Path, sequences: tuple[int, ...]) -> bool
 
 
 def main() -> int:
+    started = time.perf_counter()
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path)
@@ -250,7 +252,7 @@ def main() -> int:
                 group_count=len(groups),
             )
             if _completed_output(output, run, group):
-                skipped.append(str(output))
+                skipped.append({"output": str(output), "checkpoints": len(group)})
                 continue
             command = [
                 sys.executable,
@@ -305,10 +307,22 @@ def main() -> int:
         "schema": "th06-rl-headless-cow-batch-v2",
         "requested_runs": len(runs),
         "requested_tasks": len(tasks) + len(skipped),
+        "requested_checkpoints": (
+            sum(task[3] for task in tasks)
+            + sum(record["checkpoints"] for record in skipped)
+        ),
         "launched_tasks": len(tasks),
+        "launched_checkpoints": sum(task[3] for task in tasks),
         "completed_tasks": sum(record["returncode"] == 0 for record in results),
+        "completed_checkpoints": sum(
+            record["checkpoints"] for record in results if record["returncode"] == 0
+        ),
         "skipped_completed_tasks": len(skipped),
+        "skipped_completed_checkpoints": sum(
+            record["checkpoints"] for record in skipped
+        ),
         "failed_tasks": len(failures),
+        "failed_checkpoints": sum(record["checkpoints"] for record in failures),
         "workers": args.workers,
         "checkpoints_per_task": args.checkpoints_per_task,
         "tail_transitions": args.tail_transitions,
@@ -317,8 +331,9 @@ def main() -> int:
         "stride": args.stride,
         "branch_frames": args.branch_frames,
         "teacher_horizon": args.teacher_horizon,
+        "elapsed_seconds": time.perf_counter() - started,
         "results": sorted(results, key=lambda record: record["run"]),
-        "skipped_outputs": sorted(skipped),
+        "skipped_outputs": sorted(record["output"] for record in skipped),
         "failures": sorted(failures, key=lambda record: record["run"]),
     }
     rendered = json.dumps(summary, indent=2, sort_keys=True) + "\n"
