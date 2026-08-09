@@ -21,6 +21,13 @@ A game-specific adapter must provide:
 TH06 implements reset with Linux COW replay checkpoints. TH08 may use a
 different simulator or snapshot mechanism; it need not copy the TH06 runtime.
 
+For multi-run experiments, `scripts/batch_label_headless_cow.py` enumerates
+complete compact runs, samples a bounded terminal neighborhood, and invokes
+the same dynamic COW labeler with a fixed worker ceiling. It always includes
+the final reconstructable state and resumes only from a complete JSON label
+whose recorded input run matches exactly; an interrupted or mismatched output
+is recomputed. The batch driver changes scheduling only, not branch authority.
+
 A game adapter may additionally expose fixed candidate-relative clearance
 profiles at declared checkpoints. TH06 computes worst-case clearance across
 input delivery delays and intermediate key-transition prefixes at ticks

@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""Label a resumable, worker-bounded batch of headless COW checkpoints."""
+
+from __future__ import annotations
+
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+from pathlib import Path
+import subprocess
+import sys
+from typing import Any, Iterable
+
+
+SCHEMA = "th06-rl-headless-cow-counterfactual-v1"
+
+
+def _run_directories(paths: Iterable[Path]) -> tuple[Path, ...]:
+    result = []
+    for path in paths:
+        if (path / "manifest.json").is_file():
+            result.append(path)
+        elif path.is_dir():
+            result.extend(sorted(item.parent for item in path.rglob("manifest.json")))
+    return tuple(dict.fromkeys(item.resolve() for item in result))
+
+
+def checkpoint_sequences(
+    transition_count: int,
+    *,
+    tail_transitions: int,
+    stride: int,
+) -> tuple[int, ...]:
+    """Select a terminal neighborhood and retain the final reconstructable row."""
+    if transition_count < 2:
+        return ()
+    start = max(1, transition_count - tail_transitions)
+    sequences = list(range(start, transition_count, stride))
+    final = transition_count - 1
+    if final not in sequences:
+        sequences.append(final)
+    return tuple(sequences)
+
+
+def _output_path(output_root: Path, run: Path, manifest: dict[str, Any]) -> Path:
+    scope = manifest["scope"]
+    return output_root / (
+        f"stage{int(scope['stage'])}-seed{int(manifest['initial_seed'])}-"
+        f"{run.name}.json"
+    )
+
+
+def _completed_output(path: Path, run: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    try:
+        recorded = Path(str(document.get("input_run", ""))).resolve()
+    except OSError:
+        return False
+    return document.get("schema") == SCHEMA and recorded == run.resolve()
+
+
+def main() -> int:
+    root = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("paths", nargs="+", type=Path)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--tail-transitions", type=int, default=600)
+    parser.add_argument("--stride", type=int, default=80)
+    parser.add_argument("--branch-frames", type=int, default=180)
+    parser.add_argument("--teacher-horizon", type=int, default=12)
+    parser.add_argument("--workers", type=int, default=12)
+    parser.add_argument(
+        "--binary",
+        type=Path,
+        default=root / "reference/GensokyoClub-th06-portable/th06",
+    )
+    parser.add_argument(
+        "--game-directory",
+        type=Path,
+        default=root / "reference/th06-game-original/th06",
+    )
+    parser.add_argument("--summary", type=Path)
+    args = parser.parse_args()
+    if min(
+        args.tail_transitions,
+        args.stride,
+        args.branch_frames,
+        args.teacher_horizon,
+        args.workers,
+    ) <= 0:
+        parser.error("batch, branch, teacher, and worker bounds must be positive")
+    if args.workers > 64:
+        parser.error("workers must be at most 64 on the shared VPS")
+
+    runs = _run_directories(args.paths)
+    if not runs:
+        parser.error("no compact headless corpus manifests found")
+    output_root = args.output_root.resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    tasks = []
+    skipped = []
+    for run in runs:
+        manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+        if manifest.get("transaction_complete") is not True:
+            continue
+        sequences = checkpoint_sequences(
+            int(manifest.get("transition_count", 0)),
+            tail_transitions=args.tail_transitions,
+            stride=args.stride,
+        )
+        if not sequences:
+            continue
+        output = _output_path(output_root, run, manifest)
+        if _completed_output(output, run):
+            skipped.append(str(output))
+            continue
+        command = [
+            sys.executable,
+            str(root / "scripts/label_headless_cow_counterfactuals.py"),
+            str(run),
+        ]
+        for sequence in sequences:
+            command.extend(("--checkpoint-sequence", str(sequence)))
+        command.extend((
+            "--branch-frames",
+            str(args.branch_frames),
+            "--teacher-horizon",
+            str(args.teacher_horizon),
+            "--binary",
+            str(args.binary.resolve()),
+            "--game-directory",
+            str(args.game_directory.resolve()),
+            "--output",
+            str(output),
+        ))
+        tasks.append((run, output, command, len(sequences)))
+
+    results = []
+    failures = []
+
+    def execute(task):
+        run, output, command, checkpoints = task
+        process = subprocess.run(command, capture_output=True, text=True)
+        return run, output, checkpoints, process
+
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        futures = {executor.submit(execute, task): task for task in tasks}
+        for future in as_completed(futures):
+            run, output, checkpoints, process = future.result()
+            record = {
+                "run": str(run),
+                "output": str(output),
+                "checkpoints": checkpoints,
+                "returncode": process.returncode,
+            }
+            results.append(record)
+            if process.returncode:
+                failures.append({
+                    **record,
+                    "stderr": process.stderr[-4000:],
+                })
+                print(f"FAILED {run.name}", file=sys.stderr, flush=True)
+            else:
+                print(f"DONE {run.name} checkpoints={checkpoints}", flush=True)
+
+    summary = {
+        "schema": "th06-rl-headless-cow-batch-v1",
+        "requested_runs": len(runs),
+        "launched_runs": len(tasks),
+        "completed_runs": sum(record["returncode"] == 0 for record in results),
+        "skipped_completed_runs": len(skipped),
+        "failed_runs": len(failures),
+        "workers": args.workers,
+        "tail_transitions": args.tail_transitions,
+        "stride": args.stride,
+        "branch_frames": args.branch_frames,
+        "teacher_horizon": args.teacher_horizon,
+        "results": sorted(results, key=lambda record: record["run"]),
+        "skipped_outputs": sorted(skipped),
+        "failures": sorted(failures, key=lambda record: record["run"]),
+    }
+    rendered = json.dumps(summary, indent=2, sort_keys=True) + "\n"
+    if args.summary is not None:
+        args.summary.parent.mkdir(parents=True, exist_ok=True)
+        args.summary.write_text(rendered, encoding="utf-8")
+    print(rendered, end="")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
