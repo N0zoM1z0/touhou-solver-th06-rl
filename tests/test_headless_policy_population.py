@@ -39,6 +39,7 @@ def _rollout(
     continuation: bool,
     physical_hits: int | None = None,
     nmnb_stage_clear: bool = False,
+    forced_actions: int = 0,
 ) -> None:
     directory = root / name
     directory.mkdir(parents=True)
@@ -53,6 +54,8 @@ def _rollout(
             physical_hits if physical_hits is not None else 1 if continuation else 0
         ),
         "physical_hit_ticks": [ticks // 2] if physical_hits else [],
+        "authority_failure_events": forced_actions,
+        "benchmark_forced_actions": forced_actions,
         "nmnb_stage_clear": nmnb_stage_clear,
     }), encoding="utf-8")
 
@@ -125,6 +128,28 @@ def test_high_quality_requires_multi_seed_natural_nmnb_stage_clears(tmp_path: Pa
     assert metrics["continuation_complete_runs"] == 2
     assert metrics["continuation_natural_stage_clears"] == 2
     assert metrics["continuation_nmnb_stage_clears"] == 2
+
+
+def test_manifest_nmnb_flag_with_forced_release_is_not_high_quality(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    rollouts = tmp_path / "rollouts"
+    sha = _candidate(models, "candidate", b"candidate", 0.8)
+    for index, ticks in enumerate((2000, 3000), 1):
+        _rollout(
+            rollouts,
+            f"seed{index}",
+            sha,
+            ticks,
+            continuation=True,
+            physical_hits=0,
+            nmnb_stage_clear=True,
+            forced_actions=1,
+        )
+
+    result = build_population([models], [rollouts])
+
+    assert result["high_quality_population"] == []
+    assert result["candidates"][0]["closed_loop"]["continuation_nmnb_stage_clears"] == 0
 
 
 def test_active_population_requires_exact_runtime_source(tmp_path: Path) -> None:

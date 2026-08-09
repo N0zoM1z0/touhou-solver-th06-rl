@@ -99,6 +99,15 @@ def _manifest_run(path: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
     )
     ticks = int(manifest.get("transition_count", 0))
     termination = str(manifest.get("termination_reason", "unknown"))
+    authority_events = int(manifest.get("authority_failure_events", 0))
+    forced_actions = int(manifest.get("benchmark_forced_actions", 0))
+    strict_nmnb_clear = bool(
+        manifest.get("nmnb_stage_clear") is True
+        and termination in {"chain-exit-success", "stage-clear-success"}
+        and hits == 0
+        and authority_events == 0
+        and forced_actions == 0
+    )
     return {
         "manifest": str(path),
         "status": "complete",
@@ -109,9 +118,9 @@ def _manifest_run(path: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
         "physical_hit_ticks": manifest.get("physical_hit_ticks", []),
         "continue_after_hit": manifest.get("continue_after_hit") is True,
         "authority_failure": termination == "authority-failure",
-        "authority_failure_events": int(manifest.get("authority_failure_events", 0)),
-        "benchmark_forced_actions": int(manifest.get("benchmark_forced_actions", 0)),
-        "nmnb_stage_clear": manifest.get("nmnb_stage_clear") is True,
+        "authority_failure_events": authority_events,
+        "benchmark_forced_actions": forced_actions,
+        "nmnb_stage_clear": strict_nmnb_clear,
     }
 
 

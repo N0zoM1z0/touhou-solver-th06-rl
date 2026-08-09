@@ -405,6 +405,8 @@ def collect(
             and termination_reason in {"chain-exit-success", "stage-clear-success"}
             and int(terminal["deaths"]) == 0
             and int(terminal["bombs_used"]) == 0
+            and authority_failure_events == 0
+            and benchmark_forced_actions == 0
         ),
         "effective_transition_ratio": 1.0 if writer.transition_count else 0.0,
         "selected_actions_native_legal_ratio": 1.0 if writer.transition_count else 0.0,

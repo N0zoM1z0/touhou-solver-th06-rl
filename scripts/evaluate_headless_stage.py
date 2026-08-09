@@ -51,6 +51,7 @@ def classify_stage_runs(
         run.get("termination_reason") not in {"physical-hit", "authority-failure"}
         and run.get("physical_hit") is not True
         and run.get("authority_failure") in {None, ""}
+        and int(run.get("benchmark_forced_rows", 0)) == 0
         for run in runs
     )
     bounded_survival = (

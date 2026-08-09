@@ -266,6 +266,8 @@ Evidence tiers are intentionally strict:
 candidate enters it only after at least two distinct seeds both finish as
 natural no-HIT/no-Bomb stage clears. Interrupted runs, bounded survival, and
 continued clears with any HIT stay in the research/Pareto evidence archive.
+Any benchmark forced-release or authority-empty event also rejects NMNB status,
+even when the continued physical trajectory happens to record zero HITs.
 
 First-failure DAgger trajectories remain training-eligible because they end
 before benchmark continuation or forced release. Corrective-pair weighting

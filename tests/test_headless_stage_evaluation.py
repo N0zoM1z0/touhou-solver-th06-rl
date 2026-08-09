@@ -14,6 +14,7 @@ def run(*, seed: int, stage: int = 6, rows: int = 2999) -> dict[str, object]:
         "termination_reason": "tick-limit",
         "physical_hit": False,
         "authority_failure": None,
+        "benchmark_forced_rows": 0,
         "nmnb_stage_clear": False,
     }
 
@@ -56,3 +57,18 @@ def test_two_audited_nmnb_stage_clears_qualify() -> None:
 
     assert result["headless_nmnb_stage_clear_qualified"] is True
     assert result["headless_status"] == "headless-nmnb-stage-clear-candidate"
+
+
+def test_forced_authority_release_rejects_even_a_zero_hit_clear_flag() -> None:
+    cleared = {
+        **run(seed=7, rows=18000),
+        "termination_reason": "stage-clear-success",
+        "nmnb_stage_clear": True,
+        "benchmark_forced_rows": 1,
+    }
+    second = {**cleared, "initial_seed": 12}
+
+    result = classify_stage_runs([cleared, second], required_seeds=2, minimum_ticks=3000)
+
+    assert result["headless_nmnb_stage_clear_qualified"] is False
+    assert result["headless_status"] == "rejected"
