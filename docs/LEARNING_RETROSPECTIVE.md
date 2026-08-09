@@ -1068,6 +1068,65 @@ cross-seed COW support. Captured frame, seed, counterexample identity, and
 handwritten phase actions remain forbidden. Closed-loop same-seed and fresh-
 seed panels remain authoritative over offline fit.
 
+### 2026-08-09 Stage 5/6 current-source coverage audit
+
+The Stage 5/6 incumbents were first compatibility-extended to portable source
+`1cc49f0f3be7819cdd34aac9bb0803d24ee53e9a` through exact additive-observation
+differentials. Their current model SHA-256 values are
+`effd4c6f1de05118704d041594b7cbd701e44a4ac29996e984e5599bba394776`
+and
+`f466d5435bc46fe03c96463eece6750465734d9e9cfd5065697ae4578883b87b`.
+Fresh natural seeds 151--158 produced zero HIT and zero Bomb in both stages,
+but all 16 runs ended in native authority failure rather than a strict clear.
+Stage 5 stopped after 3,072/3,026/3,153/17,634/16,303/3,080/16,419/3,252
+decisions; Stage 6 after
+16,214/15,964/3,314/17,659/22,030/3,182/18,810/20,040.
+
+The canonical 600-tick terminal-neighborhood audit retained 120 exact
+checkpoints per stage. Stage 5 covered 1,774 legal first-action outcomes;
+79/120 checkpoints were learning-informative, while the factual action and
+h12 teacher were strict best at only 34.2% and 36.7%. Stage 6 covered 1,764
+outcomes; 106/120 were informative, with factual/h12 strict-best rates of
+23.3%/26.7%. Geometry therefore admits many earlier alternatives, but sparse
+terminal value alone does not generalize. Complete-seed holdout fits on seeds
+157/158 reached only 20.0% Stage 5 and 45.5% Stage 6 robust-action top-1. Both
+incumbent-risk classifiers memorized their training seeds and had zero recall
+on 13 held-out risk checkpoints in each stage. The corresponding residuals
+remain rejected and were never rolled out.
+
+This result introduced phase-agnostic route-wide COW sampling. Uniform mode
+selects every declared sequence stride plus the final reconstructable row;
+coverage mode unions that sample with the causal event window. Neither uses
+seed, boss name, captured frame, or handwritten phase. The first growing
+Stage 6 route-wide snapshot raised held-out robust-action top-1 to 67.5% over
+40 checkpoints while retaining the factual action on 93.1% of ordinary
+held-out observations. That encouraging offline result still failed the
+closed-loop gate: direct value weight
+`98b049ec6cd9f7841133a1a16bc235b568c951ef96a6be2f9173d6969b43646b`
+stopped on seeds 157/158 after only 3,097/15,365 decisions, versus the
+incumbent's 18,810/20,040. Both candidate runs remained native-legal,
+factual-successor, zero-HIT, and Bomb-free, so the regression is policy
+selection rather than weakened authority. The model remains a data-producing
+population member only; it is not promoted.
+
+The complete route-wide tables confirmed that the signal was real but the
+global policy update was not conservative enough. Stage 5 completed 77/77
+uniform checkpoints with 1,280 outcomes and 51 informative groups; factual
+and h12 strict-best rates were 15.6%/14.3%. Stage 6 completed 127/127 with
+2,164 outcomes and 111 informative groups; its corresponding rates were
+9.4%/11.0%. There were no generation or audit failures. After unioning event
+and uniform labels, the complete Stage 6 correction selected a robust action
+on 34/49 seed-157/158 groups, exactly tying the incumbent, and its risk gate
+still recalled 0/15 incumbent errors. It was not rolled out again. The Stage 5
+correction improved robust top-1 from 12/25 to 13/25 but retained only 90.7%
+of ordinary held-out behavior. Its natural panel exposed the tradeoff:
+seed 158 improved from 3,252 to 5,415 decisions, while seed 157 regressed from
+16,419 to 1,878. Aggregate survival fell from 19,671 to 7,293 decisions.
+Correction SHA-256
+`add209e18fbdf1dfeff93e10eabdf3ae5578684ca618ba13467fa645b5c15404`
+therefore remains a counterexample-producing population member, not a
+deployment candidate.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
