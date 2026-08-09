@@ -897,6 +897,32 @@ reached 9/12 HIT with 97/145 forced rows. The older lower-forced member reached
 incumbent aggregately dominates both at 21 HIT and 242 forced rows, though the
 other members preserve a lower-forced mode on seed 110. None is NMNB.
 
+The formally provenance-frozen Stage 2 LambdaRank correction initially looked
+useful on its own seeds 113/114. The incumbent reached 2/1 HIT with 67/63
+forced rows. The survivable ranker matched 2/1 HIT while reducing forced rows
+to 49/46; unique-best matched 2/1 HIT with 66/58. This was targeted repair
+evidence only because those seeds supplied both factual failure prefixes and
+COW labels. A fresh seeds 115/116 panel rejected the apparent gain. There the
+incumbent reached 2/1 HIT with 62/31 forced rows, survivable reached 3/1 with
+63/42, and unique-best reached 2/3 with 72/70. The incumbent seedwise dominates
+both grouped rankers on the fresh panel, so neither enters the population.
+
+Stage 3 supplied the same warning without needing a fresh panel. On the
+targeted seeds 107/108, its incumbent reached 1/2 HIT with 5/17 forced rows.
+The provenance-frozen survivable LambdaRank model reached 6/5 with 39/48 and
+unique-best reached 10/4 with 51/15. Both are rejected. Together with Stage 1
+and the fresh Stage 2 result, this shows that grouped ranking is a reusable
+learner, not a guarantee of closed-loop improvement; paired natural
+continuations remain the selection authority.
+
+The failed Stage 4 consensus replication still produced useful causal
+coverage. Its incumbent and consensus first-failure neighborhoods yielded
+28/28 valid COW checkpoints and 444 audited action outcomes. Twenty-two
+checkpoints (78.6%) had a unique strict best, while the factual action and
+12-frame local teacher were each best at only 10.7%. These labels may train a
+new experiment, but the high unique-best ratio is data-yield evidence only and
+does not reverse the failed rollout verdict.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
