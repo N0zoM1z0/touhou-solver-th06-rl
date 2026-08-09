@@ -923,6 +923,27 @@ checkpoints (78.6%) had a unique strict best, while the factual action and
 new experiment, but the high unique-best ratio is data-yield evidence only and
 does not reverse the failed rollout verdict.
 
+### 2026-08-09 exact-state authority audit
+
+The Stage 2 seed-113/114 apparent last-frame dead ends were not a single
+learning failure. Exact source differentials found two hidden infrastructure
+errors first: final player-aim bullets had been shared across mutually
+exclusive candidate paths, and synchronous Linux `STEP` had inherited the
+Windows 0--3-tick delivery envelope. With candidate-coupled aim and exact
+delay 0, seed 113's factual `stay + h12` continuation survived 1,200 ticks;
+the prior conclusion that every action died immediately was false.
+
+The corrected audit then exposed the actual policy problem. At seed 114
+sequence 4183, both the factual first action and a higher-reserve alternative
+could survive 1,200 ticks under h12. The historical ranker continuation still
+entered a no-witness state 30 ticks later. Conversely, running h12 alone from
+stage entry produced new true source dead ends on both seeds after 3,483 and
+3,329 decisions. Thus neither old ranker nor local teacher is a whole-route
+oracle. The next generation must learn corrected-contract dynamic COW ordinal
+value, including minimum future legal-set width and boundary reserve, and keep
+multiple rollout-tested population members. Last-frame empty-set rows remain
+diagnostics rather than supervised actions.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:

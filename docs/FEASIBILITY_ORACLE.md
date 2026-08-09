@@ -157,3 +157,39 @@ physical Windows validation.
 Confirmed authority failures and source-physical geometry corrections are
 recorded separately in
 [`GEOMETRY_AUTHORITY_FINDINGS.md`](GEOMETRY_AUTHORITY_FINDINGS.md).
+
+## Stage 2 exact-state diagnosis (2026-08-09)
+
+All results below use authoritative runtime commit
+`1350819f396b9db93eb9891c107e651be70c83f6`, binary SHA-256
+`402f7d89a2cdbed0ad9b32b121177a345a18bb4dfa79ac92219a2ed163edc873`,
+Lunatic Reimu-A Stage 2, and synchronous delivery `[0]`.
+
+At seed 113 sequence 3306 the corrected native set contained 11 actions.
+Five first actions had 120-tick witnesses across 14 branches; the factual and
+local-teacher `stay` was one of them. `stay + native-local-h12` then survived a
+formal 1,200-tick extension to tick 4507 with zero HIT/Bomb, minimum native-set
+width 1, and terminal boundary reserve 11.08. The earlier one-tick conclusion
+was therefore a false dead end caused by aimed-bullet cross-candidate coupling
+plus the wrong headless delivery envelope.
+
+At seed 114 sequence 4243, 5 actions times 7 continuations produced no
+120-tick witness; the best four survived 10 ticks. The terminal differential
+above classified the closure as conservative margin, not geometry mismatch.
+Moving back to sequence 4213 still yielded no witness across all 17 actions
+and four corrected continuations (68 branches, maximum 49 ticks). At sequence
+4183, however, both the factual `up_right_fast` and alternative
+`down_left_fast` survived 1,200 ticks under the h12 continuation to tick 5384.
+Their minimum native-set widths were 1 and 16 respectively. This shows that
+the old closed-loop ranker continuation, rather than an intrinsically bad
+first action or broken geometry, carried the route into the later basin.
+
+A pure h12 teacher is not the complete solver either. Fresh exact-contract
+seed 113/114 runs failed closed after 3,483/3,329 decisions, with no physical
+HIT or Bomb before release. Replaying their terminal fingerprints showed no
+margin-zero or source-safe four-tick constant action. The actionable boundary
+must therefore be found earlier and labeled with dynamic COW outcome value.
+The value target already orders completed survival before minimum future
+native-set width and terminal boundary reserve; new training must regenerate
+that table under the corrected delivery contract instead of mixing legacy COW
+labels.

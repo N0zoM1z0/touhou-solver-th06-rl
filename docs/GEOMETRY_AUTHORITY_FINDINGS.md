@@ -159,6 +159,32 @@ non-authoritative feature or ranker term, while the exact delay-0 set remains
 the collision authority. Promotion requires oracle and held-out route evidence
 over that exact set rather than the smaller-set trajectory.
 
+## Fourth differential: margin closure is not geometry mismatch
+
+The corrected seed-114 route reached another empty configured set at tick
+4254. Its exact fingerprint was
+`51fea335ac942e9dd6c65c5c7186931a8d31936f17ab7110bfd840ec67f2beb0`.
+The isolated COW differential tried every ordinary action directly in the
+authoritative runtime for the four-tick Hard window:
+
+- configured margin 0.35 certified no action;
+- native margin 0 certified only `down_left`;
+- source execution also kept only `down_left` no-HIT for all four ticks;
+- the other 17 actions physically HIT within one to three ticks.
+
+Margin-zero native and source execution therefore agree exactly. This is a
+conservative-margin closure, not permission to weaken collision authority.
+The route had already spent its recovery reserve and left only a knife-edge
+source path. Training must move the correction to an earlier state instead of
+teaching the ranker to rely on a sub-margin action.
+
+Two later pure-h12-teacher failures close the remaining geometry suspicion.
+After their final certified actions, seed 113 tick 3484 and seed 114 tick 3330
+had neither a configured nor margin-zero native action, and all 18 direct
+source trials physically HIT within four ticks. These terminal rows are true
+tested constant-action dead ends. They remain evidence about an earlier
+planning failure, not useful last-frame action labels.
+
 ## Consequences for collection and learning
 
 Last-frame corrective labels can be unsatisfiable or dominated by authority
