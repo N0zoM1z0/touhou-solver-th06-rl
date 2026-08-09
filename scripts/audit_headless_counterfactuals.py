@@ -59,6 +59,15 @@ def audit_file(path: Path) -> dict[str, Any]:
             errors.append("synchronous COW delivery must be exactly [0]")
     elif delivery_contract != "legacy-unspecified-v0":
         errors.append("unsupported COW delivery contract")
+    digest_contract = document.get(
+        "observation_digest_contract",
+        "legacy-full-observation-v0",
+    )
+    if digest_contract not in {
+        "legacy-full-observation-v0",
+        "physical-observation-without-diagnostic-events-v1",
+    }:
+        errors.append("unsupported COW observation digest contract")
     branch_frames = int(document.get("branch_frames", 0))
     checkpoints = document.get("checkpoints")
     if branch_frames <= 0 or not isinstance(checkpoints, list) or not checkpoints:
@@ -124,6 +133,7 @@ def audit_file(path: Path) -> dict[str, Any]:
         "initial_seed": document.get("initial_seed"),
         "runtime_delivery_contract": delivery_contract,
         "runtime_delivery_delays": delivery_delays,
+        "observation_digest_contract": digest_contract,
         "checkpoints": len(checkpoints),
         "outcomes": outcomes_count,
         "unique_best_checkpoints": unique_best,
@@ -170,11 +180,16 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     delivery_contracts = Counter(
         str(result.get("runtime_delivery_contract")) for result in results
     )
+    digest_contracts = Counter(
+        str(result.get("observation_digest_contract")) for result in results
+    )
     return {
         "schema": "th06-rl-headless-cow-counterfactual-audit-v1",
         **aggregate(results),
         "runtime_delivery_contracts": dict(sorted(delivery_contracts.items())),
         "mixed_runtime_delivery_contracts": len(delivery_contracts) > 1,
+        "observation_digest_contracts": dict(sorted(digest_contracts.items())),
+        "mixed_observation_digest_contracts": len(digest_contracts) > 1,
         "by_stage": [
             {"stage": stage, **aggregate(rows)}
             for stage, rows in sorted(by_stage.items())
@@ -200,6 +215,7 @@ def main() -> int:
     return 0 if (
         result["valid_files"] == result["files"]
         and not result["mixed_runtime_delivery_contracts"]
+        and not result["mixed_observation_digest_contracts"]
     ) else 1
 
 

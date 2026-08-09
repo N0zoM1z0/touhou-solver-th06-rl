@@ -265,6 +265,7 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
     source: Mapping[str, Any] | None = None
     delivery_contract: str | None = None
     delivery_delays: tuple[int, ...] | None = None
+    observation_digest_contract: str | None = None
     for run in _run_directories(paths):
         manifest_path = run / "manifest.json"
         manifest_bytes = manifest_path.read_bytes()
@@ -294,6 +295,10 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
                 if isinstance(raw_delays, list)
                 else ()
             )
+            observation_digest_contract = str(manifest.get(
+                "observation_digest_contract",
+                "legacy-full-observation-v0",
+            ))
         if manifest.get("scope") != scope:
             raise ValueError("headless teacher data silently mixes scopes")
         if manifest.get("source", {}).get("commit") != source.get("commit"):  # type: ignore[union-attr]
@@ -315,12 +320,26 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
             raise ValueError(
                 "headless teacher data silently mixes delivery contracts"
             )
+        current_digest_contract = str(manifest.get(
+            "observation_digest_contract",
+            "legacy-full-observation-v0",
+        ))
+        if current_digest_contract != observation_digest_contract:
+            raise ValueError(
+                "headless teacher data silently mixes observation digest contracts"
+            )
         seed = int(manifest["initial_seed"])
         terminal_failure = manifest.get("termination_reason") in CORRECTIVE_TERMINATIONS
         transition_count = int(manifest.get("transition_count", 0))
         with gzip.open(run / "transitions.jsonl.gz", "rt", encoding="utf-8") as stream:
             for line in stream:
                 row = json.loads(line)
+                row_digest_contract = str(row.get(
+                    "observation_digest_contract",
+                    "legacy-full-observation-v0",
+                ))
+                if row_digest_contract != observation_digest_contract:
+                    raise ValueError("transition observation digest contract differs from manifest")
                 behavior = row["behavior"]
                 digest = str(row["observation_sha256"])
                 teacher_action = str(behavior["teacher_action"])
@@ -380,6 +399,7 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
         "source": source,
         "native_delivery_contract": delivery_contract,
         "native_delivery_delays": list(delivery_delays or ()),
+        "observation_digest_contract": observation_digest_contract,
         "duplicate_decisions_skipped": duplicate_decisions,
         "factual_corpus": {
             "runs": len(input_runs),
@@ -427,6 +447,10 @@ def apply_counterfactual_labels(
     ambiguous = 0
     checkpoints = 0
     runtime_sources = set()
+    expected_digest_contract = str(provenance.get(
+        "observation_digest_contract",
+        "legacy-full-observation-v0",
+    ))
     for path in files:
         document = json.loads(path.read_text(encoding="utf-8"))
         if document.get("schema") != "th06-rl-headless-cow-counterfactual-v1":
@@ -435,6 +459,11 @@ def apply_counterfactual_labels(
             raise ValueError("counterfactual labels silently mix scopes")
         if document.get("input_source", {}).get("commit") != provenance["source"].get("commit"):
             raise ValueError("counterfactual labels use a different factual source revision")
+        if str(document.get(
+            "observation_digest_contract",
+            "legacy-full-observation-v0",
+        )) != expected_digest_contract:
+            raise ValueError("counterfactual labels use a different observation digest contract")
         runtime_sources.add(json.dumps(document.get("runtime_source"), sort_keys=True))
         for checkpoint in document.get("checkpoints", []):
             checkpoints += 1
@@ -494,6 +523,7 @@ def apply_counterfactual_labels(
         "unmatched_labels": len(labels) - matched,
         "runtime_sources": [json.loads(item) for item in sorted(runtime_sources)],
         "target": target,
+        "observation_digest_contract": expected_digest_contract,
         "mean_acceptable_actions": (
             sum(len(actions) for actions in labels.values()) / len(labels) if labels else 0.0
         ),
@@ -742,6 +772,7 @@ def main() -> int:
             "compatible_headless_sources": compatible_sources,
             "native_delivery_contract": provenance["native_delivery_contract"],
             "native_delivery_delays": provenance["native_delivery_delays"],
+            "observation_digest_contract": provenance["observation_digest_contract"],
         },
         args.output / "teacher-ranker.joblib",
         compress=3,
@@ -755,6 +786,7 @@ def main() -> int:
         "compatible_headless_sources": compatible_sources,
         "native_delivery_contract": provenance["native_delivery_contract"],
         "native_delivery_delays": provenance["native_delivery_delays"],
+        "observation_digest_contract": provenance["observation_digest_contract"],
         "code_commit": code_commit,
         "train_seeds": sorted(set(seeds) - holdout),
         "holdout_seeds": sorted(holdout),

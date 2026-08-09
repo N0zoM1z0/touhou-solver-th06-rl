@@ -146,6 +146,10 @@ def load_value_groups(
         str(provenance.get("native_delivery_contract", "legacy-unspecified-v0")),
         tuple(int(value) for value in provenance.get("native_delivery_delays", ())),
     )
+    expected_digest_contract = str(provenance.get(
+        "observation_digest_contract",
+        "legacy-full-observation-v0",
+    ))
     unmatched = 0
     uninformative = 0
     for path in files:
@@ -159,6 +163,11 @@ def load_value_groups(
         current_delivery = delivery_contract(document)
         if current_delivery != expected_delivery:
             raise ValueError("COW value labels use a different delivery contract")
+        if str(document.get(
+            "observation_digest_contract",
+            "legacy-full-observation-v0",
+        )) != expected_digest_contract:
+            raise ValueError("COW value labels use a different observation digest contract")
         runtime_sources.add(json.dumps(document["runtime_source"], sort_keys=True))
         seed = int(document["initial_seed"])
         for checkpoint in document["checkpoints"]:
@@ -203,6 +212,7 @@ def load_value_groups(
         "runtime_sources": [json.loads(item) for item in sorted(runtime_sources)],
         "native_delivery_contract": expected_delivery[0],
         "native_delivery_delays": list(expected_delivery[1]),
+        "observation_digest_contract": expected_digest_contract,
     }
 
 
@@ -356,6 +366,7 @@ def main() -> int:
         "compatible_headless_sources": compatible_sources,
         "native_delivery_contract": provenance["native_delivery_contract"],
         "native_delivery_delays": provenance["native_delivery_delays"],
+        "observation_digest_contract": provenance["observation_digest_contract"],
         "value_contract": "dynamic-cow-quality-tier-conservative-improvement-v3",
     }
     joblib.dump(artifact, args.output / "cow-value-ranker.joblib", compress=3)
@@ -373,6 +384,7 @@ def main() -> int:
         "compatible_headless_sources": compatible_sources,
         "native_delivery_contract": provenance["native_delivery_contract"],
         "native_delivery_delays": provenance["native_delivery_delays"],
+        "observation_digest_contract": provenance["observation_digest_contract"],
         "label_report": label_report,
         "behavior_regularization": {
             "enabled": bool(behavior_groups),

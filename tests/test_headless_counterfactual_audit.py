@@ -15,6 +15,7 @@ def document() -> dict[str, object]:
         "runtime_source": {"clean": True},
         "runtime_delivery_contract": "synchronous-step-v1",
         "runtime_delivery_delays": [0],
+        "observation_digest_contract": "physical-observation-without-diagnostic-events-v1",
         "checkpoints": [{
             "native_legal_actions": ["up", "stay_fast"],
             "local_teacher_action": "stay_fast",
@@ -103,3 +104,15 @@ def test_counterfactual_audit_rejects_false_synchronous_delivery(tmp_path) -> No
 
     assert result["valid"] is False
     assert "delivery" in " ".join(result["errors"])
+
+
+def test_counterfactual_audit_rejects_unknown_observation_digest(tmp_path) -> None:
+    value = document()
+    value["observation_digest_contract"] = "unknown"
+    path = tmp_path / "bad-digest.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    result = audit_file(path)
+
+    assert result["valid"] is False
+    assert "digest" in " ".join(result["errors"])
