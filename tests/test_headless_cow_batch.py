@@ -45,3 +45,26 @@ def test_event_sequences_ignore_runs_without_hit_or_forced_release():
     assert event_checkpoint_sequences(
         [_row() for _ in range(20)], event_window=4, stride=2
     ) == ()
+
+
+def test_event_sequences_include_fail_close_terminal_neighborhood():
+    rows = [_row() for _ in range(20)]
+
+    assert event_checkpoint_sequences(
+        rows,
+        event_window=4,
+        stride=2,
+        termination_reason="authority-failure",
+    ) == (15, 17, 19)
+
+
+def test_event_sequences_back_up_from_unlabelable_terminal_row():
+    rows = [_row() for _ in range(20)]
+    rows[19] = _row(legal=False)
+
+    assert event_checkpoint_sequences(
+        rows,
+        event_window=4,
+        stride=2,
+        termination_reason="physical-hit",
+    ) == (14, 16, 18)

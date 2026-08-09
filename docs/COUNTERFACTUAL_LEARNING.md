@@ -30,8 +30,11 @@ interrupted or mismatched output is recomputed. Besides a terminal window, the
 driver can select real HIT rows and the last native-legal state before each
 contiguous benchmark authority-release event. Event neighborhoods make
 continued-HIT evaluation useful for offline diagnosis without treating forced
-or post-HIT rows as factual training data. The batch driver changes scheduling
-only, not branch authority.
+or post-HIT rows as factual training data. A default fail-close trajectory has
+no forced transition to select: publication stops after its last legal row.
+For `authority-failure` and `physical-hit` manifests the event selector
+therefore also samples backward from that final reconstructable state. The
+batch driver changes scheduling only, not branch authority.
 
 A game adapter may additionally expose fixed candidate-relative clearance
 profiles at declared checkpoints. TH06 computes worst-case clearance across

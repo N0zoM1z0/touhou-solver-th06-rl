@@ -14,6 +14,7 @@ from typing import Any, Iterable
 
 
 SCHEMA = "th06-rl-headless-cow-counterfactual-v1"
+CORRECTIVE_TERMINATIONS = frozenset({"authority-failure", "physical-hit"})
 
 
 def _run_directories(paths: Iterable[Path]) -> tuple[Path, ...]:
@@ -48,8 +49,15 @@ def event_checkpoint_sequences(
     *,
     event_window: int,
     stride: int,
+    termination_reason: str | None = None,
 ) -> tuple[int, ...]:
-    """Sample legal states leading into observed HIT or authority-release events."""
+    """Sample legal states leading into observed or terminal failure events.
+
+    A fail-close run ends before it can append an authority-release transition,
+    so the manifest termination reason is required to retain that final failure
+    neighborhood.  Continued-HIT runs still expose their individual events in
+    the transition stream.
+    """
     event_rows = []
     previous_forced = False
     for index, row in enumerate(rows):
@@ -63,6 +71,12 @@ def event_checkpoint_sequences(
             if target >= 1:
                 event_rows.append(target)
         previous_forced = forced
+    if termination_reason in CORRECTIVE_TERMINATIONS:
+        target = len(rows) - 1
+        while target >= 1 and not row_is_labelable(rows[target]):
+            target -= 1
+        if target >= 1:
+            event_rows.append(target)
     selected = set()
     for target in event_rows:
         lower = max(1, target - event_window)
@@ -181,6 +195,7 @@ def main() -> int:
             _transition_rows(run),
             event_window=args.event_window,
             stride=args.stride,
+            termination_reason=manifest.get("termination_reason"),
         ) if args.selection in {"events", "hybrid"} else ()
         sequences = tuple(sorted(set(tail).union(events)))
         if not sequences:
