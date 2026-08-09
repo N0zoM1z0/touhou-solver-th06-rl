@@ -267,6 +267,11 @@ candidate enters it only after at least two distinct seeds both finish as
 natural no-HIT/no-Bomb stage clears. Interrupted runs, bounded survival, and
 continued clears with any HIT stay in the research/Pareto evidence archive.
 
+First-failure DAgger trajectories remain training-eligible because they end
+before benchmark continuation or forced release. Corrective-pair weighting
+applies to both an observed physical HIT and an authority-empty termination;
+continued-HIT trajectories remain evaluation-only regardless of this signal.
+
 The current archive contains 41 model artifacts and 12 historical
 first-failure Pareto members across source builds. Only six Stage 3--5 members
 are compatible with the active `8c3de1de63fd` / `ca4b2e7cb05e` runtime; the

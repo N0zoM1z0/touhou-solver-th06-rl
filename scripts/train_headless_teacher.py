@@ -54,6 +54,7 @@ NUMERIC_FEATURES = (
     *PROFILE_FEATURE_NAMES,
 )
 FEATURE_NAMES = (*CATEGORICAL_FEATURES, *NUMERIC_FEATURES)
+CORRECTIVE_TERMINATIONS = frozenset({"authority-failure", "physical-hit"})
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,7 @@ class Decision:
     teacher_action: str
     selected_action: str
     observation_sha256: str = ""
-    authority_failure_distance: int | None = None
+    terminal_failure_distance: int | None = None
     counterfactual_original_action: str | None = None
     counterfactual_acceptable_actions: tuple[str, ...] | None = None
 
@@ -147,7 +148,7 @@ def candidate_sample_weight(
     failure_weight: float,
     counterfactual_weight: float = 0.0,
 ) -> float:
-    """Emphasize the corrective pair before a demonstrated authority dead-end.
+    """Emphasize the corrective pair before a demonstrated HIT or dead-end.
 
     The terminal signal says that the behavior trajectory became uncertifiable;
     it does not say that every locally legal action near the end was bad.  Only
@@ -166,7 +167,7 @@ def candidate_sample_weight(
         )
     ):
         weight = max(weight, 1.0 + counterfactual_weight)
-    distance = decision.authority_failure_distance
+    distance = decision.terminal_failure_distance
     if not (
         failure_horizon <= 0
         or failure_weight <= 0.0
@@ -253,7 +254,7 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
         if manifest.get("source", {}).get("commit") != source.get("commit"):  # type: ignore[union-attr]
             raise ValueError("headless teacher data silently mixes source revisions")
         seed = int(manifest["initial_seed"])
-        authority_failure = manifest.get("termination_reason") == "authority-failure"
+        terminal_failure = manifest.get("termination_reason") in CORRECTIVE_TERMINATIONS
         transition_count = int(manifest.get("transition_count", 0))
         with gzip.open(run / "transitions.jsonl.gz", "rt", encoding="utf-8") as stream:
             for line in stream:
@@ -264,7 +265,7 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
                 previous_index = index_by_observation.get(digest)
                 failure_distance = (
                     transition_count - int(row["sequence"])
-                    if authority_failure
+                    if terminal_failure
                     else None
                 )
                 if previous_index is not None:
@@ -274,15 +275,15 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
                     if (
                         failure_distance is not None
                         and (
-                            previous.authority_failure_distance is None
-                            or failure_distance < previous.authority_failure_distance
+                            previous.terminal_failure_distance is None
+                            or failure_distance < previous.terminal_failure_distance
                         )
                     ):
                         decisions[previous_index] = replace(
                             previous,
                             run=run.name,
                             selected_action=str(behavior["selected_action"]),
-                            authority_failure_distance=failure_distance,
+                            terminal_failure_distance=failure_distance,
                         )
                     duplicate_decisions += 1
                     continue
@@ -302,7 +303,7 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
                     teacher_action=teacher_action,
                     selected_action=str(behavior["selected_action"]),
                     observation_sha256=digest,
-                    authority_failure_distance=failure_distance,
+                    terminal_failure_distance=failure_distance,
                 ))
     if not decisions or scope is None or source is None:
         raise ValueError("no eligible compact headless decisions found")
@@ -444,7 +445,8 @@ def _candidate_matrix(
         corrective_decisions += int(corrective)
         counterfactual_decisions += int(decision.counterfactual_acceptable_actions is not None)
     return features, labels, weights, {
-        "authority_failure_horizon": failure_horizon,
+        "terminal_failure_horizon": failure_horizon,
+        "terminal_failure_reasons": sorted(CORRECTIVE_TERMINATIONS),
         "corrective_pair_weight": failure_weight,
         "corrective_decisions": corrective_decisions,
         "counterfactual_pair_weight": counterfactual_weight,

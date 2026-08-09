@@ -131,7 +131,7 @@ def test_failure_weighting_only_emphasizes_disagreeing_corrective_pair() -> None
         **{
             **decision().__dict__,
             "selected_action": "stay",
-            "authority_failure_distance": 1,
+            "terminal_failure_distance": 1,
         }
     )
 
@@ -156,7 +156,7 @@ def test_failure_weighting_does_not_invent_a_counterfactual_on_agreement() -> No
     agreed = Decision(
         **{
             **decision().__dict__,
-            "authority_failure_distance": 1,
+            "terminal_failure_distance": 1,
         }
     )
 
