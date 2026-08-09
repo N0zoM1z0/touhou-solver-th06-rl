@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from scripts.build_headless_cow_residual import _metrics, choose_threshold, risk_label
-from scripts.collect_headless_dagger import supported_residual_ranking
+from scripts.collect_headless_dagger import DistilledRanker, supported_residual_ranking
 from scripts.train_headless_cow_value import ValueGroup
 from tests.test_headless_teacher import decision
 
@@ -70,3 +71,47 @@ def test_residual_correction_cannot_change_native_safe_membership() -> None:
     )
     with pytest.raises(ValueError, match="same nonempty native-safe set"):
         supported_residual_ranking(("stay", "left"), ("left", "right"))
+
+
+@pytest.mark.parametrize(
+    ("probability", "expected", "activated", "overrode"),
+    [
+        (0.95, ("left", "stay"), True, True),
+        (0.50, ("stay", "left"), False, False),
+    ],
+)
+def test_residual_ranker_records_gate_and_override_diagnostics(
+    probability: float,
+    expected: tuple[str, ...],
+    activated: bool,
+    overrode: bool,
+) -> None:
+    ranker = DistilledRanker.__new__(DistilledRanker)
+    ranker.threads = 1
+    ranker.last_decision_diagnostics = None
+    ranker.members = []
+    ranker.residual = {
+        "base": "base",
+        "correction": "correction",
+        "gate_model": SimpleNamespace(
+            booster_=SimpleNamespace(
+                predict=lambda _matrix, num_threads: np.asarray([probability])
+            )
+        ),
+        "gate_encoder": SimpleNamespace(encode=lambda rows: rows),
+        "threshold": 0.9,
+    }
+    ranker._rank_member = lambda member, _decision: (
+        ("stay", "left") if member == "base" else ("left", "stay")
+    )
+
+    assert ranker.rank_decision(decision()) == expected
+    assert ranker.last_decision_diagnostics == {
+        "kind": "supported-residual",
+        "risk_probability": probability,
+        "threshold": 0.9,
+        "activated": activated,
+        "base_action": "stay",
+        "correction_action": "left" if activated else None,
+        "overrode": overrode,
+    }

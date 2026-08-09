@@ -171,6 +171,7 @@ class DistilledRanker:
         self.path = artifact_path.resolve()
         self.threads = threads
         artifact = joblib.load(self.path)
+        self.last_decision_diagnostics: dict[str, Any] | None = None
         self.scope = artifact["scope"]
         self.headless_source = artifact["headless_source"]
         self.compatible_headless_sources = artifact.get(
@@ -253,6 +254,7 @@ class DistilledRanker:
 
     def rank_decision(self, decision: Decision) -> tuple[str, ...]:
         """Return the complete Borda order for one recorded native-safe set."""
+        self.last_decision_diagnostics = None
         candidates = tuple(decision.candidates)
         actions = [str(candidate["action"]) for candidate in candidates]
         if len(actions) != len(set(actions)) or set(actions) != set(decision.legal_actions):
@@ -270,9 +272,24 @@ class DistilledRanker:
                 self.residual["gate_encoder"].encode([gate_features]),
                 num_threads=self.threads,
             )[0])
-            if risk_probability >= self.residual["threshold"]:
+            activated = risk_probability >= self.residual["threshold"]
+            diagnostics = {
+                "kind": "supported-residual",
+                "risk_probability": risk_probability,
+                "threshold": self.residual["threshold"],
+                "activated": activated,
+                "base_action": base[0],
+                "correction_action": None,
+                "overrode": False,
+            }
+            if activated:
                 correction = self._rank_member(self.residual["correction"], decision)
-                return supported_residual_ranking(base, correction)
+                selected = supported_residual_ranking(base, correction)
+                diagnostics["correction_action"] = selected[0]
+                diagnostics["overrode"] = selected[0] != base[0]
+                self.last_decision_diagnostics = diagnostics
+                return selected
+            self.last_decision_diagnostics = diagnostics
             return base
         features = [candidate_features(decision, candidate) for candidate in candidates]
         member_scores = [
@@ -368,6 +385,9 @@ def collect(
     benchmark_forced_actions = 0
     physical_hits = 0
     physical_hit_ticks: list[int] = []
+    residual_gate_evaluations = 0
+    residual_gate_activations = 0
+    residual_action_overrides = 0
     terminal: dict[str, Any] | None = None
     try:
         client = HeadlessClient(
@@ -384,6 +404,7 @@ def collect(
             sequence = 0
             while observation.get("terminal_reason") is None:
                 benchmark_forced = False
+                decision_diagnostics: dict[str, Any] | None = None
                 try:
                     hard_hazards = lower_headless_hard_hazards(
                         observation,
@@ -419,6 +440,7 @@ def collect(
                         seed=seed,
                         profiles=profiles,
                     )
+                    decision_diagnostics = ranker.last_decision_diagnostics
                     if teacher is None:
                         teacher_decision = _benchmark_ranker_decision(selected, certified)
                     else:
@@ -455,6 +477,14 @@ def collect(
                         )
                         break
                 else:
+                    if decision_diagnostics is not None:
+                        residual_gate_evaluations += 1
+                        residual_gate_activations += int(
+                            decision_diagnostics["activated"]
+                        )
+                        residual_action_overrides += int(
+                            decision_diagnostics["overrode"]
+                        )
                     behavior = BehaviorDecision(
                         selected_action=selected,
                         probability=1.0,
@@ -472,6 +502,8 @@ def collect(
                     profiles=profiles,
                     benchmark_forced_action=benchmark_forced,
                 )
+                if decision_diagnostics is not None:
+                    transition["ranker_diagnostics"] = decision_diagnostics
                 deaths_delta = max(int(transition["outcome_terms"]["deaths_delta"]), 0)
                 physical_hits += deaths_delta
                 physical_hit_ticks.extend([int(transition["next_tick"])] * deaths_delta)
@@ -513,6 +545,11 @@ def collect(
         "physical_hit": physical_hits > 0,
         "physical_hits": physical_hits,
         "physical_hit_ticks": physical_hit_ticks,
+        "ranker_residual_gate": {
+            "evaluations": residual_gate_evaluations,
+            "activations": residual_gate_activations,
+            "action_overrides": residual_action_overrides,
+        },
         "nmnb_stage_clear": bool(
             terminal is not None
             and termination_reason in {"chain-exit-success", "stage-clear-success"}
