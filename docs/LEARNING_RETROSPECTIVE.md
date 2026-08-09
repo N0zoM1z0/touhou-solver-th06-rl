@@ -401,7 +401,7 @@ for each stage is still a research incumbent, not a promoted policy:
 | Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
 | --- | --- | --- | --- | --- |
 | 1 | `a887bb79e54a` | 43 / 44 | 1 / 1 | 24 / 8 |
-| 2 | `a4245bdfc8d3` | 61 / 62 | 1 / 0 | 60 / 15 |
+| 2 | `a4245bdfc8d3` | 71 / 72 | 0 / 0 | 20 / 14 |
 | 3 | `b9b3c842d98e` | 53 / 54 | 3 / 2 | 21 / 30 |
 | 4 | `f8a94d1689c4` | 47 / 48 | 2 / 7 | 8 / 78 |
 | 5 | `88b334b4ad78` | 59 / 60 | 8 / 14 | 58 / 88 |
@@ -422,10 +422,12 @@ pair while reducing total forced releases from 38 to 32. The table intentionally
 uses closed-loop HIT and forced-release counts instead of offline accuracy to
 select the current experiment order.
 
-The Stage 2 row includes a natural zero-HIT seed, but its 15 forced-release
-rows keep it outside NMNB. Its paired seed has one HIT and 60 forced releases.
-It preserves the preceding table member's one total HIT while reducing total
-forced rows from 86 to 75. The preceding `37d75f340fd1` Stage 2 member (0/3
+The Stage 2 row is the first two-seed natural 0-HIT continuation result, but its
+20/14 forced-release rows keep it outside strict NMNB: at those states the
+native safe set was empty and the benchmark released input to let the physical
+stage continue. The same weight's preceding seeds 61/62 had 1/0 HIT and 60/15
+forced rows, so the fresh pair is stronger evidence but still an authority-gap
+target rather than a clear. The preceding `37d75f340fd1` Stage 2 member (0/3
 HIT, 27/48 forced) remains a different per-seed trade-off, and `ac7edd49d803`
 (3/1 HIT, 53/62 forced) retains additional trajectory diversity. The preceding
 `8c7a94fd3b4f` Stage 4 member
@@ -518,6 +520,48 @@ continuation seeds with 1/1 HIT and 36/19 forced-release rows. Both HITs were
 late (around tick 15.8k of 18.3k), making those event neighborhoods useful for
 the next COW cycle, but the member is dominated by the existing 1/1-HIT
 incumbent's 24/8 forced rows and is not promoted.
+
+Repeating that Stage 1 incumbent on fresh seeds 71/72 produced 3/2 HIT and
+26/57 forced-release rows. This rejects the tempting interpretation that its
+earlier 1/1 pair had nearly solved the stage. The corresponding first-failure
+runs still contributed 10,779 and 15,762 trustworthy pre-failure decisions,
+and their first event neighborhoods entered a separate 1200-tick COW batch.
+
+The next Stage 2 live-snapshot corrections also regressed and were rejected:
+the survivable target produced 2/3 HIT with 46/88 forced rows on seeds 69/70,
+while unique-best produced 2/2 HIT with 39/68 forced rows. In Stage 6, the
+newer survivable and unique-best pair both totaled 27 HIT (16/11 and 15/12),
+with 296 and 271 forced rows respectively. The sparse grouped-value candidate
+was substantially worse at 30/33 HIT and 333/384 forced rows. These outcomes
+reinforce that COW fit and offline top-1 only order experiments; closed-loop
+continuation remains the decision criterion.
+
+### First-HIT reconstruction boundary
+
+The first continuation-derived event selector included every HIT in a run.
+That was invalid for correction: the forkserver's factual prefix stops at the
+first physical HIT, so checkpoints after it cannot be reconstructed from the
+same physical trajectory. Those old partial directories remain diagnostic-only
+and are not training inputs. Event selection now stops at the first physical
+HIT while retaining preceding native-authority events. Post-HIT rows remain
+useful only for HIT-continuation evaluation.
+
+The first repaired `prehit-v2` batches completed without a replay failure and
+passed independent native-action-table audits:
+
+| Source stage/policy | Checkpoints | Outcomes | Unique strict best | Local/factual best |
+| --- | ---: | ---: | ---: | ---: |
+| Stage 2 unique-best r4 | 56 | 995 | 94.6% | 10.7% |
+| Stage 3 unique-best r3 | 12 | 187 | 75.0% | 8.3% |
+| Stage 4 unique-best r4 partial | 8 | 119 | 75.0% | 25.0% |
+| Stage 5 survivable r4 | 11 | 152 | 72.7% | 18.2% |
+| Stage 6 unique-best r3 | 8 | 121 | 87.5% | 12.5% |
+
+Stage 2 also shows why an event count is not the same as trainable yield. Only
+15 of its 56 audited checkpoints match first-failure corpus observations; the
+remaining post-authority states are preserved as diagnostics rather than
+silently treated as factual training data. Exact COW file paths and hashes are
+frozen in every new training report before decoding begins.
 
 ## Portability to TH08
 
