@@ -1,4 +1,5 @@
 from scripts.batch_label_headless_cow import (
+    _output_path,
     checkpoint_groups,
     checkpoint_sequences,
     event_checkpoint_sequences,
@@ -40,6 +41,33 @@ def test_round_robin_task_groups_balances_early_run_coverage() -> None:
         "a3",
     )
     assert round_robin_task_groups(()) == ()
+
+
+def test_output_path_disambiguates_identical_run_basenames(tmp_path) -> None:
+    manifest = {"scope": {"stage": 3}, "initial_seed": 73}
+    first = tmp_path / "model-a" / "same-run"
+    second = tmp_path / "model-b" / "same-run"
+
+    first_output = _output_path(
+        tmp_path,
+        first,
+        manifest,
+        disambiguate_run=True,
+    )
+    second_output = _output_path(
+        tmp_path,
+        second,
+        manifest,
+        disambiguate_run=True,
+    )
+
+    assert first_output != second_output
+    assert first_output == _output_path(
+        tmp_path,
+        first,
+        manifest,
+        disambiguate_run=True,
+    )
 
 
 def _row(*, hit: bool = False, forced: bool = False, legal: bool = True):

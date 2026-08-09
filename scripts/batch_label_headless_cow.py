@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import gzip
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -145,12 +146,16 @@ def _output_path(
     *,
     group_index: int = 0,
     group_count: int = 1,
+    disambiguate_run: bool = False,
 ) -> Path:
     scope = manifest["scope"]
     stem = (
         f"stage{int(scope['stage'])}-seed{int(manifest['initial_seed'])}-"
         f"{run.name}"
     )
+    if disambiguate_run:
+        run_key = hashlib.sha256(str(run.resolve()).encode()).hexdigest()[:12]
+        stem += f"-run{run_key}"
     if group_count > 1:
         stem += f"-part{group_index + 1:04d}-of{group_count:04d}"
     return output_root / f"{stem}.json"
@@ -236,6 +241,11 @@ def main() -> int:
         parser.error("no compact headless corpus manifests found")
     output_root = args.output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
+    duplicate_run_names = {
+        run_name
+        for run_name in {run.name for run in runs}
+        if sum(run.name == run_name for run in runs) > 1
+    }
     task_groups = []
     skipped = []
     for run in runs:
@@ -268,6 +278,7 @@ def main() -> int:
                 manifest,
                 group_index=group_index,
                 group_count=len(groups),
+                disambiguate_run=run.name in duplicate_run_names,
             )
             if _completed_output(output, run, group):
                 skipped.append({"output": str(output), "checkpoints": len(group)})
