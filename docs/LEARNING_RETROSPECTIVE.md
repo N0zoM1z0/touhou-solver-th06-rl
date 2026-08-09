@@ -712,6 +712,13 @@ contained 16 valid checkpoints and 227 outcomes, with ratios of 68.75%,
 18.75%, and 18.75%. They are valuable corrective corpora, but their descendants
 still require full natural continuation before any population update.
 
+The Stage 6 r7 descendants were then decisively rejected. Survivable reached
+19/20 HIT with 147/150 forced rows, and unique-best reached 14/14 HIT with
+104/101; both used zero Bombs and are worse than the 9/12-HIT incumbent. The
+Stage 5 r7 COW batch completed 16 valid checkpoints and 250 outcomes, with
+68.75% unique strict best, 18.75% local-teacher best, and only 6.25% factual
+best. Its r8 descendants remain behind the natural-continuation gate.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
