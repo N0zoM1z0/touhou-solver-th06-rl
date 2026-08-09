@@ -90,8 +90,11 @@ def source_compatible(
     )
 
 
-def borda_consensus(actions: list[str], member_scores: list[list[float]]) -> str:
-    """Select a calibration-free consensus inside one native-safe action set."""
+def borda_ranking(
+    actions: list[str],
+    member_scores: list[list[float]],
+) -> tuple[str, ...]:
+    """Rank one native-safe set without comparing scores across members."""
     if (
         not actions
         or not member_scores
@@ -109,7 +112,16 @@ def borda_consensus(actions: list[str], member_scores: list[list[float]]) -> str
         for rank, (action, _) in enumerate(ranked):
             points[action] += len(actions) - rank - 1
             worst_rank[action] = max(worst_rank[action], rank)
-    return max(actions, key=lambda action: (points[action], -worst_rank[action], action))
+    return tuple(sorted(
+        actions,
+        key=lambda action: (points[action], -worst_rank[action], action),
+        reverse=True,
+    ))
+
+
+def borda_consensus(actions: list[str], member_scores: list[list[float]]) -> str:
+    """Select a calibration-free consensus inside one native-safe action set."""
+    return borda_ranking(actions, member_scores)[0]
 
 
 def _sha256(path: Path) -> str:
@@ -159,6 +171,10 @@ class DistilledRanker:
             "legacy-unspecified-v0",
         )
         self.native_delivery_delays = artifact.get("native_delivery_delays", [])
+        self.observation_digest_contract = artifact.get(
+            "observation_digest_contract",
+            "legacy-full-observation-v0",
+        )
         if self.native_delivery_contract not in {
             "legacy-unspecified-v0",
             HEADLESS_DELIVERY_CONTRACT,
@@ -182,6 +198,22 @@ class DistilledRanker:
                 for name, values in member["categories"].items()
             }
             self.members.append((model, encoder))
+
+    def rank_decision(self, decision: Decision) -> tuple[str, ...]:
+        """Return the complete Borda order for one recorded native-safe set."""
+        candidates = tuple(decision.candidates)
+        actions = [str(candidate["action"]) for candidate in candidates]
+        if len(actions) != len(set(actions)) or set(actions) != set(decision.legal_actions):
+            raise ValueError("ranker decision candidates do not equal the native-safe set")
+        features = [candidate_features(decision, candidate) for candidate in candidates]
+        member_scores = [
+            [float(score) for score in model.booster_.predict(
+                encoder.encode(features),
+                num_threads=self.threads,
+            )]
+            for model, encoder in self.members
+        ]
+        return borda_ranking(actions, member_scores)
 
     def rank(
         self,
@@ -210,16 +242,7 @@ class DistilledRanker:
             teacher_action="",
             selected_action="",
         )
-        features = [candidate_features(decision, candidate) for candidate in candidates]
-        actions = [str(candidate["action"]) for candidate in candidates]
-        member_scores = [
-            [float(score) for score in model.booster_.predict(
-                encoder.encode(features),
-                num_threads=self.threads,
-            )]
-            for model, encoder in self.members
-        ]
-        return borda_consensus(actions, member_scores)
+        return self.rank_decision(decision)[0]
 
 
 def collect(

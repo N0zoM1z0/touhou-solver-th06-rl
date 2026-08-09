@@ -18,7 +18,11 @@ from th06_rl.headless_corpus import (
     compact_hazard_sector_features,
     source_context_id,
 )
-from scripts.collect_headless_dagger import borda_consensus, source_compatible
+from scripts.collect_headless_dagger import (
+    borda_consensus,
+    borda_ranking,
+    source_compatible,
+)
 from scripts.collect_headless_dagger import _benchmark_ranker_decision
 from th06_rl.native import ACTIONS, NativeCertifiedAction
 
@@ -322,3 +326,13 @@ def test_borda_consensus_rewards_cross_model_support_without_score_calibration()
     ])
 
     assert selected == "stay"
+
+
+def test_borda_ranking_retains_complete_deterministic_order() -> None:
+    actions = ["stay", "left", "right"]
+    scores = [[100.0, 50.0, 0.0], [0.1, 0.2, 0.3]]
+
+    ranked = borda_ranking(actions, scores)
+
+    assert ranked == ("left", "stay", "right")
+    assert borda_consensus(actions, scores) == ranked[0]
