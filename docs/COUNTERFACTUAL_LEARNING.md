@@ -82,6 +82,12 @@ complete-seed train/holdout splits. It ranks only the native action set. A
 future fitted-Q, CQL, IQL, or contextual-bandit implementation should consume
 the same candidate/outcome table and obey the same grouped split.
 
+Factual corpus and COW labels must also declare the same platform delivery
+contract. The value trainer refuses, for example, a synchronous Linux `[0]`
+corpus paired with legacy or asynchronous-delay counterfactuals, and writes the
+frozen contract into both model and report. Source revision equality alone is
+not sufficient provenance for an action-value target.
+
 Corrective imitation can also use `--objective lambdarank`. Unlike the legacy
 binary candidate classifier, this treats every coherent snapshot as one query
 group and optimizes the relative order of that snapshot's native-safe actions.

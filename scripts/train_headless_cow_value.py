@@ -73,6 +73,20 @@ def ordinal_outcome_labels(outcomes: Iterable[Mapping[str, Any]]) -> tuple[int, 
     return tuple(ordered[rank] for rank in ranks)
 
 
+def delivery_contract(document: Mapping[str, Any]) -> tuple[str, tuple[int, ...]]:
+    name = str(document.get(
+        "runtime_delivery_contract",
+        "legacy-unspecified-v0",
+    ))
+    raw_delays = document.get("runtime_delivery_delays")
+    delays = (
+        tuple(int(value) for value in raw_delays)
+        if isinstance(raw_delays, list)
+        else ()
+    )
+    return name, delays
+
+
 def load_value_groups(
     decisions: list[Decision],
     provenance: Mapping[str, Any],
@@ -85,6 +99,10 @@ def load_value_groups(
     decision_by_digest = {decision.observation_sha256: decision for decision in decisions}
     groups = []
     runtime_sources = set()
+    expected_delivery = (
+        str(provenance.get("native_delivery_contract", "legacy-unspecified-v0")),
+        tuple(int(value) for value in provenance.get("native_delivery_delays", ())),
+    )
     unmatched = 0
     for path in files:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -94,6 +112,9 @@ def load_value_groups(
             raise ValueError("COW value labels silently mix scopes")
         if document.get("input_source", {}).get("commit") != provenance["source"].get("commit"):
             raise ValueError("COW value labels use a different factual source revision")
+        current_delivery = delivery_contract(document)
+        if current_delivery != expected_delivery:
+            raise ValueError("COW value labels use a different delivery contract")
         runtime_sources.add(json.dumps(document["runtime_source"], sort_keys=True))
         seed = int(document["initial_seed"])
         for checkpoint in document["checkpoints"]:
@@ -131,6 +152,8 @@ def load_value_groups(
         "candidate_outcomes": sum(len(group.actions) for group in groups),
         "unmatched_checkpoints": unmatched,
         "runtime_sources": [json.loads(item) for item in sorted(runtime_sources)],
+        "native_delivery_contract": expected_delivery[0],
+        "native_delivery_delays": list(expected_delivery[1]),
     }
 
 
@@ -191,6 +214,9 @@ def main() -> int:
         parser.error("threads must be in 1..12")
     if min(args.iterations, args.num_leaves, args.max_depth, args.min_child_samples) <= 0:
         parser.error("model capacity bounds must be positive")
+    # Freeze implementation provenance before decoding or fitting. Other
+    # benchmark commits may advance this branch while the CPU job is active.
+    code_commit = repository_commit()
     # Freeze a live generator directory before the potentially long corpus
     # decode. The report below records the exact immutable snapshot.
     label_files = _files(args.labels)
@@ -243,10 +269,11 @@ def main() -> int:
         "scope": provenance["scope"],
         "headless_source": provenance["source"],
         "compatible_headless_sources": compatible_sources,
+        "native_delivery_contract": provenance["native_delivery_contract"],
+        "native_delivery_delays": provenance["native_delivery_delays"],
         "value_contract": "dynamic-cow-ordinal-survival-maneuverability-v1",
     }
     joblib.dump(artifact, args.output / "cow-value-ranker.joblib", compress=3)
-    code_commit = repository_commit()
     report = {
         "schema": "th06-rl-headless-cow-value-v1",
         "algorithm": "lightgbm-lambdarank-counterfactual-action-value",
@@ -255,6 +282,8 @@ def main() -> int:
         "code_commit": code_commit,
         "factual_source": provenance["source"],
         "compatible_headless_sources": compatible_sources,
+        "native_delivery_contract": provenance["native_delivery_contract"],
+        "native_delivery_delays": provenance["native_delivery_delays"],
         "label_report": label_report,
         "train_seeds": sorted(set(seeds) - holdout),
         "holdout_seeds": sorted(holdout),
