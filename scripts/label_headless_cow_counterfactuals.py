@@ -13,7 +13,11 @@ import tempfile
 from typing import Any, Mapping
 
 from th06_rl.headless import HeadlessScope
-from th06_rl.headless_corpus import NativeOfflineTeacher, canonical_observation_sha256
+from th06_rl.headless_corpus import (
+    OBSERVATION_DIGEST_CONTRACT,
+    NativeOfflineTeacher,
+    canonical_observation_sha256,
+)
 from th06_rl.headless_forkserver import HeadlessForkserver
 from th06_rl.headless_geometry import (
     HARD_HORIZON,
@@ -240,6 +244,13 @@ def main() -> int:
         parser.error("branch and teacher horizons are outside safe bounds")
     run = args.run.resolve()
     manifest, rows = _load_run(run)
+    digest_contract = manifest.get(
+        "observation_digest_contract", "legacy-full-observation-v0"
+    )
+    if digest_contract not in {
+        "legacy-full-observation-v0", OBSERVATION_DIGEST_CONTRACT
+    }:
+        parser.error("counterfactual input uses an unsupported observation digest contract")
     sequences = sorted(set(args.checkpoint_sequence))
     if any(sequence <= 0 or sequence >= len(rows) for sequence in sequences):
         parser.error("checkpoint sequence is outside the reconstructable run")
@@ -296,6 +307,7 @@ def main() -> int:
         "runtime_source": _runtime_provenance(binary),
         "runtime_delivery_contract": HEADLESS_DELIVERY_CONTRACT,
         "runtime_delivery_delays": list(HEADLESS_DELIVERY_DELAYS),
+        "observation_digest_contract": digest_contract,
         "teacher_horizon": args.teacher_horizon,
         "branch_frames": args.branch_frames,
         "checkpoints": labels,

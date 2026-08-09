@@ -13,6 +13,7 @@ from typing import Any, Iterable, Mapping
 
 from th06_rl.headless_corpus import (
     MANIFEST_SCHEMA,
+    OBSERVATION_DIGEST_CONTRACT,
     TRANSITION_SCHEMA,
     canonical_observation_sha256,
 )
@@ -78,6 +79,15 @@ def audit_run(run: Path) -> dict[str, Any]:
         errors.append("transition count mismatch")
     if manifest.get("anchor_count") != len(anchors):
         errors.append("anchor count mismatch")
+    digest_contract = manifest.get(
+        "observation_digest_contract",
+        "legacy-full-observation-v0",
+    )
+    if digest_contract not in {
+        "legacy-full-observation-v0",
+        OBSERVATION_DIGEST_CONTRACT,
+    }:
+        errors.append("unsupported observation digest contract")
     delivery_contract = manifest.get(
         "native_delivery_contract",
         "legacy-unspecified-v0",
@@ -105,6 +115,12 @@ def audit_run(run: Path) -> dict[str, Any]:
             errors.append(f"{prefix}: unsupported schema")
         if row.get("sequence") != index:
             errors.append(f"{prefix}: nondense sequence")
+        row_digest_contract = row.get("observation_digest_contract")
+        if digest_contract == OBSERVATION_DIGEST_CONTRACT:
+            if row_digest_contract != digest_contract:
+                errors.append(f"{prefix}: observation digest contract mismatch")
+        elif row_digest_contract is not None:
+            errors.append(f"{prefix}: undeclared observation digest contract")
         try:
             tick = int(row["tick"])
             next_tick = int(row["next_tick"])
@@ -171,6 +187,14 @@ def audit_run(run: Path) -> dict[str, Any]:
         if not isinstance(observation, Mapping):
             errors.append(f"{prefix}: observation missing")
             continue
+        anchor_digest_contract = anchor.get("observation_digest_contract")
+        if digest_contract == OBSERVATION_DIGEST_CONTRACT:
+            if anchor_digest_contract != digest_contract:
+                errors.append(f"{prefix}: observation digest contract mismatch")
+                continue
+        elif anchor_digest_contract is not None:
+            errors.append(f"{prefix}: undeclared observation digest contract")
+            continue
         digest = canonical_observation_sha256(observation)
         sequence = anchor.get("sequence")
         if anchor.get("observation_sha256") != digest:
@@ -200,6 +224,7 @@ def audit_run(run: Path) -> dict[str, Any]:
         "termination_reason": manifest.get("termination_reason"),
         "native_delivery_contract": delivery_contract,
         "native_delivery_delays": delivery_delays,
+        "observation_digest_contract": digest_contract,
         "rows": rows,
         "factual_successor_rows": valid_successors,
         "native_legal_rows": valid_legal,

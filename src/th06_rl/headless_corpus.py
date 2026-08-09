@@ -74,11 +74,17 @@ SOURCE_CONTEXT_FEATURE_DEFAULTS = {
     "timeline_next_time_delta": -1.0,
 }
 SOURCE_CONTEXT_FEATURE_NAMES = tuple(SOURCE_CONTEXT_FEATURE_DEFAULTS)
+OBSERVATION_DIGEST_CONTRACT = "physical-observation-without-diagnostic-events-v1"
 
 
 def canonical_observation_sha256(observation: Mapping[str, Any]) -> str:
+    # ``events`` retains causal births/collision callers from the preceding
+    # calc pass, but it is not current physical state and cannot affect a COW
+    # successor.  Excluding exactly this additive diagnostic member keeps the
+    # replay identity stable while sparse anchors remain lossless.
+    physical = {key: value for key, value in observation.items() if key != "events"}
     encoded = json.dumps(
-        observation,
+        physical,
         allow_nan=False,
         separators=(",", ":"),
         sort_keys=True,
@@ -450,6 +456,7 @@ def build_transition(
         "scope": current_scope,
         "source_context": source_context_id(observation),
         "next_source_context": source_context_id(next_observation),
+        "observation_digest_contract": OBSERVATION_DIGEST_CONTRACT,
         "observation_sha256": canonical_observation_sha256(observation),
         "next_observation_sha256": canonical_observation_sha256(next_observation),
         "state": compact_state_features(observation),
@@ -530,6 +537,7 @@ class CompactHeadlessCorpusWriter:
             "schema": "th06-rl-headless-anchor-v1",
             "sequence": sequence,
             "role": role,
+            "observation_digest_contract": OBSERVATION_DIGEST_CONTRACT,
             "observation_sha256": digest,
             "observation": observation,
         }))
@@ -561,6 +569,7 @@ class CompactHeadlessCorpusWriter:
         complete = {
             "schema": MANIFEST_SCHEMA,
             **manifest,
+            "observation_digest_contract": OBSERVATION_DIGEST_CONTRACT,
             "transition_count": self.transition_count,
             "anchor_count": self.anchor_count,
             "files": {

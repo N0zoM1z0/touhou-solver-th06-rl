@@ -76,6 +76,22 @@ def test_source_context_uses_automatic_timeline_or_boss_identity() -> None:
     assert source_context_id(value) == "boss:3/17"
 
 
+def test_observation_digest_excludes_only_diagnostic_events() -> None:
+    value = observation()
+    eventful = {
+        **value,
+        "events": {
+            "bullet_births": [{"slot": 3}],
+            "laser_births": [],
+            "hit": {"kind": "enemy"},
+        },
+    }
+    moved = {**value, "player": {**value["player"], "x": 193.0}}
+
+    assert canonical_observation_sha256(eventful) == canonical_observation_sha256(value)
+    assert canonical_observation_sha256(moved) != canonical_observation_sha256(value)
+
+
 def test_compact_source_context_retains_boss_clock_without_movement_script() -> None:
     value = observation()
     value["player"]["x"] = 350.75

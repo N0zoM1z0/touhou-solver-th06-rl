@@ -29,6 +29,7 @@ except ModuleNotFoundError:
 
 from th06_rl.headless import HeadlessScope
 from th06_rl.headless_corpus import (
+    OBSERVATION_DIGEST_CONTRACT,
     PROFILE_CHECKPOINTS,
     NativeOfflineTeacher,
     canonical_observation_sha256,
@@ -665,6 +666,13 @@ def main() -> int:
         parser.error("threads must be in 1..12")
     run = args.run.resolve()
     manifest, rows = _load_run(run)
+    digest_contract = manifest.get(
+        "observation_digest_contract", "legacy-full-observation-v0"
+    )
+    if digest_contract not in {
+        "legacy-full-observation-v0", OBSERVATION_DIGEST_CONTRACT
+    }:
+        parser.error("feasibility input uses an unsupported observation digest contract")
     sequences = tuple(sorted(set(args.checkpoint_sequence)))
     if any(sequence <= 0 or sequence >= len(rows) for sequence in sequences):
         parser.error("checkpoint sequence is outside the reconstructable run")
@@ -759,6 +767,7 @@ def main() -> int:
         ),
         "runtime_delivery_contract": HEADLESS_DELIVERY_CONTRACT,
         "runtime_delivery_delays": list(HEADLESS_DELIVERY_DELAYS),
+        "observation_digest_contract": digest_contract,
         "native_set_revision_allowed": args.allow_native_set_revision,
         "continuations": [item.describe() for item in continuations],
         "checkpoints": labels,
