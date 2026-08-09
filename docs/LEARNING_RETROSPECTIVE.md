@@ -408,7 +408,7 @@ for each stage is still a research incumbent, not a promoted policy:
 
 | Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
 | --- | --- | --- | --- | --- |
-| 1 | `fb3bdffc609b` | 95 / 96 | 0 / 1 | 0 / 4 |
+| 1 | `7a816b1f4e3e` | 73 / 74 | 2 / 0 | 24 / 4 |
 | 2 | `a4245bdfc8d3` | 71 / 72 | 0 / 0 | 20 / 14 |
 | 3 | `4b4e9235f816` | 75 / 76 | 1 / 2 | 4 / 9 |
 | 4 | `02a85a9fdf7d` | 75 / 76 | 3 / 3 | 27 / 17 |
@@ -748,10 +748,16 @@ The first fixed panel produced the clearest policy improvement in this cycle.
 On identical Stage 1 seeds 95/96, the incumbent-plus-r9-unique Borda consensus
 reached 0/1 HIT with 0/4 forced rows, while the old incumbent reached 2/1 HIT
 with 32/20 forced rows. Both used zero Bombs. The ensemble strictly improves
-both closed-loop objectives on that panel and becomes the paired-evidence
-Stage 1 experiment-order incumbent; it is still rejected as NMNB because seed
-96 contains one HIT and four forced releases. A second seeds 99/100 panel is
-running as a replication rather than treating one paired result as final.
+both closed-loop objectives on that panel, but it is still rejected as NMNB
+because seed 96 contains one HIT and four forced releases.
+
+The seeds 99/100 replication did not preserve that ordering. The ensemble
+reached 1/3 HIT with 17/46 forced rows, while the original incumbent reached
+2/1 with 37/11. The ensemble therefore had four rather than three aggregate
+HITs and 63 rather than 48 forced rows. Consensus remains useful population
+diversity, but the attempted promotion is revoked: a single favorable paired
+panel is not stable evidence. Both complete panels remain reported rather than
+selecting only the positive one.
 
 Stage 4 r9 survivable was rejected at 10/8 HIT and 93/81 forced rows. Its
 unique sibling reached 4/3 with 27/14, trading one more aggregate HIT than the
@@ -775,6 +781,11 @@ understood as seed-local evidence rather than stable Stage 2 no-HIT.
 Stage 6 r8 did not benefit from its 100%-unique COW labels: survivable reached
 15/17 HIT with 137/133 forced rows and unique-best reached 16/17 with 164/168.
 Both used zero Bombs and are rejected relative to the 9/12-HIT incumbent.
+
+Stage 4 r10 also failed to improve the HIT-primary member. Survivable reached
+1/8 HIT with 6/69 forced rows and unique-best reached 2/6 with 24/42. The
+single-HIT seed is retained as a useful mode, but aggregate HIT totals of nine
+and eight are worse than the incumbent's six. Both used zero Bombs.
 
 ## Portability to TH08
 
