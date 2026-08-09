@@ -156,7 +156,7 @@ def load_value_groups(
         "candidate_outcomes": sum(len(group.actions) for group in groups),
         "unmatched_checkpoints": unmatched,
         "uninformative_checkpoints": uninformative,
-        "value_target": "completed-maneuverability-or-failed-survival-v2",
+        "value_target": "completed-quality-buckets-or-failed-survival-v3",
         "runtime_sources": [json.loads(item) for item in sorted(runtime_sources)],
         "native_delivery_contract": expected_delivery[0],
         "native_delivery_delays": list(expected_delivery[1]),

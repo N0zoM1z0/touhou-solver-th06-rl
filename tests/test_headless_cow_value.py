@@ -46,6 +46,15 @@ def test_ordinal_value_labels_retain_failed_survival_signal() -> None:
     assert labels[0] < labels[1]
 
 
+def test_ordinal_value_labels_keep_equivalent_completed_routes_tied() -> None:
+    labels = ordinal_outcome_labels([
+        outcome("tick-limit", 240, 16, 25.0),
+        outcome("tick-limit", 240, 18, 31.0),
+    ])
+
+    assert labels == (0, 0)
+
+
 def test_cow_value_delivery_contract_is_explicit_and_backward_auditable() -> None:
     assert delivery_contract({
         "runtime_delivery_contract": "synchronous-step-v1",

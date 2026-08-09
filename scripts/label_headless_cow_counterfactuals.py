@@ -96,15 +96,21 @@ def outcome_rank(outcome: Mapping[str, Any]) -> tuple[int, int, int, int, float]
 def learning_outcome_rank(
     outcome: Mapping[str, Any],
 ) -> tuple[int, int, int, int, float]:
-    """Retain failed survival without inventing value inside equal dead ends."""
+    """Retain robust outcome tiers, not pixel-level accidental argmaxes."""
     terminal = str(outcome["termination_reason"])
     completed = terminal in {"tick-limit", "chain-exit-success", "stage-clear-success"}
+    width = max(int(outcome["minimum_native_legal_actions"]), 0)
+    width_bucket = min(width.bit_length() - 1, 4) if width else 0
+    reserve = max(float(outcome["terminal_boundary_reserve"]), 0.0)
+    reserve_bucket = sum(
+        reserve >= threshold for threshold in (1e-6, 8.0, 16.0, 32.0, 64.0)
+    )
     return (
         int(completed),
         int(terminal != "physical-hit"),
         int(outcome["survival_ticks"]),
-        int(outcome["minimum_native_legal_actions"]) if completed else 0,
-        float(outcome["terminal_boundary_reserve"]) if completed else 0.0,
+        width_bucket if completed else 0,
+        float(reserve_bucket) if completed else 0.0,
     )
 
 

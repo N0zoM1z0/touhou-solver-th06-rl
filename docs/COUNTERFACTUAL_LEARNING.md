@@ -79,6 +79,13 @@ because one one-tick branch ended slightly farther from the wall. A checkpoint
 whose learning ranks are all tied is audited as outcome coverage but excluded
 from the value fit.
 
+Completed branches use quality tiers rather than exact integer/float
+argmaxes. Minimum native-set width is grouped as 1, 2--3, 4--7, 8--15, and
+16-or-more actions; terminal boundary reserve is grouped at 0, 8, 16, 32, and
+64 pixels. This preserves meaningful maneuverability differences while
+keeping several equivalent high-quality actions in the target set. Raw widths
+and reserves remain lossless in the artifact for later sensitivity studies.
+
 This ordering is independent of TH06 phase names, boss identities, captured
 frames, or hand-authored routes. A game may add raw outcome fields, but it may
 not weaken collision authority or silently reinterpret an unknown terminal.
