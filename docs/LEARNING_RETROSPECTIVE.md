@@ -811,6 +811,14 @@ The consensus improves both aggregate metrics and both per-seed HIT counts,
 but remains behind a second seeds 107/108 replication gate before any table
 change.
 
+That replication decisively failed. On seeds 107/108 the incumbent reached
+1/2 HIT with 5/17 forced rows, while consensus reached 3/3 with 16/31. The
+incumbent is better on both objectives on both seeds, so consensus is rejected
+and the Stage 3 table remains unchanged. Both policies' complete first-failure
+neighborhoods enter a separate COW batch: the failed feasible mode is useful
+for causal coverage, but its favorable 97/98 result is not selected in
+isolation or described as a stable improvement.
+
 Stage 5's old-plus-new consensus did not help. On the already paired seeds
 91/92 it reached 13/12 HIT with 83/114 forced rows, versus 13/12 with 156/84
 for the old member and 12/9 with 80/82 for the new member. The confirmed new
