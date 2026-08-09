@@ -395,6 +395,34 @@ grouped-value experiments, but the first value rankers again fit training
 groups perfectly while reaching only 0--27.8% held-out top-1; they were
 discarded by first-failure rollout rather than promoted from training fit.
 
+As of the next exact-source iteration, the best measured continuation member
+for each stage is still a research incumbent, not a promoted policy:
+
+| Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
+| --- | --- | --- | --- | --- |
+| 1 | `269675ae8805` | 27 / 28 | 1 / 1 | 10 / 28 |
+| 2 | `ac7edd49d803` | 31 / 32 | 3 / 1 | 53 / 62 |
+| 3 | `f6167e893286` | 23 / 24 | 7 / 6 | 71 / 47 |
+| 4 | `8c7a94fd3b4f` | 25 / 26 | 7 / 10 | 54 / 70 |
+| 5 | `481036a5ed47` | 27 / 28 | 11 / 11 | 76 / 91 |
+| 6 | `85471d1dbe2a` | 27 / 28 | 18 / 19 | 94 / 130 |
+
+All twelve runs completed their natural Practice Stage with zero Bombs, but
+none of the six two-seed stage candidates is NMNB. A different Stage 1 member
+did produce one strict natural 0-HIT/0-forced clear on seed 26; its paired seed
+had four HITs, so it remains population evidence rather than promotion. The
+table intentionally uses closed-loop HIT and forced-release counts instead of
+offline accuracy to select the current experiment order.
+
+A second COW batch targeted the last 600 decisions of the bootstrap policy's
+first-failure trajectories. All 10 files were valid: 90 checkpoints and 1,441
+complete outcomes. A unique strict best action existed at 83.3% of checkpoints,
+while the local teacher and factual action were strict-best at only 20.0% and
+15.6%. Per-stage unique-best ratios for Stages 2--6 were 83.3%, 88.9%, 83.3%,
+66.7%, and 94.4%. Early 240-tick survivable-set models changed few local labels
+and did not improve Stage 5 or 6 continuation HITs, motivating event-centered
+600/1200-tick branches rather than more short-horizon imitation weight.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
