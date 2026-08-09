@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Build an exact-checkpoint empirical feasibility lower bound for TH06.
 
-Every native-safe first action is evaluated under every declared continuation.
-The result is an offline diagnostic only: failure to find a witness is not a
-proof that no action sequence exists, and no oracle result enters the resident
+By default every native-safe first action is evaluated under every declared
+continuation.  An explicitly declared subset can extend selected branches at a
+larger bound without pretending to be an exhaustive checkpoint result.  The
+result is an offline diagnostic only: failure to find a witness is not a proof
+that no action sequence exists, and no oracle result enters the resident
 controller or enlarges the native action set.
 """
 
@@ -67,6 +69,21 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def action_trace_sha256(actions: list[str]) -> str:
+    payload = json.dumps(actions, ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def action_trace_rle(actions: list[str]) -> list[dict[str, Any]]:
+    runs: list[dict[str, Any]] = []
+    for action in actions:
+        if runs and runs[-1]["action"] == action:
+            runs[-1]["ticks"] += 1
+        else:
+            runs.append({"action": action, "ticks": 1})
+    return runs
 
 
 def _runtime_provenance(binary: Path) -> dict[str, Any]:
@@ -359,6 +376,7 @@ def _run_branch(
     checkpoint_bombs = int(observation["bombs_used"])
     minimum_legal = len(certified)
     actions_issued = 1
+    action_trace = [first_action]
     authority_failure_reason: str | None = None
     observation = server.step_session(first_action)
     while observation.get("terminal_reason") is None:
@@ -386,6 +404,7 @@ def _run_branch(
             result = server.abort_step_session()
             terminal_observation = result.terminal_observation
             break
+        action_trace.append(selected)
         observation = server.step_session(selected)
         actions_issued += 1
     else:
@@ -400,6 +419,12 @@ def _run_branch(
         termination_reason = "authority-failure"
         end_tick = int(observation["tick"])
         terminal_reserve = _boundary_reserve(observation)
+    fingerprint_observation = (
+        observation if authority_failure_reason is not None else terminal_observation
+    )
+    terminal_player = fingerprint_observation.get("player")
+    if not isinstance(terminal_player, Mapping):
+        raise HeadlessAuthorityUnavailable("branch terminal player is incoherent")
     deaths_delta = int(terminal_observation["deaths"]) - checkpoint_deaths
     bombs_delta = int(terminal_observation["bombs_used"]) - checkpoint_bombs
     completed = termination_reason in COMPLETED_TERMINATIONS
@@ -411,6 +436,21 @@ def _run_branch(
         "authority_failure_reason": authority_failure_reason,
         "survival_ticks": end_tick - checkpoint_tick,
         "actions_issued": actions_issued,
+        "action_trace_rle": action_trace_rle(action_trace),
+        "action_trace_sha256": action_trace_sha256(action_trace),
+        "terminal_observation_sha256": canonical_observation_sha256(
+            fingerprint_observation
+        ),
+        "terminal_tick": end_tick,
+        "terminal_player": {
+            "x": float(terminal_player["x"]),
+            "y": float(terminal_player["y"]),
+        },
+        "terminal_hazard_counts": {
+            "bullets": len(fingerprint_observation.get("bullets", ())),
+            "lasers": len(fingerprint_observation.get("lasers", ())),
+            "enemies": len(fingerprint_observation.get("enemies", ())),
+        },
         "minimum_native_legal_actions": minimum_legal,
         "terminal_boundary_reserve": terminal_reserve,
         "physical_deaths_delta": deaths_delta,
@@ -429,6 +469,7 @@ def label_checkpoint(
     kernel: NativeKernel,
     seed: int,
     allow_native_set_revision: bool,
+    requested_first_actions: tuple[str, ...] | None,
 ) -> dict[str, Any]:
     first_observation = server.begin_step_session(
         terminal_tick=int(row["tick"]) + 1,
@@ -449,6 +490,20 @@ def label_checkpoint(
     if not native_legal_actions:
         server.abort_step_session()
         raise ValueError("oracle checkpoint has no runtime native-safe first action")
+    if requested_first_actions is None:
+        evaluated_first_actions = native_legal_actions
+    else:
+        unknown = tuple(
+            action for action in requested_first_actions
+            if action not in native_legal_actions
+        )
+        if unknown:
+            server.abort_step_session()
+            raise ValueError(
+                "requested first actions are not runtime native-safe: "
+                + ", ".join(unknown)
+            )
+        evaluated_first_actions = tuple(dict.fromkeys(requested_first_actions))
     factual = str(row["behavior"]["selected_action"])
     local = str(row["behavior"]["teacher_action"])
     profile_hazards = lower_headless_hazards(
@@ -492,7 +547,7 @@ def label_checkpoint(
             seed=seed,
             native_legal_actions=native_legal_actions,
         )
-        for first_action in native_legal_actions
+        for first_action in evaluated_first_actions
         for continuation in continuations
     ]
     feasible_actions = tuple(sorted({
@@ -520,6 +575,7 @@ def label_checkpoint(
         "local_teacher_action": local,
         "input_native_legal_actions": list(input_legal_actions),
         "native_legal_actions": list(native_legal_actions),
+        "evaluated_first_actions": list(evaluated_first_actions),
         "native_set_revised": native_set_revised,
         "branch_frames": branch_frames,
         "continuation_count": len(continuations),
@@ -577,6 +633,16 @@ def main() -> int:
     parser.add_argument("--branch-frames", type=int, default=600)
     parser.add_argument("--planner-horizon", type=int, action="append")
     parser.add_argument("--model", type=Path, action="append")
+    parser.add_argument(
+        "--first-action",
+        action="append",
+        help="explicit native-safe first-action subset for branch extension",
+    )
+    parser.add_argument(
+        "--continuation",
+        action="append",
+        help="explicit continuation-name subset for branch extension",
+    )
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--allow-dirty-code", action="store_true")
     parser.add_argument("--allow-native-set-revision", action="store_true")
@@ -625,6 +691,16 @@ def main() -> int:
         expected_scope=scope_data,
         runtime_source=runtime_source,
     )
+    if args.continuation:
+        requested_continuations = tuple(dict.fromkeys(args.continuation))
+        by_name = {item.name: item for item in continuations}
+        unknown = tuple(name for name in requested_continuations if name not in by_name)
+        if unknown:
+            parser.error("unknown continuation subset: " + ", ".join(unknown))
+        continuations = tuple(by_name[name] for name in requested_continuations)
+    requested_first_actions = (
+        tuple(dict.fromkeys(args.first_action)) if args.first_action else None
+    )
     labels = []
     with tempfile.TemporaryDirectory(prefix="th06-feasibility-oracle-") as raw:
         workspace = Path(raw)
@@ -654,6 +730,7 @@ def main() -> int:
                         kernel=kernel,
                         seed=int(manifest["initial_seed"]),
                         allow_native_set_revision=args.allow_native_set_revision,
+                        requested_first_actions=requested_first_actions,
                     ))
                 finally:
                     server.leave_checkpoint()
@@ -677,6 +754,9 @@ def main() -> int:
         "code_source": code_source,
         "runtime_source": runtime_source,
         "branch_frames": args.branch_frames,
+        "evaluation_mode": (
+            "declared-subset" if args.first_action or args.continuation else "exhaustive"
+        ),
         "runtime_delivery_contract": HEADLESS_DELIVERY_CONTRACT,
         "runtime_delivery_delays": list(HEADLESS_DELIVERY_DELAYS),
         "native_set_revision_allowed": args.allow_native_set_revision,

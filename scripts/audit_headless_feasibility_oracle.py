@@ -15,6 +15,7 @@ try:
         AUTHORITY,
         COMPLETED_TERMINATIONS,
         SCHEMA,
+        action_trace_sha256,
         checkpoint_verdict,
         outcome_rank,
     )
@@ -23,9 +24,12 @@ except ModuleNotFoundError:
         AUTHORITY,
         COMPLETED_TERMINATIONS,
         SCHEMA,
+        action_trace_sha256,
         checkpoint_verdict,
         outcome_rank,
     )
+
+from th06_rl.offline import ACTION_SET
 
 
 def _files(paths: Iterable[Path]) -> tuple[Path, ...]:
@@ -53,6 +57,9 @@ def audit_file(path: Path) -> dict[str, Any]:
         errors.append("unsupported schema")
     if document.get("authority") != AUTHORITY:
         errors.append("invalid authority contract")
+    evaluation_mode = document.get("evaluation_mode", "exhaustive")
+    if evaluation_mode not in {"exhaustive", "declared-subset"}:
+        errors.append("invalid evaluation mode")
     if document.get("runtime_source", {}).get("clean") is not True:
         errors.append("oracle runtime source was dirty")
     input_source = document.get("input_source", {})
@@ -101,8 +108,10 @@ def audit_file(path: Path) -> dict[str, Any]:
     continuation_witnesses: Counter[str] = Counter()
     branch_count = 0
     native_actions = 0
+    evaluated_actions = 0
     discriminative = 0
     native_set_revisions = 0
+    subset_checkpoints = 0
     for checkpoint_index, checkpoint in enumerate(checkpoints):
         prefix = f"checkpoint {checkpoint_index}"
         legal = checkpoint.get("native_legal_actions")
@@ -149,7 +158,24 @@ def audit_file(path: Path) -> dict[str, Any]:
         if not isinstance(branches, list):
             errors.append(f"{prefix}: branches missing")
             continue
-        expected_pairs = {(action, continuation) for action in legal for continuation in continuation_names}
+        evaluated = checkpoint.get("evaluated_first_actions", legal)
+        if (
+            not isinstance(evaluated, list)
+            or not evaluated
+            or len(evaluated) != len(set(evaluated))
+            or not set(evaluated).issubset(legal)
+        ):
+            errors.append(f"{prefix}: invalid evaluated first-action set")
+            continue
+        subset = evaluated != legal
+        subset_checkpoints += int(subset)
+        if document.get("evaluation_mode", "exhaustive") == "exhaustive" and subset:
+            errors.append(f"{prefix}: exhaustive artifact omits native first actions")
+        expected_pairs = {
+            (action, continuation)
+            for action in evaluated
+            for continuation in continuation_names
+        }
         actual_pairs = [
             (branch.get("first_action"), branch.get("continuation"))
             for branch in branches
@@ -159,6 +185,7 @@ def audit_file(path: Path) -> dict[str, Any]:
             errors.append(f"{prefix}: branches do not cover action-continuation product")
             continue
         native_actions += len(legal)
+        evaluated_actions += len(evaluated)
         branch_count += len(branches)
         recomputed_feasible = []
         for branch in branches:
@@ -170,6 +197,34 @@ def audit_file(path: Path) -> dict[str, Any]:
                 errors.append(f"{prefix}: branch exceeds declared bound")
             if int(branch.get("bombs_used_delta", -1)) != 0:
                 errors.append(f"{prefix}: branch observed Bomb use")
+            trace_rle = branch.get("action_trace_rle")
+            trace_digest = branch.get("action_trace_sha256")
+            if trace_rle is not None or trace_digest is not None:
+                trace = []
+                if not isinstance(trace_rle, list):
+                    errors.append(f"{prefix}: invalid branch action trace")
+                else:
+                    for run in trace_rle:
+                        if not isinstance(run, Mapping):
+                            errors.append(f"{prefix}: invalid branch action trace run")
+                            continue
+                        action = str(run.get("action"))
+                        ticks = int(run.get("ticks", 0))
+                        if action not in ACTION_SET or ticks <= 0:
+                            errors.append(f"{prefix}: forbidden branch action trace run")
+                            continue
+                        trace.extend([action] * ticks)
+                if len(trace) != issued:
+                    errors.append(f"{prefix}: branch action trace length mismatch")
+                if trace and trace[0] != branch.get("first_action"):
+                    errors.append(f"{prefix}: branch action trace first action mismatch")
+                if trace_digest != action_trace_sha256(trace):
+                    errors.append(f"{prefix}: branch action trace SHA-256 mismatch")
+                if branch.get("terminal_tick") != int(checkpoint.get("checkpoint_tick", 0)) + survival:
+                    errors.append(f"{prefix}: branch terminal tick mismatch")
+                terminal_digest = branch.get("terminal_observation_sha256")
+                if not isinstance(terminal_digest, str) or len(terminal_digest) != 64:
+                    errors.append(f"{prefix}: branch terminal fingerprint missing")
             expected_feasible = _branch_feasible(branch)
             if branch.get("feasible") is not expected_feasible:
                 errors.append(f"{prefix}: branch feasibility summary mismatch")
@@ -200,7 +255,7 @@ def audit_file(path: Path) -> dict[str, Any]:
         if checkpoint.get("verdict") != expected_verdict:
             errors.append(f"{prefix}: verdict mismatch")
         verdicts[expected_verdict] += 1
-        discriminative += 0 < len(feasible_actions) < len(legal)
+        discriminative += 0 < len(feasible_actions) < len(evaluated)
         exact_features = checkpoint.get("exact_snapshot_features")
         if not isinstance(exact_features, Mapping) or not exact_features:
             errors.append(f"{prefix}: exact snapshot feature probe missing")
@@ -215,10 +270,13 @@ def audit_file(path: Path) -> dict[str, Any]:
         "errors": errors,
         "scope": document.get("scope"),
         "initial_seed": document.get("initial_seed"),
+        "evaluation_mode": evaluation_mode,
         "input_source": document.get("input_source"),
         "runtime_source": document.get("runtime_source"),
         "checkpoints": len(checkpoints),
         "native_actions": native_actions,
+        "evaluated_actions": evaluated_actions,
+        "subset_checkpoints": subset_checkpoints,
         "branches": branch_count,
         "discriminative_checkpoints": discriminative,
         "native_set_revisions": native_set_revisions,
@@ -236,6 +294,14 @@ def _candidate_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seed = int(document["initial_seed"])
         for checkpoint in document["checkpoints"]:
             legal = tuple(str(action) for action in checkpoint["native_legal_actions"])
+            evaluated = tuple(
+                str(action)
+                for action in checkpoint.get("evaluated_first_actions", legal)
+            )
+            if evaluated != legal:
+                # A branch-extension subset does not label untested native
+                # actions negative and therefore cannot train this probe.
+                continue
             feasible = frozenset(str(action) for action in checkpoint["feasible_actions"])
             if not 0 < len(feasible) < len(legal):
                 continue
@@ -398,6 +464,11 @@ def summarize(results: list[dict[str, Any]], *, threads: int) -> dict[str, Any]:
     mixed_scope = len(scopes) > 1
     mixed_source = len(sources) > 1
     total_checkpoints = sum(int(result["checkpoints"]) for result in valid)
+    exhaustive = [
+        result for result in valid
+        if result.get("evaluation_mode", "exhaustive") == "exhaustive"
+    ]
+    signal_checkpoints = sum(int(result["checkpoints"]) for result in exhaustive)
     verdicts: Counter[str] = Counter()
     terminations: Counter[str] = Counter()
     continuation_witnesses: Counter[str] = Counter()
@@ -405,8 +476,11 @@ def summarize(results: list[dict[str, Any]], *, threads: int) -> dict[str, Any]:
         verdicts.update(result["verdicts"])
         terminations.update(result["terminations"])
         continuation_witnesses.update(result["continuation_witnesses"])
-    no_witness = verdicts["oracle-no-witness"]
-    policy_selection = verdicts["policy-selection-witness"]
+    signal_verdicts: Counter[str] = Counter()
+    for result in exhaustive:
+        signal_verdicts.update(result["verdicts"])
+    no_witness = signal_verdicts["oracle-no-witness"]
+    policy_selection = signal_verdicts["policy-selection-witness"]
     probe = (
         representation_probe(valid, threads=threads)
         if valid and not mixed_scope and not mixed_source
@@ -418,10 +492,10 @@ def summarize(results: list[dict[str, Any]], *, threads: int) -> dict[str, Any]:
     )
     signals = {
         "geometry_authority_or_search_ceiling": (
-            no_witness / total_checkpoints if total_checkpoints else None
+            no_witness / signal_checkpoints if signal_checkpoints else None
         ),
         "observed_policy_selection": (
-            policy_selection / total_checkpoints if total_checkpoints else None
+            policy_selection / signal_checkpoints if signal_checkpoints else None
         ),
         "compact_representation_loss": None,
         "learner_gap_within_compact_view": None,
@@ -452,7 +526,17 @@ def summarize(results: list[dict[str, Any]], *, threads: int) -> dict[str, Any]:
         "mixed_scope": mixed_scope,
         "mixed_runtime_source": mixed_source,
         "checkpoints": total_checkpoints,
+        "signal_checkpoints": signal_checkpoints,
+        "evaluation_modes": dict(sorted(Counter(
+            str(result.get("evaluation_mode", "exhaustive")) for result in valid
+        ).items())),
         "native_actions": sum(int(result["native_actions"]) for result in valid),
+        "evaluated_actions": sum(
+            int(result["evaluated_actions"]) for result in valid
+        ),
+        "subset_checkpoints": sum(
+            int(result["subset_checkpoints"]) for result in valid
+        ),
         "branches": sum(int(result["branches"]) for result in valid),
         "discriminative_checkpoints": sum(
             int(result["discriminative_checkpoints"]) for result in valid

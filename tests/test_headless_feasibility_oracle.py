@@ -7,6 +7,7 @@ from scripts.audit_headless_feasibility_oracle import (
     representation_probe,
 )
 from scripts.label_headless_feasibility_oracle import (
+    action_trace_sha256,
     checkpoint_verdict,
     exact_snapshot_features,
 )
@@ -89,6 +90,48 @@ def test_feasibility_audit_accepts_complete_action_continuation_product(tmp_path
     assert result["valid"] is True
     assert result["branches"] == 4
     assert result["verdicts"] == {"policy-selection-witness": 1}
+
+
+def test_feasibility_audit_accepts_declared_branch_extension_subset(tmp_path) -> None:
+    document = _document()
+    document["evaluation_mode"] = "declared-subset"
+    checkpoint = document["checkpoints"][0]
+    checkpoint["evaluated_first_actions"] = ["left"]
+    checkpoint["branches"] = [
+        branch for branch in checkpoint["branches"]
+        if branch["first_action"] == "left"
+    ]
+    path = tmp_path / "oracle.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    result = audit_file(path)
+
+    assert result["valid"] is True
+    assert result["native_actions"] == 2
+    assert result["evaluated_actions"] == 1
+    assert result["subset_checkpoints"] == 1
+
+
+def test_feasibility_audit_rechecks_reproducible_action_trace(tmp_path) -> None:
+    document = _document()
+    checkpoint = document["checkpoints"][0]
+    branch = checkpoint["branches"][0]
+    actions = [branch["first_action"]] * branch["actions_issued"]
+    branch.update({
+        "action_trace_rle": [{"action": branch["first_action"], "ticks": len(actions)}],
+        "action_trace_sha256": action_trace_sha256(actions),
+        "terminal_tick": checkpoint["checkpoint_tick"] + branch["survival_ticks"],
+        "terminal_observation_sha256": "3" * 64,
+    })
+    path = tmp_path / "oracle.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    assert audit_file(path)["valid"] is True
+
+    branch["action_trace_sha256"] = "4" * 64
+    path.write_text(json.dumps(document), encoding="utf-8")
+    result = audit_file(path)
+    assert result["valid"] is False
+    assert "trace SHA-256" in " ".join(result["errors"])
 
 
 def test_feasibility_audit_rejects_missing_continuation_branch(tmp_path) -> None:
