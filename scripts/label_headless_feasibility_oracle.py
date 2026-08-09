@@ -27,8 +27,11 @@ except ModuleNotFoundError:
 
 from th06_rl.headless import HeadlessScope
 from th06_rl.headless_corpus import (
+    PROFILE_CHECKPOINTS,
     NativeOfflineTeacher,
     canonical_observation_sha256,
+    compact_candidate_records,
+    compact_state_features,
 )
 from th06_rl.headless_forkserver import HeadlessForkserver
 from th06_rl.headless_geometry import (
@@ -444,6 +447,32 @@ def label_checkpoint(
     if not native_legal_actions:
         server.abort_step_session()
         raise ValueError("oracle checkpoint has no runtime native-safe first action")
+    factual = str(row["behavior"]["selected_action"])
+    local = str(row["behavior"]["teacher_action"])
+    profile_hazards = lower_headless_hazards(
+        first_observation,
+        PROFILE_CHECKPOINTS[-1],
+    )
+    player = first_observation["player"]
+    assert isinstance(player, Mapping)
+    runtime_profiles = kernel.profile_actions(
+        x=float(player["x"]),
+        y=float(player["y"]),
+        half_width=float(player["half_width"]),
+        half_height=float(player["half_height"]),
+        kinematics=KINEMATICS,
+        current_action=action_from_input(int(first_observation["input"])),
+        hazards=profile_hazards,
+        candidates=tuple(item.action for item in runtime_certified),
+        checkpoints=PROFILE_CHECKPOINTS,
+    )
+    runtime_state = compact_state_features(first_observation)
+    runtime_candidates = compact_candidate_records(
+        runtime_certified,
+        selected=factual,
+        teacher=local,
+        profiles=runtime_profiles,
+    )
     exact_features = exact_snapshot_features(first_observation)
     # Close the one-tick feature probe with an ordinary certified action.  This
     # avoids using the deliberate authority-abort sentinel for a successful
@@ -475,8 +504,6 @@ def label_checkpoint(
         for branch in branches
         if outcome_rank(branch) == best_rank
     }))
-    factual = str(row["behavior"]["selected_action"])
-    local = str(row["behavior"]["teacher_action"])
     return {
         "sequence": sequence,
         "checkpoint_tick": int(row["tick"]),
@@ -484,6 +511,8 @@ def label_checkpoint(
         "source_context": row["source_context"],
         "compact_state": row["state"],
         "action_candidates": row["action_candidates"],
+        "runtime_compact_state": runtime_state,
+        "runtime_action_candidates": runtime_candidates,
         "exact_snapshot_features": exact_features,
         "factual_action": factual,
         "local_teacher_action": local,

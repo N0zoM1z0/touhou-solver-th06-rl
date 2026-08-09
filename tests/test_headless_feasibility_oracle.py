@@ -132,6 +132,22 @@ def test_feasibility_audit_accepts_declared_native_set_revision(tmp_path) -> Non
     assert result["native_set_revisions"] == 1
 
 
+def test_feasibility_audit_rejects_runtime_candidates_outside_native_set(
+    tmp_path,
+) -> None:
+    document = _document()
+    checkpoint = document["checkpoints"][0]
+    checkpoint["runtime_compact_state"] = checkpoint["compact_state"]
+    checkpoint["runtime_action_candidates"] = [{"action": "left"}]
+    path = tmp_path / "oracle.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    result = audit_file(path)
+
+    assert result["valid"] is False
+    assert "runtime candidates" in " ".join(result["errors"])
+
+
 def test_checkpoint_verdict_preserves_no_witness_epistemic_boundary() -> None:
     assert checkpoint_verdict(feasible_actions=(), factual_action="left") == "oracle-no-witness"
     assert checkpoint_verdict(

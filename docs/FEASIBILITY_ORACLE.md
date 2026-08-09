@@ -73,6 +73,10 @@ when the source checkpoint remains byte-logically identical. For a declared
 before/after authority experiment, add `--allow-native-set-revision`. The
 artifact then records both `input_native_legal_actions` and the recomputed
 `native_legal_actions`; the independent audit rejects a silent revision.
+It also recomputes `runtime_compact_state` and `runtime_action_candidates` for
+the revised set, while retaining the original corpus records separately. This
+keeps newly exposed actions available to representation probes and later
+offline supervision instead of silently dropping them from the feature table.
 
 The independent audit recomputes branch feasibility, action/continuation
 coverage, best-action summaries, policy verdicts, Bomb deltas, bounds, and

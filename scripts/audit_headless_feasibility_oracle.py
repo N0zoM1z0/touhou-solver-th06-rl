@@ -118,6 +118,27 @@ def audit_file(path: Path) -> dict[str, Any]:
         if revised and document.get("native_set_revision_allowed") is not True:
             errors.append(f"{prefix}: undeclared native set revision")
         native_set_revisions += int(revised)
+        runtime_candidates = checkpoint.get("runtime_action_candidates")
+        runtime_state = checkpoint.get("runtime_compact_state")
+        if runtime_candidates is not None:
+            if not isinstance(runtime_candidates, list):
+                errors.append(f"{prefix}: invalid runtime action candidates")
+            else:
+                candidate_actions = [
+                    str(item.get("action"))
+                    for item in runtime_candidates
+                    if isinstance(item, Mapping)
+                ]
+                if (
+                    len(candidate_actions) != len(runtime_candidates)
+                    or len(candidate_actions) != len(set(candidate_actions))
+                    or set(candidate_actions) != set(legal)
+                ):
+                    errors.append(
+                        f"{prefix}: runtime candidates do not equal native legal set"
+                    )
+            if not isinstance(runtime_state, Mapping) or not runtime_state:
+                errors.append(f"{prefix}: runtime compact state missing")
         if not isinstance(branches, list):
             errors.append(f"{prefix}: branches missing")
             continue
@@ -211,9 +232,17 @@ def _candidate_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
             feasible = frozenset(str(action) for action in checkpoint["feasible_actions"])
             if not 0 < len(feasible) < len(legal):
                 continue
+            candidate_rows = checkpoint.get(
+                "runtime_action_candidates",
+                checkpoint["action_candidates"],
+            )
+            state = checkpoint.get(
+                "runtime_compact_state",
+                checkpoint["compact_state"],
+            )
             candidates = {
                 str(item["action"]): item
-                for item in checkpoint["action_candidates"]
+                for item in candidate_rows
             }
             if set(candidates) != set(legal):
                 continue
@@ -221,7 +250,7 @@ def _candidate_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for action in legal:
                 compact = {
                     f"state_{name}": value
-                    for name, value in checkpoint["compact_state"].items()
+                    for name, value in state.items()
                     if isinstance(value, (str, int, float, bool))
                 }
                 compact.update({
