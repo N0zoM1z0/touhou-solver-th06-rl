@@ -617,12 +617,37 @@ population member, but it does not replace the 0/0-HIT incumbent because its
 aggregate forced count is 43 rather than 34. The native authority gap remains
 the limiting objective; zero observed collision alone is not NMNB evidence.
 
+The incumbent's 34 forced rows are now attributed rather than treated as one
+opaque policy metric. All 34 are newly lethal lasers without angular history:
+12 each from slots 0 and 3, and 10 from slot 6. None are an empty native safe
+set. The authoritative snapshot at the first such failure contains a newly
+spawned active laser with `start_time=0`, `graze_delay=0`, and no preceding
+physical angle sample. Assuming zero rotation would weaken the uncertainty
+contract, so this remains an observation-authority gap rather than a learned
+policy correction target. Continuation summaries now aggregate
+`benchmark_forced_reason_rows` and separately count unattributed rows from
+interrupted partial streams.
+
+Increasing the same correction weight from 32 to 128 did not close this gap.
+The strong-weight survivable member reached 2/2 HIT with 40/84 forced rows,
+and its unique-best sibling reached 3/1 HIT with 103/41. A Borda ensemble of
+the incumbent and ordinary r8 unique member also regressed to 1/3 HIT with
+44/75 forced rows. All remain archived population evidence, not promotions.
+
 The repaired Stage 5 r5-pair COW batch contributed 16/16 valid checkpoints
 and 240 complete branches. A unique strict best action existed at 87.5% of
 checkpoints, while both the local teacher and factual action were best at only
 18.75%. These labels entered separate survivable-set and unique-best r6
 training jobs; they are not promoted until both natural unseen-seed
 continuations complete.
+
+The next completed population checks did not replace their incumbents. Stage
+1 r7 survivable reached 3/1 HIT with 76/15 forced rows and unique-best reached
+3/2 with 38/36. Stage 3 r6 survivable matched the incumbent's three aggregate
+HITs at 2/1 but raised forced rows from 13 to 17; unique-best reached 3/2 with
+19/44. These late failures also reject promotion from an encouraging partial
+snapshot: the Stage 1 unique pair was still 0-HIT/0-forced after roughly 10.7k
+ticks each, then failed before the natural 18,306-tick stage end.
 
 ## Portability to TH08
 

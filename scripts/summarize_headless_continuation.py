@@ -115,6 +115,13 @@ def summarize_transition_file(path: Path) -> dict[str, Any]:
     ranker_sha = ranker.get("sha256") if isinstance(ranker, Mapping) else None
     seed_match = re.search(r"-seed(\d+)$", run.name)
     inferred_seed = int(seed_match.group(1)) if seed_match else None
+    raw_failure_reasons = manifest.get("authority_failure_reasons")
+    failure_reasons = {
+        str(reason): int(count)
+        for reason, count in raw_failure_reasons.items()
+        if int(count) > 0
+    } if isinstance(raw_failure_reasons, Mapping) else {}
+    attributed_forced = sum(failure_reasons.values())
     return {
         "run": str(run),
         "status": "interrupted-partial" if is_partial else "complete",
@@ -137,6 +144,8 @@ def summarize_transition_file(path: Path) -> dict[str, Any]:
         "hits_per_1000_ticks": len(hits) * 1000.0 / rows if rows else 0.0,
         "longest_no_hit_interval_ticks": _longest_no_hit_interval(start, end, hits),
         "benchmark_forced_rows": forced,
+        "benchmark_forced_reason_rows": dict(sorted(failure_reasons.items())),
+        "unattributed_benchmark_forced_rows": max(forced - attributed_forced, 0),
         "bombs_used": bombs,
         "unique_source_contexts": len(source_contexts),
         "selected_action_counts": dict(sorted(actions.items())),
@@ -161,6 +170,9 @@ def summarize(paths: Iterable[Path]) -> dict[str, Any]:
     runs = [summarize_transition_file(path) for path in files]
     total_rows = sum(run["rows"] for run in runs)
     total_hits = sum(run["physical_hits"] for run in runs)
+    forced_reasons: Counter[str] = Counter()
+    for run in runs:
+        forced_reasons.update(run["benchmark_forced_reason_rows"])
     return {
         "schema": "th06-rl-headless-hit-continuation-summary-v1",
         "runs": len(runs),
@@ -171,6 +183,10 @@ def summarize(paths: Iterable[Path]) -> dict[str, Any]:
         "hits_per_1000_ticks": total_hits * 1000.0 / total_rows if total_rows else 0.0,
         "bombs_used": sum(run["bombs_used"] for run in runs),
         "benchmark_forced_rows": sum(run["benchmark_forced_rows"] for run in runs),
+        "benchmark_forced_reason_rows": dict(sorted(forced_reasons.items())),
+        "unattributed_benchmark_forced_rows": sum(
+            run["unattributed_benchmark_forced_rows"] for run in runs
+        ),
         "run_results": runs,
     }
 
