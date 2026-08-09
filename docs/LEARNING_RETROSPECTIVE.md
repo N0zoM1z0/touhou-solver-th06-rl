@@ -408,7 +408,7 @@ for each stage is still a research incumbent, not a promoted policy:
 
 | Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
 | --- | --- | --- | --- | --- |
-| 1 | `7a816b1f4e3e` | 73 / 74 | 2 / 0 | 24 / 4 |
+| 1 | `fb3bdffc609b` | 95 / 96 | 0 / 1 | 0 / 4 |
 | 2 | `a4245bdfc8d3` | 71 / 72 | 0 / 0 | 20 / 14 |
 | 3 | `4b4e9235f816` | 75 / 76 | 1 / 2 | 4 / 9 |
 | 4 | `02a85a9fdf7d` | 75 / 76 | 3 / 3 | 27 / 17 |
@@ -743,6 +743,21 @@ incumbent-plus-r9 Borda consensus on 95/96, and the Stage 3 incumbent against
 r9 survivable on 97/98. These panels isolate the policy delta from seed
 difficulty; their natural results, not cross-seed aggregate ordering, decide
 whether an apparent gain is repeatable.
+
+The first fixed panel produced the clearest policy improvement in this cycle.
+On identical Stage 1 seeds 95/96, the incumbent-plus-r9-unique Borda consensus
+reached 0/1 HIT with 0/4 forced rows, while the old incumbent reached 2/1 HIT
+with 32/20 forced rows. Both used zero Bombs. The ensemble strictly improves
+both closed-loop objectives on that panel and becomes the paired-evidence
+Stage 1 experiment-order incumbent; it is still rejected as NMNB because seed
+96 contains one HIT and four forced releases. A second seeds 99/100 panel is
+running as a replication rather than treating one paired result as final.
+
+Stage 4 r9 survivable was rejected at 10/8 HIT and 93/81 forced rows. Its
+unique sibling reached 4/3 with 27/14, trading one more aggregate HIT than the
+incumbent for three fewer forced rows and remaining a distinct Pareto member.
+Stage 5 r8 also regressed: survivable reached 15/8 with 140/46 and unique-best
+11/16 with 81/134. All six runs completed naturally with zero Bombs.
 
 ## Portability to TH08
 
