@@ -208,3 +208,40 @@ factual/h12 action was best at only one. This directly separates the remaining
 bottleneck from collision authority: constructive actions exist early enough,
 but neither behavior policy nor local clearance teacher assigns their
 long-horizon value reliably.
+
+The completed multi-continuation feasibility audit strengthens that result.
+Across the six checkpoints it accepted 408/408 branches and 102 native first
+actions. Every checkpoint had a witness: three retained a factual-action
+witness and three were policy-selection witnesses, with no geometry/search
+no-witness checkpoint. On the four discriminative checkpoints, a leave-one-seed-
+out Extra Trees probe selected a feasible action at 75% from the compact view
+and 100% from the bounded exact-derived view. With only two seeds and four
+checkpoints this is evidence of representation loss, not a generalization
+claim, but it rules out another round of last-frame imitation as the primary
+response.
+
+Runtime `63afca9` then removed the newborn-laser false terminal. The incumbent
+naturally cleared Stage 2 on seeds 121, 123, and 127 at decision 21,454 with
+zero HIT/Bomb, while five other seeds failed authority between decisions 2,307
+and 4,193. A fresh LambdaRank imitation candidate physically HIT on seed 128
+at decision 3,093. The exact checkpoint immediately before that HIT contained
+18 legal actions; 36 short branches found four rightward first-action witnesses
+and 28 immediate physical HIT outcomes. Both factual and local-teacher top-1
+were outside the witness set. Lossless source instrumentation identified the
+cause as a next-tick ECL-driven Boss contact, not a bullet, laser, or native-set
+geometry error.
+
+For additive source instrumentation upgrades, reproduce physical equivalence
+with `audit_headless_event_observation.py`. It forks both binaries from one
+recorded checkpoint, runs every ordinary action, removes only the declared
+`events` member, and compares every physical observation. This evidence may
+authorize a compatibility copy of an old ranker; it cannot promote the copy or
+change native authority.
+
+Exact checkpoint identity follows
+`physical-observation-without-diagnostic-events-v1`. The top-level `events`
+member describes births and collision callers from the preceding calc pass; it
+does not affect the current state or any forked successor. It remains lossless
+in sparse anchors but is excluded from transition/COW digests. Every new
+manifest, transition, anchor, COW table, and feasibility artifact declares the
+digest contract, and corpus audit rejects silent contract drift.

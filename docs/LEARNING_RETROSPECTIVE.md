@@ -976,6 +976,49 @@ value supervision, not another imitation target. The next candidate must use
 the full ordinal outcomes and then beat the incumbent on a fixed unseen-seed
 panel before it is retained.
 
+### 2026-08-09 source-clock partial observability
+
+The newborn-laser observation fix changed the Stage 2 conclusion materially.
+The incumbent no longer stopped at decision 12,932: seeds 121, 123, and 127
+completed the natural stage after 21,454 decisions with zero HIT/Bomb. Five
+other seeds still failed authority earlier, so the fix removed a false ceiling
+without solving route selection.
+
+Retraining more of the same imitation objective did not help. On source-fixed
+seeds 127/128, the incumbent cleared seed 127 and failed authority at 4,191 on
+seed 128. A binary DAgger fit failed at 3,324/4,341. LambdaRank failed authority
+at 3,509 on seed 127 and physically HIT at 3,093 on seed 128. The modern loss
+and stronger offline top-1 were therefore rejected by the same closed-loop
+gate as earlier candidates.
+
+The HIT is a useful counterexample rather than random regression. At its exact
+pre-HIT state, only four rightward first actions survived the next four ticks.
+Both the ranker and local h12 teacher chose `stay_fast`. Authoritative event
+instrumentation showed that ECL moved the Boss from the far-left side to the
+player and activated contact on the next calc pass. The old compact state
+retained `boss:0/17` as a categorical partition but omitted numeric ECL time,
+Boss-relative geometry, and contact state. Visually similar rows within the
+same subroutine could therefore require opposite actions with no separating
+input feature.
+
+The corrective response is deliberately generic: rankers now receive bounded
+numeric source clocks and current Boss physical context. No seed, captured
+frame, counterexample ID, boss name, or handwritten phase action enters the
+feature contract. ECL remains lossless offline metadata, not collision
+authority, and future ECL instructions are still absent from the resident
+native gate. New data must be collected under this schema and paired with
+long-horizon COW outcomes around the first constructive boundary; offline fit
+alone cannot promote the resulting model.
+
+The first replay also caught an event/state conflation before it reached a
+model. Successful birth and collision events are lossless causal metadata from
+the preceding calc pass, not current simulator state. Including them in the
+COW digest made two physically identical checkpoints appear different. The
+digest now excludes only `events`, while sparse anchors preserve the complete
+payload and every artifact declares the new contract. This is another example
+of the headless flywheel improving the measurement system before optimizing a
+policy against it.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:

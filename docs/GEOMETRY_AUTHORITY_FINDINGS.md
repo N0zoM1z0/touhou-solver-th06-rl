@@ -211,6 +211,63 @@ permission. Old rankers may be copied to the new source identity only by the
 bounded compatibility-extension tool and the immutable differential evidence;
 the resulting copy remains unpromoted until new-source full-stage rollout.
 
+## Sixth differential: next-tick Boss contact is a policy observation gap
+
+After the newborn-laser correction, the Stage 2 incumbent naturally cleared
+seeds 121, 123, and 127 after 21,454 decisions with zero HIT and zero Bomb.
+This proves that the former 12,932-decision stop was an infrastructure false
+terminal. It does not make the incumbent complete: seeds 122, 124, 125, 126,
+and 128 still failed native authority after 2,307 / 3,328 / 4,193 / 3,046 /
+4,191 decisions.
+
+A newly trained LambdaRank imitation candidate exposed a different failure on
+seed 128. At sequence 3092 / tick 3093, all 18 actions were native-certified,
+but the ranker and local h12 teacher selected `stay_fast`; the authoritative
+runtime reported a physical HIT on the next tick. An exact two-continuation
+audit covered 36 branches. Twenty-eight branches HIT immediately. Only
+`right`, `right_fast`, `up_right_fast`, and `down_right_fast` reached the
+four-tick bound, so the checkpoint is a constructive policy-selection witness.
+
+The source call chain identifies the collision exactly. `EnemyManager::OnUpdate`
+runs the current ECL context before `Player::CalcKillBoxCollision`; the boss
+exception suppresses enemy damage but does not suppress player contact. At the
+input observation the boss was in sub 17 at ECL time 40, position approximately
+`(85.62, 96)`, with contact inactive. In the next calc pass ECL moved it to
+`(336.43, 96)`, advanced time to 41, and enabled the contact that hit the
+player near `(350.76, 93.88)`. No bullet or laser birth caused this HIT.
+
+This is not an already-observed-hazard geometry false positive. At tick 3093
+the native gate correctly certified the coherent physical snapshot it was
+given, and the product boundary forbids it from interpreting a future ECL
+instruction as resident collision authority. The missing predictive signal
+belongs to ranking: compact data retained the categorical boss subroutine but
+not its numeric ECL clock and current boss physical relation. Generic numeric
+features now retain boss-relative position, velocity, hitbox, contact flag,
+ECL time, and timeline clock for the learned ranker. They do not select a
+scripted action and cannot add an action to the native set.
+
+Portable source commit `1cc49f0f3be7819cdd34aac9bb0803d24ee53e9a`
+(binary SHA-256
+`d40b98d22b20248f98baa6c12a311be976bca4332ed890b484a9e054fb4fffff`)
+also retains successful bullet/laser births and the exact collision caller in
+the lossless `events` member. The additive claim was tested rather than
+assumed: old `63afca9` and new `1cc49f0` replayed all 18 actions from the exact
+seed-128 checkpoint. After removing only `events`, every physical observation
+matched for every emitted tick; the new runtime retained 14 enemy-HIT events.
+The compatibility upgrader requires this complete A/B artifact and the exact
+seven-file source diff before it will copy an old ranker to the new source
+identity. Copied weights remain unpromoted.
+
+The first COW replay with this richer trace exposed a separate identity bug:
+one checkpoint had identical current physical state and compact features but a
+different preceding-tick `events` payload. Diagnostic history cannot affect a
+forked successor, so it must not define exact-state identity. Corpus commit
+`0eb0f02` now hashes the complete observation except for exactly `events`,
+declares that contract in the manifest, transition, and anchor, and retains the
+unmodified event payload inside every sparse anchor. The auditor rejects a
+missing or mixed contract. This preserves lossless causal evidence without
+turning trace history into simulated state.
+
 ## Consequences for collection and learning
 
 Last-frame corrective labels can be unsatisfiable or dominated by authority
