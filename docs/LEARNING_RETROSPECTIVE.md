@@ -254,6 +254,14 @@ promote it. Incompatible weights remain historical evidence and are rejected
 by the active queue. The online consumer may use consensus, uncertainty, or a
 contextual selector only to rank the current native safe set.
 
+An audit of the rolling evaluation scheme found one further comparability
+requirement: two continuation candidates may eliminate one another from the
+Pareto population only when their seed sets are identical. Different unseen
+seeds are valid robustness evidence but confound policy quality with seed
+difficulty. The population builder now preserves both candidates in that case;
+the rolling table orders experiments provisionally, while fixed same-seed
+panels establish actual weight-to-weight improvement.
+
 Evidence tiers are intentionally strict:
 
 - `offline-only` has no rollout claim;

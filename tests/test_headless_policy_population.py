@@ -132,6 +132,36 @@ def test_continuation_pareto_front_minimizes_forced_release_rate(tmp_path: Path)
     )
 
 
+def test_continuation_dominance_requires_the_same_seed_panel(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    rollouts = tmp_path / "rollouts"
+    apparent_winner_sha = _candidate(models, "winner", b"winner", 0.8)
+    apparent_loser_sha = _candidate(models, "loser", b"loser", 0.8)
+    _rollout(
+        rollouts,
+        "winner-seed-101",
+        apparent_winner_sha,
+        101,
+        continuation=True,
+        physical_hits=0,
+    )
+    _rollout(
+        rollouts,
+        "loser-seed-202",
+        apparent_loser_sha,
+        202,
+        continuation=True,
+        physical_hits=3,
+        forced_actions=20,
+    )
+
+    result = build_population([models], [rollouts])
+    candidates = {row["model_sha256"]: row for row in result["candidates"]}
+
+    assert candidates[apparent_winner_sha]["pareto_member"] is True
+    assert candidates[apparent_loser_sha]["pareto_member"] is True
+
+
 def test_high_quality_requires_multi_seed_natural_nmnb_stage_clears(tmp_path: Path) -> None:
     models = tmp_path / "models"
     rollouts = tmp_path / "rollouts"

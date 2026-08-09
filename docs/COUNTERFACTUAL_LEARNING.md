@@ -105,4 +105,7 @@ action outside the native gate.
 The population's continuation Pareto front minimizes both physical HITs and
 forced-release rows per 1,000 ticks. A life-patched stage clear with fewer HITs
 but more native-authority gaps is retained only when it is genuinely
-non-dominated; forced play can never enter the strict NMNB population.
+non-dominated. Continuation candidates may dominate one another only when they
+were measured on the exact same seed panel; rolling unseen seeds measure
+robustness but confound policy quality with seed difficulty. Forced play can
+never enter the strict NMNB population.

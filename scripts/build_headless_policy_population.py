@@ -207,6 +207,14 @@ def _dominates(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     right_metrics = right["closed_loop"]
     if left_metrics["hit_rate_evidence_complete"] != right_metrics["hit_rate_evidence_complete"]:
         return False
+    if left_metrics["hit_rate_evidence_complete"] and (
+        left_metrics["continuation_seeds"] != right_metrics["continuation_seeds"]
+    ):
+        # Rolling unseen seeds measure robustness, but a policy difference is
+        # confounded with seed difficulty unless both policies saw the exact
+        # same panel.  Preserve both population members rather than inventing
+        # a cross-seed dominance claim.
+        return False
     maximize = ("minimum_ticks_before_stop", "tick_limit_rate")
     minimize = ("authority_failure_rate",)
     if left_metrics["hit_rate_evidence_complete"]:
