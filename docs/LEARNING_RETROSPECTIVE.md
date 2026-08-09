@@ -401,8 +401,8 @@ for each stage is still a research incumbent, not a promoted policy:
 | Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
 | --- | --- | --- | --- | --- |
 | 1 | `a887bb79e54a` | 43 / 44 | 1 / 1 | 24 / 8 |
-| 2 | `39e36a5db412` | 45 / 46 | 0 / 1 | 24 / 62 |
-| 3 | `07eadef52e0b` | 53 / 54 | 0 / 5 | 1 / 61 |
+| 2 | `a4245bdfc8d3` | 61 / 62 | 1 / 0 | 60 / 15 |
+| 3 | `b9b3c842d98e` | 53 / 54 | 3 / 2 | 21 / 30 |
 | 4 | `f8a94d1689c4` | 47 / 48 | 2 / 7 | 8 / 78 |
 | 5 | `481036a5ed47` | 27 / 28 | 11 / 11 | 76 / 91 |
 | 6 | `85471d1dbe2a` | 27 / 28 | 18 / 19 | 94 / 130 |
@@ -422,11 +422,13 @@ pair while reducing total forced releases from 38 to 32. The table intentionally
 uses closed-loop HIT and forced-release counts instead of offline accuracy to
 select the current experiment order.
 
-The Stage 2 row includes a natural zero-HIT seed, but its 24 forced-release
-rows keep it outside NMNB. Its paired seed has one HIT and 62 forced releases.
-The preceding `37d75f340fd1` Stage 2 member (0/3 HIT, 27/48 forced) remains a
-lower-forced trade-off, and `ac7edd49d803` (3/1 HIT, 53/62 forced) retains
-additional trajectory diversity. The preceding `8c7a94fd3b4f` Stage 4 member
+The Stage 2 row includes a natural zero-HIT seed, but its 15 forced-release
+rows keep it outside NMNB. Its paired seed has one HIT and 60 forced releases.
+It preserves the preceding table member's one total HIT while reducing total
+forced rows from 86 to 75. The preceding `37d75f340fd1` Stage 2 member (0/3
+HIT, 27/48 forced) remains a different per-seed trade-off, and `ac7edd49d803`
+(3/1 HIT, 53/62 forced) retains additional trajectory diversity. The preceding
+`8c7a94fd3b4f` Stage 4 member
 (7/10 HIT, 54/70 forced) retains trajectory diversity but no longer leads
 either closed-loop objective. The new Stage 4 HIT-primary row has 2/7 HIT and
 8/78 forced rows. Its sibling `3763b2518d4a` has 7/5 HIT and 39/42 forced
@@ -438,11 +440,12 @@ These are explicit trade-offs, not overwritten checkpoints.
 The Stage 3 bootstrap-DAgger COW member `d8472ed568fe` is a strict closed-loop
 improvement over the preceding bootstrap on these metrics: total HIT fell from
 13 to 9 and total forced releases from 118 to 56 on its unseen seed pair. It
-remains the lower-forced member of the research front. The later
-`07eadef52e0b` unique-best candidate reduced total HIT again to five, including
-a zero-HIT seed, but that seed still required one forced-release row and its
-pair required 61. It is therefore the HIT-primary table member rather than a
-strict clear or a reason to discard the lower-forced candidate.
+is now superseded in both metrics by `b9b3c842d98e`, which reduced the pair to
+3/2 HIT and 21/30 forced rows. A sibling `07eadef52e0b` unique-best candidate
+also had five total HITs, including a zero-HIT seed, but that seed still
+required one forced-release row and its pair required 61. It is retained as a
+different feasible mode rather than mistaken for a strict clear; the table
+uses the sibling with the lower forced rate.
 
 The Stage 6 bootstrap-DAgger COW member `3d4f9b3e5599` reduced its unseen-pair
 HIT total from the table member's 37 to 32 (13/19 rather than 18/19), but raised
