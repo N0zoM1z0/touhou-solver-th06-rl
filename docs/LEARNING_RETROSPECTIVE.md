@@ -473,6 +473,30 @@ stage: Stage 4 first-failure checks regressed despite 92.9% unique targets, so
 both survivable-set and unique-best candidates still require complete unseen
 seed continuation rollout.
 
+A subsequent Stage 6 cycle targeted the failure neighborhoods of the lower-HIT
+but higher-forced bootstrap-DAgger member. All 14 sharded files were valid and
+contained 221 complete outcomes. Only 71.4% of checkpoints had a unique strict
+best action; the local teacher and factual action were best at 21.4% and 7.1%,
+respectively. This distribution is materially more ambiguous than the first
+Stage 6 event batch and is retained as a distinct population stratum rather
+than merged into a single assumed ground truth. Its survivable-set and
+unique-best classifiers changed 6/14 and 10/10 usable local labels,
+respectively; unseen-seed continuation remains the promotion gate.
+
+The same two Stage 6 generations also supplied 28 grouped action-value
+checkpoints for an exact-source LambdaMART diagnostic. It fit the 21 training
+groups perfectly but achieved only 14.3% top-1 on the seven checkpoints of a
+complete held-out seed. This is direct evidence that sparse counterfactual
+value fit still does not generalize reliably; the model remains only a diverse
+rollout candidate, not evidence that value learning has surpassed corrective
+imitation.
+
+The first 1200-tick Stage 1 corrective candidate then completed two new
+continuation seeds with 1/1 HIT and 36/19 forced-release rows. Both HITs were
+late (around tick 15.8k of 18.3k), making those event neighborhoods useful for
+the next COW cycle, but the member is dominated by the existing 1/1-HIT
+incumbent's 24/8 forced rows and is not promoted.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
