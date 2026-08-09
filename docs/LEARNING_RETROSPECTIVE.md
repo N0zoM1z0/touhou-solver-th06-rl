@@ -412,7 +412,11 @@ none of the six two-seed stage candidates is NMNB. A different Stage 1 member
 did produce one strict natural 0-HIT/0-forced clear on seed 26; its paired seed
 had four HITs. A later 600-tick unique-best COW member independently produced
 a strict 0-HIT/0-forced clear on seed 43, but its paired seed had two HITs and
-40 forced releases. Both remain population evidence rather than promotion.
+40 forced releases. A Borda ensemble of two strict-clear-bearing members then
+produced another strict clear on seed 56, but its paired seed had three HITs
+and 66 forced releases. These three distinct model/seed successes remain
+population evidence rather than promotion; consensus generated a new feasible
+mode but did not make success repeatable.
 The Stage 1 table member matches the preceding `269675ae8805` member's 1/1 HIT
 pair while reducing total forced releases from 38 to 32. The table intentionally
 uses closed-loop HIT and forced-release counts instead of offline accuracy to
