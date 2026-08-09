@@ -90,7 +90,9 @@ def event_checkpoint_sequences(
     stream, but only the prefix through the first HIT or forced authority
     release is a factual correction target. Both events change the subsequent
     physical trajectory. Later states remain evaluation evidence and are never
-    labeled for policy training.
+    labeled for policy training.  A uniform stride covers the wider approach;
+    power-of-two offsets retain the dense causal boundary without labeling the
+    entire event window.
     """
     event_rows = []
     previous_forced = False
@@ -119,6 +121,12 @@ def event_checkpoint_sequences(
         for sequence in range(target, lower - 1, -stride):
             if row_is_labelable(rows[sequence]):
                 selected.add(sequence)
+        offset = 1
+        while target - offset >= lower:
+            sequence = target - offset
+            if row_is_labelable(rows[sequence]):
+                selected.add(sequence)
+            offset *= 2
         if row_is_labelable(rows[lower]):
             selected.add(lower)
     return tuple(sorted(selected))

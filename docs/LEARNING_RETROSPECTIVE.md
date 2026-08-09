@@ -1019,6 +1019,15 @@ payload and every artifact declares the new contract. This is another example
 of the headless flywheel improving the measurement system before optimizing a
 policy against it.
 
+Failure-neighborhood selection also now combines its broad uniform stride with
+power-of-two offsets from the first HIT or authority failure. For a 240-row
+window this keeps the approach coverage while automatically retaining offsets
+1, 2, 4, 8, and so on near the causal boundary. The seed-128 contact failure
+showed why this matters: a stride-only sweep found the final state but skipped
+the ECL-time 36/38/39 observations where an anticipatory ranker can act. The
+scheme is event-relative and phase-agnostic; it does not key movement to this
+seed, tick, or boss.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:

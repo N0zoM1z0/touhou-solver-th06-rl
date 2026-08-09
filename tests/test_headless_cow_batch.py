@@ -87,6 +87,7 @@ def test_event_sequences_target_hit_and_first_forced_release_neighborhoods():
     assert event_checkpoint_sequences(rows, event_window=4, stride=2) == (
         6,
         8,
+        9,
         10,
     )
 
@@ -99,6 +100,7 @@ def test_event_sequences_stop_at_first_forced_release_before_any_hit():
 
     assert event_checkpoint_sequences(rows, event_window=2, stride=2) == (
         2,
+        3,
         4,
     )
 
@@ -117,7 +119,7 @@ def test_event_sequences_include_fail_close_terminal_neighborhood():
         event_window=4,
         stride=2,
         termination_reason="authority-failure",
-    ) == (15, 17, 19)
+    ) == (15, 17, 18, 19)
 
 
 def test_event_sequences_back_up_from_unlabelable_terminal_row():
@@ -129,4 +131,4 @@ def test_event_sequences_back_up_from_unlabelable_terminal_row():
         event_window=4,
         stride=2,
         termination_reason="physical-hit",
-    ) == (14, 16, 18)
+    ) == (14, 16, 17, 18)
