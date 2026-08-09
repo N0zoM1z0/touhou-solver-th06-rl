@@ -9,6 +9,8 @@ from th06_rl.th06.background_input import (
     BUTTON_BOMB,
     CONTROL_OFFSET,
     HOOK_ADDRESS,
+    PROCESS_SUSPEND_RESUME,
+    BackgroundInputBridge,
     build_hook,
     build_stub,
     call_target,
@@ -43,6 +45,43 @@ def test_public_key_encoder_cannot_represent_bomb() -> None:
         keys_to_input_mask({"bomb"})
 
 
+def test_hook_transaction_uses_a_minimal_suspend_handle() -> None:
+    calls = []
+
+    class Kernel:
+        def OpenProcess(self, access, inherit, pid):
+            calls.append(("open", access, inherit, pid))
+            return 123
+
+        def CloseHandle(self, handle):
+            calls.append(("close", handle))
+
+    class Ntdll:
+        def NtSuspendProcess(self, handle):
+            calls.append(("suspend", handle))
+            return 0
+
+        def NtResumeProcess(self, handle):
+            calls.append(("resume", handle))
+            return 0
+
+    bridge = BackgroundInputBridge.__new__(BackgroundInputBridge)
+    bridge.kernel32 = Kernel()
+    bridge.ntdll = Ntdll()
+    bridge.process = type("Process", (), {"pid": 77})()
+
+    with bridge._suspended():
+        calls.append(("transaction",))
+
+    assert calls == [
+        ("open", PROCESS_SUSPEND_RESUME, False, 77),
+        ("suspend", 123),
+        ("transaction",),
+        ("resume", 123),
+        ("close", 123),
+    ]
+
+
 def test_menu_tap_spans_a_background_throttled_update() -> None:
     calls = []
 
@@ -50,7 +89,7 @@ def test_menu_tap_spans_a_background_throttled_update() -> None:
         def tap(self, key, *, hold_seconds):
             calls.append((key, hold_seconds))
 
-    _tap(Keyboard(), "shoot")
+    _tap(object(), Keyboard(), "shoot")
 
     assert calls == [("shoot", BACKGROUND_TAP_SECONDS)]
     assert BACKGROUND_TAP_SECONDS > 0.25
@@ -93,3 +132,45 @@ def test_settled_menu_tap_maintains_background_activity(monkeypatch) -> None:
 
     assert len(maintained) >= 2
     assert auxiliary == [("shoot", True), ("shoot", False)]
+
+
+def test_settled_bridge_tap_waits_for_real_press_and_release_edges(
+    monkeypatch,
+) -> None:
+    # DWORD-spaced u16 globals: current, previous, repeat marker, held frames.
+    sampled_inputs = iter(
+        (
+            (0x00, 0x00, 0, 5),
+            (0x20, 0x00, 0, 0),
+            (0x20, 0x20, 0, 1),
+            (0x00, 0x20, 0, 0),
+        )
+    )
+    published = []
+
+    class Process:
+        def read(self, _address, _size):
+            values = next(sampled_inputs)
+            block = bytearray(14)
+            for offset, value in zip((0, 4, 8, 12), values):
+                struct.pack_into("<H", block, offset, value)
+            return bytes(block)
+
+    class Keyboard:
+        published_input_mask = 0
+
+        def set_auxiliary(self, _key, enabled):
+            self.published_input_mask = 0x20 if enabled else 0
+            published.append(self.published_input_mask)
+
+    monkeypatch.setattr(menu, "read_menu_state", lambda _process: (2, 0, 30))
+    monkeypatch.setattr(menu.time, "sleep", lambda _seconds: None)
+
+    _settled_tap(
+        Process(),
+        Keyboard(),
+        "down",
+        maintain_activity=lambda: None,
+    )
+
+    assert published == [0x20, 0]

@@ -12,3 +12,12 @@ else()
   target_compile_options(th06_rl_native PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+# The Windows controller is also exercised under Wine with an embeddable
+# 32-bit Python. Keep that validation DLL self-contained instead of requiring
+# compiler-runtime DLLs to be copied into either the Python or retail-game
+# directory.
+if(MINGW)
+  target_link_options(
+    th06_rl_native PRIVATE -static -static-libgcc -static-libstdc++
+  )
+endif()

@@ -26,13 +26,18 @@ from ..policy_loader import HotReloadPolicy
 from ..policy_transaction import StagePolicyTransaction
 from .background_activity import BackgroundActivityLease
 from .background_input import BackgroundInputBridge
+from .background_keyboard import BackgroundKeyboard
 from .control_capture import (
     CONTROL_CAPTURE_TIER,
     observe_passive_control_clock,
     read_control_snapshot,
 )
 from .donor import enable_donor_imports
-from .menu import MenuNavigationError, start_reimu_a_practice
+from .menu import (
+    MenuNavigationError,
+    start_reimu_a_practice,
+    start_reimu_a_route,
+)
 from .source import (
     AuthorityUnavailable,
     automatic_source_context,
@@ -52,6 +57,38 @@ DIALOGUE_PROBE_SECONDS = 1.0 / 60.0
 LOW_COMMIT_EXIT_CODE = 75
 MENU_RETRY_EXIT_CODE = 77
 DIFFICULTIES = {"normal": 1, "hard": 2, "lunatic": 3}
+SUPERVISOR_GAMEPLAY = 2
+SUPERVISOR_GAMEPLAY_REINIT = 3
+SUPERVISOR_ENDING = 10
+
+
+class RouteTrial:
+    """Complete only when a played ordinary route reaches the Ending state."""
+
+    def __init__(self) -> None:
+        self.gameplay_seen = False
+
+    def observe_supervisor(self, current_state: int) -> bool:
+        if current_state in (SUPERVISOR_GAMEPLAY, SUPERVISOR_GAMEPLAY_REINIT):
+            self.gameplay_seen = True
+        return self.gameplay_seen and current_state == SUPERVISOR_ENDING
+
+
+def _advance_route_scope(
+    expected: tuple[int, int, int, int | None],
+    observed: tuple[int, int, int, int | None],
+) -> tuple[int, int, int, int | None]:
+    """Accept only the source-defined next Stage in the same learning scope."""
+    expected_stage = expected[3]
+    observed_stage = observed[3]
+    if (
+        observed[:3] != expected[:3]
+        or not isinstance(expected_stage, int)
+        or observed_stage != expected_stage + 1
+        or not 1 <= observed_stage <= 6
+    ):
+        raise AuthorityUnavailable(f"route scope changed unexpectedly to {observed}")
+    return observed
 
 
 def _physical_bomb(snapshot) -> bool:
@@ -62,6 +99,16 @@ def _physical_bomb(snapshot) -> bool:
             getattr(snapshot, "player_attack", None) is not None
             and snapshot.player_attack.bomb_active
         )
+    )
+
+
+def _valid_executable_basename(value: str) -> bool:
+    return bool(
+        value
+        and value not in (".", "..")
+        and "/" not in value
+        and "\\" not in value
+        and value.lower().endswith(".exe")
     )
 
 
@@ -161,7 +208,7 @@ def _code_commit(repository: Path) -> str:
 def run(args: argparse.Namespace) -> int:
     if os.name != "nt":
         raise RuntimeError("physical controller must run with Windows Python")
-    if args.practice_stage is not None and not args.armed:
+    if (args.practice_stage is not None or args.start_route) and not args.armed:
         raise RuntimeError("menu automation requires --armed")
     if args.patch_lives and not args.armed:
         raise RuntimeError("--patch-lives requires --armed")
@@ -169,14 +216,14 @@ def run(args: argparse.Namespace) -> int:
         raise RuntimeError("--patch-lives requires exact-process cleanup via --stop-game")
     if args.continuous_stage and (
         not args.armed
-        or args.practice_stage is None
+        or (args.practice_stage is None and not args.start_route)
         or not args.patch_lives
     ):
         raise RuntimeError(
-            "--continuous-stage requires armed Practice play with --patch-lives"
+            "--continuous-stage requires armed Practice or route play with "
+            "--patch-lives"
         )
     enable_donor_imports()
-    from th06.actuator import Keyboard
     from th06.dialogue import DialogueSkipper
     from th06.hazards.lasers import (
         track_motion,
@@ -194,10 +241,12 @@ def run(args: argparse.Namespace) -> int:
         read_snapshot as read_authoritative_snapshot,
         read_supervisor_state,
     )
+    import th06.native as donor_native
     from th06.trial import PracticeTrial, physical_hit
 
-    expected_stage = args.practice_stage or args.expected_stage
+    expected_stage = args.practice_stage or (1 if args.start_route else args.expected_stage)
     expected_scope = (DIFFICULTIES[args.difficulty], 0, 0, expected_stage)
+    donor_native.TARGET_EXE = args.game_executable_name
     process = attach_exact(Path(args.game_dir).resolve())
     bridge = None
     activity = None
@@ -233,15 +282,7 @@ def run(args: argparse.Namespace) -> int:
             bridge.install()
             activity = BackgroundActivityLease(process)
             activity.maintain()
-            keyboard = Keyboard(
-                process.pid,
-                bridge,
-                # The verified in-process input bridge is explicitly
-                # background-capable. Foreground gating here made ordinary
-                # window switches abort menu automation and contradicted the
-                # always-on collection use case.
-                foreground_required=False,
-            )
+            keyboard = BackgroundKeyboard(process.pid, bridge)
             dialogue = DialogueSkipper(process, keyboard)
         if args.patch_lives:
             print(
@@ -249,18 +290,28 @@ def run(args: argparse.Namespace) -> int:
                 f"at 0x{ADDR_LIFE_PATCH:08X}; physical HIT remains observable",
                 flush=True,
             )
-        if args.practice_stage is not None:
+        if args.practice_stage is not None or args.start_route:
             assert keyboard is not None
             try:
-                start_reimu_a_practice(
-                    process,
-                    keyboard,
-                    args.practice_stage,
-                    difficulty=DIFFICULTIES[args.difficulty],
-                    maintain_activity=(
-                        activity.maintain if activity is not None else None
-                    ),
-                )
+                if args.start_route:
+                    start_reimu_a_route(
+                        process,
+                        keyboard,
+                        difficulty=DIFFICULTIES[args.difficulty],
+                        maintain_activity=(
+                            activity.maintain if activity is not None else None
+                        ),
+                    )
+                else:
+                    start_reimu_a_practice(
+                        process,
+                        keyboard,
+                        args.practice_stage,
+                        difficulty=DIFFICULTIES[args.difficulty],
+                        maintain_activity=(
+                            activity.maintain if activity is not None else None
+                        ),
+                    )
             except MenuNavigationError as error:
                 termination_reason = "menu-navigation-retry"
                 exit_code = MENU_RETRY_EXIT_CODE
@@ -304,7 +355,13 @@ def run(args: argparse.Namespace) -> int:
                 deferred_compression=args.defer_corpus_compression,
             )
         lease = InputLease()
-        trial = PracticeTrial() if args.practice_stage is not None else None
+        trial = (
+            RouteTrial()
+            if args.start_route
+            else PracticeTrial()
+            if args.practice_stage is not None
+            else None
+        )
         previous_snapshot = None
         previous_player_state = None
         pending_learning = None
@@ -470,9 +527,16 @@ def run(args: argparse.Namespace) -> int:
                     raise
                 if trial.observe_supervisor(current_supervisor):
                     stage_completed = True
-                    termination_reason = "practice-stage-complete"
+                    termination_reason = (
+                        "route-complete" if args.start_route else "practice-stage-complete"
+                    )
                     print(
-                        f"Practice Stage {expected_stage} complete; "
+                        (
+                            "Full route reached Ending"
+                            if args.start_route
+                            else f"Practice Stage {expected_stage} complete"
+                        )
+                        + "; "
                         f"physical_hits={hit_count}",
                         flush=True,
                     )
@@ -559,6 +623,18 @@ def run(args: argparse.Namespace) -> int:
             if snapshot.frame == prior_frame:
                 time.sleep(0.001)
                 continue
+            observed_scope = _snapshot_scope(snapshot)
+            if args.start_route and observed_scope != expected_scope:
+                previous_scope = expected_scope
+                expected_scope = _advance_route_scope(expected_scope, observed_scope)
+                expected_stage = expected_scope[3]
+                emit_trace({
+                    "time": time.time(),
+                    "event": "route-stage-transition",
+                    "from_scope": list(previous_scope),
+                    "to_scope": list(expected_scope),
+                    "frame": snapshot.frame,
+                })
             try:
                 if (
                     previous_snapshot is not None
@@ -655,7 +731,7 @@ def run(args: argparse.Namespace) -> int:
                     for laser in snapshot.lasers
                 ):
                     raise AuthorityUnavailable("unknown reachable laser motion")
-                elif _snapshot_scope(snapshot) != expected_scope:
+                elif observed_scope != expected_scope:
                     raise AuthorityUnavailable(
                         f"scope changed to {_snapshot_scope(snapshot)}"
                     )
@@ -1312,21 +1388,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--game-dir",
         default=r"D:\Entertainment\Game\Touhou\th06",
     )
+    parser.add_argument("--game-executable-name", default="th06.exe")
     parser.add_argument("--armed", action="store_true")
     parser.add_argument("--practice-stage", type=int, choices=range(1, 7))
+    parser.add_argument(
+        "--start-route",
+        action="store_true",
+        help="enter ordinary Start and continue through the six-Stage route",
+    )
     parser.add_argument("--expected-stage", type=int, choices=range(1, 7), default=1)
     parser.add_argument("--difficulty", choices=tuple(DIFFICULTIES), default="hard")
     parser.add_argument(
         "--patch-lives",
         action="store_true",
-        help="apply the verified 1.02h Practice life patch",
+        help="apply the verified 1.02h HIT-continuation life patch",
     )
     parser.add_argument(
         "--continuous-stage",
         action="store_true",
         help=(
-            "record HIT/dead-end feedback and keep playing the same Practice "
-            "stage until its result path"
+            "record HIT/dead-end feedback and keep playing Practice or the "
+            "ordinary route until its natural terminal"
         ),
     )
     parser.add_argument("--stop-game", action="store_true")
@@ -1383,6 +1465,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     args = parser.parse_args(argv)
+    if args.start_route and args.practice_stage is not None:
+        parser.error("--start-route and --practice-stage are mutually exclusive")
+    if not _valid_executable_basename(args.game_executable_name):
+        parser.error("--game-executable-name must be one .exe basename")
     if args.seconds < 0.0:
         parser.error("--seconds cannot be negative")
     if args.horizon < 4:
@@ -1394,7 +1480,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.min_commit_headroom_gib < 0.0:
         parser.error("--min-commit-headroom-gib cannot be negative")
     expected_stage = args.practice_stage or args.expected_stage
-    label = f"{args.difficulty}_reimu_a_stage{expected_stage}"
+    label = (
+        f"{args.difficulty}_reimu_a_route"
+        if args.start_route
+        else f"{args.difficulty}_reimu_a_stage{expected_stage}"
+    )
     if args.policy_state is None:
         args.policy_state = repository / f"artifacts/policy/{label}.json"
     if args.trace is None:
