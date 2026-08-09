@@ -386,6 +386,15 @@ new seed still had four HITs. This is useful causal evidence for iterative
 failure-neighborhood aggregation, but one seed is not promotion or
 high-quality-population evidence.
 
+The paired factual-tail COW expansion completed all 48 seed runs: 432 audited
+checkpoints and 7,331 complete native-action outcomes. A unique strict best
+action existed at 84.5% of checkpoints, while the local teacher/factual action
+was in that best set at only 8.3%. Per-stage factual-best ratios were 0%,
+2.8%, 8.3%, 9.7%, 18.1%, and 11.1%. These labels support survivable-set and
+grouped-value experiments, but the first value rankers again fit training
+groups perfectly while reaching only 0--27.8% held-out top-1; they were
+discarded by first-failure rollout rather than promoted from training fit.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
