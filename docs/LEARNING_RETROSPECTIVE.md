@@ -759,6 +759,23 @@ incumbent for three fewer forced rows and remaining a distinct Pareto member.
 Stage 5 r8 also regressed: survivable reached 15/8 with 140/46 and unique-best
 11/16 with 81/134. All six runs completed naturally with zero Bombs.
 
+The Stage 5 fixed panel confirmed that its provisional gain was real. On the
+same seeds 91/92, `911a325c4468` reached 12/9 HIT with 80/82 forced rows, while
+the preceding `88b334b4ad78` member reached 13/12 with 156/84. The newer model
+strictly improves both aggregate objectives on identical trajectories and is
+therefore no longer promoted merely from cross-seed ordering.
+
+Stage 2's fixed panel was a trade-off rather than a no-HIT confirmation. On
+seeds 93/94, the rolling incumbent reached 1/3 HIT with 53/94 forced rows and
+r11 unique `c8b570237485` reached 3/1 with 76/61. Both total four HITs; r11
+reduces aggregate forced rows from 147 to 137 but moves two HITs between seeds.
+Both remain in the population, and the old rolling 0/0 result is now explicitly
+understood as seed-local evidence rather than stable Stage 2 no-HIT.
+
+Stage 6 r8 did not benefit from its 100%-unique COW labels: survivable reached
+15/17 HIT with 137/133 forced rows and unique-best reached 16/17 with 164/168.
+Both used zero Bombs and are rejected relative to the 9/12-HIT incumbent.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
