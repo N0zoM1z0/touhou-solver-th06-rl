@@ -401,9 +401,9 @@ for each stage is still a research incumbent, not a promoted policy:
 | Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
 | --- | --- | --- | --- | --- |
 | 1 | `269675ae8805` | 27 / 28 | 1 / 1 | 10 / 28 |
-| 2 | `ac7edd49d803` | 31 / 32 | 3 / 1 | 53 / 62 |
+| 2 | `37d75f340fd1` | 37 / 38 | 0 / 3 | 27 / 48 |
 | 3 | `f6167e893286` | 23 / 24 | 7 / 6 | 71 / 47 |
-| 4 | `8c7a94fd3b4f` | 25 / 26 | 7 / 10 | 54 / 70 |
+| 4 | `cc904ffc2bd0` | 27 / 28 | 9 / 5 | 59 / 72 |
 | 5 | `481036a5ed47` | 27 / 28 | 11 / 11 | 76 / 91 |
 | 6 | `85471d1dbe2a` | 27 / 28 | 18 / 19 | 94 / 130 |
 
@@ -413,6 +413,14 @@ did produce one strict natural 0-HIT/0-forced clear on seed 26; its paired seed
 had four HITs, so it remains population evidence rather than promotion. The
 table intentionally uses closed-loop HIT and forced-release counts instead of
 offline accuracy to select the current experiment order.
+
+The Stage 2 row includes a natural zero-HIT seed, but its 27 forced-release
+rows keep it outside NMNB. Its paired seed has three HITs. The preceding
+`ac7edd49d803` Stage 2 member (3/1 HIT, 53/62 forced) remains useful diversity,
+as does the preceding `8c7a94fd3b4f` Stage 4 member (7/10 HIT, 54/70 forced):
+the newer Stage 4 member reduces total and worst-case HIT but uses slightly
+more forced releases. These are explicit Pareto trade-offs, not overwritten
+checkpoints.
 
 A second COW batch targeted the last 600 decisions of the bootstrap policy's
 first-failure trajectories. All 10 files were valid: 90 checkpoints and 1,441
