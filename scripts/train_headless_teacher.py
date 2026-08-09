@@ -564,6 +564,15 @@ def main() -> int:
         default="unique-best",
     )
     parser.add_argument("--counterfactual-weight", type=float, default=0.0)
+    parser.add_argument(
+        "--objective",
+        choices=("binary", "lambdarank"),
+        default="binary",
+        help=(
+            "binary candidate classification or snapshot-grouped LambdaRank; "
+            "both rank only the native-safe action set"
+        ),
+    )
     parser.add_argument("--seed", type=int, default=6006)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -605,31 +614,50 @@ def main() -> int:
     )
     x_train = encoder.encode(train_features)
 
-    from lightgbm import LGBMClassifier
+    from lightgbm import LGBMClassifier, LGBMRanker
     import joblib
     import numpy as np
 
-    model = LGBMClassifier(
-        objective="binary",
-        n_estimators=args.iterations,
-        learning_rate=args.learning_rate,
-        num_leaves=args.num_leaves,
-        max_depth=args.max_depth,
-        min_child_samples=args.min_child_samples,
-        subsample=0.9,
-        colsample_bytree=0.9,
-        reg_lambda=1.0,
-        class_weight="balanced",
-        random_state=args.seed,
-        n_jobs=args.threads,
-        verbosity=-1,
-    )
+    common_parameters = {
+        "n_estimators": args.iterations,
+        "learning_rate": args.learning_rate,
+        "num_leaves": args.num_leaves,
+        "max_depth": args.max_depth,
+        "min_child_samples": args.min_child_samples,
+        "subsample": 0.9,
+        "colsample_bytree": 0.9,
+        "reg_lambda": 1.0,
+        "random_state": args.seed,
+        "n_jobs": args.threads,
+        "verbosity": -1,
+    }
+    if args.objective == "lambdarank":
+        model = LGBMRanker(
+            objective="lambdarank",
+            metric="ndcg",
+            label_gain=[0, 1],
+            **common_parameters,
+        )
+        fit_parameters = {
+            "group": np.asarray(
+                [len(decision.candidates) for decision in train],
+                dtype=np.int32,
+            ),
+        }
+    else:
+        model = LGBMClassifier(
+            objective="binary",
+            class_weight="balanced",
+            **common_parameters,
+        )
+        fit_parameters = {}
     started = time.perf_counter()
     model.fit(
         x_train,
         np.asarray(labels, dtype=np.int8),
         sample_weight=np.asarray(sample_weights, dtype=np.float32),
         categorical_feature=list(range(len(CATEGORICAL_FEATURES))),
+        **fit_parameters,
     )
     elapsed = time.perf_counter() - started
     compatible_sources = [provenance["source"]]
@@ -653,7 +681,7 @@ def main() -> int:
     code_commit = repository_commit()
     report = {
         "schema": "th06-rl-headless-teacher-distillation-v1",
-        "algorithm": "lightgbm-binary-candidate-ranker",
+        "algorithm": f"lightgbm-{args.objective}-candidate-ranker",
         "authority": "rank-native-legal-set-only",
         "scope": provenance["scope"],
         "headless_source": provenance["source"],
@@ -667,6 +695,7 @@ def main() -> int:
         "duplicate_decisions_skipped": provenance["duplicate_decisions_skipped"],
         "iterations": args.iterations,
         "model_parameters": {
+            "objective": args.objective,
             "learning_rate": args.learning_rate,
             "num_leaves": args.num_leaves,
             "max_depth": args.max_depth,
@@ -681,7 +710,7 @@ def main() -> int:
         "holdout": evaluate(model, encoder, test, threads=args.threads),
         "promotion_allowed": False,
         "promotion_blocker": (
-            "teacher imitation is not an off-policy return estimate; require long multi-seed "
+            "grouped corrective ranking is not promotion evidence; require long multi-seed "
             "HIT/stage-clear trajectories and later Windows differential evidence"
         ),
     }

@@ -82,6 +82,14 @@ complete-seed train/holdout splits. It ranks only the native action set. A
 future fitted-Q, CQL, IQL, or contextual-bandit implementation should consume
 the same candidate/outcome table and obey the same grouped split.
 
+Corrective imitation can also use `--objective lambdarank`. Unlike the legacy
+binary candidate classifier, this treats every coherent snapshot as one query
+group and optimizes the relative order of that snapshot's native-safe actions.
+Its binary relevance labels still come only from the local teacher or audited
+COW survivable/best set; it is not an off-policy value estimate. LambdaRank and
+binary candidates therefore share the same complete-seed rollout and paired
+replication gates.
+
 Offline rankings are experiment order, not promotion. Promotion requires
 unseen-seed full-stage headless rollout and later differential/physical Windows
 evidence. Online UCB may adapt a distilled prior inside the safe set; neither
