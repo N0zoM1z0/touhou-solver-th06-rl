@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import subprocess
 
 from scripts.train_headless_teacher import (
     Decision,
@@ -9,6 +10,7 @@ from scripts.train_headless_teacher import (
     candidate_features,
     candidate_sample_weight,
     generic_choice,
+    repository_commit,
 )
 from th06_rl.headless_corpus import (
     HAZARD_FEATURE_NAMES,
@@ -72,6 +74,21 @@ def test_teacher_features_exclude_seed_rng_and_supervision_leakage() -> None:
     assert not any("teacher" in name for name in value)
     assert not any("selected" in name for name in value)
     assert all(name in value for name in HAZARD_FEATURE_NAMES)
+
+
+def test_repository_commit_is_independent_of_caller_working_directory(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    expected = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    monkeypatch.chdir(tmp_path)
+
+    assert repository_commit() == expected
 
 
 def test_hazard_sector_features_retain_position_and_approach_without_authority() -> None:

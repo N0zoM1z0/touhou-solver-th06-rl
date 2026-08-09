@@ -9,7 +9,6 @@ import hashlib
 import json
 from pathlib import Path
 import resource
-import subprocess
 import time
 from typing import Any, Iterable, Mapping
 
@@ -22,6 +21,7 @@ try:
         FEATURE_NAMES,
         candidate_features,
         load_decisions,
+        repository_commit,
     )
 except ModuleNotFoundError:
     from scripts.label_headless_cow_counterfactuals import outcome_rank
@@ -32,6 +32,7 @@ except ModuleNotFoundError:
         FEATURE_NAMES,
         candidate_features,
         load_decisions,
+        repository_commit,
     )
 
 
@@ -245,12 +246,7 @@ def main() -> int:
         "value_contract": "dynamic-cow-ordinal-survival-maneuverability-v1",
     }
     joblib.dump(artifact, args.output / "cow-value-ranker.joblib", compress=3)
-    code_commit = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    code_commit = repository_commit()
     report = {
         "schema": "th06-rl-headless-cow-value-v1",
         "algorithm": "lightgbm-lambdarank-counterfactual-action-value",

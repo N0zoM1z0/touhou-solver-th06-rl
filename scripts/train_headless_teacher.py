@@ -56,6 +56,18 @@ NUMERIC_FEATURES = (
 )
 FEATURE_NAMES = (*CATEGORICAL_FEATURES, *NUMERIC_FEATURES)
 CORRECTIVE_TERMINATIONS = frozenset({"authority-failure", "physical-hit"})
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
+def repository_commit() -> str:
+    """Resolve training provenance independently of the caller's cwd."""
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
 
 @dataclass(frozen=True)
@@ -638,12 +650,7 @@ def main() -> int:
         args.output / "teacher-ranker.joblib",
         compress=3,
     )
-    code_commit = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    code_commit = repository_commit()
     report = {
         "schema": "th06-rl-headless-teacher-distillation-v1",
         "algorithm": "lightgbm-binary-candidate-ranker",
