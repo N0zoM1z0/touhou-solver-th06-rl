@@ -318,6 +318,12 @@ def main() -> int:
     parser.add_argument("--behavior-weight", type=float, default=1.0)
     parser.add_argument("--value-weight", type=float, default=1.0)
     parser.add_argument("--holdout-seed", type=int, action="append")
+    parser.add_argument(
+        "--exclude-seed",
+        type=int,
+        action="append",
+        help="omit a seed from both fitting and reported holdout evaluation",
+    )
     parser.add_argument("--threads", type=int, default=12)
     parser.add_argument("--iterations", type=int, default=500)
     parser.add_argument("--num-leaves", type=int, default=31)
@@ -342,7 +348,13 @@ def main() -> int:
     groups, label_report = load_value_groups(decisions, provenance, label_files)
     seeds = sorted({group.seed for group in groups})
     holdout = set(args.holdout_seed or seeds[-1:])
-    train = [group for group in groups if group.seed not in holdout]
+    excluded = set(args.exclude_seed or ())
+    if holdout & excluded:
+        parser.error("holdout and excluded seeds must be disjoint")
+    train = [
+        group for group in groups
+        if group.seed not in holdout and group.seed not in excluded
+    ]
     test = [group for group in groups if group.seed in holdout]
     if not train or not test:
         parser.error("COW value train and holdout must contain complete seed groups")
@@ -358,7 +370,10 @@ def main() -> int:
         )
         if not behavior_groups:
             parser.error("behavior corpus supplied no conservative support groups")
-    behavior_train = [group for group in behavior_groups if group.seed not in holdout]
+    behavior_train = [
+        group for group in behavior_groups
+        if group.seed not in holdout and group.seed not in excluded
+    ]
     behavior_test = [group for group in behavior_groups if group.seed in holdout]
     combined_train = behavior_train + train
     encoder = Encoder(group.decision for group in combined_train)
@@ -447,8 +462,9 @@ def main() -> int:
                 else None
             ),
         },
-        "train_seeds": sorted(set(seeds) - holdout),
+        "train_seeds": sorted(set(seeds) - holdout - excluded),
         "holdout_seeds": sorted(holdout),
+        "excluded_seeds": sorted(excluded),
         "iterations": args.iterations,
         "threads": args.threads,
         "fit_seconds": elapsed,

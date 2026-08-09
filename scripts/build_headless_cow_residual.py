@@ -185,6 +185,12 @@ def main() -> int:
     parser.add_argument("--base-model", type=Path, required=True)
     parser.add_argument("--correction-model", type=Path, required=True)
     parser.add_argument("--holdout-seed", type=int, action="append", required=True)
+    parser.add_argument(
+        "--exclude-seed",
+        type=int,
+        action="append",
+        help="omit a seed from both fitting and reported holdout evaluation",
+    )
     parser.add_argument("--behavior-stride", type=int, default=8)
     parser.add_argument("--cow-weight", type=float, default=50.0)
     parser.add_argument("--min-train-precision", type=float, default=0.9)
@@ -218,7 +224,13 @@ def main() -> int:
     decisions, provenance = load_decisions(args.corpus)
     groups, label_report = load_value_groups(decisions, provenance, args.labels)
     holdout = set(args.holdout_seed)
-    train_groups = [group for group in groups if group.seed not in holdout]
+    excluded = set(args.exclude_seed or ())
+    if holdout & excluded:
+        parser.error("holdout and excluded seeds must be disjoint")
+    train_groups = [
+        group for group in groups
+        if group.seed not in holdout and group.seed not in excluded
+    ]
     test_groups = [group for group in groups if group.seed in holdout]
     if not train_groups or not test_groups:
         parser.error("risk gate train and holdout must contain complete seed groups")
@@ -263,7 +275,10 @@ def main() -> int:
         and decision.observation_sha256 not in cow_digests
         and decision.selected_action in decision.legal_actions
     ]
-    behavior_train = [item for item in behavior_decisions if item.seed not in holdout]
+    behavior_train = [
+        item for item in behavior_decisions
+        if item.seed not in holdout and item.seed not in excluded
+    ]
     behavior_test = [item for item in behavior_decisions if item.seed in holdout]
     encoder = Encoder([group.decision for group in train_groups] + behavior_train)
     cow_train_features = [
@@ -377,6 +392,7 @@ def main() -> int:
         "label_report": label_report,
         "train_seeds": sorted({group.seed for group in train_groups}),
         "holdout_seeds": sorted({group.seed for group in test_groups}),
+        "excluded_seeds": sorted(excluded),
         "behavior_stride": args.behavior_stride,
         "cow_weight": args.cow_weight,
         "threshold": threshold,
