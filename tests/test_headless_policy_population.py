@@ -30,7 +30,16 @@ def _candidate(root: Path, name: str, payload: bytes, accuracy: float) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _rollout(root: Path, name: str, sha: str, ticks: int, *, continuation: bool) -> None:
+def _rollout(
+    root: Path,
+    name: str,
+    sha: str,
+    ticks: int,
+    *,
+    continuation: bool,
+    physical_hits: int | None = None,
+    nmnb_stage_clear: bool = False,
+) -> None:
     directory = root / name
     directory.mkdir(parents=True)
     (directory / "manifest.json").write_text(json.dumps({
@@ -38,11 +47,13 @@ def _rollout(root: Path, name: str, sha: str, ticks: int, *, continuation: bool)
         "scope": SCOPE,
         "initial_seed": ticks,
         "transition_count": ticks,
-        "termination_reason": "tick-limit",
+        "termination_reason": "stage-clear-success" if nmnb_stage_clear else "tick-limit",
         "continue_after_hit": continuation,
-        "physical_hits": 1 if continuation else 0,
-        "physical_hit_ticks": [ticks // 2] if continuation else [],
-        "nmnb_stage_clear": False,
+        "physical_hits": (
+            physical_hits if physical_hits is not None else 1 if continuation else 0
+        ),
+        "physical_hit_ticks": [ticks // 2] if physical_hits else [],
+        "nmnb_stage_clear": nmnb_stage_clear,
     }), encoding="utf-8")
 
 
@@ -67,7 +78,7 @@ def test_population_keeps_evidence_tiers_and_does_not_use_offline_score_to_promo
     assert candidates[weaker_sha]["pareto_member"] is False
 
 
-def test_high_quality_population_requires_multiple_continuation_runs(tmp_path: Path) -> None:
+def test_hit_continuations_are_evidence_but_not_high_quality(tmp_path: Path) -> None:
     models = tmp_path / "models"
     rollouts = tmp_path / "rollouts"
     sha = _candidate(models, "candidate", b"candidate", 0.8)
@@ -76,11 +87,44 @@ def test_high_quality_population_requires_multiple_continuation_runs(tmp_path: P
 
     result = build_population([models], [rollouts])
 
-    assert result["high_quality_population"] == [sha]
+    assert result["high_quality_population"] == []
     candidate = result["candidates"][0]
     assert candidate["closed_loop"]["continuation_runs"] == 2
     assert candidate["closed_loop"]["continuation_hits"] == 2
     assert candidate["closed_loop"]["continuation_hits_per_1000_ticks"] == 0.4
+
+
+def test_high_quality_requires_multi_seed_natural_nmnb_stage_clears(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    rollouts = tmp_path / "rollouts"
+    sha = _candidate(models, "candidate", b"candidate", 0.8)
+    _rollout(
+        rollouts,
+        "seed1",
+        sha,
+        2000,
+        continuation=True,
+        physical_hits=0,
+        nmnb_stage_clear=True,
+    )
+    _rollout(
+        rollouts,
+        "seed2",
+        sha,
+        3000,
+        continuation=True,
+        physical_hits=0,
+        nmnb_stage_clear=True,
+    )
+
+    result = build_population([models], [rollouts])
+
+    assert result["high_quality_population"] == [sha]
+    metrics = result["candidates"][0]["closed_loop"]
+    assert metrics["continuation_seeds"] == [2000, 3000]
+    assert metrics["continuation_complete_runs"] == 2
+    assert metrics["continuation_natural_stage_clears"] == 2
+    assert metrics["continuation_nmnb_stage_clears"] == 2
 
 
 def test_active_population_requires_exact_runtime_source(tmp_path: Path) -> None:

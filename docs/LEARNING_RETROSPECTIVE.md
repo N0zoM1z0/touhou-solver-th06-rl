@@ -262,6 +262,11 @@ Evidence tiers are intentionally strict:
 - `continuation-evidenced` has HIT-counting rollouts after respawn;
 - Windows shadow/canary remains the only promotion gate.
 
+`high_quality_population` is stricter than the continuation evidence tier. A
+candidate enters it only after at least two distinct seeds both finish as
+natural no-HIT/no-Bomb stage clears. Interrupted runs, bounded survival, and
+continued clears with any HIT stay in the research/Pareto evidence archive.
+
 The current archive contains 41 model artifacts and 12 historical
 first-failure Pareto members across source builds. Only six Stage 3--5 members
 are compatible with the active `8c3de1de63fd` / `ca4b2e7cb05e` runtime; the

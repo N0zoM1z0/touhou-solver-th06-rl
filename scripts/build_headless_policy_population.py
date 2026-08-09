@@ -137,6 +137,18 @@ def _closed_loop_metrics(runs: list[dict[str, Any]]) -> dict[str, Any]:
     continuation = [run for run in runs if run["continue_after_hit"]]
     continuation_ticks = sum(run["ticks"] for run in continuation)
     continuation_hits = sum(run["physical_hits"] for run in continuation)
+    continuation_seeds = sorted({
+        run["seed"] for run in continuation if isinstance(run["seed"], int)
+    })
+    complete_continuation = [run for run in continuation if run["status"] == "complete"]
+    natural_stage_clears = [
+        run for run in complete_continuation
+        if run["termination_reason"] in {"chain-exit-success", "stage-clear-success"}
+    ]
+    nmnb_stage_clears = [
+        run for run in natural_stage_clears
+        if run["physical_hits"] == 0 and run["nmnb_stage_clear"]
+    ]
     return {
         "runs": len(runs),
         "seeds": sorted({run["seed"] for run in runs if isinstance(run["seed"], int)}),
@@ -152,6 +164,10 @@ def _closed_loop_metrics(runs: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "nmnb_stage_clears": sum(run["nmnb_stage_clear"] for run in runs),
         "continuation_runs": len(continuation),
+        "continuation_complete_runs": len(complete_continuation),
+        "continuation_seeds": continuation_seeds,
+        "continuation_natural_stage_clears": len(natural_stage_clears),
+        "continuation_nmnb_stage_clears": len(nmnb_stage_clears),
         "continuation_ticks": continuation_ticks,
         "continuation_hits": continuation_hits,
         "continuation_hits_per_1000_ticks": (
@@ -324,6 +340,11 @@ def build_population(
         if candidate["pareto_member"]
         and candidate["evidence_tier"] == "continuation-evidenced"
         and candidate["closed_loop"]["continuation_runs"] >= 2
+        and len(candidate["closed_loop"]["continuation_seeds"]) >= 2
+        and candidate["closed_loop"]["continuation_complete_runs"]
+        == candidate["closed_loop"]["continuation_runs"]
+        and candidate["closed_loop"]["continuation_nmnb_stage_clears"]
+        == candidate["closed_loop"]["continuation_runs"]
         and active(candidate)
     ]
     high_quality_set = set(high_quality)
@@ -346,6 +367,9 @@ def build_population(
                 "continuation_hits_per_1000_ticks:min when observed",
             ],
             "offline_metrics": "diagnostic and diversity metadata, never promotion evidence",
+            "high_quality_gate": (
+                "at least two unique-seed complete continuation runs, all natural NMNB stage clears"
+            ),
             "windows_gate": "paired shadow/canary required before incumbent replacement",
         },
         "candidate_count": len(candidates),
