@@ -193,3 +193,12 @@ The value target already orders completed survival before minimum future
 native-set width and terminal boundary reserve; new training must regenerate
 that table under the corrected delivery contract instead of mixing legacy COW
 labels.
+
+The first corrected 240-tick COW sweep sampled three earlier offsets for each
+seed. All six observation digests matched the factual corpus exactly, and all
+102 branches covered the full native legal set with fresh per-tick
+revalidation. Five of six checkpoints had a unique best action, while the
+factual/h12 action was best at only one. This directly separates the remaining
+bottleneck from collision authority: constructive actions exist early enough,
+but neither behavior policy nor local clearance teacher assigns their
+long-horizon value reliably.

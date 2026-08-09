@@ -944,6 +944,38 @@ value, including minimum future legal-set width and boundary reserve, and keep
 multiple rollout-tested population members. Last-frame empty-set rows remain
 diagnostics rather than supervised actions.
 
+### 2026-08-09 corrected-contract imitation rejection
+
+The first new synchronous-contract DAgger corpus retained the useful old
+Stage 2 incumbent as its behavior policy. Across seeds 113, 114, 117, and 118
+it produced 42,999 audited native-legal, Bomb-free decisions. Seed 113 failed
+closed after 4,203 decisions; the other three reached decision 12,932 before
+the conservative newborn-laser-history fail close. This is important positive
+coverage evidence for the old policy even though it is not a stage clear.
+
+Binary and LambdaRank imitation fits looked strong on held-out seed 118. Their
+teacher top-1 scores were 81.57% and 83.98%, with model SHA-256
+`4e8abd3844164879ced5ac3914b831d6e73be65645c60dbf8016494610d71735`
+and
+`7cb034f8f19c9ca2c9f679a94937e1a713282b49a5b20ddbdbdd3285010b8e28`.
+Fresh seeds 119/120 nevertheless rejected both fits. The incumbent survived
+12,932/10,202 decisions; binary survived 12,932/3,393; LambdaRank survived
+1,982/4,167. Every run remained zero-HIT and zero-Bomb before fail-close, so
+the comparable metric is natural decisions before authority release. Higher
+offline imitation accuracy was therefore anti-correlated with the most
+important closed-loop tail on this panel. Neither new imitation weight enters
+the policy population.
+
+The first exact 240-tick dynamic-COW onset table makes the cause concrete.
+Six checkpoints yielded 102 complete native-action outcomes; five checkpoints
+had a unique strict best, while the factual action and h12 local teacher were
+best at only one checkpoint each (16.7%). At seed 113 sequence 3422,
+`down_right` survived the full 240 ticks with minimum native-set width 4;
+factual/local `up_fast` reached an empty set after 61 ticks. This table is
+value supervision, not another imitation target. The next candidate must use
+the full ordinal outcomes and then beat the incumbent on a fixed unseen-seed
+panel before it is retained.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
