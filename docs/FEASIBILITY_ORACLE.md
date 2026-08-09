@@ -118,6 +118,12 @@ conservative-margin closure; disagreement is a geometry-model counterexample.
 No source-safe constant action is only a four-tick constant-action dead end,
 not a proof against a changing-action sequence or earlier avoidance.
 
+If hazard lowering itself fails closed on missing observation history, the
+differential still runs all source children and records that native comparison
+was unavailable. Source-safe actions in that case are classified as an
+observation-completeness gap, never as permission to guess the missing motion
+or weaken collision authority.
+
 The independent artifact audit recomputes branch feasibility,
 action/continuation coverage, trace integrity, best-action summaries, policy
 verdicts, Bomb deltas, bounds, and source identity. It rejects a missing branch

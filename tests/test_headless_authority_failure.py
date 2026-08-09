@@ -43,3 +43,9 @@ def test_authority_failure_classification_separates_geometry_and_margin() -> Non
         margin_zero=set(),
         source_safe=set(),
     ) == "source-immediate-dead-end-under-constant-actions"
+    assert classify_differential(
+        configured=set(),
+        margin_zero=set(),
+        source_safe={"left"},
+        authority_error="newborn laser lacks history",
+    ) == "source-safe-but-native-observation-incomplete"

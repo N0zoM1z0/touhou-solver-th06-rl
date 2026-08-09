@@ -44,6 +44,7 @@ from th06_rl.headless_geometry import (
     HEADLESS_DELIVERY_CONTRACT,
     HEADLESS_DELIVERY_DELAYS,
     KINEMATICS,
+    HeadlessAuthorityUnavailable,
     action_from_input,
     certify_lowered_headless_actions,
     lower_headless_hard_hazards,
@@ -87,7 +88,14 @@ def classify_differential(
     configured: set[str],
     margin_zero: set[str],
     source_safe: set[str],
+    authority_error: str | None = None,
 ) -> str:
+    if authority_error is not None:
+        return (
+            "source-safe-but-native-observation-incomplete"
+            if source_safe
+            else "source-immediate-dead-end-under-constant-actions"
+        )
     if source_safe - margin_zero or margin_zero - source_safe:
         return "geometry-model-mismatch"
     if source_safe and not configured:
@@ -202,31 +210,37 @@ def main() -> int:
             if observed_digest != branch.get("terminal_observation_sha256"):
                 server.abort_step_session()
                 raise ValueError("authority-failure terminal fingerprint is not reproducible")
-            hazards = lower_headless_hard_hazards(observation, HARD_HORIZON)
-            prepared = kernel.prepare_hazards(hazards)
-            configured = tuple(
-                item.action.name
-                for item in certify_lowered_headless_actions(
-                    observation, prepared, kernel=kernel
+            authority_error = None
+            try:
+                hazards = lower_headless_hard_hazards(observation, HARD_HORIZON)
+                prepared = kernel.prepare_hazards(hazards)
+                configured = tuple(
+                    item.action.name
+                    for item in certify_lowered_headless_actions(
+                        observation, prepared, kernel=kernel
+                    )
                 )
-            )
-            player = observation["player"]
-            if not isinstance(player, Mapping):
-                raise ValueError("authority-failure player is incoherent")
-            margin_zero = tuple(
-                item.action.name
-                for item in kernel.certify_actions(
-                    x=float(player["x"]),
-                    y=float(player["y"]),
-                    half_width=float(player["half_width"]),
-                    half_height=float(player["half_height"]),
-                    kinematics=KINEMATICS,
-                    current_action=action_from_input(int(observation["input"])),
-                    hazards=prepared,
-                    delivery_delays=HEADLESS_DELIVERY_DELAYS,
-                    collision_margin=0.0,
+                player = observation["player"]
+                if not isinstance(player, Mapping):
+                    raise ValueError("authority-failure player is incoherent")
+                margin_zero = tuple(
+                    item.action.name
+                    for item in kernel.certify_actions(
+                        x=float(player["x"]),
+                        y=float(player["y"]),
+                        half_width=float(player["half_width"]),
+                        half_height=float(player["half_height"]),
+                        kinematics=KINEMATICS,
+                        current_action=action_from_input(int(observation["input"])),
+                        hazards=prepared,
+                        delivery_delays=HEADLESS_DELIVERY_DELAYS,
+                        collision_margin=0.0,
+                    )
                 )
-            )
+            except HeadlessAuthorityUnavailable as error:
+                authority_error = str(error)
+                configured = ()
+                margin_zero = ()
             # Close the fingerprint child without treating its deliberate
             # diagnostic read as an authority failure.
             server.step_session(ACTIONS[0].name)
@@ -272,6 +286,7 @@ def main() -> int:
         configured=set(configured),
         margin_zero=set(margin_zero),
         source_safe=set(source_safe),
+        authority_error=authority_error,
     )
     result = {
         "schema": SCHEMA,
@@ -295,12 +310,18 @@ def main() -> int:
         "runtime_delivery_contract": HEADLESS_DELIVERY_CONTRACT,
         "runtime_delivery_delays": list(HEADLESS_DELIVERY_DELAYS),
         "configured_collision_margin": COLLISION_MARGIN,
+        "native_authority_error": authority_error,
+        "native_comparison_available": authority_error is None,
         "configured_native_actions": list(configured),
         "margin_zero_native_actions": list(margin_zero),
         "source_safe_constant_actions": list(source_safe),
-        "configured_false_negatives": sorted(set(source_safe) - set(configured)),
+        "configured_false_negatives": (
+            sorted(set(source_safe) - set(configured)) if authority_error is None else []
+        ),
         "configured_false_positives": sorted(set(configured) - set(source_safe)),
-        "margin_zero_false_negatives": sorted(set(source_safe) - set(margin_zero)),
+        "margin_zero_false_negatives": (
+            sorted(set(source_safe) - set(margin_zero)) if authority_error is None else []
+        ),
         "margin_zero_false_positives": sorted(set(margin_zero) - set(source_safe)),
         "classification": classification,
         "source_outcomes": source_outcomes,
