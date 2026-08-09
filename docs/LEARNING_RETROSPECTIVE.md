@@ -674,6 +674,21 @@ candidate. Exact simulated return is still too sparse and seed-specific to
 override the corrective classifiers, and it will not be promoted or ensembled
 without materially better complete-seed validation.
 
+The concurrent Stage 2 r10 and Stage 4 r8 checks were also rejected. Stage 2
+reached 2/0 HIT with 70/27 forced rows (survivable) and 2/1 with 71/38
+(unique-best), both worse than the 0/0-HIT incumbent. Stage 4 reached 6/7 HIT
+with 39/37 forced rows and 2/12 with 13/91, both worse than its 3/3-HIT
+incumbent. All used zero Bombs. Their completed first-failure trajectories
+remain causal-label sources; the population table is unchanged.
+
+The next completed COW batches remained useful despite those rollout losses.
+Stage 2 r10 contained 16 valid checkpoints and 241 outcomes, with 87.5% unique
+strict best, 12.5% local-teacher best, and 12.5% factual-action best. Stage 3
+r8 contained 16 valid checkpoints and 246 outcomes, with corresponding ratios
+of 93.75%, 25%, and 12.5%. Stage 4 r7 contained 16 valid checkpoints and 244
+outcomes, with ratios of 75%, 25%, and 18.75%. These are new supervision
+signals, but only their unseen-seed descendants can establish improvement.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
