@@ -400,7 +400,7 @@ for each stage is still a research incumbent, not a promoted policy:
 
 | Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
 | --- | --- | --- | --- | --- |
-| 1 | `269675ae8805` | 27 / 28 | 1 / 1 | 10 / 28 |
+| 1 | `a887bb79e54a` | 43 / 44 | 1 / 1 | 24 / 8 |
 | 2 | `37d75f340fd1` | 37 / 38 | 0 / 3 | 27 / 48 |
 | 3 | `d8472ed568fe` | 37 / 38 | 4 / 5 | 23 / 33 |
 | 4 | `cc904ffc2bd0` | 27 / 28 | 9 / 5 | 59 / 72 |
@@ -410,9 +410,13 @@ for each stage is still a research incumbent, not a promoted policy:
 All twelve runs completed their natural Practice Stage with zero Bombs, but
 none of the six two-seed stage candidates is NMNB. A different Stage 1 member
 did produce one strict natural 0-HIT/0-forced clear on seed 26; its paired seed
-had four HITs, so it remains population evidence rather than promotion. The
-table intentionally uses closed-loop HIT and forced-release counts instead of
-offline accuracy to select the current experiment order.
+had four HITs. A later 600-tick unique-best COW member independently produced
+a strict 0-HIT/0-forced clear on seed 43, but its paired seed had two HITs and
+40 forced releases. Both remain population evidence rather than promotion.
+The Stage 1 table member matches the preceding `269675ae8805` member's 1/1 HIT
+pair while reducing total forced releases from 38 to 32. The table intentionally
+uses closed-loop HIT and forced-release counts instead of offline accuracy to
+select the current experiment order.
 
 The Stage 2 row includes a natural zero-HIT seed, but its 27 forced-release
 rows keep it outside NMNB. Its paired seed has three HITs. The preceding
@@ -426,6 +430,12 @@ The Stage 3 bootstrap-DAgger COW member `d8472ed568fe` is a strict closed-loop
 improvement over the preceding bootstrap on these metrics: total HIT fell from
 13 to 9 and total forced releases from 118 to 56 on its unseen seed pair. It
 still has no zero-HIT seed and remains research evidence.
+
+The Stage 6 bootstrap-DAgger COW member `3d4f9b3e5599` reduced its unseen-pair
+HIT total from the table member's 37 to 32 (13/19 rather than 18/19), but raised
+forced releases from 224 to 347. Both remain on the research front until a
+failure-neighborhood correction improves one metric without paying for it in
+the other.
 
 A second COW batch targeted the last 600 decisions of the bootstrap policy's
 first-failure trajectories. All 10 files were valid: 90 checkpoints and 1,441
