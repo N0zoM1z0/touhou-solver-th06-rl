@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from scripts.train_headless_teacher import (
     Decision,
     Encoder,
@@ -194,6 +196,11 @@ def test_dynamic_counterfactual_can_override_local_teacher_label(tmp_path) -> No
     assert updated[0].teacher_action == "stay"
     assert updated[0].counterfactual_original_action == "left"
     assert report["changed_local_teacher_labels"] == 1
+    assert report["files_used"] == [{
+        "path": str(label.resolve()),
+        "sha256": hashlib.sha256(label.read_bytes()).hexdigest(),
+    }]
+    assert len(report["file_set_sha256"]) == 64
     weight = candidate_sample_weight(
         updated[0],
         updated[0].candidates[0],

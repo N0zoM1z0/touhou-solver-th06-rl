@@ -87,6 +87,12 @@ evidence. Online UCB may adapt a distilled prior inside the safe set; neither
 UCB nor a value model may add actions, request Bomb, bypass fresh issue
 certification, or weaken fail-close behavior.
 
+Counterfactual generators and trainers may intentionally overlap on a large
+CPU host. Each trainer freezes the label-file set before decoding its corpus
+and records every file SHA-256 plus a deterministic set digest in the model
+report. A directory that grows during fitting therefore affects only a later
+model, never the already declared training snapshot.
+
 When independently useful candidates make different safe tradeoffs,
 `scripts/build_headless_ranker_ensemble.py` can package them as an immutable
 Borda consensus artifact. Each member encodes and ranks the same current

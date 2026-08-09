@@ -7,6 +7,7 @@ import argparse
 from collections import Counter
 from dataclasses import dataclass, replace
 import gzip
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -324,6 +325,17 @@ def _counterfactual_files(paths: Iterable[Path]) -> tuple[Path, ...]:
     return tuple(dict.fromkeys(item.resolve() for item in result))
 
 
+def _counterfactual_file_records(files: Iterable[Path]) -> tuple[list[dict[str, str]], str]:
+    records = []
+    for path in files:
+        records.append({
+            "path": str(path),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+    payload = json.dumps(records, sort_keys=True, separators=(",", ":")).encode()
+    return records, hashlib.sha256(payload).hexdigest()
+
+
 def apply_counterfactual_labels(
     decisions: list[Decision],
     provenance: Mapping[str, Any],
@@ -336,6 +348,7 @@ def apply_counterfactual_labels(
     files = _counterfactual_files(paths)
     if not files:
         raise ValueError("no counterfactual label files found")
+    file_records, file_set_sha256 = _counterfactual_file_records(files)
     labels: dict[str, tuple[str, ...]] = {}
     ambiguous = 0
     checkpoints = 0
@@ -397,6 +410,8 @@ def apply_counterfactual_labels(
         ))
     return output, {
         "files": len(files),
+        "files_used": file_records,
+        "file_set_sha256": file_set_sha256,
         "checkpoints": checkpoints,
         "unique_unambiguous_labels": len(labels),
         "ambiguous_checkpoints_skipped": ambiguous,
@@ -550,13 +565,17 @@ def main() -> int:
         parser.error("tree capacity bounds must be positive")
     if min(args.failure_horizon, args.failure_weight, args.counterfactual_weight) < 0:
         parser.error("failure weighting bounds must be nonnegative")
+    # Counterfactual generation may continue in parallel. Freeze its input
+    # file set before corpus decoding so one model never consumes an
+    # accidental mid-training mixture that cannot be reconstructed later.
+    counterfactual_label_files = _counterfactual_files(args.counterfactual_labels or ())
     decisions, provenance = load_decisions(args.paths)
     counterfactuals = None
     if args.counterfactual_labels:
         decisions, counterfactuals = apply_counterfactual_labels(
             decisions,
             provenance,
-            args.counterfactual_labels,
+            counterfactual_label_files,
             target=args.counterfactual_target,
         )
     seeds = sorted({decision.seed for decision in decisions})

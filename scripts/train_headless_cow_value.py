@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import resource
@@ -54,6 +55,17 @@ def _files(paths: Iterable[Path]) -> tuple[Path, ...]:
     return tuple(dict.fromkeys(item.resolve() for item in result))
 
 
+def _file_records(files: Iterable[Path]) -> tuple[list[dict[str, str]], str]:
+    records = []
+    for path in files:
+        records.append({
+            "path": str(path),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+    payload = json.dumps(records, sort_keys=True, separators=(",", ":")).encode()
+    return records, hashlib.sha256(payload).hexdigest()
+
+
 def ordinal_outcome_labels(outcomes: Iterable[Mapping[str, Any]]) -> tuple[int, ...]:
     ranks = tuple(outcome_rank(outcome) for outcome in outcomes)
     ordered = {rank: index for index, rank in enumerate(sorted(set(ranks)))}
@@ -68,6 +80,7 @@ def load_value_groups(
     files = _files(paths)
     if not files:
         raise ValueError("no COW value label files found")
+    file_records, file_set_sha256 = _file_records(files)
     decision_by_digest = {decision.observation_sha256: decision for decision in decisions}
     groups = []
     runtime_sources = set()
@@ -111,6 +124,8 @@ def load_value_groups(
         raise ValueError("no COW value groups matched compact corpus observations")
     return groups, {
         "files": len(files),
+        "files_used": file_records,
+        "file_set_sha256": file_set_sha256,
         "groups": len(groups),
         "candidate_outcomes": sum(len(group.actions) for group in groups),
         "unmatched_checkpoints": unmatched,
@@ -175,8 +190,11 @@ def main() -> int:
         parser.error("threads must be in 1..12")
     if min(args.iterations, args.num_leaves, args.max_depth, args.min_child_samples) <= 0:
         parser.error("model capacity bounds must be positive")
+    # Freeze a live generator directory before the potentially long corpus
+    # decode. The report below records the exact immutable snapshot.
+    label_files = _files(args.labels)
     decisions, provenance = load_decisions(args.corpus)
-    groups, label_report = load_value_groups(decisions, provenance, args.labels)
+    groups, label_report = load_value_groups(decisions, provenance, label_files)
     seeds = sorted({group.seed for group in groups})
     holdout = set(args.holdout_seed or seeds[-1:])
     train = [group for group in groups if group.seed not in holdout]
