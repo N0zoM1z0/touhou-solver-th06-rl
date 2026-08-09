@@ -143,7 +143,9 @@ Borda consensus artifact. Each member encodes and ranks the same current
 native-safe set with its own feature categories; rank positions are aggregated
 without assuming that LightGBM scores are calibrated across objectives. The
 ensemble remains phase-agnostic and cannot inspect seed identity or publish an
-action outside the native gate.
+action outside the native gate. Ensemble construction also requires an exact
+shared delivery contract; a legacy Windows-envelope member cannot be silently
+combined with a synchronous Linux `[0]` value model.
 
 The population's continuation Pareto front minimizes both physical HITs and
 forced-release rows per 1,000 ticks. A life-patched stage clear with fewer HITs
