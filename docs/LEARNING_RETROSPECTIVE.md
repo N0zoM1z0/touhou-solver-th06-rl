@@ -401,7 +401,7 @@ for each stage is still a research incumbent, not a promoted policy:
 | Stage | Ranker SHA-256 prefix | Unseen seeds | HITs | Forced release rows |
 | --- | --- | --- | --- | --- |
 | 1 | `a887bb79e54a` | 43 / 44 | 1 / 1 | 24 / 8 |
-| 2 | `37d75f340fd1` | 37 / 38 | 0 / 3 | 27 / 48 |
+| 2 | `39e36a5db412` | 45 / 46 | 0 / 1 | 24 / 62 |
 | 3 | `d8472ed568fe` | 37 / 38 | 4 / 5 | 23 / 33 |
 | 4 | `cc904ffc2bd0` | 27 / 28 | 9 / 5 | 59 / 72 |
 | 5 | `481036a5ed47` | 27 / 28 | 11 / 11 | 76 / 91 |
@@ -418,11 +418,13 @@ pair while reducing total forced releases from 38 to 32. The table intentionally
 uses closed-loop HIT and forced-release counts instead of offline accuracy to
 select the current experiment order.
 
-The Stage 2 row includes a natural zero-HIT seed, but its 27 forced-release
-rows keep it outside NMNB. Its paired seed has three HITs. The preceding
-`ac7edd49d803` Stage 2 member (3/1 HIT, 53/62 forced) remains useful diversity,
-as does the preceding `8c7a94fd3b4f` Stage 4 member (7/10 HIT, 54/70 forced):
-the newer Stage 4 member reduces total and worst-case HIT but uses slightly
+The Stage 2 row includes a natural zero-HIT seed, but its 24 forced-release
+rows keep it outside NMNB. Its paired seed has one HIT and 62 forced releases.
+The preceding `37d75f340fd1` Stage 2 member (0/3 HIT, 27/48 forced) remains a
+lower-forced trade-off, and `ac7edd49d803` (3/1 HIT, 53/62 forced) retains
+additional trajectory diversity. The preceding `8c7a94fd3b4f` Stage 4 member
+(7/10 HIT, 54/70 forced) likewise remains useful; the newer Stage 4 member
+reduces total and worst-case HIT but uses slightly
 more forced releases. These are explicit Pareto trade-offs, not overwritten
 checkpoints.
 
