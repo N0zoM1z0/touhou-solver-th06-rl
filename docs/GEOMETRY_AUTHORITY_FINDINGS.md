@@ -85,6 +85,42 @@ this extreme bullet count. Moving that lowering into the fixed native kernel is
 a separate resident-latency task; the correction itself did not introduce a
 material hot-path regression.
 
+## Second differential: cross-candidate aim contamination
+
+The shared reachable cone was safe, but it was still not exact enough for a
+native *set* of mutually exclusive first actions. A trajectory aimed at a
+left-moving candidate remained in the common hazard view used to certify a
+right-moving candidate, and vice versa. A candidate-coupled diagnostic at the
+same seed-113 checkpoint separated the layers:
+
+| Hard authority | certified actions |
+|---|---:|
+| old arbitrary 360-degree enclosure | 3 |
+| shared reachable-target cone | 7 |
+| candidate/delivery-coupled native turn | 11 |
+| authoritative source, immediate constant action for 4 ticks | 12 |
+
+Every one of the 11 candidate-coupled actions is in the 12-action source-safe
+set. The remaining source-safe action is conservatively rejected by the fixed
+0--3 frame delivery coverage and 0.35 collision margin; an immediate source
+branch alone is not evidence that those robustness terms may be weakened.
+Seed 114 remains unchanged at four certified actions.
+
+The final common `0x080` fired-bullet turn is now passed as compact source state
+to the native Hard kernel. For each of the fixed 18 actions, four delivery
+delays, bounded `Keyboard::_sync` prefixes, and four Hard frames, the kernel
+advances the player first and then retargets the bullet exactly as the source
+calc-chain ordering requires. Unsupported combinations, spawning bullets,
+multi-turn forms, and longer offline lookahead retain the shared fail-close
+projection.
+
+On 60 repetitions of the same 156-bullet snapshot, combined lowering plus
+certification changed from a 9.776 ms median for the shared cone to 8.686 ms
+for candidate-coupled native aim. The correction therefore removed four more
+false negatives while reducing this Python-path benchmark by 11.2%; native
+candidate certification itself took about 0.65 ms for 72 aimed bullets. The
+remaining absolute cost is common Python lowering for other hazard classes.
+
 ## Consequences for collection and learning
 
 Last-frame corrective labels can be unsatisfiable or dominated by authority

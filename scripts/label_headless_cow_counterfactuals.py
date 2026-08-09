@@ -19,6 +19,7 @@ from th06_rl.headless_geometry import (
     HARD_HORIZON,
     HeadlessAuthorityUnavailable,
     certify_lowered_headless_actions,
+    lower_headless_hard_hazards,
     lower_headless_hazards,
 )
 from th06_rl.native import NativeKernel
@@ -91,7 +92,7 @@ def outcome_rank(outcome: Mapping[str, Any]) -> tuple[int, int, int, int, float]
 
 
 def _certify(observation: Mapping[str, Any], kernel: NativeKernel):
-    hazards = lower_headless_hazards(observation, HARD_HORIZON)
+    hazards = lower_headless_hard_hazards(observation, HARD_HORIZON)
     prepared = kernel.prepare_hazards(hazards)
     return certify_lowered_headless_actions(observation, prepared, kernel=kernel), prepared
 

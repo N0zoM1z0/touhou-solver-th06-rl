@@ -39,6 +39,7 @@ from th06_rl.headless_geometry import (
     HeadlessAuthorityUnavailable,
     action_from_input,
     certify_lowered_headless_actions,
+    lower_headless_hard_hazards,
     lower_headless_hazards,
 )
 from th06_rl.native import NativeCertifiedAction, NativeKernel
@@ -277,7 +278,10 @@ def collect(
             while observation.get("terminal_reason") is None:
                 benchmark_forced = False
                 try:
-                    hard_hazards = lower_headless_hazards(observation, HARD_HORIZON)
+                    hard_hazards = lower_headless_hard_hazards(
+                        observation,
+                        HARD_HORIZON,
+                    )
                     prepared_hard = kernel.prepare_hazards(hard_hazards)
                     certified = certify_lowered_headless_actions(
                         observation,

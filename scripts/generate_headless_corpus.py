@@ -27,6 +27,7 @@ from th06_rl.headless_geometry import (
     HeadlessAuthorityUnavailable,
     action_from_input,
     certify_lowered_headless_actions,
+    lower_headless_hard_hazards,
     lower_headless_hazards,
 )
 from th06_rl.native import NativeKernel
@@ -126,7 +127,10 @@ def generate_episode(
             sequence = 0
             while observation.get("terminal_reason") is None:
                 try:
-                    hard_hazards = lower_headless_hazards(observation, HARD_HORIZON)
+                    hard_hazards = lower_headless_hard_hazards(
+                        observation,
+                        HARD_HORIZON,
+                    )
                     prepared_hard = kernel.prepare_hazards(hard_hazards)
                     certified = certify_lowered_headless_actions(
                         observation,

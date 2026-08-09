@@ -5,7 +5,14 @@ import math
 import pytest
 
 from th06_rl.core.model import Kinematics
-from th06_rl.native import ACTIONS, Aabb, LaserRect, NativeKernel, PackedHazards
+from th06_rl.native import (
+    ACTIONS,
+    Aabb,
+    LaserRect,
+    NativeKernel,
+    PackedHazards,
+    PlayerAimedBullet,
+)
 
 
 BY_NAME = {action.name: action for action in ACTIONS}
@@ -106,3 +113,69 @@ def test_native_action_profile_retains_checkpoint_clearance() -> None:
 
     assert math.isinf(profile.min_clearances[0])
     assert profile.min_clearances[1:] == (5.0, 5.0)
+
+
+def test_native_player_aim_turn_is_coupled_to_each_candidate() -> None:
+    hazards = PackedHazards(
+        aabb_frames=((),) * 4,
+        laser_frames=((),) * 4,
+        player_aimed_bullets=(PlayerAimedBullet(
+            x=100.0,
+            y=80.0,
+            vx=0.0,
+            vy=0.0,
+            half_width=1.0,
+            half_height=1.0,
+            speed=0.0,
+            angle=0.0,
+            turn_speed=10.0,
+            direction_rotation=0.0,
+            timer_float=0.0,
+            timer=0,
+            direction_interval=0,
+            direction_num_times=0,
+            direction_max_times=1,
+        ),),
+    )
+
+    certified = NativeKernel().certify_actions(
+        x=100.0,
+        y=100.0,
+        half_width=1.0,
+        half_height=1.0,
+        kinematics=KINEMATICS,
+        current_action=BY_NAME["stay"],
+        hazards=hazards,
+        delivery_delays=(0,),
+        collision_margin=0.0,
+    )
+    names = {item.action.name for item in certified}
+
+    # The final aim turn hits a stationary candidate on frame two. Mutually
+    # exclusive horizontal targets retain their own trajectories and escape.
+    assert "stay" not in names
+    assert {"left_fast", "right_fast"} <= names
+
+
+def test_candidate_coupled_aim_is_rejected_by_feature_only_profile() -> None:
+    hazards = PackedHazards(
+        aabb_frames=((),) * 4,
+        laser_frames=((),) * 4,
+        player_aimed_bullets=(PlayerAimedBullet(
+            100.0, 80.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0,
+            10.0, 0.0, 0.0, 0, 0, 0, 1,
+        ),),
+    )
+
+    with pytest.raises(ValueError, match="Hard-certification only"):
+        NativeKernel().profile_actions(
+            x=100.0,
+            y=100.0,
+            half_width=1.0,
+            half_height=1.0,
+            kinematics=KINEMATICS,
+            current_action=BY_NAME["stay"],
+            hazards=hazards,
+            candidates=(BY_NAME["stay"],),
+            checkpoints=(4,),
+        )

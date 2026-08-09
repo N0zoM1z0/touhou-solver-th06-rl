@@ -35,9 +35,31 @@ class LaserRect:
 
 
 @dataclass(frozen=True)
+class PlayerAimedBullet:
+    """Exact source state for one supported final player-aim turn."""
+
+    x: float
+    y: float
+    vx: float
+    vy: float
+    half_width: float
+    half_height: float
+    speed: float
+    angle: float
+    turn_speed: float
+    direction_rotation: float
+    timer_float: float
+    timer: int
+    direction_interval: int
+    direction_num_times: int
+    direction_max_times: int
+
+
+@dataclass(frozen=True)
 class PackedHazards:
     aabb_frames: tuple[tuple[Aabb, ...], ...]
     laser_frames: tuple[tuple[LaserRect, ...], ...]
+    player_aimed_bullets: tuple[PlayerAimedBullet, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.aabb_frames:
@@ -103,6 +125,26 @@ class _LaserRect(ctypes.Structure):
     ]
 
 
+class _PlayerAimedBullet(ctypes.Structure):
+    _fields_ = [
+        ("x", ctypes.c_float),
+        ("y", ctypes.c_float),
+        ("vx", ctypes.c_float),
+        ("vy", ctypes.c_float),
+        ("half_width", ctypes.c_float),
+        ("half_height", ctypes.c_float),
+        ("speed", ctypes.c_float),
+        ("angle", ctypes.c_float),
+        ("turn_speed", ctypes.c_float),
+        ("direction_rotation", ctypes.c_float),
+        ("timer_float", ctypes.c_float),
+        ("timer", ctypes.c_int32),
+        ("direction_interval", ctypes.c_int32),
+        ("direction_num_times", ctypes.c_int32),
+        ("direction_max_times", ctypes.c_int32),
+    ]
+
+
 class _PlanResult(ctypes.Structure):
     _fields_ = [
         ("selected_action", ctypes.c_int32),
@@ -127,6 +169,8 @@ class PreparedHazards:
     aabbs: object
     laser_offsets: object
     lasers: object
+    player_aimed_bullets: object
+    player_aimed_bullet_count: int
 
     def prefix(self, horizon: int) -> PreparedHazards:
         if not 1 <= horizon <= self.horizon:
@@ -139,6 +183,8 @@ class PreparedHazards:
             self.aabbs,
             self.laser_offsets,
             self.lasers,
+            self.player_aimed_bullets,
+            self.player_aimed_bullet_count,
         )
 
     @property
@@ -210,6 +256,29 @@ class NativeKernel:
         ]
         self.certify_function.restype = ctypes.c_int
 
+        self.certify_aimed_function = (
+            self.library.th06_rl_certify_actions_aimed_v1
+        )
+        self.certify_aimed_function.argtypes = [
+            *floats8,
+            ctypes.c_int32,
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_int32),
+            ctypes.c_int32,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.POINTER(_Aabb),
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.POINTER(_LaserRect),
+            ctypes.POINTER(_PlayerAimedBullet),
+            ctypes.c_int32,
+            ctypes.c_float,
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.POINTER(ctypes.c_float),
+        ]
+        self.certify_aimed_function.restype = ctypes.c_int
+
         self.profile_function = self.library.th06_rl_profile_actions_v1
         self.profile_function.argtypes = [
             *floats8,
@@ -280,7 +349,18 @@ class NativeKernel:
 
     @classmethod
     def prepare_hazards(cls, hazards: PackedHazards) -> PreparedHazards:
-        return PreparedHazards(hazards.horizon, *cls._pack(hazards))
+        aimed = (_PlayerAimedBullet * max(1, len(hazards.player_aimed_bullets)))(
+            *(
+                _PlayerAimedBullet(*item.__dict__.values())
+                for item in hazards.player_aimed_bullets
+            )
+        )
+        return PreparedHazards(
+            hazards.horizon,
+            *cls._pack(hazards),
+            aimed,
+            len(hazards.player_aimed_bullets),
+        )
 
     @staticmethod
     def _physical_args(
@@ -326,7 +406,7 @@ class NativeKernel:
         safe_mask = ctypes.c_uint32()
         minimum = (ctypes.c_float * len(ACTIONS))()
         final_xy = (ctypes.c_float * (len(ACTIONS) * 2))()
-        status = self.certify_function(
+        common_args = (
             *self._physical_args(x, y, half_width, half_height, kinematics),
             ACTION_INDEX[current_action],
             prepared.horizon,
@@ -334,11 +414,25 @@ class NativeKernel:
             len(delivery_delays),
             _action_mask(candidates),
             *prepared.native_args,
-            collision_margin,
-            ctypes.byref(safe_mask),
-            minimum,
-            final_xy,
         )
+        if prepared.player_aimed_bullet_count:
+            status = self.certify_aimed_function(
+                *common_args,
+                prepared.player_aimed_bullets,
+                prepared.player_aimed_bullet_count,
+                collision_margin,
+                ctypes.byref(safe_mask),
+                minimum,
+                final_xy,
+            )
+        else:
+            status = self.certify_function(
+                *common_args,
+                collision_margin,
+                ctypes.byref(safe_mask),
+                minimum,
+                final_xy,
+            )
         if status != 0:
             raise RuntimeError(f"native Hard kernel rejected input: {status}")
         return tuple(
@@ -376,6 +470,10 @@ class NativeKernel:
             if isinstance(hazards, PreparedHazards)
             else self.prepare_hazards(hazards)
         )
+        if prepared.player_aimed_bullet_count:
+            raise ValueError(
+                "candidate-coupled aimed bullets are Hard-certification only"
+            )
         if checkpoints[-1] > prepared.horizon:
             raise ValueError("profile checkpoint exceeds hazard horizon")
         delay_array = (ctypes.c_int32 * len(delivery_delays))(*delivery_delays)
@@ -427,6 +525,10 @@ class NativeKernel:
     ) -> NativePlan | None:
         if not hard:
             return None
+        if hazards.player_aimed_bullets:
+            raise ValueError(
+                "candidate-coupled aimed bullets are Hard-certification only"
+            )
         config = config or LocalPlannerConfig(horizon=hazards.horizon)
         if config.horizon != hazards.horizon:
             raise ValueError("planner config and hazard horizon differ")

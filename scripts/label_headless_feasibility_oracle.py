@@ -37,6 +37,7 @@ from th06_rl.headless_geometry import (
     HeadlessAuthorityUnavailable,
     action_from_input,
     certify_lowered_headless_actions,
+    lower_headless_hard_hazards,
     lower_headless_hazards,
     reactive_headless_action,
 )
@@ -265,7 +266,7 @@ def _certify(
     observation: Mapping[str, Any],
     kernel: NativeKernel,
 ) -> tuple[tuple[NativeCertifiedAction, ...], Any]:
-    hazards = lower_headless_hazards(observation, HARD_HORIZON)
+    hazards = lower_headless_hard_hazards(observation, HARD_HORIZON)
     prepared = kernel.prepare_hazards(hazards)
     certified = certify_lowered_headless_actions(observation, prepared, kernel=kernel)
     return certified, prepared

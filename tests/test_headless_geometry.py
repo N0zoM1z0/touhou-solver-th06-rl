@@ -9,6 +9,7 @@ from th06_rl.headless_geometry import (
     HeadlessAuthorityUnavailable,
     OBSERVATION_SCHEMA,
     certify_headless_actions,
+    lower_headless_hard_hazards,
     lower_headless_hazards,
     reactive_headless_action,
 )
@@ -169,6 +170,48 @@ def test_player_aim_turn_only_encloses_hard_reachable_targets() -> None:
                 assert frame[0].left <= x + 1.0 <= frame[0].right
                 assert frame[0].top <= y - 1.0 <= frame[0].bottom
                 assert frame[0].top <= y + 1.0 <= frame[0].bottom
+
+
+def test_hard_lowering_routes_final_player_aim_to_native_candidate_paths() -> None:
+    value = observation()
+    value["bullets"] = [bullet(
+        ex_flags=0x84,
+        direction_interval=40,
+        direction_num_times=0,
+        direction_max_times=1,
+    )]
+
+    hazards = lower_headless_hard_hazards(value)
+
+    assert len(hazards.player_aimed_bullets) == 1
+    assert all(not frame for frame in hazards.aabb_frames)
+
+
+def test_hard_lowering_keeps_multiturn_player_aim_fail_closed() -> None:
+    value = observation()
+    value["bullets"] = [bullet(
+        ex_flags=0x84,
+        direction_interval=40,
+        direction_num_times=0,
+        direction_max_times=2,
+    )]
+
+    hazards = lower_headless_hard_hazards(value)
+
+    assert not hazards.player_aimed_bullets
+    assert any(frame for frame in hazards.aabb_frames)
+
+
+def test_hard_lowering_rejects_incoherent_player_aim_counter() -> None:
+    value = observation()
+    value["bullets"] = [bullet(
+        ex_flags=0x84,
+        direction_num_times=1,
+        direction_max_times=1,
+    )]
+
+    with pytest.raises(HeadlessAuthorityUnavailable, match="player-aim"):
+        lower_headless_hard_hazards(value)
 
 
 def test_unknown_ex_motion_fails_closed() -> None:

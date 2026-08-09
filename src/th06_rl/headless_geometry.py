@@ -22,6 +22,7 @@ from .native import (
     NativeCertifiedAction,
     NativeKernel,
     PackedHazards,
+    PlayerAimedBullet,
     PreparedHazards,
 )
 from .th06.observed_lasers import laser_rects_by_frame
@@ -657,13 +658,101 @@ def lower_headless_hazards(
     )
 
 
+def _native_player_aimed_bullet(
+    row: Mapping[str, Any],
+) -> PlayerAimedBullet | None:
+    bullet = _Bullet.from_json(row)
+    dynamic = bullet.ex_flags & ~SPAWN_EFFECT_FLAGS
+    if dynamic == PLAYER_AIM_TURN_FLAG and (
+        bullet.timer < 0
+        or bullet.direction_interval < 0
+        or bullet.direction_num_times < 0
+        or bullet.direction_max_times <= 0
+        or bullet.direction_num_times >= bullet.direction_max_times
+    ):
+        raise HeadlessAuthorityUnavailable("invalid player-aim turn state")
+    if (
+        bullet.state != 1
+        or dynamic != PLAYER_AIM_TURN_FLAG
+        or bullet.direction_num_times + 1 < bullet.direction_max_times
+    ):
+        return None
+    return PlayerAimedBullet(
+        x=bullet.x,
+        y=bullet.y,
+        vx=bullet.vx,
+        vy=bullet.vy,
+        half_width=bullet.half_width,
+        half_height=bullet.half_height,
+        speed=bullet.speed,
+        angle=bullet.angle,
+        turn_speed=bullet.turn_speed,
+        direction_rotation=bullet.direction_rotation,
+        timer_float=bullet.timer_float,
+        timer=bullet.timer,
+        direction_interval=bullet.direction_interval,
+        direction_num_times=bullet.direction_num_times,
+        direction_max_times=bullet.direction_max_times,
+    )
+
+
+def lower_headless_hard_hazards(
+    observation: Mapping[str, Any],
+    horizon: int = HARD_HORIZON,
+) -> PackedHazards:
+    """Lower Hard hazards with candidate-coupled final player-aim turns.
+
+    Longer offline lookahead still consumes the shared fail-close projection.
+    Only the fixed resident Hard window may use source-exact candidate/delivery
+    paths, and unsupported motion combinations remain in the common envelope.
+    """
+    validate_headless_observation(observation)
+    if not 1 <= horizon <= HARD_HORIZON:
+        raise HeadlessAuthorityUnavailable(
+            "candidate-coupled player aim is limited to the Hard window"
+        )
+    player = observation["player"]
+    assert isinstance(player, Mapping)
+    x = _finite_number(player, "x")
+    y = _finite_number(player, "y")
+    half_width = _finite_number(player, "half_width")
+    half_height = _finite_number(player, "half_height")
+    common_rows = []
+    aimed = []
+    for row in observation["bullets"]:  # type: ignore[union-attr]
+        assert isinstance(row, Mapping)
+        candidate_coupled = _native_player_aimed_bullet(row)
+        if candidate_coupled is None:
+            common_rows.append(row)
+        else:
+            aimed.append(candidate_coupled)
+    bullet_frames = _bullet_frames(
+        common_rows,
+        horizon=horizon,
+        player_x=x,
+        player_y=y,
+        player_half_width=half_width,
+        player_half_height=half_height,
+        player_targets=_hard_player_target_bounds(observation, horizon),
+    )
+    enemy_frames = _enemy_frames(observation["enemies"], horizon)  # type: ignore[arg-type]
+    return PackedHazards(
+        aabb_frames=tuple(
+            tuple(bullets + enemies)
+            for bullets, enemies in zip(bullet_frames, enemy_frames, strict=True)
+        ),
+        laser_frames=_laser_frames(observation["lasers"], horizon),  # type: ignore[arg-type]
+        player_aimed_bullets=tuple(aimed),
+    )
+
+
 def certify_headless_actions(
     observation: Mapping[str, Any],
     *,
     kernel: NativeKernel | None = None,
     horizon: int = HARD_HORIZON,
 ) -> tuple[NativeCertifiedAction, ...]:
-    hazards = lower_headless_hazards(observation, horizon)
+    hazards = lower_headless_hard_hazards(observation, horizon)
     return certify_lowered_headless_actions(observation, hazards, kernel=kernel)
 
 
