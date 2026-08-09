@@ -649,6 +649,16 @@ HITs at 2/1 but raised forced rows from 13 to 17; unique-best reached 3/2 with
 snapshot: the Stage 1 unique pair was still 0-HIT/0-forced after roughly 10.7k
 ticks each, then failed before the natural 18,306-tick stage end.
 
+The following generation remained a negative but useful population sweep.
+Stage 2 r9 reached 1/1 HIT with 59/60 forced rows (survivable) and 1/2 with
+20/35 (unique-best), so neither replaced the 0/0-HIT incumbent. Stage 3 r7
+reached 4/2 with 19/11 and 4/4 with 16/24. Stage 4 r7 reached 4/6 with 27/71
+and 9/4 with 107/27. Stage 5 r6 kept 22 aggregate HITs in both modes, at
+12/10 with 73/85 and 10/12 with 81/146. Stage 6 r6 regressed to 19/15 with
+234/132 and 14/21 with 114/163. These closed-loop results reject the models;
+their completed first-failure trajectories remain eligible inputs for the
+next causal-label generation.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
