@@ -14,6 +14,8 @@ from th06_rl.headless_corpus import (
     source_context_id,
 )
 from scripts.collect_headless_dagger import source_compatible
+from scripts.collect_headless_dagger import _benchmark_ranker_decision
+from th06_rl.native import ACTIONS, NativeCertifiedAction
 
 
 def decision() -> Decision:
@@ -262,3 +264,23 @@ def test_runtime_compatibility_requires_exact_clean_commit_and_binary() -> None:
         allowed,
         {"commit": "new", "binary_sha256": "abc", "clean": False},
     )
+
+
+def test_continuation_ranker_metadata_does_not_claim_a_teacher_label() -> None:
+    certified = (
+        NativeCertifiedAction(
+            action=ACTIONS[0],
+            min_clearance=10.0,
+            final_x=192.0,
+            final_y=384.0,
+        ),
+    )
+
+    decision_metadata = _benchmark_ranker_decision(
+        certified[0].action.name,
+        certified,
+    )
+
+    assert decision_metadata.kind == "benchmark-ranker-only"
+    assert decision_metadata.effort_horizon == 0
+    assert decision_metadata.action == certified[0].action.name

@@ -336,6 +336,15 @@ stage. A fixed stationary action cleared all six infrastructure trials at
 first-HIT fail-close. Continued-HIT runs are evaluation-only and never factual
 training data.
 
+Continuation rollout no longer computes the unused offline teacher label. A
+same-model Stage 1 seed-23 differential compared the old and optimized paths:
+the first 2,998 complete transition records had the same physical digest and
+all 2,999 published actions were identical. Only the bounded trial's final
+successor differed because `max_ticks=3000` marks that observation terminal.
+The optimized 3,000-tick run took 44.97 CPU seconds on the shared VPS. It still
+computes candidate-relative profiles and performs both native certification
+and the fresh issue check.
+
 This also invalidates the apparent millions-of-ticks survival denominator in
 the deadline-stopped old-runtime runs. Each of those six weights incurred
 exactly three battle HITs before Game Over, then idled in menu/empty state.

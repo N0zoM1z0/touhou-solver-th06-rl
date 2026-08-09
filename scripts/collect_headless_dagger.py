@@ -61,6 +61,19 @@ def _benchmark_release_behavior() -> BehaviorDecision:
     )
 
 
+def _benchmark_ranker_decision(
+    selected_action: str,
+    certified: tuple[NativeCertifiedAction, ...],
+) -> TeacherDecision:
+    """Describe an evaluation-only ranker action without running the teacher."""
+    return TeacherDecision(
+        action=selected_action,
+        kind="benchmark-ranker-only",
+        effort_horizon=0,
+        surviving_actions=tuple(item.action.name for item in certified),
+    )
+
+
 def source_compatible(
     allowed: list[dict[str, Any]],
     runtime: dict[str, Any],
@@ -205,7 +218,11 @@ def collect(
         "source": provenance,
     }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     kernel = NativeKernel()
-    teacher = NativeOfflineTeacher(kernel=kernel, horizon=teacher_horizon)
+    teacher = (
+        None
+        if continue_after_hit
+        else NativeOfflineTeacher(kernel=kernel, horizon=teacher_horizon)
+    )
     termination_reason = "generator-error"
     authority_failure: str | None = None
     authority_failure_events = 0
@@ -239,7 +256,10 @@ def collect(
                     )
                     if not certified:
                         raise HeadlessAuthorityUnavailable("headless native safe set is empty")
-                    teacher_hazards = lower_headless_hazards(observation, teacher_horizon)
+                    profile_hazards = lower_headless_hazards(
+                        observation,
+                        teacher_horizon,
+                    )
                     player = observation["player"]
                     profiles = kernel.profile_actions(
                         x=float(player["x"]),
@@ -248,13 +268,8 @@ def collect(
                         half_height=float(player["half_height"]),
                         kinematics=KINEMATICS,
                         current_action=action_from_input(int(observation["input"])),
-                        hazards=teacher_hazards,
+                        hazards=profile_hazards,
                         candidates=tuple(item.action for item in certified),
-                    )
-                    teacher_decision = teacher.rank(
-                        observation,
-                        certified,
-                        hazards=teacher_hazards,
                     )
                     selected = ranker.rank(
                         observation,
@@ -263,6 +278,14 @@ def collect(
                         seed=seed,
                         profiles=profiles,
                     )
+                    if teacher is None:
+                        teacher_decision = _benchmark_ranker_decision(selected, certified)
+                    else:
+                        teacher_decision = teacher.rank(
+                            observation,
+                            certified,
+                            hazards=profile_hazards,
+                        )
                     issue = certify_lowered_headless_actions(
                         observation,
                         prepared_hard,
@@ -335,6 +358,7 @@ def collect(
         "behavior_policy": POLICY_NAME,
         "behavior_epsilon": 0.0,
         "teacher_horizon": teacher_horizon,
+        "teacher_labels_recorded": teacher is not None,
         "native_gate_horizon": HARD_HORIZON,
         "anchor_stride": anchor_stride,
         "termination_reason": termination_reason,

@@ -76,7 +76,11 @@ than a shared timeout. Bomb remains forbidden in both modes.
 The same flag is available on `collect_headless_dagger.py`, so an immutable
 ranker weight can be measured by HIT count rather than only by its first
 failure point. Interrupted long runs remain valid benchmark evidence but never
-training data. Recover all complete newline-terminated rows and build the
+training data. Continuation mode skips the unused offline teacher search and
+marks its behavior metadata `benchmark-ranker-only`; native gating, ranker
+profiles, immediate issue revalidation, HIT accounting, and Bomb prohibition
+remain unchanged. Default first-failure DAgger still records teacher labels.
+Recover all complete newline-terminated rows and build the
 model-linked population archive with:
 
 ```bash
