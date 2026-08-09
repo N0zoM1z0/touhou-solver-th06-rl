@@ -402,7 +402,7 @@ for each stage is still a research incumbent, not a promoted policy:
 | --- | --- | --- | --- | --- |
 | 1 | `269675ae8805` | 27 / 28 | 1 / 1 | 10 / 28 |
 | 2 | `37d75f340fd1` | 37 / 38 | 0 / 3 | 27 / 48 |
-| 3 | `f6167e893286` | 23 / 24 | 7 / 6 | 71 / 47 |
+| 3 | `d8472ed568fe` | 37 / 38 | 4 / 5 | 23 / 33 |
 | 4 | `cc904ffc2bd0` | 27 / 28 | 9 / 5 | 59 / 72 |
 | 5 | `481036a5ed47` | 27 / 28 | 11 / 11 | 76 / 91 |
 | 6 | `85471d1dbe2a` | 27 / 28 | 18 / 19 | 94 / 130 |
@@ -421,6 +421,11 @@ as does the preceding `8c7a94fd3b4f` Stage 4 member (7/10 HIT, 54/70 forced):
 the newer Stage 4 member reduces total and worst-case HIT but uses slightly
 more forced releases. These are explicit Pareto trade-offs, not overwritten
 checkpoints.
+
+The Stage 3 bootstrap-DAgger COW member `d8472ed568fe` is a strict closed-loop
+improvement over the preceding bootstrap on these metrics: total HIT fell from
+13 to 9 and total forced releases from 118 to 56 on its unseen seed pair. It
+still has no zero-HIT seed and remains research evidence.
 
 A second COW batch targeted the last 600 decisions of the bootstrap policy's
 first-failure trajectories. All 10 files were valid: 90 checkpoints and 1,441
