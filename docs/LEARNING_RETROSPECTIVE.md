@@ -1127,6 +1127,29 @@ Correction SHA-256
 therefore remains a counterexample-producing population member, not a
 deployment candidate.
 
+## Original-retail Wine baseline
+
+On 2026-08-09, the original Japanese 1.02h executable completed natural
+Lunatic Reimu-A Practice Stages 6 through 1 and an ordinary Start-to-Ending
+route under Wine. The standalone Stages accumulated 58 physical HITs; the full
+route accumulated 68. This proves that the Linux VPS can exercise the shipped
+collision/HIT path and complete the whole game without interactive window
+control. It does not prove NMNB or real-Windows equivalence.
+
+The run also prevents a misleading promotion: an earlier 25-second Stage 6
+smoke had zero HIT, while the full natural Stage 6 had eight. Full natural
+completion is therefore mandatory for policy claims. In the route, 59 of 68
+HITs had a native safe-set dead-end in the preceding 30 frames, making
+pre-HIT authority neighborhoods and capture continuity higher-priority
+diagnostics than more undirected online UCB time.
+
+The measured policy was the mutable online
+`phase-local-hierarchical-ucb-v4`, not an offline distilled candidate. Separate
+Stage states and a separate route state make their differences diagnostic, not
+a paired model comparison. The full evidence, hashes, limitations, and next
+decision gates are in
+[WINE_RETAIL_BASELINE_2026-08-09.md](WINE_RETAIL_BASELINE_2026-08-09.md).
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:

@@ -55,6 +55,17 @@ The evidence and decision history behind the transition from online UCB-only
 learning to this hybrid design is maintained in
 [docs/LEARNING_RETROSPECTIVE.md](docs/LEARNING_RETROSPECTIVE.md).
 
+The original Japanese retail executable can now be validated non-interactively
+under Wine with exact hashing, source-grounded menu/input handling, natural
+Practice completion, full Start-to-Ending routing, physical HIT continuation,
+and exact-prefix cleanup. See
+[docs/WINE_RETAIL_VALIDATION.md](docs/WINE_RETAIL_VALIDATION.md) for the runner
+contract and
+[docs/WINE_RETAIL_BASELINE_2026-08-09.md](docs/WINE_RETAIL_BASELINE_2026-08-09.md)
+for the first complete Stage 6-to-1 and full-route baseline. Wine is closer to
+the shipped execution path than the reconstructed Linux runtime, but real
+Windows remains the final NMNB gate.
+
 Generate a compact factual trajectory with the paired runtime, then audit it
 independently:
 

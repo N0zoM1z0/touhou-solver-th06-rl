@@ -17,6 +17,12 @@ scripts and online planning with a small native hazard gate plus learning.
 6. Learn only inside the native survival frontier, with independent
    difficulty/character/shot/stage/source-phase state.
 
+For Linux-VPS validation against the original retail executable, read
+`docs/WINE_RETAIL_VALIDATION.md`. The first complete natural Stage 6-to-1 and
+Start-to-Ending measurements are frozen in
+`docs/WINE_RETAIL_BASELINE_2026-08-09.md`. Those HIT-continuation runs are
+benchmark evidence only and are never training corpus.
+
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
 
