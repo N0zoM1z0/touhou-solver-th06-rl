@@ -242,6 +242,13 @@ geometry/planning benchmark, recorded physical-frame coherence check, effective
 corpus ratios, exact fixed revision, and conservative VPS commands are recorded
 in [`notes/OFFLINE_TRAINING_BENCHMARK_20260808.md`](notes/OFFLINE_TRAINING_BENCHMARK_20260808.md).
 
+Before fitting another long-horizon learner, use the exact-checkpoint
+multi-continuation feasibility benchmark in
+[`docs/FEASIBILITY_ORACLE.md`](docs/FEASIBILITY_ORACLE.md). It distinguishes a
+constructive native-action feasibility witness, an observed policy-selection
+error, and compact-versus-exact-derived representation evidence without moving
+search or source-only features into the resident controller.
+
 Online reward version `survival-reserve-hit-trace-v2` delivers a confirmed
 physical HIT independently of the one-step publication outcome. It assigns a
 discounted penalty to at most the prior 120 learning-eligible actions in the
