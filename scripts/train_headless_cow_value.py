@@ -84,6 +84,7 @@ def require_compatible_provenance(
         "source",
         "native_delivery_contract",
         "native_delivery_delays",
+        "observation_digest_contract",
     ):
         if behavior.get(key) != factual.get(key):
             raise ValueError(f"behavior corpus uses incompatible {key}")
