@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 from scripts.batch_label_headless_cow import (
     _output_path,
     checkpoint_groups,
     checkpoint_sequences,
     event_checkpoint_sequences,
     round_robin_task_groups,
+    uniform_checkpoint_sequences,
 )
 
 
@@ -132,3 +135,28 @@ def test_event_sequences_back_up_from_unlabelable_terminal_row():
         stride=2,
         termination_reason="physical-hit",
     ) == (14, 16, 17, 18)
+
+
+def row(*, labelable: bool = True) -> dict[str, object]:
+    return {
+        "legal_actions": ["stay"] if labelable else [],
+        "benchmark_forced_action": False,
+    }
+
+
+def test_uniform_checkpoints_cover_the_complete_route_and_final_state() -> None:
+    rows = [row() for _ in range(11)]
+
+    assert uniform_checkpoint_sequences(rows, stride=4) == (1, 5, 9, 10)
+
+
+def test_uniform_checkpoints_skip_unlabelable_rows_and_find_final_legal_state() -> None:
+    rows = [row() for _ in range(11)]
+    rows[5] = row(labelable=False)
+    rows[10] = row(labelable=False)
+
+    assert uniform_checkpoint_sequences(rows, stride=4) == (1, 9)
+
+
+def test_uniform_checkpoints_require_a_reconstructable_prefix() -> None:
+    assert uniform_checkpoint_sequences([row()], stride=4) == ()

@@ -46,6 +46,27 @@ def checkpoint_sequences(
     return tuple(sequences)
 
 
+def uniform_checkpoint_sequences(
+    rows: list[dict[str, Any]],
+    *,
+    stride: int,
+) -> tuple[int, ...]:
+    """Cover a complete factual route without phase- or identity-specific keys."""
+    if len(rows) < 2:
+        return ()
+    selected = {
+        sequence
+        for sequence in range(1, len(rows), stride)
+        if row_is_labelable(rows[sequence])
+    }
+    final = len(rows) - 1
+    while final >= 1 and not row_is_labelable(rows[final]):
+        final -= 1
+    if final >= 1:
+        selected.add(final)
+    return tuple(sorted(selected))
+
+
 def checkpoint_groups(
     sequences: tuple[int, ...],
     *,
@@ -204,7 +225,7 @@ def main() -> int:
     parser.add_argument("--stride", type=int, default=80)
     parser.add_argument(
         "--selection",
-        choices=("tail", "events", "hybrid"),
+        choices=("tail", "events", "hybrid", "uniform", "coverage"),
         default="tail",
     )
     parser.add_argument("--branch-frames", type=int, default=180)
@@ -262,18 +283,27 @@ def main() -> int:
         manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
         if manifest.get("transaction_complete") is not True:
             continue
+        rows = (
+            _transition_rows(run)
+            if args.selection in {"events", "hybrid", "uniform", "coverage"}
+            else []
+        )
         tail = checkpoint_sequences(
             int(manifest.get("transition_count", 0)),
             tail_transitions=args.tail_transitions,
             stride=args.stride,
         ) if args.selection in {"tail", "hybrid"} else ()
         events = event_checkpoint_sequences(
-            _transition_rows(run),
+            rows,
             event_window=args.event_window,
             stride=args.stride,
             termination_reason=manifest.get("termination_reason"),
-        ) if args.selection in {"events", "hybrid"} else ()
-        sequences = tuple(sorted(set(tail).union(events)))
+        ) if args.selection in {"events", "hybrid", "coverage"} else ()
+        uniform = uniform_checkpoint_sequences(
+            rows,
+            stride=args.stride,
+        ) if args.selection in {"uniform", "coverage"} else ()
+        sequences = tuple(sorted(set(tail).union(events).union(uniform)))
         if not sequences:
             continue
         groups = checkpoint_groups(
