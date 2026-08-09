@@ -44,6 +44,7 @@ class ValueGroup:
     actions: tuple[str, ...]
     labels: tuple[int, ...]
     best_actions: tuple[str, ...]
+    completed_or_best_actions: tuple[str, ...]
 
 
 def behavior_value_groups(
@@ -71,6 +72,7 @@ def behavior_value_groups(
             actions=actions,
             labels=tuple(int(action == decision.selected_action) for action in actions),
             best_actions=(decision.selected_action,),
+            completed_or_best_actions=(decision.selected_action,),
         ))
     return groups
 
@@ -190,6 +192,12 @@ def load_value_groups(
                 uninformative += 1
                 continue
             best_label = max(labels)
+            completed_actions = tuple(
+                action
+                for action, outcome in zip(actions, ordered_outcomes, strict=True)
+                if outcome["termination_reason"]
+                in {"tick-limit", "chain-exit-success", "stage-clear-success"}
+            )
             group = ValueGroup(
                 seed=seed,
                 observation_sha256=digest,
@@ -197,6 +205,10 @@ def load_value_groups(
                 actions=actions,
                 labels=labels,
                 best_actions=tuple(
+                    action for action, label in zip(actions, labels, strict=True)
+                    if label == best_label
+                ),
+                completed_or_best_actions=completed_actions or tuple(
                     action for action, label in zip(actions, labels, strict=True)
                     if label == best_label
                 ),
@@ -256,7 +268,9 @@ def evaluate(model, encoder: Encoder, groups: list[ValueGroup], *, threads: int)
     scores = model.booster_.predict(encoder.encode(features), num_threads=threads)
     offset = 0
     top1 = 0
+    completed_or_best_top1 = 0
     reciprocal_ranks = []
+    completed_or_best_reciprocal_ranks = []
     for group, size in zip(groups, sizes, strict=True):
         ranked = sorted(
             zip(group.actions, scores[offset:offset + size], strict=True),
@@ -265,16 +279,28 @@ def evaluate(model, encoder: Encoder, groups: list[ValueGroup], *, threads: int)
         )
         offset += size
         top1 += ranked[0][0] in group.best_actions
+        completed_or_best_top1 += ranked[0][0] in group.completed_or_best_actions
         best_rank = next(
             index for index, (action, _) in enumerate(ranked, 1)
             if action in group.best_actions
         )
         reciprocal_ranks.append(1.0 / best_rank)
+        completed_or_best_rank = next(
+            index for index, (action, _) in enumerate(ranked, 1)
+            if action in group.completed_or_best_actions
+        )
+        completed_or_best_reciprocal_ranks.append(1.0 / completed_or_best_rank)
     return {
         "groups": len(groups),
         "candidate_outcomes": sum(len(group.actions) for group in groups),
         "counterfactual_best_top1_accuracy": top1 / len(groups),
         "counterfactual_best_mean_reciprocal_rank": sum(reciprocal_ranks) / len(groups),
+        "counterfactual_completed_or_best_top1_accuracy": (
+            completed_or_best_top1 / len(groups)
+        ),
+        "counterfactual_completed_or_best_mean_reciprocal_rank": (
+            sum(completed_or_best_reciprocal_ranks) / len(groups)
+        ),
     }
 
 

@@ -150,6 +150,7 @@ def test_longer_duplicate_cow_horizon_supersedes_shorter(tmp_path) -> None:
     groups, report = load_value_groups([decision], provenance, [tmp_path])
 
     assert groups[0].best_actions == ("right",)
+    assert groups[0].completed_or_best_actions == ("right",)
     assert report["groups"] == 1
     assert report["duplicate_checkpoints"] == 1
     assert report["longer_horizon_replacements"] == 1

@@ -30,14 +30,22 @@ def _sha256(path: Path) -> str:
 def evaluate_groups(ranker: DistilledRanker, groups) -> dict[str, Any]:
     results = []
     top1 = 0
+    completed_or_best_top1 = 0
     reciprocal_ranks = []
+    completed_or_best_reciprocal_ranks = []
     by_seed: dict[int, list[dict[str, Any]]] = {}
     for group in groups:
         ranked = ranker.rank_decision(group.decision)
         best_rank = min(ranked.index(action) + 1 for action in group.best_actions)
         matched = ranked[0] in group.best_actions
+        completed_or_best_matched = ranked[0] in group.completed_or_best_actions
         top1 += matched
         reciprocal_ranks.append(1.0 / best_rank)
+        completed_or_best_rank = min(
+            ranked.index(action) + 1 for action in group.completed_or_best_actions
+        )
+        completed_or_best_top1 += completed_or_best_matched
+        completed_or_best_reciprocal_ranks.append(1.0 / completed_or_best_rank)
         result = {
             "seed": group.seed,
             "sequence": group.decision.sequence,
@@ -46,6 +54,9 @@ def evaluate_groups(ranker: DistilledRanker, groups) -> dict[str, Any]:
             "best_actions": list(group.best_actions),
             "predicted_is_best": matched,
             "best_action_rank": best_rank,
+            "completed_or_best_actions": list(group.completed_or_best_actions),
+            "predicted_is_completed_or_best": completed_or_best_matched,
+            "completed_or_best_action_rank": completed_or_best_rank,
             "ranked_actions": list(ranked),
         }
         results.append(result)
@@ -56,6 +67,12 @@ def evaluate_groups(ranker: DistilledRanker, groups) -> dict[str, Any]:
         "counterfactual_best_mean_reciprocal_rank": (
             sum(reciprocal_ranks) / len(reciprocal_ranks)
         ),
+        "counterfactual_completed_or_best_top1_accuracy": (
+            completed_or_best_top1 / len(groups)
+        ),
+        "counterfactual_completed_or_best_mean_reciprocal_rank": (
+            sum(completed_or_best_reciprocal_ranks) / len(groups)
+        ),
         "by_seed": [
             {
                 "seed": seed,
@@ -63,6 +80,12 @@ def evaluate_groups(ranker: DistilledRanker, groups) -> dict[str, Any]:
                 "counterfactual_best_top1_accuracy": (
                     sum(result["predicted_is_best"] for result in seed_results)
                     / len(seed_results)
+                ),
+                "counterfactual_completed_or_best_top1_accuracy": (
+                    sum(
+                        result["predicted_is_completed_or_best"]
+                        for result in seed_results
+                    ) / len(seed_results)
                 ),
             }
             for seed, seed_results in sorted(by_seed.items())
