@@ -13,7 +13,7 @@ from th06_rl.headless_corpus import (
     compact_hazard_sector_features,
     source_context_id,
 )
-from scripts.collect_headless_dagger import source_compatible
+from scripts.collect_headless_dagger import borda_consensus, source_compatible
 from scripts.collect_headless_dagger import _benchmark_ranker_decision
 from th06_rl.native import ACTIONS, NativeCertifiedAction
 
@@ -284,3 +284,15 @@ def test_continuation_ranker_metadata_does_not_claim_a_teacher_label() -> None:
     assert decision_metadata.kind == "benchmark-ranker-only"
     assert decision_metadata.effort_horizon == 0
     assert decision_metadata.action == certified[0].action.name
+
+
+def test_borda_consensus_rewards_cross_model_support_without_score_calibration() -> None:
+    actions = ["left", "stay", "right"]
+
+    selected = borda_consensus(actions, [
+        [1000.0, 900.0, -500.0],
+        [-20.0, 0.2, 0.1],
+        [0.0, 0.8, 0.7],
+    ])
+
+    assert selected == "stay"

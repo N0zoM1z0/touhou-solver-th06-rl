@@ -87,6 +87,28 @@ def source_compatible(
     )
 
 
+def borda_consensus(actions: list[str], member_scores: list[list[float]]) -> str:
+    """Select a calibration-free consensus inside one native-safe action set."""
+    if (
+        not actions
+        or not member_scores
+        or any(len(scores) != len(actions) for scores in member_scores)
+    ):
+        raise ValueError("Borda consensus requires complete nonempty member rankings")
+    points = {action: 0 for action in actions}
+    worst_rank = {action: 0 for action in actions}
+    for scores in member_scores:
+        ranked = sorted(
+            zip(actions, scores, strict=True),
+            key=lambda item: (float(item[1]), item[0]),
+            reverse=True,
+        )
+        for rank, (action, _) in enumerate(ranked):
+            points[action] += len(actions) - rank - 1
+            worst_rank[action] = max(worst_rank[action], rank)
+    return max(actions, key=lambda action: (points[action], -worst_rank[action], action))
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -119,24 +141,31 @@ class DistilledRanker:
         self.path = artifact_path.resolve()
         self.threads = threads
         artifact = joblib.load(self.path)
-        self.model = artifact["model"]
+        raw_members = artifact.get("ensemble_members")
+        members = raw_members if isinstance(raw_members, list) else [artifact]
+        if not members:
+            raise ValueError("ranker ensemble has no members")
         self.scope = artifact["scope"]
         self.headless_source = artifact["headless_source"]
         self.compatible_headless_sources = artifact.get(
             "compatible_headless_sources",
             [self.headless_source],
         )
-        stored_features = artifact.get("feature_names")
-        if stored_features is None:
-            feature_count = int(self.model.booster_.num_feature())
-            if feature_count > len(FEATURE_NAMES):
-                raise ValueError("ranker uses an unsupported feature schema")
-            stored_features = FEATURE_NAMES[:feature_count]
-        self.encoder = Encoder([], feature_names=stored_features)
-        self.encoder.categories = {
-            name: {value: index for index, value in enumerate(values)}
-            for name, values in artifact["categories"].items()
-        }
+        self.members = []
+        for member in members:
+            model = member["model"]
+            stored_features = member.get("feature_names")
+            if stored_features is None:
+                feature_count = int(model.booster_.num_feature())
+                if feature_count > len(FEATURE_NAMES):
+                    raise ValueError("ranker uses an unsupported feature schema")
+                stored_features = FEATURE_NAMES[:feature_count]
+            encoder = Encoder([], feature_names=stored_features)
+            encoder.categories = {
+                name: {value: index for index, value in enumerate(values)}
+                for name, values in member["categories"].items()
+            }
+            self.members.append((model, encoder))
 
     def rank(
         self,
@@ -166,14 +195,15 @@ class DistilledRanker:
             selected_action="",
         )
         features = [candidate_features(decision, candidate) for candidate in candidates]
-        scores = self.model.booster_.predict(
-            self.encoder.encode(features),
-            num_threads=self.threads,
-        )
-        return str(max(
-            zip(candidates, scores, strict=True),
-            key=lambda item: (float(item[1]), str(item[0]["action"])),
-        )[0]["action"])
+        actions = [str(candidate["action"]) for candidate in candidates]
+        member_scores = [
+            [float(score) for score in model.booster_.predict(
+                encoder.encode(features),
+                num_threads=self.threads,
+            )]
+            for model, encoder in self.members
+        ]
+        return borda_consensus(actions, member_scores)
 
 
 def collect(

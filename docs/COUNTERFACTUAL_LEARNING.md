@@ -73,3 +73,11 @@ unseen-seed full-stage headless rollout and later differential/physical Windows
 evidence. Online UCB may adapt a distilled prior inside the safe set; neither
 UCB nor a value model may add actions, request Bomb, bypass fresh issue
 certification, or weaken fail-close behavior.
+
+When independently useful candidates make different safe tradeoffs,
+`scripts/build_headless_ranker_ensemble.py` can package them as an immutable
+Borda consensus artifact. Each member encodes and ranks the same current
+native-safe set with its own feature categories; rank positions are aggregated
+without assuming that LightGBM scores are calibrated across objectives. The
+ensemble remains phase-agnostic and cannot inspect seed identity or publish an
+action outside the native gate.
