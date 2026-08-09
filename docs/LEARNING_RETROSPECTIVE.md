@@ -405,7 +405,7 @@ for each stage is still a research incumbent, not a promoted policy:
 | 3 | `b9b3c842d98e` | 53 / 54 | 3 / 2 | 21 / 30 |
 | 4 | `f8a94d1689c4` | 47 / 48 | 2 / 7 | 8 / 78 |
 | 5 | `88b334b4ad78` | 59 / 60 | 8 / 14 | 58 / 88 |
-| 6 | `85471d1dbe2a` | 27 / 28 | 18 / 19 | 94 / 130 |
+| 6 | `3bc9e35ea979` | 51 / 52 | 9 / 12 | 83 / 146 |
 
 All twelve runs completed their natural Practice Stage with zero Bombs, but
 none of the six two-seed stage candidates is NMNB. A different Stage 1 member
@@ -450,11 +450,12 @@ required one forced-release row and its pair required 61. It is retained as a
 different feasible mode rather than mistaken for a strict clear; the table
 uses the sibling with the lower forced rate.
 
-The Stage 6 bootstrap-DAgger COW member `3d4f9b3e5599` reduced its unseen-pair
-HIT total from the table member's 37 to 32 (13/19 rather than 18/19), but raised
-forced releases from 224 to 347. Both remain on the research front until a
-failure-neighborhood correction improves one metric without paying for it in
-the other.
+The Stage 6 bootstrap-DAgger COW member `3d4f9b3e5599` first reduced its
+unseen-pair HIT total from 37 to 32 (13/19 rather than 18/19), but raised forced
+releases from 224 to 347. The later `3bc9e35ea979` unique-best member reduced
+the pair again to 9/12 HIT with 83/146 forced rows. It dominates the bootstrap
+COW member and becomes the HIT-primary table row, while the original
+`85471d1dbe2a` weight remains lower by five aggregate forced rows.
 
 The newer Stage 5 survivable-set member `88b334b4ad78` retained the previous
 pair's 22 total HITs while reducing total forced rows from 167 to 146. Its
