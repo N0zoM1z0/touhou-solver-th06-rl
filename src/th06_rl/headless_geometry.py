@@ -600,8 +600,13 @@ def _laser_frames(rows: Iterable[Mapping[str, Any]], horizon: int):
         timer = _integer(row, "timer")
         graze_delay = _integer(row, "graze_delay")
         tracked = row.get("angle_tracked") is True
+        initialized = (
+            row.get("angle_initialized") is True
+            and timer <= 1
+            and _finite_number(row, "angular_velocity") == 0.0
+        )
         could_be_lethal = state in (1, 2) or timer + horizon >= graze_delay
-        if not tracked and could_be_lethal:
+        if not (tracked or initialized) and could_be_lethal:
             raise HeadlessAuthorityUnavailable(
                 f"laser slot {_integer(row, 'slot')} lacks angular history"
             )

@@ -185,6 +185,32 @@ source trials physically HIT within four ticks. These terminal rows are true
 tested constant-action dead ends. They remain evidence about an earlier
 planning failure, not useful last-frame action labels.
 
+## Fifth differential: newborn laser history was a false terminal
+
+The corrected-contract incumbent repeatedly reached Stage 2 decision 12,932
+and then failed closed on `laser slot 0 lacks angular history`. At seed 114,
+an exact oracle confirmed that all 36 action/continuation branches stopped one
+tick later on that same observation-authority error. The isolated source
+differential then executed every ordinary action for the complete four-tick
+Hard window: all 18/18 remained no-HIT and no-Bomb. This state was neither a
+policy dead end nor a collision closure.
+
+The authoritative `Laser` object has no intrinsic angular-velocity member.
+Commit `63afca914939bc6dfcd78aa913a0fc55173b1fe5` therefore adds an observation
+fact, `angle_initialized`, only while the source laser timer is initialized or
+reset; its binary SHA-256 is
+`10c408012bcd556e2b5187b21cc7c8feb3cd24820af7d250e21cf3e3adc32b0e`.
+The native lowering accepts zero angular velocity only when that flag, timer
+bound, and zero value agree. An untracked lethal laser without the explicit
+source initialization flag still fails closed. Replaying the seed-114 onset
+with the patched runtime produced three initialized lasers and an 18-action
+native set, matching the 18 source-safe trials.
+
+This is an additive headless observation ABI correction, not a learned-policy
+permission. Old rankers may be copied to the new source identity only by the
+bounded compatibility-extension tool and the immutable differential evidence;
+the resulting copy remains unpromoted until new-source full-stage rollout.
+
 ## Consequences for collection and learning
 
 Last-frame corrective labels can be unsatisfiable or dominated by authority

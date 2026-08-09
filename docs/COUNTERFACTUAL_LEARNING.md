@@ -127,6 +127,14 @@ evidence. Online UCB may adapt a distilled prior inside the safe set; neither
 UCB nor a value model may add actions, request Bomb, bypass fresh issue
 certification, or weaken fail-close behavior.
 
+An old ranker may cross a headless source revision only through
+`extend_headless_ranker_compatibility.py`. The upgrader requires a differential
+where every ordinary source action survives an observation-authority gap,
+requires the new runtime to descend from that exact old build, and restricts
+the source diff to the additive headless observation ABI. It copies the model,
+retains both exact source identities, hashes the evidence, and never promotes
+the result. Physics or gameplay-source changes require fresh data and training.
+
 Counterfactual generators and trainers may intentionally overlap on a large
 CPU host. Each trainer freezes the label-file set before decoding its corpus
 and records every file SHA-256 plus a deterministic set digest in the model

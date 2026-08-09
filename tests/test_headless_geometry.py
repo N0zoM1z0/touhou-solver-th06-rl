@@ -77,6 +77,7 @@ def laser(**overrides: object) -> dict[str, object]:
         "angle": 0.0,
         "angular_velocity": 0.0,
         "angle_tracked": True,
+        "angle_initialized": False,
         "start": 0.0,
         "end": 32.0,
         "start_length": 32.0,
@@ -245,6 +246,22 @@ def test_new_laser_may_be_ignored_only_before_its_hitbox_horizon() -> None:
     dangerous["lasers"][0]["graze_delay"] = 3  # type: ignore[index]
     with pytest.raises(HeadlessAuthorityUnavailable, match="angular history"):
         lower_headless_hazards(dangerous)
+
+    initialized = deepcopy(dangerous)
+    initialized["lasers"][0]["angle_initialized"] = True  # type: ignore[index]
+    assert any(lower_headless_hazards(initialized).laser_frames)
+
+
+def test_laser_initialization_evidence_is_bounded_to_source_timer_reset() -> None:
+    value = observation()
+    value["lasers"] = [laser(
+        angle_tracked=False,
+        angle_initialized=True,
+        timer=2,
+    )]
+
+    with pytest.raises(HeadlessAuthorityUnavailable, match="angular history"):
+        lower_headless_hazards(value)
 
 
 def test_bomb_in_observed_input_fails_closed() -> None:
