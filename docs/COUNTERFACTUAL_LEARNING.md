@@ -109,3 +109,13 @@ non-dominated. Continuation candidates may dominate one another only when they
 were measured on the exact same seed panel; rolling unseen seeds measure
 robustness but confound policy quality with seed difficulty. Forced play can
 never enter the strict NMNB population.
+
+`scripts/compare_headless_paired_panel.py` enforces that fixed-panel contract
+before calculating a policy verdict. Every candidate must have exactly one
+transaction-complete, natural, Bomb-free continuation for each common seed,
+and all candidates must share the exact scope and authoritative source build.
+It reports aggregate Pareto dominance separately from the stronger seedwise
+form, where neither HITs nor forced releases may regress on any panel seed.
+Even seedwise dominance keeps `promotion_allowed` false until an independent
+paired replication and later Windows validation; a favorable single panel is
+experiment evidence rather than a promoted policy.
