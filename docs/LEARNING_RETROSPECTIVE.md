@@ -798,6 +798,26 @@ Stage 4 r10 also failed to improve the HIT-primary member. Survivable reached
 single-HIT seed is retained as a useful mode, but aggregate HIT totals of nine
 and eight are worse than the incumbent's six. Both used zero Bombs.
 
+A three-member Stage 1 consensus then reduced HITs on seeds 101/102 from the
+incumbent's 1/2 to 1/1, but raised forced rows from 8/42 to 32/35. Its
+seeds 105/106 replication reversed the HIT result: consensus reached 3/1 with
+59/4 forced rows while the incumbent reached 1/2 with 6/42. Like the earlier
+two-member consensus, it is rejected as an unstable cross-seed improvement.
+
+Stage 3's first three-way same-seed panel was more promising. On seeds 97/98,
+the incumbent-plus-r9-survivable consensus reached 1/1 HIT with 20/5 forced
+rows; the incumbent reached 2/3 with 12/25 and r9 alone reached 4/2 with 61/20.
+The consensus improves both aggregate metrics and both per-seed HIT counts,
+but remains behind a second seeds 107/108 replication gate before any table
+change.
+
+Stage 5's old-plus-new consensus did not help. On the already paired seeds
+91/92 it reached 13/12 HIT with 83/114 forced rows, versus 13/12 with 156/84
+for the old member and 12/9 with 80/82 for the new member. The confirmed new
+member dominates consensus on both aggregate objectives, so the ensemble is
+rejected. The later Stage 4 r10 COW batch remains data-only despite 16 valid
+checkpoints, 240 outcomes, and 87.5% unique strict best.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
