@@ -87,9 +87,10 @@ def event_checkpoint_sequences(
     A fail-close run ends before it can append an authority-release transition,
     so the manifest termination reason is required to retain that final failure
     neighborhood. Continued-HIT runs expose every event in the transition
-    stream, but only the first HIT and preceding authority events are factual
-    correction targets. Post-HIT states remain evaluation evidence and are
-    never labeled for policy training.
+    stream, but only the prefix through the first HIT or forced authority
+    release is a factual correction target. Both events change the subsequent
+    physical trajectory. Later states remain evaluation evidence and are never
+    labeled for policy training.
     """
     event_rows = []
     previous_forced = False
@@ -103,7 +104,7 @@ def event_checkpoint_sequences(
                 target -= 1
             if target >= 1:
                 event_rows.append(target)
-        if hit:
+        if hit or forced:
             break
         previous_forced = forced
     if termination_reason in CORRECTIVE_TERMINATIONS:

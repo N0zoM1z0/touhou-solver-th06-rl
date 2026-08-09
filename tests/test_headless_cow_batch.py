@@ -91,7 +91,7 @@ def test_event_sequences_target_hit_and_first_forced_release_neighborhoods():
     )
 
 
-def test_event_sequences_keep_pre_hit_forced_release_but_ignore_later_hits():
+def test_event_sequences_stop_at_first_forced_release_before_any_hit():
     rows = [_row() for _ in range(20)]
     rows[5] = _row(forced=True, legal=False)
     rows[10] = _row(hit=True)
@@ -100,8 +100,6 @@ def test_event_sequences_keep_pre_hit_forced_release_but_ignore_later_hits():
     assert event_checkpoint_sequences(rows, event_window=2, stride=2) == (
         2,
         4,
-        8,
-        10,
     )
 
 
