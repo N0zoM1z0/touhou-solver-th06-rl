@@ -46,6 +46,49 @@ class ValueGroup:
     best_actions: tuple[str, ...]
 
 
+def behavior_value_groups(
+    decisions: Iterable[Decision],
+    *,
+    excluded_observations: frozenset[str] = frozenset(),
+    stride: int = 1,
+) -> list[ValueGroup]:
+    """Build conservative behavior targets away from causal COW overrides."""
+    if stride <= 0:
+        raise ValueError("behavior stride must be positive")
+    groups = []
+    for decision in decisions:
+        if (
+            decision.sequence % stride != 0
+            or decision.observation_sha256 in excluded_observations
+            or decision.selected_action not in decision.legal_actions
+        ):
+            continue
+        actions = tuple(decision.legal_actions)
+        groups.append(ValueGroup(
+            seed=decision.seed,
+            observation_sha256=decision.observation_sha256,
+            decision=decision,
+            actions=actions,
+            labels=tuple(int(action == decision.selected_action) for action in actions),
+            best_actions=(decision.selected_action,),
+        ))
+    return groups
+
+
+def require_compatible_provenance(
+    factual: Mapping[str, Any],
+    behavior: Mapping[str, Any],
+) -> None:
+    for key in (
+        "scope",
+        "source",
+        "native_delivery_contract",
+        "native_delivery_delays",
+    ):
+        if behavior.get(key) != factual.get(key):
+            raise ValueError(f"behavior corpus uses incompatible {key}")
+
+
 def _files(paths: Iterable[Path]) -> tuple[Path, ...]:
     result = []
     for path in paths:
@@ -207,6 +250,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", nargs="+", type=Path, required=True)
     parser.add_argument("--labels", nargs="+", type=Path, required=True)
+    parser.add_argument(
+        "--behavior-corpus",
+        nargs="+",
+        type=Path,
+        help="optional exact-contract behavior support for conservative policy improvement",
+    )
+    parser.add_argument("--behavior-stride", type=int, default=1)
+    parser.add_argument("--behavior-weight", type=float, default=1.0)
+    parser.add_argument("--value-weight", type=float, default=1.0)
     parser.add_argument("--holdout-seed", type=int, action="append")
     parser.add_argument("--threads", type=int, default=12)
     parser.add_argument("--iterations", type=int, default=500)
@@ -220,6 +272,8 @@ def main() -> int:
         parser.error("threads must be in 1..12")
     if min(args.iterations, args.num_leaves, args.max_depth, args.min_child_samples) <= 0:
         parser.error("model capacity bounds must be positive")
+    if args.behavior_stride <= 0 or min(args.behavior_weight, args.value_weight) <= 0:
+        parser.error("behavior stride and training weights must be positive")
     # Freeze implementation provenance before decoding or fitting. Other
     # benchmark commits may advance this branch while the CPU job is active.
     code_commit = repository_commit()
@@ -234,8 +288,32 @@ def main() -> int:
     test = [group for group in groups if group.seed in holdout]
     if not train or not test:
         parser.error("COW value train and holdout must contain complete seed groups")
-    encoder = Encoder(group.decision for group in train)
-    train_features, train_labels, train_sizes = _matrix(train)
+    behavior_groups: list[ValueGroup] = []
+    behavior_provenance: Mapping[str, Any] | None = None
+    if args.behavior_corpus:
+        behavior_decisions, behavior_provenance = load_decisions(args.behavior_corpus)
+        require_compatible_provenance(provenance, behavior_provenance)
+        behavior_groups = behavior_value_groups(
+            behavior_decisions,
+            excluded_observations=frozenset(group.observation_sha256 for group in groups),
+            stride=args.behavior_stride,
+        )
+        if not behavior_groups:
+            parser.error("behavior corpus supplied no conservative support groups")
+    behavior_train = [group for group in behavior_groups if group.seed not in holdout]
+    behavior_test = [group for group in behavior_groups if group.seed in holdout]
+    combined_train = behavior_train + train
+    encoder = Encoder(group.decision for group in combined_train)
+    train_features, train_labels, train_sizes = _matrix(combined_train)
+    train_weights = [
+        weight
+        for groups_part, weight in (
+            (behavior_train, args.behavior_weight),
+            (train, args.value_weight),
+        )
+        for group in groups_part
+        for _ in group.actions
+    ]
 
     from lightgbm import LGBMRanker
     import joblib
@@ -260,6 +338,7 @@ def main() -> int:
         encoder.encode(train_features),
         np.asarray(train_labels, dtype=np.int16),
         group=train_sizes,
+        sample_weight=np.asarray(train_weights, dtype=np.float32),
         categorical_feature=list(range(len(CATEGORICAL_FEATURES))),
     )
     elapsed = time.perf_counter() - started
@@ -277,12 +356,16 @@ def main() -> int:
         "compatible_headless_sources": compatible_sources,
         "native_delivery_contract": provenance["native_delivery_contract"],
         "native_delivery_delays": provenance["native_delivery_delays"],
-        "value_contract": "dynamic-cow-ordinal-survival-maneuverability-v1",
+        "value_contract": "dynamic-cow-quality-tier-conservative-improvement-v3",
     }
     joblib.dump(artifact, args.output / "cow-value-ranker.joblib", compress=3)
     report = {
         "schema": "th06-rl-headless-cow-value-v1",
-        "algorithm": "lightgbm-lambdarank-counterfactual-action-value",
+        "algorithm": (
+            "lightgbm-lambdarank-counterfactual-value-with-behavior-regularization"
+            if behavior_groups
+            else "lightgbm-lambdarank-counterfactual-action-value"
+        ),
         "authority": "rank-native-legal-set-only",
         "scope": provenance["scope"],
         "code_commit": code_commit,
@@ -291,6 +374,19 @@ def main() -> int:
         "native_delivery_contract": provenance["native_delivery_contract"],
         "native_delivery_delays": provenance["native_delivery_delays"],
         "label_report": label_report,
+        "behavior_regularization": {
+            "enabled": bool(behavior_groups),
+            "stride": args.behavior_stride,
+            "behavior_weight": args.behavior_weight,
+            "value_weight": args.value_weight,
+            "train_groups": len(behavior_train),
+            "holdout_groups": len(behavior_test),
+            "factual_corpus": (
+                behavior_provenance.get("factual_corpus")
+                if behavior_provenance is not None
+                else None
+            ),
+        },
         "train_seeds": sorted(set(seeds) - holdout),
         "holdout_seeds": sorted(holdout),
         "iterations": args.iterations,
@@ -299,6 +395,14 @@ def main() -> int:
         "peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0,
         "train": evaluate(model, encoder, train, threads=args.threads),
         "holdout": evaluate(model, encoder, test, threads=args.threads),
+        "behavior_train": (
+            evaluate(model, encoder, behavior_train, threads=args.threads)
+            if behavior_train else None
+        ),
+        "behavior_holdout": (
+            evaluate(model, encoder, behavior_test, threads=args.threads)
+            if behavior_test else None
+        ),
         "promotion_allowed": False,
         "promotion_blocker": (
             "counterfactual ranking is an offline diagnostic until full unseen-seed stage rollout"

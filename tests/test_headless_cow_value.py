@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from scripts.train_headless_cow_value import delivery_contract, ordinal_outcome_labels
+from scripts.train_headless_cow_value import (
+    behavior_value_groups,
+    delivery_contract,
+    ordinal_outcome_labels,
+)
+from scripts.train_headless_teacher import Decision
 
 
 def outcome(terminal: str, survival: int, legal: int, reserve: float):
@@ -61,3 +66,24 @@ def test_cow_value_delivery_contract_is_explicit_and_backward_auditable() -> Non
         "runtime_delivery_delays": [0],
     }) == ("synchronous-step-v1", (0,))
     assert delivery_contract({}) == ("legacy-unspecified-v0", ())
+
+
+def test_behavior_regularization_yields_to_cow_observation() -> None:
+    decision = Decision(
+        run="run",
+        seed=7,
+        sequence=4,
+        source_context="boss:0/1",
+        state={},
+        legal_actions=("left", "right"),
+        candidates=(),
+        teacher_action="left",
+        selected_action="right",
+        observation_sha256="digest",
+    )
+
+    assert behavior_value_groups([decision], stride=2)[0].labels == (0, 1)
+    assert behavior_value_groups(
+        [decision],
+        excluded_observations=frozenset({"digest"}),
+    ) == []

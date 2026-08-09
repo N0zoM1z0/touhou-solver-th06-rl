@@ -97,6 +97,14 @@ complete-seed train/holdout splits. It ranks only the native action set. A
 future fitted-Q, CQL, IQL, or contextual-bandit implementation should consume
 the same candidate/outcome table and obey the same grouped split.
 
+A value-only fit has no support away from its sparse COW checkpoints and must
+not be treated as a whole-route policy. The conservative-improvement mode adds
+the exact-contract behavior action as a ranking target on all other sampled
+observations, lets COW quality tiers override matching observations, and
+records independent behavior/value weights. Holdout reports both COW value
+ranking and behavior-action retention. This is behavior regularization, not
+permission to copy an old incompatible-delivery model into a new ensemble.
+
 Factual corpus and COW labels must also declare the same platform delivery
 contract. The value trainer refuses, for example, a synchronous Linux `[0]`
 corpus paired with legacy or asynchronous-delay counterfactuals, and writes the
