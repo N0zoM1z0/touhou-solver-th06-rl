@@ -95,6 +95,7 @@ def audit_file(path: Path) -> dict[str, Any]:
     branch_count = 0
     native_actions = 0
     discriminative = 0
+    native_set_revisions = 0
     for checkpoint_index, checkpoint in enumerate(checkpoints):
         prefix = f"checkpoint {checkpoint_index}"
         legal = checkpoint.get("native_legal_actions")
@@ -107,6 +108,16 @@ def audit_file(path: Path) -> dict[str, Any]:
         ):
             errors.append(f"{prefix}: invalid native legal set")
             continue
+        input_legal = checkpoint.get("input_native_legal_actions", legal)
+        if not isinstance(input_legal, list) or "bomb" in input_legal:
+            errors.append(f"{prefix}: invalid input native legal set")
+            continue
+        revised = input_legal != legal
+        if checkpoint.get("native_set_revised", revised) != revised:
+            errors.append(f"{prefix}: native set revision flag mismatch")
+        if revised and document.get("native_set_revision_allowed") is not True:
+            errors.append(f"{prefix}: undeclared native set revision")
+        native_set_revisions += int(revised)
         if not isinstance(branches, list):
             errors.append(f"{prefix}: branches missing")
             continue
@@ -182,6 +193,7 @@ def audit_file(path: Path) -> dict[str, Any]:
         "native_actions": native_actions,
         "branches": branch_count,
         "discriminative_checkpoints": discriminative,
+        "native_set_revisions": native_set_revisions,
         "verdicts": dict(sorted(verdicts.items())),
         "terminations": dict(sorted(terminations.items())),
         "continuation_witnesses": dict(sorted(continuation_witnesses.items())),
@@ -408,6 +420,9 @@ def summarize(results: list[dict[str, Any]], *, threads: int) -> dict[str, Any]:
         "branches": sum(int(result["branches"]) for result in valid),
         "discriminative_checkpoints": sum(
             int(result["discriminative_checkpoints"]) for result in valid
+        ),
+        "native_set_revisions": sum(
+            int(result["native_set_revisions"]) for result in valid
         ),
         "verdicts": dict(sorted(verdicts.items())),
         "terminations": dict(sorted(terminations.items())),

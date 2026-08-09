@@ -336,6 +336,7 @@ def _run_branch(
     branch_frames: int,
     kernel: NativeKernel,
     seed: int,
+    native_legal_actions: tuple[str, ...],
 ) -> dict[str, Any]:
     checkpoint_tick = int(row["tick"])
     observation = server.begin_step_session(
@@ -345,9 +346,9 @@ def _run_branch(
         server.abort_step_session()
         raise ValueError("oracle checkpoint is not byte-logically identical")
     certified, _ = _certify(observation, kernel)
-    if tuple(item.action.name for item in certified) != tuple(row["legal_actions"]):
+    if tuple(item.action.name for item in certified) != native_legal_actions:
         server.abort_step_session()
-        raise ValueError("oracle checkpoint native legal set differs from corpus")
+        raise ValueError("oracle checkpoint native legal set is not repeatable")
     checkpoint_deaths = int(observation["deaths"])
     checkpoint_bombs = int(observation["bombs_used"])
     minimum_legal = len(certified)
@@ -421,6 +422,7 @@ def label_checkpoint(
     continuations: tuple[Continuation, ...],
     kernel: NativeKernel,
     seed: int,
+    allow_native_set_revision: bool,
 ) -> dict[str, Any]:
     first_observation = server.begin_step_session(
         terminal_tick=int(row["tick"]) + 1,
@@ -428,11 +430,24 @@ def label_checkpoint(
     if canonical_observation_sha256(first_observation) != row["observation_sha256"]:
         server.abort_step_session()
         raise ValueError("oracle feature checkpoint is not byte-logically identical")
+    runtime_certified, _ = _certify(first_observation, kernel)
+    native_legal_actions = tuple(item.action.name for item in runtime_certified)
+    input_legal_actions = tuple(str(action) for action in row["legal_actions"])
+    native_set_revised = native_legal_actions != input_legal_actions
+    if native_set_revised and not allow_native_set_revision:
+        server.abort_step_session()
+        raise ValueError(
+            "oracle native legal set differs from corpus; "
+            "pass --allow-native-set-revision for an explicit geometry A/B"
+        )
+    if not native_legal_actions:
+        server.abort_step_session()
+        raise ValueError("oracle checkpoint has no runtime native-safe first action")
     exact_features = exact_snapshot_features(first_observation)
     # Close the one-tick feature probe with an ordinary certified action.  This
     # avoids using the deliberate authority-abort sentinel for a successful
     # observation read and keeps runtime diagnostics free of false failures.
-    server.step_session(str(row["legal_actions"][0]))
+    server.step_session(native_legal_actions[0])
     server.finish_step_session()
     branches = [
         _run_branch(
@@ -443,8 +458,9 @@ def label_checkpoint(
             branch_frames=branch_frames,
             kernel=kernel,
             seed=seed,
+            native_legal_actions=native_legal_actions,
         )
-        for first_action in row["legal_actions"]
+        for first_action in native_legal_actions
         for continuation in continuations
     ]
     feasible_actions = tuple(sorted({
@@ -470,7 +486,9 @@ def label_checkpoint(
         "exact_snapshot_features": exact_features,
         "factual_action": factual,
         "local_teacher_action": local,
-        "native_legal_actions": row["legal_actions"],
+        "input_native_legal_actions": list(input_legal_actions),
+        "native_legal_actions": list(native_legal_actions),
+        "native_set_revised": native_set_revised,
         "branch_frames": branch_frames,
         "continuation_count": len(continuations),
         "feasible_actions": list(feasible_actions),
@@ -529,6 +547,7 @@ def main() -> int:
     parser.add_argument("--model", type=Path, action="append")
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--allow-dirty-code", action="store_true")
+    parser.add_argument("--allow-native-set-revision", action="store_true")
     parser.add_argument(
         "--binary",
         type=Path,
@@ -602,6 +621,7 @@ def main() -> int:
                         continuations=continuations,
                         kernel=kernel,
                         seed=int(manifest["initial_seed"]),
+                        allow_native_set_revision=args.allow_native_set_revision,
                     ))
                 finally:
                     server.leave_checkpoint()
@@ -625,6 +645,7 @@ def main() -> int:
         "code_source": code_source,
         "runtime_source": runtime_source,
         "branch_frames": args.branch_frames,
+        "native_set_revision_allowed": args.allow_native_set_revision,
         "continuations": [item.describe() for item in continuations],
         "checkpoints": labels,
     }

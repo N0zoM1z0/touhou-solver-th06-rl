@@ -40,6 +40,7 @@ def _document():
         "scope": {"difficulty": 3, "character": 0, "shot_type": 0, "stage": 3},
         "initial_seed": 9,
         "branch_frames": 60,
+        "native_set_revision_allowed": False,
         "runtime_source": {"clean": True, "commit": "abc", "binary_sha256": "def"},
         "input_source": {"clean": True, "commit": "abc", "binary_sha256": "def"},
         "code_source": {"clean": True, "commit": "123"},
@@ -65,6 +66,8 @@ def _document():
             "factual_action": "right",
             "local_teacher_action": "right",
             "native_legal_actions": ["left", "right"],
+            "input_native_legal_actions": ["left", "right"],
+            "native_set_revised": False,
             "branch_frames": 60,
             "continuation_count": 2,
             "feasible_actions": ["left"],
@@ -98,6 +101,35 @@ def test_feasibility_audit_rejects_missing_continuation_branch(tmp_path) -> None
 
     assert result["valid"] is False
     assert "action-continuation product" in " ".join(result["errors"])
+
+
+def test_feasibility_audit_requires_declared_native_set_revision(tmp_path) -> None:
+    document = _document()
+    checkpoint = document["checkpoints"][0]
+    checkpoint["input_native_legal_actions"] = ["left"]
+    checkpoint["native_set_revised"] = True
+    path = tmp_path / "oracle.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    result = audit_file(path)
+
+    assert result["valid"] is False
+    assert "undeclared native set revision" in " ".join(result["errors"])
+
+
+def test_feasibility_audit_accepts_declared_native_set_revision(tmp_path) -> None:
+    document = _document()
+    document["native_set_revision_allowed"] = True
+    checkpoint = document["checkpoints"][0]
+    checkpoint["input_native_legal_actions"] = ["left"]
+    checkpoint["native_set_revised"] = True
+    path = tmp_path / "oracle.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    result = audit_file(path)
+
+    assert result["valid"] is True
+    assert result["native_set_revisions"] == 1
 
 
 def test_checkpoint_verdict_preserves_no_witness_epistemic_boundary() -> None:

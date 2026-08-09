@@ -99,6 +99,41 @@ def action_from_input(input_mask: int) -> Action:
     return BY_NAME[name]
 
 
+def _hard_player_target_bounds(
+    observation: Mapping[str, Any],
+    horizon: int,
+) -> tuple[tuple[float, float, float, float] | None, ...]:
+    """Enclose every player target position covered by the native Hard gate.
+
+    Player-aim turns are candidate dependent.  A shared arbitrary-direction
+    enclosure is safe but pathological: it invents targets that no legal
+    action, delivery delay, or Keyboard::_sync prefix can reach.  Every source
+    movement primitive is bounded by four pixels per axis and frame, so this
+    small rectangle covers the complete action/delivery product without a
+    per-bullet combinatorial enumeration.
+
+    The offline planner may change action after the Hard window, so later
+    frames deliberately return no target set and retain the conservative
+    arbitrary-direction fallback.
+    """
+    player = observation["player"]
+    assert isinstance(player, Mapping)
+    start_x = _finite_number(player, "x")
+    start_y = _finite_number(player, "y")
+    covered = min(horizon, HARD_HORIZON)
+    return tuple(
+        (
+            max(8.0, start_x - KINEMATICS.normal_speed * frame),
+            max(16.0, start_y - KINEMATICS.normal_speed * frame),
+            min(376.0, start_x + KINEMATICS.normal_speed * frame),
+            min(432.0, start_y + KINEMATICS.normal_speed * frame),
+        )
+        if frame <= covered
+        else None
+        for frame in range(1, horizon + 1)
+    )
+
+
 @dataclass(frozen=True)
 class _Bullet:
     x: float
@@ -192,7 +227,100 @@ def _maximum_uncertain_speed(bullet: _Bullet, remaining: int) -> float:
     return max(0.0, base + remaining * max(acceleration, curve))
 
 
-def _project_fired(bullet: _Bullet, horizon: int) -> tuple[Aabb, ...]:
+def _aimed_turn_envelope(
+    bullet: _Bullet,
+    *,
+    target_bounds: tuple[float, float, float, float],
+    remaining: int,
+) -> tuple[Aabb, ...] | None:
+    """Bound a one-shot source retarget to the complete Hard target rectangle.
+
+    For the common 0x80/0x84 form, the source chooses one angle to the player,
+    clears the turn flag, and then keeps the resulting velocity.  The angles
+    subtended by a rectangle form one circular interval.  Evaluating its two
+    ends plus contained cardinal angles gives exact velocity-component extrema
+    without enumerating every action/delivery scenario for every bullet.
+    """
+    dynamic = bullet.ex_flags & ~SPAWN_EFFECT_FLAGS
+    if (
+        dynamic != PLAYER_AIM_TURN_FLAG
+        or bullet.direction_num_times + 1 < bullet.direction_max_times
+        or remaining <= 0
+    ):
+        return None
+    left, top, right, bottom = target_bounds
+    if left <= bullet.x <= right and top <= bullet.y <= bottom:
+        start = 0.0
+        end = math.tau
+    else:
+        angles = sorted(
+            math.atan2(y - bullet.y, x - bullet.x) % math.tau
+            for x, y in (
+                (left, top),
+                (left, bottom),
+                (right, top),
+                (right, bottom),
+            )
+        )
+        gaps = [
+            (angles[(index + 1) % len(angles)] - angles[index]) % math.tau
+            for index in range(len(angles))
+        ]
+        gap_index = max(range(len(gaps)), key=gaps.__getitem__)
+        start = angles[(gap_index + 1) % len(angles)]
+        end = angles[gap_index]
+        if end < start:
+            end += math.tau
+    start += bullet.direction_rotation
+    end += bullet.direction_rotation
+    candidates = [start, end]
+    quarter = math.pi / 2.0
+    first_cardinal = math.ceil(start / quarter)
+    last_cardinal = math.floor(end / quarter)
+    candidates.extend(
+        cardinal * quarter
+        for cardinal in range(first_cardinal, last_cardinal + 1)
+    )
+    velocities = [
+        (
+            _f32(math.cos(angle) * bullet.turn_speed),
+            _f32(math.sin(angle) * bullet.turn_speed),
+        )
+        for angle in candidates
+    ]
+    minimum_vx = min(x for x, _ in velocities)
+    maximum_vx = max(x for x, _ in velocities)
+    minimum_vy = min(y for _, y in velocities)
+    maximum_vy = max(y for _, y in velocities)
+    minimum_x = maximum_x = bullet.x
+    minimum_y = maximum_y = bullet.y
+    result = []
+    for frame in range(1, remaining + 1):
+        minimum_x = _f32(minimum_x + minimum_vx)
+        maximum_x = _f32(maximum_x + maximum_vx)
+        minimum_y = _f32(minimum_y + minimum_vy)
+        maximum_y = _f32(maximum_y + maximum_vy)
+        # Cover libm/float32 endpoint rounding while remaining negligible next
+        # to the separately retained 0.35 physical collision margin.
+        epsilon = frame * 1.0e-4
+        result.append(Aabb(
+            minimum_x - bullet.half_width - epsilon,
+            minimum_y - bullet.half_height - epsilon,
+            maximum_x + bullet.half_width + epsilon,
+            maximum_y + bullet.half_height + epsilon,
+        ))
+    return tuple(result)
+
+
+def _project_fired(
+    bullet: _Bullet,
+    horizon: int,
+    *,
+    player_targets: tuple[
+        tuple[float, float, float, float] | None,
+        ...,
+    ] = (),
+) -> tuple[Aabb, ...]:
     result: list[Aabb] = []
     current = replace(bullet, state=1)
     uncertain_radius: float | None = None
@@ -273,9 +401,26 @@ def _project_fired(bullet: _Bullet, horizon: int) -> tuple[Aabb, ...]:
         elif flags & PLAYER_AIM_TURN_FLAG:
             threshold = current.direction_interval * (direction_num_times + 1)
             if current.timer >= threshold:
-                # The source retargets to the candidate player position.  The
-                # shared native hazard view cannot encode candidate-dependent
-                # angles, so enclose every direction from this exact point.
+                target_bounds = (
+                    player_targets[frame_index]
+                    if frame_index < len(player_targets)
+                    else None
+                )
+                envelope = (
+                    _aimed_turn_envelope(
+                        current,
+                        target_bounds=target_bounds,
+                        remaining=remaining,
+                    )
+                    if target_bounds is not None
+                    else None
+                )
+                if envelope is not None:
+                    result.extend(envelope)
+                    return tuple(result)
+                # Beyond the fixed Hard window an offline plan can reach
+                # positions not represented by one constant first action.
+                # Retain the previous fail-close arbitrary-direction envelope.
                 uncertain_x = current.x
                 uncertain_y = current.y
                 uncertain_radius = _maximum_uncertain_speed(current, remaining)
@@ -330,11 +475,19 @@ def _project_fired(bullet: _Bullet, horizon: int) -> tuple[Aabb, ...]:
     return tuple(result)
 
 
-def _project_bullet(bullet: _Bullet, horizon: int) -> tuple[Aabb | None, ...]:
+def _project_bullet(
+    bullet: _Bullet,
+    horizon: int,
+    *,
+    player_targets: tuple[
+        tuple[float, float, float, float] | None,
+        ...,
+    ] = (),
+) -> tuple[Aabb | None, ...]:
     if bullet.state in (0, 5):
         return (None,) * horizon
     if bullet.state == 1:
-        return _project_fired(bullet, horizon)
+        return _project_fired(bullet, horizon, player_targets=player_targets)
     if bullet.state not in (2, 3, 4):
         raise HeadlessAuthorityUnavailable("unsupported headless bullet state")
 
@@ -352,7 +505,11 @@ def _project_bullet(bullet: _Bullet, horizon: int) -> tuple[Aabb | None, ...]:
             timer=0,
             timer_float=0.0,
         )
-        for offset, box in enumerate(_project_fired(fired, horizon - transition_frame + 1)):
+        for offset, box in enumerate(_project_fired(
+            fired,
+            horizon - transition_frame + 1,
+            player_targets=player_targets[transition_frame - 1 :],
+        )):
             branches[transition_frame - 1 + offset].append(box)
     return tuple(
         Aabb(
@@ -383,11 +540,19 @@ def _bullet_frames(
     player_y: float,
     player_half_width: float,
     player_half_height: float,
+    player_targets: tuple[
+        tuple[float, float, float, float] | None,
+        ...,
+    ],
 ) -> list[list[Aabb]]:
     frames: list[list[Aabb]] = [[] for _ in range(horizon)]
     for row in rows:
         bullet = _Bullet.from_json(row)
-        for frame_index, box in enumerate(_project_bullet(bullet, horizon)):
+        for frame_index, box in enumerate(_project_bullet(
+            bullet,
+            horizon,
+            player_targets=player_targets,
+        )):
             if box is not None and _reachable(
                 box,
                 x=player_x,
@@ -480,6 +645,7 @@ def lower_headless_hazards(
         player_y=y,
         player_half_width=half_width,
         player_half_height=half_height,
+        player_targets=_hard_player_target_bounds(observation, horizon),
     )
     enemy_frames = _enemy_frames(observation["enemies"], horizon)  # type: ignore[arg-type]
     return PackedHazards(

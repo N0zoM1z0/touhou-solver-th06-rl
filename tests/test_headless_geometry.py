@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import math
 
 import pytest
 
@@ -119,6 +120,55 @@ def test_spawn_state_encloses_every_possible_firing_tick() -> None:
     assert not frames[0]
     assert all(len(frame) == 1 for frame in frames[1:])
     assert frames[-1][0].bottom >= frames[1][0].bottom
+
+
+def test_player_aim_turn_only_encloses_hard_reachable_targets() -> None:
+    value = observation()
+    value["player"] = {
+        **value["player"],  # type: ignore[dict-item]
+        "x": 45.4141846,
+        "y": 39.119915,
+    }
+    value["bullets"] = [bullet(
+        x=55.0,
+        y=42.3366013,
+        vx=-0.0835062414,
+        vy=-0.0498731174,
+        speed=3.890625,
+        angle=-2.6032064,
+        ex_flags=0x84,
+        turn_speed=4.0,
+        timer=40,
+        timer_float=40.0,
+        direction_interval=40,
+        direction_num_times=0,
+        direction_max_times=1,
+    )]
+
+    frames = lower_headless_hazards(value).aabb_frames
+
+    # The source can only aim at positions produced by the declared movement,
+    # delivery-delay, and key-transition product.  The old arbitrary 360-degree
+    # box was about 12 px wide on frame one; the reachable target cone is tight.
+    assert frames[0][0].right - frames[0][0].left < 4.0
+    assert frames[0][0].bottom - frames[0][0].top < 6.0
+
+    player = value["player"]
+    assert isinstance(player, dict)
+    for target_x in (player["x"] - 4.0, player["x"], player["x"] + 4.0):
+        for target_y in (player["y"] - 4.0, player["y"], player["y"] + 4.0):
+            angle = math.atan2(target_y - 42.3366013, target_x - 55.0)
+            vx = math.cos(angle) * 4.0
+            vy = math.sin(angle) * 4.0
+            x = 55.0
+            y = 42.3366013
+            for frame in frames:
+                x += vx
+                y += vy
+                assert frame[0].left <= x - 1.0 <= frame[0].right
+                assert frame[0].left <= x + 1.0 <= frame[0].right
+                assert frame[0].top <= y - 1.0 <= frame[0].bottom
+                assert frame[0].top <= y + 1.0 <= frame[0].bottom
 
 
 def test_unknown_ex_motion_fails_closed() -> None:

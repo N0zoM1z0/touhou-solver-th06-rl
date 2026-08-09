@@ -68,6 +68,12 @@ PYTHONPATH=.:src .venv/bin/python \
 Formal generation refuses a dirty repository by default. `--allow-dirty-code`
 exists only for local smoke tests and is recorded as dirty provenance.
 
+Geometry changes intentionally invalidate the compact corpus legal set even
+when the source checkpoint remains byte-logically identical. For a declared
+before/after authority experiment, add `--allow-native-set-revision`. The
+artifact then records both `input_native_legal_actions` and the recomputed
+`native_legal_actions`; the independent audit rejects a silent revision.
+
 The independent audit recomputes branch feasibility, action/continuation
 coverage, best-action summaries, policy verdicts, Bomb deltas, bounds, and
 source identity. It rejects a missing branch or a summary that does not match
@@ -101,3 +107,7 @@ Interpret the deltas conservatively:
 Only complete-seed, exact-scope comparisons may be combined. The final NMNB
 gate remains a natural full-Stage headless clear followed by differential and
 physical Windows validation.
+
+Confirmed authority failures and source-physical geometry corrections are
+recorded separately in
+[`GEOMETRY_AUTHORITY_FINDINGS.md`](GEOMETRY_AUTHORITY_FINDINGS.md).

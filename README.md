@@ -249,6 +249,10 @@ constructive native-action feasibility witness, an observed policy-selection
 error, and compact-versus-exact-derived representation evidence without moving
 search or source-only features into the resident controller.
 
+Confirmed source-physical geometry failures and their before/after authority
+evidence are recorded in
+[`docs/GEOMETRY_AUTHORITY_FINDINGS.md`](docs/GEOMETRY_AUTHORITY_FINDINGS.md).
+
 Online reward version `survival-reserve-hit-trace-v2` delivers a confirmed
 physical HIT independently of the one-step publication outcome. It assigns a
 discounted penalty to at most the prior 120 learning-eligible actions in the
