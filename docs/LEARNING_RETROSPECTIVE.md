@@ -846,6 +846,29 @@ action were each best at 25%. These labels are frozen for a later generation;
 rollout evidence, not the 68.75% label statistic, decides whether to train or
 promote that generation.
 
+The exact Stage 5 seeds 83/84 panel kept the HIT-primary incumbent. It reached
+8/9 HIT with 85/77 forced rows; r9 unique reached 12/7 with 90/55, and r9
+survivable reached 12/10 with 94/70. Thus r9 unique seedwise dominates its
+survivable sibling, but trades two more aggregate HITs for 17 fewer forced rows
+than the incumbent. It remains a lower-forced Pareto member rather than
+replacing `911a325c4468`.
+
+Fresh incumbent baselines on seeds 113/114 further reject seed-local optimism.
+Stage 1 reached 3/1 HIT with 46/13 forced rows. Stage 2 reached 2/1 with 67/63;
+of its 130 forced rows, 76 were empty native safe sets and 54 were untracked
+newborn lasers. Both Stage 2 runs first entered forced continuation at an empty
+safe set before any laser-history failure, so their pre-dead-end states remain
+valid targets for a 720-tick, 1200-branch COW batch. Later post-forced states
+remain evaluation-only.
+
+The authoritative ECL implementation also excludes a generic newborn-laser
+angular bound. `LASERROTATE` adds a runtime `GetVarFloat` argument directly to
+the laser angle, while `LASERROTATEFROMPLAYER` replaces it with the current
+player-facing angle plus another runtime float. Without interpreting future
+ECL there is neither a fixed per-tick delta nor a source-independent direction
+bound. Newborn lasers therefore continue to fail closed; learned ranking or a
+headless-only zero-rotation assumption may not bypass that authority gap.
+
 ## Portability to TH08
 
 The COW mechanism itself is a TH06 adapter. The learning contract is portable:
