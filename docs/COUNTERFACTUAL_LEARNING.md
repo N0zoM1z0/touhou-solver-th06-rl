@@ -102,6 +102,13 @@ and records every file SHA-256 plus a deterministic set digest in the model
 report. A directory that grows during fitting therefore affects only a later
 model, never the already declared training snapshot.
 
+The factual side is frozen as well. Every eligible compact-run manifest
+already commits to the compressed transition SHA-256; teacher reports retain
+that digest together with the manifest SHA-256, resolved run path, byte count,
+and a deterministic digest of the ordered run set. This makes a many-root
+all-history fit auditable without hashing the large transition streams a
+second time.
+
 When independently useful candidates make different safe tradeoffs,
 `scripts/build_headless_ranker_ensemble.py` can package them as an immutable
 Borda consensus artifact. Each member encodes and ranks the same current

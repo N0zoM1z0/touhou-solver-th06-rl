@@ -253,12 +253,25 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
     decisions = []
     index_by_observation: dict[str, int] = {}
     duplicate_decisions = 0
+    input_runs: list[dict[str, Any]] = []
     scope: Mapping[str, Any] | None = None
     source: Mapping[str, Any] | None = None
     for run in _run_directories(paths):
-        manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+        manifest_path = run / "manifest.json"
+        manifest_bytes = manifest_path.read_bytes()
+        manifest = json.loads(manifest_bytes)
         if manifest.get("transaction_complete") is not True or manifest.get("training_eligible") is not True:
             continue
+        transition_file = manifest.get("files", {}).get("transitions", {})
+        transition_sha256 = transition_file.get("sha256")
+        if not isinstance(transition_sha256, str) or len(transition_sha256) != 64:
+            raise ValueError("eligible headless teacher run lacks transition SHA-256")
+        input_runs.append({
+            "run": str(run.resolve()),
+            "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+            "transition_sha256": transition_sha256,
+            "transition_bytes": int(transition_file.get("bytes", 0)),
+        })
         if scope is None:
             scope = manifest["scope"]
             source = manifest["source"]
@@ -320,10 +333,21 @@ def load_decisions(paths: Iterable[Path]) -> tuple[list[Decision], dict[str, Any
                 ))
     if not decisions or scope is None or source is None:
         raise ValueError("no eligible compact headless decisions found")
+    input_runs.sort(key=lambda item: item["run"])
+    input_run_payload = json.dumps(
+        input_runs,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
     return decisions, {
         "scope": scope,
         "source": source,
         "duplicate_decisions_skipped": duplicate_decisions,
+        "factual_corpus": {
+            "runs": len(input_runs),
+            "runs_used": input_runs,
+            "run_set_sha256": hashlib.sha256(input_run_payload).hexdigest(),
+        },
     }
 
 
@@ -693,6 +717,7 @@ def main() -> int:
         "holdout_decisions": len(test),
         "candidate_training_rows": len(labels),
         "duplicate_decisions_skipped": provenance["duplicate_decisions_skipped"],
+        "factual_corpus": provenance["factual_corpus"],
         "iterations": args.iterations,
         "model_parameters": {
             "objective": args.objective,
