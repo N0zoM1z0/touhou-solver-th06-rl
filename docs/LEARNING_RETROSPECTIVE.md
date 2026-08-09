@@ -404,7 +404,7 @@ for each stage is still a research incumbent, not a promoted policy:
 | 2 | `a4245bdfc8d3` | 61 / 62 | 1 / 0 | 60 / 15 |
 | 3 | `b9b3c842d98e` | 53 / 54 | 3 / 2 | 21 / 30 |
 | 4 | `f8a94d1689c4` | 47 / 48 | 2 / 7 | 8 / 78 |
-| 5 | `481036a5ed47` | 27 / 28 | 11 / 11 | 76 / 91 |
+| 5 | `88b334b4ad78` | 59 / 60 | 8 / 14 | 58 / 88 |
 | 6 | `85471d1dbe2a` | 27 / 28 | 18 / 19 | 94 / 130 |
 
 All twelve runs completed their natural Practice Stage with zero Bombs, but
@@ -436,6 +436,9 @@ rows: it strictly improves the former 9/5-HIT, 59/72-forced incumbent, while
 trading four additional total HITs for five fewer total forced rows relative
 to the new table member. Both siblings therefore remain on the Pareto front.
 These are explicit trade-offs, not overwritten checkpoints.
+The corresponding full-label Stage 4 candidates regressed to 4/11 HIT with
+14/73 forced rows and 6/11 HIT with 65/83 forced rows. More labels at the same
+counterfactual weight therefore did not dominate the partial correction.
 
 The Stage 3 bootstrap-DAgger COW member `d8472ed568fe` is a strict closed-loop
 improvement over the preceding bootstrap on these metrics: total HIT fell from
@@ -452,6 +455,14 @@ HIT total from the table member's 37 to 32 (13/19 rather than 18/19), but raised
 forced releases from 224 to 347. Both remain on the research front until a
 failure-neighborhood correction improves one metric without paying for it in
 the other.
+
+The newer Stage 5 survivable-set member `88b334b4ad78` retained the previous
+pair's 22 total HITs while reducing total forced rows from 167 to 146. Its
+8/14 HIT split is less balanced than the preceding member's 11/11, so the old
+weight remains a robustness/diversity candidate even though the new member is
+better on the aggregate continuation Pareto metrics.
+The sibling unique-best member returned 11/11 HIT and 86/105 forced rows, so
+it did not improve either the old balanced member or the new aggregate member.
 
 A second COW batch targeted the last 600 decisions of the bootstrap policy's
 first-failure trajectories. All 10 files were valid: 90 checkpoints and 1,441
