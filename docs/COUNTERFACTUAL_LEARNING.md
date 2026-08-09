@@ -37,6 +37,14 @@ For `authority-failure` and `physical-hit` manifests the event selector
 therefore also samples backward from that final reconstructable state. The
 batch driver changes scheduling only, not branch authority.
 
+`--selection uniform` instead samples the complete factual route at the
+declared stride and retains the final reconstructable state. `--selection
+coverage` unions that route-wide sample with the event neighborhood. Both are
+phase-agnostic: selection depends only on dense factual sequence order and
+labelability, never RNG identity, boss name, captured frame, or a handwritten
+phase. Route-wide labels are required when terminal-only labels fit one
+failure neighborhood but do not transfer across complete-seed holdouts.
+
 The default keeps all checkpoints from one run in a single sequential replay,
 which minimizes total CPU work. On a high-core offline host,
 `--checkpoints-per-task N` may split that replay into independently resumable
