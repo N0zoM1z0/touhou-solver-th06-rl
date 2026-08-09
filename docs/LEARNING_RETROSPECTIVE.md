@@ -404,7 +404,7 @@ for each stage is still a research incumbent, not a promoted policy:
 | 2 | `a4245bdfc8d3` | 71 / 72 | 0 / 0 | 20 / 14 |
 | 3 | `4b4e9235f816` | 75 / 76 | 1 / 2 | 4 / 9 |
 | 4 | `02a85a9fdf7d` | 75 / 76 | 3 / 3 | 27 / 17 |
-| 5 | `88b334b4ad78` | 59 / 60 | 8 / 14 | 58 / 88 |
+| 5 | `911a325c4468` | 79 / 80 | 9 / 12 | 60 / 120 |
 | 6 | `3bc9e35ea979` | 51 / 52 | 9 / 12 | 83 / 146 |
 
 All twelve runs completed their natural Practice Stage with zero Bombs, but
@@ -470,6 +470,12 @@ weight remains a robustness/diversity candidate even though the new member is
 better on the aggregate continuation Pareto metrics.
 The sibling unique-best member returned 11/11 HIT and 86/105 forced rows, so
 it did not improve either the old balanced member or the new aggregate member.
+The later `911a325c4468` survivable member reduced the pair to 9/12 HIT on
+seeds 79/80, becoming the new HIT-primary Stage 5 incumbent despite raising
+forced rows to 60/120. Its unique-best sibling regressed to 10/14 HIT with
+75/123 forced rows. Both completed naturally with zero Bombs; neither is a
+strict clear, and the older lower-forced and balanced members remain in the
+population.
 
 A second COW batch targeted the last 600 decisions of the bootstrap policy's
 first-failure trajectories. All 10 files were valid: 90 checkpoints and 1,441
@@ -688,6 +694,23 @@ r8 contained 16 valid checkpoints and 246 outcomes, with corresponding ratios
 of 93.75%, 25%, and 12.5%. Stage 4 r7 contained 16 valid checkpoints and 244
 outcomes, with ratios of 75%, 25%, and 18.75%. These are new supervision
 signals, but only their unseen-seed descendants can establish improvement.
+
+That Stage 3 r8 descendant did not establish an improvement: survivable
+reached 2/2 HIT with 18/14 forced rows, and unique-best reached 3/5 with
+37/78. Both used zero Bombs and are rejected relative to the 1/2-HIT,
+4/9-forced incumbent. The next Stage 5 survivable member did improve the
+HIT-primary objective from 22 to 21 aggregate HITs at 9/12, although its
+60/120 forced rows are worse than the previous incumbent's 58/88. It becomes
+the experiment-order incumbent while both lower-forced and balanced members
+remain in the Pareto population. Its unique sibling reached 10/14 HIT and
+75/123 forced rows and is rejected.
+
+Two more complete COW batches quantify the continuing mismatch. Stage 1 r8
+contained 28 valid checkpoints and 462 outcomes, with 85.7% unique strict
+best and only 10.7% each local-teacher and factual-action best. Stage 6 r7
+contained 16 valid checkpoints and 227 outcomes, with ratios of 68.75%,
+18.75%, and 18.75%. They are valuable corrective corpora, but their descendants
+still require full natural continuation before any population update.
 
 ## Portability to TH08
 
