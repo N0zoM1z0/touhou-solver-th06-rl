@@ -126,6 +126,21 @@ No training is authorized by this result.  The next gate is the
 episode-grouped audit of existing frozen-UCB original-retail Wine first-failure
 prefixes.
 
+## Retail-anchored supplement
+
+Later work added diagnostic pre-Stage RNG restoration and delayed Shoot to the
+source runtime, then reproduced two complete original-retail Wine prefixes in
+both source builds.  This confirmed full-prefix discrete source-platform
+delivery and matched retail RNG, game state, hazard counts, and player geometry
+at `1e-6`, apart from a known dialogue input gap.  It also exposed and fixed an
+exporter error that had treated a captured-but-stale frame as published input.
+
+The resulting exact-checkpoint sub10 COW rejected the proposed alternative and
+created no residual candidate.  See
+`WINE_FIRST_STAGE6_TARGETED_COW_2026-08-10.md` for the stricter contract,
+negative result, hashes, and next gate.  This supplement does not change the
+original rule: reconstructed source evidence cannot promote a policy.
+
 ## Reproduction
 
 ```bash

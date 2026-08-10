@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from th06_rl.headless import HeadlessScope
 from th06_rl.headless_corpus import (
@@ -132,11 +132,20 @@ def label_checkpoint(
     branch_frames: int,
     teacher: NativeOfflineTeacher,
     kernel: NativeKernel,
+    evaluated_first_actions: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     checkpoint_tick = int(row["tick"])
     terminal_tick = checkpoint_tick + branch_frames
     outcomes = []
-    for first_action in row["legal_actions"]:
+    native_legal_actions = tuple(str(action) for action in row["legal_actions"])
+    first_actions = (
+        native_legal_actions
+        if evaluated_first_actions is None
+        else tuple(dict.fromkeys(str(action) for action in evaluated_first_actions))
+    )
+    if not first_actions or any(action not in native_legal_actions for action in first_actions):
+        raise ValueError("evaluated first actions must be a non-empty native-legal subset")
+    for first_action in first_actions:
         observation = server.begin_step_session(terminal_tick=terminal_tick)
         digest = canonical_observation_sha256(observation)
         if digest != row["observation_sha256"]:
@@ -213,6 +222,7 @@ def label_checkpoint(
         "factual_action": row["behavior"]["selected_action"],
         "local_teacher_action": row["behavior"]["teacher_action"],
         "native_legal_actions": row["legal_actions"],
+        "evaluated_first_actions": list(first_actions),
         "branch_frames": branch_frames,
         "best_actions": best_actions,
         "factual_action_is_best": row["behavior"]["selected_action"] in best_actions,

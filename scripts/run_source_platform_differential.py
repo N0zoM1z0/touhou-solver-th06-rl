@@ -78,6 +78,8 @@ class SourceActionStream:
     max_ticks: int
     auto_shoot: bool
     segments: tuple[ActionSegment, ...]
+    stage_rng_seed: int | None = None
+    auto_shoot_after_tick: int | None = None
     description: str | None = None
     provenance: dict[str, Any] | None = None
 
@@ -105,6 +107,10 @@ class SourceActionStream:
         }
         if self.description is not None:
             result["description"] = self.description
+        if self.stage_rng_seed is not None:
+            result["stage_rng_seed"] = self.stage_rng_seed
+        if self.auto_shoot_after_tick is not None:
+            result["auto_shoot_after_tick"] = self.auto_shoot_after_tick
         if self.provenance is not None:
             result["provenance"] = self.provenance
         return result
@@ -124,6 +130,8 @@ def parse_action_stream(raw: object) -> SourceActionStream:
         "delivery_contract",
         "scope",
         "initial_seed",
+        "stage_rng_seed",
+        "auto_shoot_after_tick",
         "max_ticks",
         "auto_shoot",
         "segments",
@@ -149,9 +157,28 @@ def parse_action_stream(raw: object) -> SourceActionStream:
     shot_type = _strict_int(scope["shot_type"], "shot_type", 0, 1)
     stage = _strict_int(scope["stage"], "stage", 1, 6)
     initial_seed = _strict_int(raw.get("initial_seed"), "initial_seed", 0, 65535)
+    stage_rng_seed_raw = raw.get("stage_rng_seed")
+    stage_rng_seed = (
+        None
+        if stage_rng_seed_raw is None
+        else _strict_int(stage_rng_seed_raw, "stage_rng_seed", 0, 65535)
+    )
     max_ticks = _strict_int(raw.get("max_ticks"), "max_ticks", 1, 10_000_000)
     if type(raw.get("auto_shoot")) is not bool:
         raise ValueError("auto_shoot must be a boolean")
+    auto_shoot_after_tick_raw = raw.get("auto_shoot_after_tick")
+    auto_shoot_after_tick = (
+        None
+        if auto_shoot_after_tick_raw is None
+        else _strict_int(
+            auto_shoot_after_tick_raw,
+            "auto_shoot_after_tick",
+            0,
+            max_ticks,
+        )
+    )
+    if auto_shoot_after_tick is not None and raw["auto_shoot"] is not True:
+        raise ValueError("auto_shoot_after_tick requires auto_shoot")
     segments_raw = raw.get("segments")
     if not isinstance(segments_raw, list) or not segments_raw:
         raise ValueError("segments must be a non-empty list")
@@ -184,6 +211,8 @@ def parse_action_stream(raw: object) -> SourceActionStream:
         max_ticks=max_ticks,
         auto_shoot=raw["auto_shoot"],
         segments=tuple(segments),
+        stage_rng_seed=stage_rng_seed,
+        auto_shoot_after_tick=auto_shoot_after_tick,
         description=description,
         provenance=dict(provenance) if provenance is not None else None,
     )
@@ -273,8 +302,14 @@ def _runtime_command(
         "--trace",
         trace,
     ]
+    if stream.stage_rng_seed is not None:
+        command.extend(("--stage-rng-seed", str(stream.stage_rng_seed)))
     if stream.auto_shoot:
         command.append("--auto-shoot")
+    if stream.auto_shoot_after_tick is not None:
+        command.extend(
+            ("--auto-shoot-after-tick", str(stream.auto_shoot_after_tick))
+        )
     return command
 
 

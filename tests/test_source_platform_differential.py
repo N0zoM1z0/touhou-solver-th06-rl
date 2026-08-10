@@ -54,6 +54,7 @@ def test_action_stream_is_strict_bomb_free_and_covers_tick_bound() -> None:
     command = _runtime_command(stream, binary="th06", actions="a.txt", trace="t.jsonl")
     assert "--continue-after-hit" not in command
     assert command[-1] == "--auto-shoot"
+    assert "--stage-rng-seed" not in command
 
     invalid = _stream()
     invalid["segments"] = [{"count": 12, "action": "bomb"}]
@@ -64,6 +65,36 @@ def test_action_stream_is_strict_bomb_free_and_covers_tick_bound() -> None:
     exhausted["segments"] = [{"count": 11, "action": "stay"}]
     with pytest.raises(ValueError, match="cover max_ticks"):
         parse_action_stream(exhausted)
+
+
+def test_action_stream_passes_optional_stage_rng_seed_to_both_runtimes() -> None:
+    raw = _stream()
+    raw["stage_rng_seed"] = 3193
+
+    stream = parse_action_stream(raw)
+    command = _runtime_command(stream, binary="th06", actions="a.txt", trace="t.jsonl")
+
+    assert stream.stage_rng_seed == 3193
+    assert command[command.index("--stage-rng-seed") + 1] == "3193"
+
+    raw["stage_rng_seed"] = 65536
+    with pytest.raises(ValueError, match="stage_rng_seed"):
+        parse_action_stream(raw)
+
+
+def test_action_stream_can_delay_shoot_for_a_retail_capture_prelude() -> None:
+    raw = _stream()
+    raw["auto_shoot_after_tick"] = 7
+
+    stream = parse_action_stream(raw)
+    command = _runtime_command(stream, binary="th06", actions="a.txt", trace="t.jsonl")
+
+    assert stream.auto_shoot_after_tick == 7
+    assert command[command.index("--auto-shoot-after-tick") + 1] == "7"
+
+    raw["auto_shoot"] = False
+    with pytest.raises(ValueError, match="requires auto_shoot"):
+        parse_action_stream(raw)
 
 
 def test_windows_path_uses_wine_z_drive(tmp_path: Path) -> None:

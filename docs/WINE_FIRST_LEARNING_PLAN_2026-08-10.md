@@ -90,12 +90,15 @@ clearance profiles.  The current portable Wine ranker schema has 33 coarser
 features.  A headless model is not deployable merely because similarly named
 state exists online.
 
-The magnitude of platform drift is still unknown.  No experiment has yet run
-the same seed and frozen action stream through native Linux source and the
-MinGW source build under Wine and compared the first physical divergence.
-Until that differential exists, do not claim either equivalence or harmful
-drift.  Original retail remains a further boundary because its RNG is not yet
-settable through the existing runner.
+The first source-platform differential later measured exact discrete delivery
+but accumulating floating-point geometry drift beginning at tick 441.  The
+subsequent retail-anchored replay work recovered the pre-Stage retail RNG and
+replayed two complete frozen-UCB prefixes through both source builds.  Across
+2,736 and 2,808 common retail snapshots, RNG, game state, hazard counts, and
+player geometry matched at `1e-6`; the only categorical discrepancy was a
+known dialogue/control input gap.  This narrows platform uncertainty but does
+not establish general retail equivalence.  See
+`WINE_FIRST_STAGE6_TARGETED_COW_2026-08-10.md`.
 
 ## What remains valuable from the offline generation
 
@@ -175,10 +178,13 @@ regions using Wine-reproducible physical features, then sample several
 independent headless seeds and branch every native-safe first action.  Require
 agreement across seeds and preserve seed-grouped holdouts.
 
-The current COW mechanism cannot restore an original-retail memory snapshot as
-an exact headless checkpoint.  Wine anchors are audit and matching evidence,
-not COW roots.  Exact cross-domain state transfer must not be claimed until an
-explicit validated converter or deterministic replay contract exists.
+The current COW mechanism still does not copy an original-retail memory
+snapshot.  A validated deterministic replay contract now provides a narrower
+alternative: recover the pre-Stage RNG, reproduce actual published action and
+Shoot delivery, compare the reconstructed state with the Wine snapshot at
+`1e-6`, and require an identical native hard-action set before branching.  The
+result is a Wine-anchored source COW root, not original-retail execution.  It
+can reject a candidate but cannot promote one.
 
 ## Failure-region and candidate rules
 
@@ -305,3 +311,11 @@ The episode-grouped audit is now recorded in
 positive frames to 23 independent authority-failure episodes, separates 19
 episodes in repeated contexts from four singletons, and queues only three
 bounded families for targeted multi-seed COW.  No residual has been trained.
+
+The first targeted result is now recorded in
+`WINE_FIRST_STAGE6_TARGETED_COW_2026-08-10.md`.  Generic headless COW did not
+confirm the proposed sub10 alternative.  Deterministic replay then reproduced
+two complete Wine prefixes and verified exact checkpoint native hard sets;
+three independent Wine-anchored 600-frame branches produced two incumbent
+wins and one tie.  The sub10 residual has zero candidates.  The next active
+gate is the same bounded replay/COW audit for sub31, not model fitting.

@@ -81,6 +81,33 @@ def test_forkserver_runs_children_without_a_pty(tmp_path: Path) -> None:
         server.close()
 
 
+def test_forkserver_passes_retail_rng_and_delayed_shoot_options(tmp_path: Path) -> None:
+    server = HeadlessForkserver(
+        binary=_fake_forkserver(tmp_path / "fake-forkserver"),
+        game_directory=tmp_path,
+        scope=HeadlessScope(3, 0, 0, 6),
+        seed=0,
+        stage_rng_seed=3193,
+        auto_shoot=True,
+        auto_shoot_after_tick=127,
+    )
+
+    command = server._command()
+
+    assert command[command.index("--stage-rng-seed") + 1] == "3193"
+    assert command[command.index("--auto-shoot-after-tick") + 1] == "127"
+
+    with pytest.raises(ValueError, match="requires auto_shoot"):
+        HeadlessForkserver(
+            binary=server.binary,
+            game_directory=tmp_path,
+            scope=server.scope,
+            seed=0,
+            auto_shoot=False,
+            auto_shoot_after_tick=127,
+        )
+
+
 def test_forkserver_rejects_bad_ticks_and_protocol_paths(tmp_path: Path) -> None:
     actions = tmp_path / "actions.txt"
     actions.write_text("stay\n", encoding="utf-8")
