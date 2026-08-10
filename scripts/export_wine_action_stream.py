@@ -237,7 +237,7 @@ def build_retail_action_stream(
     if scope != prefix.scope:
         raise ValueError(f"retail first snapshot scope mismatch: {scope} != {prefix.scope}")
 
-    effective_intervals: list[tuple[int, int, str]] = []
+    delivery_intervals: list[tuple[int, int, str, str]] = []
     gaps: list[dict[str, int]] = []
     first_publication_frame: int | None = None
     previous_target = first_frame
@@ -247,10 +247,12 @@ def build_retail_action_stream(
         snapshot = frame_row.get("snapshot")
         decision = frame_row.get("decision")
         next_snapshot = next_frame_row.get("snapshot")
+        next_decision = next_frame_row.get("decision")
         if (
             not isinstance(snapshot, Mapping)
             or not isinstance(decision, Mapping)
             or not isinstance(next_snapshot, Mapping)
+            or not isinstance(next_decision, Mapping)
         ):
             raise TypeError(f"retail replay row {sequence} lacks snapshot/decision evidence")
         source_frame = _frame(transition.get("snapshot_ref"))
@@ -277,12 +279,21 @@ def build_retail_action_stream(
             raise ValueError(f"retail current action is invalid at sequence {sequence}")
         if _movement_action(snapshot.get("input_mask")) != current_action:
             raise ValueError(f"retail current action/input disagree at sequence {sequence}")
+        next_current_action = next_decision.get("current_action")
+        if (
+            not isinstance(next_current_action, str)
+            or next_current_action not in ACTION_SET
+            or _movement_action(next_snapshot.get("input_mask")) != next_current_action
+        ):
+            raise ValueError(
+                f"retail next current action/input disagree at sequence {sequence}"
+            )
         published = transition.get("published_action")
         decision_published = decision.get("published_action")
         if published is None:
             if decision_published is not None:
                 raise ValueError(f"retail publication evidence disagrees at sequence {sequence}")
-            effective_action = current_action
+            unobserved_action = current_action
         else:
             if (
                 not isinstance(published, str)
@@ -290,17 +301,23 @@ def build_retail_action_stream(
                 or decision_published != published
             ):
                 raise ValueError(f"retail published action is invalid at sequence {sequence}")
-            effective_action = published
+            unobserved_action = published
             if first_publication_frame is None:
                 first_publication_frame = source_frame
         if transition.get("proposed_action") not in ACTION_SET:
             raise ValueError(f"retail proposed action is invalid at sequence {sequence}")
         if elapsed != 1:
             gaps.append({"sequence": sequence, "source_frame": source_frame, "frames": elapsed})
-        effective_intervals.append((source_frame, target_frame, effective_action))
+        # A publication is an intent, not evidence that the game sampled the
+        # new bridge mask on the next frame. The target coherent snapshot is
+        # authoritative for its own tick. Only unobserved interior ticks use
+        # the best available publication/current-action inference.
+        delivery_intervals.append(
+            (source_frame, target_frame, unobserved_action, next_current_action)
+        )
         previous_target = target_frame
 
-    terminal_frame = effective_intervals[-1][1]
+    terminal_frame = delivery_intervals[-1][1]
     if first_publication_frame is None:
         raise ValueError("retail replay prefix has no successful battle publication")
     if terminal_frame != prefix.failure_frame:
@@ -316,10 +333,21 @@ def build_retail_action_stream(
     # max_source_tick; one final padding action satisfies the conservative
     # action-stream coverage contract and is never consumed.
     actions = [prelude_action] * (first_frame - 1)
-    for source_frame, target_frame, action in effective_intervals:
+    for (
+        source_frame,
+        target_frame,
+        unobserved_action,
+        target_action,
+    ) in delivery_intervals:
         if source_frame >= requested_tick:
             break
-        actions.extend([action] * (min(target_frame, requested_tick) - source_frame))
+        covered_target = min(target_frame, requested_tick)
+        covered_frames = covered_target - source_frame
+        if covered_target == target_frame:
+            actions.extend([unobserved_action] * (covered_frames - 1))
+            actions.append(target_action)
+        else:
+            actions.extend([unobserved_action] * covered_frames)
         if target_frame >= requested_tick:
             break
     if len(actions) != requested_tick - 1:
@@ -329,6 +357,12 @@ def build_retail_action_stream(
     actions.append(actions[-1])
 
     included_gaps = [gap for gap in gaps if gap["source_frame"] < requested_tick]
+    dialogue_gaps = [gap for gap in included_gaps if gap["frames"] >= 8]
+    dialogue_control_after_tick = (
+        max(dialogue_gaps, key=lambda gap: gap["frames"])["source_frame"]
+        if dialogue_gaps
+        else requested_tick
+    )
     return SourceActionStream(
         difficulty=prefix.scope[0],
         character=prefix.scope[1],
@@ -339,6 +373,8 @@ def build_retail_action_stream(
         max_ticks=requested_tick,
         auto_shoot=True,
         auto_shoot_after_tick=first_publication_frame,
+        retail_dialogue_control=True,
+        retail_dialogue_control_after_tick=dialogue_control_after_tick,
         segments=_rle(actions),
         description=(
             "Verified original-retail Wine movement prefix for source platform/delivery "
@@ -363,13 +399,22 @@ def build_retail_action_stream(
             "first_battle_publication_frame": first_publication_frame,
             "delivered_actions": requested_tick - 1,
             "coverage_padding_actions": 1,
+            "delivery_reconstruction": (
+                "coherent target snapshot action at every observed frame; successful "
+                "publication or current action only for unobserved interior frames"
+            ),
             "observation_gaps": included_gaps,
             "maximum_observation_gap": max(
                 (gap["frames"] for gap in included_gaps), default=1
             ),
+            "retail_dialogue_control_after_tick": dialogue_control_after_tick,
+            "retail_dialogue_control_selection": (
+                "source frame of the first maximum gap among observed gaps of at least "
+                "eight frames; source GUI state remains the runtime dialogue gate"
+            ),
             "known_limit": (
-                "Battle movement publication is reconstructed; unobserved dialogue "
-                "release/tap edges inside capture gaps are not present in this corpus."
+                "Observed battle input is exact, but interior actions and dialogue "
+                "release/tap edges inside capture gaps are absent from this corpus."
             ),
             "shards": dict(shard_evidence or {}),
         },

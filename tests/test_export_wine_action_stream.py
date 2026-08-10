@@ -95,6 +95,8 @@ def test_retail_export_reconstructs_prelude_gaps_and_stale_retry(tmp_path: Path)
     assert stream.stage_rng_seed == 3193
     assert stream.auto_shoot is True
     assert stream.auto_shoot_after_tick == 127
+    assert stream.retail_dialogue_control is True
+    assert stream.retail_dialogue_control_after_tick == 132
     assert [(segment.count, segment.action) for segment in stream.segments] == [
         (126, "stay_fast"),
         (6, "up_fast"),
@@ -142,6 +144,56 @@ def test_retail_export_delays_shoot_through_initial_stale_retry(tmp_path: Path) 
         (130, "stay_fast"),
         (2, "up_fast"),
     ]
+
+
+def test_retail_export_uses_sampled_target_action_over_publication_intent(
+    tmp_path: Path,
+) -> None:
+    frames = [
+        _frame(0, 127, 0x00, "stay_fast", "up_fast"),
+        _frame(1, 128, 0x00, "stay_fast", "up_fast"),
+        _frame(2, 132, 0x11, "up_fast", "up_fast"),
+    ]
+    transitions = [
+        _transition(0, 127, 128, "up_fast", "up_fast"),
+        _transition(1, 128, 132, "up_fast", "up_fast"),
+    ]
+
+    stream = build_retail_action_stream(_prefix(tmp_path), transitions, frames)
+
+    assert [(segment.count, segment.action) for segment in stream.segments] == [
+        (127, "stay_fast"),
+        (5, "up_fast"),
+    ]
+    assert "coherent target snapshot action" in stream.provenance[
+        "delivery_reconstruction"
+    ]
+
+
+def test_retail_export_delays_dialogue_control_to_largest_observed_gap(
+    tmp_path: Path,
+) -> None:
+    frames = [
+        _frame(0, 127, 0x00, "stay_fast", "up_fast"),
+        _frame(1, 131, 0x11, "up_fast", "up_fast"),
+        _frame(2, 140, 0x11, "up_fast", "up_fast"),
+        _frame(3, 150, 0x11, "up_fast", "up_fast"),
+    ]
+    transitions = [
+        _transition(0, 127, 131, "up_fast", "up_fast"),
+        _transition(1, 131, 140, "up_fast", "up_fast"),
+        _transition(2, 140, 150, "up_fast", "up_fast"),
+    ]
+
+    stream = build_retail_action_stream(
+        replace(_prefix(tmp_path), failure_frame=150, transitions=3),
+        transitions,
+        frames,
+    )
+
+    assert stream.retail_dialogue_control_after_tick == 140
+    assert stream.provenance["maximum_observation_gap"] == 10
+
 
 def test_retail_export_refuses_terminal_or_scope_drift(tmp_path: Path) -> None:
     frames = [

@@ -97,6 +97,27 @@ def test_action_stream_can_delay_shoot_for_a_retail_capture_prelude() -> None:
         parse_action_stream(raw)
 
 
+def test_action_stream_can_enable_separate_retail_dialogue_delivery() -> None:
+    raw = _stream()
+    raw["retail_dialogue_control"] = True
+    raw["retail_dialogue_control_after_tick"] = 7
+
+    stream = parse_action_stream(raw)
+    command = _runtime_command(stream, binary="th06", actions="a.txt", trace="t.jsonl")
+
+    assert stream.retail_dialogue_control is True
+    assert command[command.index("--retail-dialogue-control-after-tick") + 1] == "7"
+
+    raw["auto_shoot"] = False
+    with pytest.raises(ValueError, match="requires auto_shoot"):
+        parse_action_stream(raw)
+
+    raw = _stream()
+    raw["retail_dialogue_control_after_tick"] = 7
+    with pytest.raises(ValueError, match="requires retail_dialogue_control"):
+        parse_action_stream(raw)
+
+
 def test_windows_path_uses_wine_z_drive(tmp_path: Path) -> None:
     assert _windows_path(tmp_path / "trace.jsonl").startswith("Z:\\")
     assert _windows_path(tmp_path / "trace.jsonl").endswith("\\trace.jsonl")

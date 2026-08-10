@@ -156,6 +156,10 @@ def label_retail_checkpoints(
             auto_shoot=stream.auto_shoot,
             stage_rng_seed=stream.stage_rng_seed,
             auto_shoot_after_tick=stream.auto_shoot_after_tick,
+            retail_dialogue_control=stream.retail_dialogue_control,
+            retail_dialogue_control_after_tick=(
+                stream.retail_dialogue_control_after_tick
+            ),
         )
         try:
             root_tick = server.start()

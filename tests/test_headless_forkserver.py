@@ -81,7 +81,7 @@ def test_forkserver_runs_children_without_a_pty(tmp_path: Path) -> None:
         server.close()
 
 
-def test_forkserver_passes_retail_rng_and_delayed_shoot_options(tmp_path: Path) -> None:
+def test_forkserver_passes_retail_delivery_options(tmp_path: Path) -> None:
     server = HeadlessForkserver(
         binary=_fake_forkserver(tmp_path / "fake-forkserver"),
         game_directory=tmp_path,
@@ -90,12 +90,15 @@ def test_forkserver_passes_retail_rng_and_delayed_shoot_options(tmp_path: Path) 
         stage_rng_seed=3193,
         auto_shoot=True,
         auto_shoot_after_tick=127,
+        retail_dialogue_control=True,
+        retail_dialogue_control_after_tick=4995,
     )
 
     command = server._command()
 
     assert command[command.index("--stage-rng-seed") + 1] == "3193"
     assert command[command.index("--auto-shoot-after-tick") + 1] == "127"
+    assert command[command.index("--retail-dialogue-control-after-tick") + 1] == "4995"
 
     with pytest.raises(ValueError, match="requires auto_shoot"):
         HeadlessForkserver(
@@ -105,6 +108,24 @@ def test_forkserver_passes_retail_rng_and_delayed_shoot_options(tmp_path: Path) 
             seed=0,
             auto_shoot=False,
             auto_shoot_after_tick=127,
+        )
+    with pytest.raises(ValueError, match="requires auto_shoot"):
+        HeadlessForkserver(
+            binary=server.binary,
+            game_directory=tmp_path,
+            scope=server.scope,
+            seed=0,
+            auto_shoot=False,
+            retail_dialogue_control=True,
+        )
+    with pytest.raises(ValueError, match="requires retail dialogue control"):
+        HeadlessForkserver(
+            binary=server.binary,
+            game_directory=tmp_path,
+            scope=server.scope,
+            seed=0,
+            auto_shoot=True,
+            retail_dialogue_control_after_tick=4995,
         )
 
 

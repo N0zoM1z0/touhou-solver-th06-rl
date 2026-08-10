@@ -51,6 +51,8 @@ class HeadlessForkserver:
         auto_shoot: bool = True,
         stage_rng_seed: int | None = None,
         auto_shoot_after_tick: int | None = None,
+        retail_dialogue_control: bool = False,
+        retail_dialogue_control_after_tick: int | None = None,
         read_timeout: float = 30.0,
     ) -> None:
         if seed not in range(1 << 16):
@@ -63,6 +65,17 @@ class HeadlessForkserver:
             raise ValueError("auto-shoot threshold must be nonnegative")
         if auto_shoot_after_tick is not None and not auto_shoot:
             raise ValueError("auto-shoot threshold requires auto_shoot")
+        if retail_dialogue_control and not auto_shoot:
+            raise ValueError("retail dialogue control requires auto_shoot")
+        if (
+            retail_dialogue_control_after_tick is not None
+            and retail_dialogue_control_after_tick < 0
+        ):
+            raise ValueError("retail dialogue control threshold must be nonnegative")
+        if retail_dialogue_control_after_tick is not None and not retail_dialogue_control:
+            raise ValueError(
+                "retail dialogue control threshold requires retail dialogue control"
+            )
         self.binary = binary.resolve()
         self.game_directory = game_directory.resolve()
         self.scope = scope
@@ -70,6 +83,8 @@ class HeadlessForkserver:
         self.auto_shoot = auto_shoot
         self.stage_rng_seed = stage_rng_seed
         self.auto_shoot_after_tick = auto_shoot_after_tick
+        self.retail_dialogue_control = retail_dialogue_control
+        self.retail_dialogue_control_after_tick = retail_dialogue_control_after_tick
         self.read_timeout = read_timeout
         self.process: subprocess.Popen[bytes] | None = None
         self._read_buffer = bytearray()
@@ -101,6 +116,15 @@ class HeadlessForkserver:
         if self.auto_shoot_after_tick is not None:
             command.extend(
                 ("--auto-shoot-after-tick", str(self.auto_shoot_after_tick))
+            )
+        if self.retail_dialogue_control:
+            command.append("--retail-dialogue-control")
+        if self.retail_dialogue_control_after_tick is not None:
+            command.extend(
+                (
+                    "--retail-dialogue-control-after-tick",
+                    str(self.retail_dialogue_control_after_tick),
+                )
             )
         nice = shutil.which("nice")
         ionice = shutil.which("ionice")

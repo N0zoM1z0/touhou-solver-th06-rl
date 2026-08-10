@@ -80,6 +80,8 @@ class SourceActionStream:
     segments: tuple[ActionSegment, ...]
     stage_rng_seed: int | None = None
     auto_shoot_after_tick: int | None = None
+    retail_dialogue_control: bool = False
+    retail_dialogue_control_after_tick: int | None = None
     description: str | None = None
     provenance: dict[str, Any] | None = None
 
@@ -111,6 +113,12 @@ class SourceActionStream:
             result["stage_rng_seed"] = self.stage_rng_seed
         if self.auto_shoot_after_tick is not None:
             result["auto_shoot_after_tick"] = self.auto_shoot_after_tick
+        if self.retail_dialogue_control:
+            result["retail_dialogue_control"] = True
+        if self.retail_dialogue_control_after_tick is not None:
+            result["retail_dialogue_control_after_tick"] = (
+                self.retail_dialogue_control_after_tick
+            )
         if self.provenance is not None:
             result["provenance"] = self.provenance
         return result
@@ -132,6 +140,8 @@ def parse_action_stream(raw: object) -> SourceActionStream:
         "initial_seed",
         "stage_rng_seed",
         "auto_shoot_after_tick",
+        "retail_dialogue_control",
+        "retail_dialogue_control_after_tick",
         "max_ticks",
         "auto_shoot",
         "segments",
@@ -179,6 +189,26 @@ def parse_action_stream(raw: object) -> SourceActionStream:
     )
     if auto_shoot_after_tick is not None and raw["auto_shoot"] is not True:
         raise ValueError("auto_shoot_after_tick requires auto_shoot")
+    retail_dialogue_control = raw.get("retail_dialogue_control", False)
+    if type(retail_dialogue_control) is not bool:
+        raise ValueError("retail_dialogue_control must be a boolean")
+    if retail_dialogue_control and raw["auto_shoot"] is not True:
+        raise ValueError("retail_dialogue_control requires auto_shoot")
+    retail_dialogue_after_raw = raw.get("retail_dialogue_control_after_tick")
+    retail_dialogue_control_after_tick = (
+        None
+        if retail_dialogue_after_raw is None
+        else _strict_int(
+            retail_dialogue_after_raw,
+            "retail_dialogue_control_after_tick",
+            0,
+            max_ticks,
+        )
+    )
+    if retail_dialogue_control_after_tick is not None and not retail_dialogue_control:
+        raise ValueError(
+            "retail_dialogue_control_after_tick requires retail_dialogue_control"
+        )
     segments_raw = raw.get("segments")
     if not isinstance(segments_raw, list) or not segments_raw:
         raise ValueError("segments must be a non-empty list")
@@ -213,6 +243,8 @@ def parse_action_stream(raw: object) -> SourceActionStream:
         segments=tuple(segments),
         stage_rng_seed=stage_rng_seed,
         auto_shoot_after_tick=auto_shoot_after_tick,
+        retail_dialogue_control=retail_dialogue_control,
+        retail_dialogue_control_after_tick=retail_dialogue_control_after_tick,
         description=description,
         provenance=dict(provenance) if provenance is not None else None,
     )
@@ -309,6 +341,15 @@ def _runtime_command(
     if stream.auto_shoot_after_tick is not None:
         command.extend(
             ("--auto-shoot-after-tick", str(stream.auto_shoot_after_tick))
+        )
+    if stream.retail_dialogue_control:
+        command.append("--retail-dialogue-control")
+    if stream.retail_dialogue_control_after_tick is not None:
+        command.extend(
+            (
+                "--retail-dialogue-control-after-tick",
+                str(stream.retail_dialogue_control_after_tick),
+            )
         )
     return command
 
