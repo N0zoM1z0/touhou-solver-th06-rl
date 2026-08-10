@@ -552,3 +552,21 @@ episode-grouped region audit.  It cannot reopen closed pairs or use the
 10-HIT continuation trace for training.  A new COW protocol is allowed only
 for an untested generic region with support from at least two physical
 episodes, including at least one new episode.
+
+That panel is closed in
+`WINE_FIRST_STAGE6_FRESH_PANEL_R9_R10_RESULT_2026-08-10.md`.  r9 terminated in
+a singleton sub11 context and r10 in sub10; neither episode contained a native
+baseline alternative opportunity.  The r1-r10 factual audit reproduced all
+41,666 frozen-UCB calls without mismatch, and the only three repeated
+action-relative opportunity regions are old, already closed regions.  The
+candidate population therefore remains empty.  Do not collect more Wine or
+run more source COW merely to rescue those hypotheses.
+
+The next step is a cheap read-only diagnostic of the evaluation-only
+current-kernel complete-Stage trace: measure how early each of its ten HITs
+shows native-safe-set collapse and whether a nonempty, low-width local set
+exists before the final Hard-empty interval.  This diagnostic can choose the
+shape of a future first-failure data-acquisition protocol; the post-HIT trace
+itself remains prohibited from fitting, labeling, candidate construction, or
+promotion.  Complete natural retail-Wine HIT count remains the only final
+Stage 6 improvement gate.
