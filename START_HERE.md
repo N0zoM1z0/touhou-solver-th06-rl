@@ -23,6 +23,11 @@ Start-to-Ending measurements are frozen in
 `docs/WINE_RETAIL_BASELINE_2026-08-09.md`. Those HIT-continuation runs are
 benchmark evidence only and are never training corpus.
 
+The current project state, the distinction between offline fitting,
+Linux-headless closed-loop behavior, original-retail Wine validation, and real
+Windows evidence, plus the ordered continuation plan are frozen in
+`docs/HANDOFF_2026-08-10.md`.
+
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
 

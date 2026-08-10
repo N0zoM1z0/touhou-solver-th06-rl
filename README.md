@@ -10,10 +10,11 @@ Its accelerated Linux simulation and lockstep environment backend lives in
 [`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless). That
 source-only fork is for corpus generation, replay, and learning acceleration;
 the shipped Windows game remains this solver's final physical validation gate.
-The currently paired local runtime revision is `1350819` on the headless
-fork's `th06-rl-headless-spike` branch; solver clients and benchmark protocol
-changes are committed together with that dependency recorded in the evidence
-note.
+The currently paired local checkout is `2e0c416` on the headless fork's
+`th06-rl-headless-spike` branch. Its latest game/observation behavior revision
+is `1cc49f0`; `2e0c416` adds the reproducible Win32 cross-build. Historical
+models remain bound to the exact source and binary recorded by their manifests
+and are not silently made compatible by this checkout update.
 
 Online UCB and future imitation/RL policies own long-horizon/global-local
 tradeoffs but cannot enlarge the native safe set, change collision physics,
@@ -65,6 +66,12 @@ contract and
 for the first complete Stage 6-to-1 and full-route baseline. Wine is closer to
 the shipped execution path than the reconstructed Linux runtime, but real
 Windows remains the final NMNB gate.
+
+For the current cross-domain diagnosis, repository/source revisions, retained
+artifacts, and ordered next experiments, start with
+[docs/HANDOFF_2026-08-10.md](docs/HANDOFF_2026-08-10.md). In particular, the
+Wine baseline used mutable online UCB rather than an offline distilled ranker,
+so it is not evidence of an offline-to-Wine regression.
 
 Generate a compact factual trajectory with the paired runtime, then audit it
 independently:
