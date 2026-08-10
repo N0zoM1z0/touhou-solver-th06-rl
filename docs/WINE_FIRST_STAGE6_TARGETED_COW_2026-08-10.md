@@ -15,6 +15,10 @@ live controller.  Frozen UCB remains the incumbent.  The next bounded audit is
 the repeated sub31 family, followed by sub18 if sub31 also supplies no
 independently supported intervention.
 
+That follow-up is now complete.  Sub31 and sub18 also created zero candidates;
+see `WINE_FIRST_STAGE6_LATE_FAILURE_AUDIT_2026-08-10.md`.  The historical
+ordering below is retained to show how the gate was applied.
+
 ## Why the first generic headless audit was insufficient
 
 The episode-grouped Wine audit queued three repeated physical families:
@@ -54,14 +58,21 @@ These changes are in the ignored source checkout
 `th06-rl-headless-spike`:
 
 - `e92ff98 Add retail stage RNG replay control`;
-- `666398e Align delayed Shoot for retail replay`.
+- `666398e Align delayed Shoot for retail replay`;
+- `9d39ff3 Replay retail dialogue delivery generically`.
 
-Both commits are pushed to `headless/th06-rl-headless-spike`.  Native and
+These commits are pushed to `headless/th06-rl-headless-spike`.  Native and
 MinGW builds passed, the MinGW executable ran under an owned dedicated Wine
 prefix, and cleanup left no source runtime or wineserver process.  The exact
-source commit used below is
+source commit used for the original sub10 rows below is
 `666398ee6b1aed713e214305d4370344c30c7e6b`; the native binary SHA-256 is
 `131a7020a230fcedf69805d5a528ea6fe7a8856e41659915037b8b04609c2a58`.
+The later generic source-GUI-gated dialogue control is diagnostic replay
+infrastructure, not a scripted phase rule.  Its exact source commit is
+`9d39ff31b3e1619eefdb88658ed31e66d625c92b`; the validated native and MinGW
+binary SHA-256 values are respectively
+`accbd9a70b8bb94dd0dc9451868e745ec1c90c0ba8fb573a24e9c216b5b68e1e` and
+`b81c937a7ac37af16d227943c22fc7ce4f248253594fc2ed5dc6ab9d1e724693`.
 
 `scripts/export_wine_action_stream.py` strictly verifies an immutable Wine
 first-failure prefix, reconstructs the pre-Stage RNG seed, rejects Bomb or
@@ -168,3 +179,16 @@ For sub31, reuse the same contract:
 No residual model is fit until a family produces the same native-safe
 alternative across independent Wine anchors.  Even then it enters replay and
 Wine shadow before any active canary.
+
+## Follow-up disposition
+
+The sub31/sub18 work did not satisfy that gate.  The one exact sub31 anchor
+favored the incumbent, and the remaining old anchors exposed incomplete
+dialogue delivery rather than a supported action correction.  Their detailed
+results and the bounded corpus fix are recorded in
+`WINE_FIRST_STAGE6_LATE_FAILURE_AUDIT_2026-08-10.md`.
+
+Do not continue selecting more checkpoints from the same old Stage 6 corpus.
+Its observed battle inputs remain useful, but its unobserved dialogue delivery
+cannot be reconstructed causally.  Use new frame-v5 frozen-UCB Wine evidence
+for the next exact replay gate.

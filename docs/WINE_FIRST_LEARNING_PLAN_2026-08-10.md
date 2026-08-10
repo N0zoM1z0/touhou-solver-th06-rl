@@ -318,4 +318,22 @@ confirm the proposed sub10 alternative.  Deterministic replay then reproduced
 two complete Wine prefixes and verified exact checkpoint native hard sets;
 three independent Wine-anchored 600-frame branches produced two incumbent
 wins and one tie.  The sub10 residual has zero candidates.  The next active
-gate is the same bounded replay/COW audit for sub31, not model fitting.
+gate was the same bounded replay/COW audit for sub31, not model fitting.
+
+That late-family audit is now complete in
+`WINE_FIRST_STAGE6_LATE_FAILURE_AUDIT_2026-08-10.md`.  One exact sub31
+checkpoint strongly favored the incumbent `left` over `up_fast`.  The second
+independent sub31 prefix and both repeated sub18 prefixes could not reach their
+Wine checkpoints in reconstructed source because the old corpus omitted the
+actual Ctrl/Shoot delivery edges inside dialogue capture gaps.  Linux source
+and MinGW source-under-Wine agreed on the resulting premature source HIT, so
+more Linux compute cannot recover that missing original-retail evidence.
+
+All three queued Stage 6 regions therefore have zero residual candidates.
+Frame schema v5 now retains a bounded, Bomb-free dialogue-delivery sample and
+attaches it to the next coherent battle frame without creating a transition or
+learning row.  The next active gate is a small new frozen-UCB original-retail
+Wine first-failure panel collected with that schema.  First use the new panel
+to verify exact retail/source delivery; only repeated, exact COW support may
+create a residual.  No candidate, shadow policy, active canary, or new fit is
+currently authorized.

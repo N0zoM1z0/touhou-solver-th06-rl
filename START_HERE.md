@@ -48,8 +48,13 @@ which repeated Stage 6 regions may enter targeted COW.
 The first Wine-anchored targeted COW result is recorded in
 `docs/WINE_FIRST_STAGE6_TARGETED_COW_2026-08-10.md`.  Deterministic retail
 replay is now validated, but the proposed sub10 `right_fast` to `left_fast`
-residual was rejected and no candidate was created.  Continue with the sub31
-family; do not resume broad training.
+residual was rejected and no candidate was created.  The completed late-family
+audit is in `docs/WINE_FIRST_STAGE6_LATE_FAILURE_AUDIT_2026-08-10.md`: sub31
+favored the incumbent at its one exact checkpoint, while a second sub31 anchor
+and both repeated sub18 anchors exposed missing retail dialogue-delivery edges
+in the old corpus.  All three Stage 6 families currently have zero residual
+candidates.  Collect a small new frozen-UCB Wine first-failure panel with frame
+schema v5 dialogue-delivery evidence; do not resume broad training.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

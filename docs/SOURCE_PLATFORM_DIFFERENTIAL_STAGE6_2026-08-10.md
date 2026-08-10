@@ -141,6 +141,23 @@ created no residual candidate.  See
 negative result, hashes, and next gate.  This supplement does not change the
 original rule: reconstructed source evidence cannot promote a policy.
 
+A later sub31 audit corrected a second exporter assumption: successful input
+publication is not proof that original retail sampled the new mask on the next
+game frame.  The exporter now uses each coherent target snapshot's observed
+input for every observed frame and uses publication only to fill truly
+unobserved interior frames.  With this correction the second sub31 source
+prefix no longer died at tick 1724 and matched every observed retail input.
+
+The corrected prefix still diverged after a 246-frame dialogue gap: source RNG
+and timeline first differed at retail frame 4675 and both Linux and MinGW
+source builds physically HIT at tick 5170, well before retail's frame-6481
+authority failure.  Linux and MinGW retained exact discrete delivery and the
+same terminal, so this is not a Linux-versus-Wine source-platform disagreement.
+The missing variable is the original-retail Ctrl/Shoot edge sequence inside
+the old corpus's dialogue gap.  Future frame-v5 Wine corpus records that tiny
+delivery stream separately from movement and learning.  See
+`WINE_FIRST_STAGE6_LATE_FAILURE_AUDIT_2026-08-10.md`.
+
 ## Reproduction
 
 ```bash
