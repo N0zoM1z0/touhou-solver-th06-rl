@@ -13,6 +13,7 @@ from scripts.run_source_platform_differential import (
     compare_source_traces,
     parse_action_stream,
     render_action_file,
+    render_dialogue_input_file,
     _trace_summary,
 )
 
@@ -115,6 +116,41 @@ def test_action_stream_can_enable_separate_retail_dialogue_delivery() -> None:
     raw = _stream()
     raw["retail_dialogue_control_after_tick"] = 7
     with pytest.raises(ValueError, match="requires retail_dialogue_control"):
+        parse_action_stream(raw)
+
+
+def test_action_stream_can_replay_exact_bomb_free_dialogue_inputs() -> None:
+    raw = _stream()
+    raw["retail_dialogue_control"] = True
+    raw["retail_dialogue_inputs"] = [
+        {"start_tick": 7, "count": 2, "input_mask": 0x01},
+        {"start_tick": 9, "count": 1, "input_mask": 0x100},
+    ]
+
+    stream = parse_action_stream(raw)
+    assert render_dialogue_input_file(stream) == "7 2 1\n9 1 256\n"
+    command = _runtime_command(
+        stream,
+        binary="th06",
+        actions="a.txt",
+        trace="t.jsonl",
+        dialogue_inputs="dialogue.txt",
+    )
+    assert command[command.index("--retail-dialogue-inputs") + 1] == "dialogue.txt"
+
+    with pytest.raises(ValueError, match="rendered input file"):
+        _runtime_command(stream, binary="th06", actions="a.txt", trace="t.jsonl")
+
+    raw["retail_dialogue_inputs"][1]["start_tick"] = 8
+    with pytest.raises(ValueError, match="overlap or are unordered"):
+        parse_action_stream(raw)
+
+    raw["retail_dialogue_inputs"][1] = {
+        "start_tick": 9,
+        "count": 1,
+        "input_mask": 0x02,
+    }
+    with pytest.raises(ValueError, match="forbidden or Bomb-bearing"):
         parse_action_stream(raw)
 
 

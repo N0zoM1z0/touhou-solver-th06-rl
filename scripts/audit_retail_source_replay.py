@@ -119,6 +119,8 @@ def compare_retail_source_states(
     require_full_coverage: bool = True,
 ) -> dict[str, Any]:
     retail_by_frame: dict[int, dict[str, Any]] = {}
+    dialogue_input_by_frame: dict[int, int] = {}
+    dialogue_sample_records = 0
     for expected_sequence, row in enumerate(frame_rows):
         if row.get("sequence") != expected_sequence:
             raise ValueError("retail frame rows are not sequence-contiguous")
@@ -130,6 +132,39 @@ def compare_retail_source_states(
         if frame in retail_by_frame:
             raise ValueError(f"duplicate retail snapshot frame {frame}")
         retail_by_frame[frame] = state
+        decision = row.get("decision")
+        if decision is None:
+            continue
+        if not isinstance(decision, Mapping):
+            raise TypeError(f"retail frame {expected_sequence} decision is invalid")
+        dialogue = decision.get("dialogue_delivery", [])
+        if not isinstance(dialogue, list):
+            raise TypeError(
+                f"retail frame {expected_sequence} dialogue delivery is not a list"
+            )
+        for sample_index, sample in enumerate(dialogue):
+            if not isinstance(sample, Mapping):
+                raise TypeError(
+                    f"retail dialogue sample {expected_sequence}:{sample_index} is invalid"
+                )
+            game_frame = sample.get("game_frame")
+            mask = sample.get("current_input_mask")
+            if type(game_frame) is not int or game_frame < 0:
+                raise ValueError("retail dialogue sample game_frame is invalid")
+            if type(mask) is not int or not 0 <= mask <= 0xFFFF:
+                raise ValueError("retail dialogue sample input is invalid")
+            allowed = 0x01 | 0x04 | 0x10 | 0x20 | 0x40 | 0x80 | 0x100
+            if mask & 0x02 or mask & ~allowed:
+                raise ValueError(
+                    "retail dialogue sample input is forbidden or Bomb-bearing"
+                )
+            previous = dialogue_input_by_frame.get(game_frame)
+            if previous is not None and previous != mask:
+                raise ValueError(
+                    f"conflicting retail dialogue input at frame {game_frame}"
+                )
+            dialogue_input_by_frame[game_frame] = mask
+            dialogue_sample_records += 1
 
     first_exact: dict[str, Any] | None = None
     first_by_tolerance: dict[float, dict[str, Any] | None] = {
@@ -152,6 +187,8 @@ def compare_retail_source_states(
         name: None for name in categories
     }
     matched_frames: list[int] = []
+    matched_dialogue_frames: set[int] = set()
+    first_dialogue_input: dict[str, Any] | None = None
     seen_trace_ticks: set[int] = set()
     with trace_path.open(encoding="utf-8") as source:
         for line_number, line in enumerate(source, start=1):
@@ -167,6 +204,26 @@ def compare_retail_source_states(
             if type(tick) is not int or tick in seen_trace_ticks:
                 raise ValueError(f"invalid source replay tick at line {line_number}")
             seen_trace_ticks.add(tick)
+            if tick in dialogue_input_by_frame:
+                source_input = observation.get("input")
+                if type(source_input) is not int:
+                    raise TypeError(
+                        f"source replay input is invalid at dialogue frame {tick}"
+                    )
+                matched_dialogue_frames.add(tick)
+                if (
+                    first_dialogue_input is None
+                    and source_input != dialogue_input_by_frame[tick]
+                ):
+                    first_dialogue_input = _record(
+                        tick,
+                        {
+                            "path": "$.input",
+                            "reason": "value",
+                            "left": dialogue_input_by_frame[tick],
+                            "right": source_input,
+                        },
+                    )
             retail = retail_by_frame.get(tick)
             if retail is None:
                 continue
@@ -226,6 +283,9 @@ def compare_retail_source_states(
             f"source replay does not cover {len(missing)} retail snapshots; first {missing[0]}"
         )
     common = len(matched_frames)
+    missing_dialogue = sorted(
+        set(dialogue_input_by_frame) - matched_dialogue_frames
+    )
     category_results = {
         name: {
             "equal": difference is None,
@@ -253,6 +313,24 @@ def compare_retail_source_states(
             for tolerance, difference in first_by_tolerance.items()
         ],
         "categories": category_results,
+        "dialogue_delivery": {
+            "available": bool(dialogue_input_by_frame),
+            "equal": (
+                None
+                if not dialogue_input_by_frame
+                else first_dialogue_input is None and not missing_dialogue
+            ),
+            "sample_records": dialogue_sample_records,
+            "unique_sample_frames": len(dialogue_input_by_frame),
+            "matched_sample_frames": len(matched_dialogue_frames),
+            "missing_sample_frames": len(missing_dialogue),
+            "first_missing_sample_frame": (
+                missing_dialogue[0] if missing_dialogue else None
+            ),
+            "first_sample_frame": min(dialogue_input_by_frame, default=None),
+            "last_sample_frame": max(dialogue_input_by_frame, default=None),
+            "first_divergence": first_dialogue_input,
+        },
     }
 
 
@@ -382,8 +460,18 @@ def audit_retail_source_replay(
     source_hit_ticks = [
         trace_evidence[domain]["first_hit_tick"] for domain in trace_evidence
     ]
+    dialogue_available = any(
+        comparisons[domain]["dialogue_delivery"]["available"]
+        for domain in comparisons
+    )
+    dialogue_equal = dialogue_available and all(
+        comparisons[domain]["dialogue_delivery"]["equal"] is True
+        for domain in comparisons
+    )
     if any(tick is not None for tick in source_hit_ticks):
         conclusion = "source-physical-hit-before-retail-failure"
+    elif stable_shared_state and dialogue_available and not dialogue_equal:
+        conclusion = "retail-source-dialogue-delivery-divergence"
     elif stable_shared_state and input_only_at_known_gap:
         conclusion = "shared-dynamics-match-with-known-dialogue-input-gap"
     elif stable_shared_state and all(divergence is None for divergence in input_divergences):
@@ -413,6 +501,13 @@ def audit_retail_source_replay(
             "conclusion": platform_report.get("conclusion"),
         },
         "known_dialogue_gap_target_frames": known_gap_frames,
+        "dialogue_delivery": {
+            "available": dialogue_available,
+            "equal_across_source_domains": (
+                dialogue_equal if dialogue_available else None
+            ),
+            "authority": "sampled original-retail Wine input globals",
+        },
         "require_full_source_coverage": require_full_source_coverage,
         "comparisons": comparisons,
         "traces": trace_evidence,

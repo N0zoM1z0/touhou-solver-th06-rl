@@ -2,9 +2,10 @@
 """Export one verified retail-Wine first-failure prefix for source replay.
 
 The output recreates the observed Stage RNG state, the pre-controller released
-input interval, and each factual Bomb-free movement publication.  It is a
-platform/delivery diagnostic only: observation gaps can hide dialogue input
-edges, and the portable source runtime is not the shipped executable.
+input interval, each factual Bomb-free movement publication, and any exact
+dialogue input samples retained by frame-schema v5.  It is a platform/delivery
+diagnostic only: unsampled observation gaps remain uncertain, and the portable
+source runtime is not the shipped executable.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ try:
         ACTION_STREAM_SCHEMA,
         DELIVERY_CONTRACT,
         ActionSegment,
+        DialogueInputSegment,
         SourceActionStream,
     )
 except ModuleNotFoundError:  # Imported as scripts.export_wine_action_stream.
@@ -35,6 +37,7 @@ except ModuleNotFoundError:  # Imported as scripts.export_wine_action_stream.
         ACTION_STREAM_SCHEMA,
         DELIVERY_CONTRACT,
         ActionSegment,
+        DialogueInputSegment,
         SourceActionStream,
     )
 
@@ -197,6 +200,154 @@ def _rle(actions: Sequence[str]) -> tuple[ActionSegment, ...]:
         else:
             segments.append(ActionSegment(1, action))
     return tuple(segments)
+
+
+_DIALOGUE_SAMPLE_KEYS = {
+    "game_frame",
+    "current_input_mask",
+    "previous_input_mask",
+    "published_input_mask",
+    "held_repeat",
+    "held_frames",
+    "active",
+    "skippable",
+    "pulsed_shoot",
+}
+_DIALOGUE_ALLOWED_INPUT = 0x01 | 0x04 | 0x10 | 0x20 | 0x40 | 0x80 | 0x100
+
+
+def _dialogue_mask(value: object, *, field: str) -> int:
+    if type(value) is not int or not 0 <= value <= 0xFFFF:
+        raise ValueError(f"retail dialogue {field} is not a u16")
+    if value & 0x02 or value & ~_DIALOGUE_ALLOWED_INPUT:
+        raise ValueError(f"retail dialogue {field} is forbidden or Bomb-bearing")
+    return value
+
+
+def _dialogue_input_segments(
+    frames: Sequence[Mapping[str, Any]],
+    *,
+    requested_tick: int,
+) -> tuple[tuple[DialogueInputSegment, ...], dict[str, int | None]]:
+    """Recover only input ticks established by passive retail evidence.
+
+    ``current_input_mask`` establishes the sampled game frame and
+    ``previous_input_mask`` establishes the immediately preceding frame.  When
+    both are equal, the retail held counter additionally proves that many
+    immediately preceding frames had the same mask.  Backfill is clipped at
+    the previous coherent battle snapshot, so it never crosses an observed
+    state boundary.
+    """
+
+    exact: dict[int, int] = {}
+    directly_sampled: set[int] = set()
+    previous_sampled: set[int] = set()
+    held_backfilled: set[int] = set()
+    sample_records = 0
+    previous_sample_frame = -1
+
+    def retain(frame: int, mask: int, evidence: set[int]) -> None:
+        if frame < 1 or frame > requested_tick:
+            return
+        prior = exact.get(frame)
+        if prior is not None and prior != mask:
+            raise ValueError(
+                f"conflicting retail dialogue input evidence at frame {frame}: "
+                f"0x{prior:04X} != 0x{mask:04X}"
+            )
+        exact[frame] = mask
+        evidence.add(frame)
+
+    for index, frame_row in enumerate(frames):
+        decision = frame_row.get("decision")
+        snapshot = frame_row.get("snapshot")
+        if not isinstance(decision, Mapping) or not isinstance(snapshot, Mapping):
+            raise TypeError(f"retail frame {index} lacks snapshot/decision evidence")
+        samples = decision.get("dialogue_delivery", [])
+        if not isinstance(samples, list):
+            raise TypeError(f"retail dialogue delivery at frame row {index} is not a list")
+        if not samples:
+            continue
+        carrier_frame = int(snapshot.get("frame", -1))
+        previous_coherent_frame = -1
+        if index:
+            previous_snapshot = frames[index - 1].get("snapshot")
+            if not isinstance(previous_snapshot, Mapping):
+                raise TypeError(f"retail frame {index - 1} lacks snapshot evidence")
+            previous_coherent_frame = int(previous_snapshot.get("frame", -1))
+        for sample_index, sample in enumerate(samples):
+            if not isinstance(sample, Mapping) or set(sample) != _DIALOGUE_SAMPLE_KEYS:
+                raise ValueError(
+                    f"retail dialogue sample {index}:{sample_index} has an invalid schema"
+                )
+            game_frame = sample.get("game_frame")
+            held_frames = sample.get("held_frames")
+            held_repeat = sample.get("held_repeat")
+            if type(game_frame) is not int or game_frame < 1:
+                raise ValueError("retail dialogue game_frame is invalid")
+            if not previous_coherent_frame <= game_frame <= carrier_frame:
+                raise ValueError(
+                    f"retail dialogue frame {game_frame} lies outside its carrier gap"
+                )
+            if game_frame < previous_sample_frame:
+                raise ValueError("retail dialogue samples are not globally frame ordered")
+            if type(held_frames) is not int or not 0 <= held_frames <= 0xFFFF:
+                raise ValueError("retail dialogue held_frames is invalid")
+            if type(held_repeat) is not int or not 0 <= held_repeat <= 0xFFFF:
+                raise ValueError("retail dialogue held_repeat is invalid")
+            for field in ("active", "skippable", "pulsed_shoot"):
+                if type(sample.get(field)) is not bool:
+                    raise ValueError(f"retail dialogue {field} is not a boolean")
+            current = _dialogue_mask(
+                sample.get("current_input_mask"), field="current_input_mask"
+            )
+            previous = _dialogue_mask(
+                sample.get("previous_input_mask"), field="previous_input_mask"
+            )
+            _dialogue_mask(
+                sample.get("published_input_mask"), field="published_input_mask"
+            )
+            sample_records += 1
+            retain(game_frame, current, directly_sampled)
+            if game_frame - 1 > previous_coherent_frame:
+                retain(game_frame - 1, previous, previous_sampled)
+            if current == previous:
+                start = max(previous_coherent_frame + 1, game_frame - held_frames)
+                for inferred_frame in range(start, game_frame):
+                    retain(inferred_frame, current, held_backfilled)
+            previous_sample_frame = game_frame
+
+    segments: list[DialogueInputSegment] = []
+    for retail_frame, mask in sorted(exact.items()):
+        # Headless NextInput() is called while runtime ``ticks`` still names
+        # the preceding observation. The returned input becomes the coherent
+        # input in trace/game frame ``ticks + 1``.
+        frame = retail_frame - 1
+        if (
+            segments
+            and frame == segments[-1].start_tick + segments[-1].count
+            and mask == segments[-1].input_mask
+        ):
+            previous = segments[-1]
+            segments[-1] = DialogueInputSegment(
+                previous.start_tick, previous.count + 1, mask
+            )
+        else:
+            segments.append(DialogueInputSegment(frame, 1, mask))
+    return tuple(segments), {
+        "sample_records": sample_records,
+        "sampled_current_frames": len(directly_sampled),
+        "sampled_previous_frames": len(previous_sampled),
+        "held_backfilled_frames": len(
+            held_backfilled - directly_sampled - previous_sampled
+        ),
+        "exact_frames": len(exact),
+        "segments": len(segments),
+        "first_exact_frame": min(exact, default=None),
+        "last_exact_frame": max(exact, default=None),
+        "first_runtime_input_tick": min(exact) - 1 if exact else None,
+        "last_runtime_input_tick": max(exact) - 1 if exact else None,
+    }
 
 
 def build_retail_action_stream(
@@ -363,6 +514,21 @@ def build_retail_action_stream(
         if dialogue_gaps
         else requested_tick
     )
+    dialogue_inputs, dialogue_evidence = _dialogue_input_segments(
+        frames,
+        requested_tick=requested_tick,
+    )
+    if dialogue_inputs:
+        known_limit = (
+            "Observed battle snapshots and retained dialogue current/previous/held "
+            "ticks are exact. Other unobserved interior battle inputs remain inferred; "
+            "source rendering, numeric, and RNG paths remain non-retail."
+        )
+    else:
+        known_limit = (
+            "Observed battle input is exact, but interior actions and dialogue "
+            "release/tap edges inside capture gaps are absent from this corpus."
+        )
     return SourceActionStream(
         difficulty=prefix.scope[0],
         character=prefix.scope[1],
@@ -375,6 +541,7 @@ def build_retail_action_stream(
         auto_shoot_after_tick=first_publication_frame,
         retail_dialogue_control=True,
         retail_dialogue_control_after_tick=dialogue_control_after_tick,
+        retail_dialogue_inputs=dialogue_inputs,
         segments=_rle(actions),
         description=(
             "Verified original-retail Wine movement prefix for source platform/delivery "
@@ -412,10 +579,8 @@ def build_retail_action_stream(
                 "source frame of the first maximum gap among observed gaps of at least "
                 "eight frames; source GUI state remains the runtime dialogue gate"
             ),
-            "known_limit": (
-                "Observed battle input is exact, but interior actions and dialogue "
-                "release/tap edges inside capture gaps are absent from this corpus."
-            ),
+            "retail_dialogue_input_evidence": dialogue_evidence,
+            "known_limit": known_limit,
             "shards": dict(shard_evidence or {}),
         },
     )

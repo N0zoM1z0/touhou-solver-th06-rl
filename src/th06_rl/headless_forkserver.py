@@ -53,6 +53,7 @@ class HeadlessForkserver:
         auto_shoot_after_tick: int | None = None,
         retail_dialogue_control: bool = False,
         retail_dialogue_control_after_tick: int | None = None,
+        retail_dialogue_inputs_path: Path | None = None,
         read_timeout: float = 30.0,
     ) -> None:
         if seed not in range(1 << 16):
@@ -76,6 +77,15 @@ class HeadlessForkserver:
             raise ValueError(
                 "retail dialogue control threshold requires retail dialogue control"
             )
+        if retail_dialogue_inputs_path is not None and not retail_dialogue_control:
+            raise ValueError(
+                "retail dialogue input stream requires retail dialogue control"
+            )
+        if (
+            retail_dialogue_inputs_path is not None
+            and not retail_dialogue_inputs_path.is_file()
+        ):
+            raise ValueError("retail dialogue input file does not exist")
         self.binary = binary.resolve()
         self.game_directory = game_directory.resolve()
         self.scope = scope
@@ -85,6 +95,11 @@ class HeadlessForkserver:
         self.auto_shoot_after_tick = auto_shoot_after_tick
         self.retail_dialogue_control = retail_dialogue_control
         self.retail_dialogue_control_after_tick = retail_dialogue_control_after_tick
+        self.retail_dialogue_inputs_path = (
+            retail_dialogue_inputs_path.resolve()
+            if retail_dialogue_inputs_path is not None
+            else None
+        )
         self.read_timeout = read_timeout
         self.process: subprocess.Popen[bytes] | None = None
         self._read_buffer = bytearray()
@@ -125,6 +140,10 @@ class HeadlessForkserver:
                     "--retail-dialogue-control-after-tick",
                     str(self.retail_dialogue_control_after_tick),
                 )
+            )
+        if self.retail_dialogue_inputs_path is not None:
+            command.extend(
+                ("--retail-dialogue-inputs", str(self.retail_dialogue_inputs_path))
             )
         nice = shutil.which("nice")
         ionice = shutil.which("ionice")

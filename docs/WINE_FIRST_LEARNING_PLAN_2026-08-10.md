@@ -337,3 +337,13 @@ Wine first-failure panel collected with that schema.  First use the new panel
 to verify exact retail/source delivery; only repeated, exact COW support may
 create a residual.  No candidate, shadow policy, active canary, or new fit is
 currently authorized.
+
+The first frame-v5 Wine episode is now audited in
+`WINE_FIRST_STAGE6_FRAMEV5_PANEL_2026-08-10.md`.  Its 251 dialogue records
+covered 238 unique sampled frames, and corrected tick-aligned replay matched
+all 238 in both source domains.  The audit also found a pre-dialogue MinGW
+source-versus-retail RNG divergence at frame 1206, so delivery equality is
+kept separate from RNG/physical equivalence and cannot authorize COW by
+itself.  This is one independent episode: the active gate remains collection
+and audit of a few additional disjoint frozen-UCB frame-v5 first-failure
+episodes, with no fit in between.

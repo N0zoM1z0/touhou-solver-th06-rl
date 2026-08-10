@@ -33,7 +33,15 @@ def _prefix(tmp_path: Path) -> FirstFailurePrefix:
     )
 
 
-def _frame(sequence: int, frame: int, mask: int, current: str, published: str | None):
+def _frame(
+    sequence: int,
+    frame: int,
+    mask: int,
+    current: str,
+    published: str | None,
+    *,
+    dialogue_delivery: list[dict[str, object]] | None = None,
+):
     return {
         "sequence": sequence,
         "snapshot": {
@@ -49,6 +57,11 @@ def _frame(sequence: int, frame: int, mask: int, current: str, published: str | 
         "decision": {
             "current_action": current,
             "published_action": published,
+            **(
+                {"dialogue_delivery": dialogue_delivery}
+                if dialogue_delivery is not None
+                else {}
+            ),
         },
     }
 
@@ -193,6 +206,108 @@ def test_retail_export_delays_dialogue_control_to_largest_observed_gap(
 
     assert stream.retail_dialogue_control_after_tick == 140
     assert stream.provenance["maximum_observation_gap"] == 10
+
+
+def test_retail_export_preserves_sampled_dialogue_edges_and_held_backfill(
+    tmp_path: Path,
+) -> None:
+    samples = [
+        {
+            "game_frame": 129,
+            "current_input_mask": 1,
+            "previous_input_mask": 1,
+            "published_input_mask": 0,
+            "held_repeat": 0,
+            "held_frames": 1,
+            "active": True,
+            "skippable": False,
+            "pulsed_shoot": False,
+        },
+        {
+            "game_frame": 130,
+            "current_input_mask": 0,
+            "previous_input_mask": 1,
+            "published_input_mask": 0,
+            "held_repeat": 0,
+            "held_frames": 0,
+            "active": True,
+            "skippable": False,
+            "pulsed_shoot": False,
+        },
+        {
+            "game_frame": 131,
+            "current_input_mask": 1,
+            "previous_input_mask": 0,
+            "published_input_mask": 1,
+            "held_repeat": 0,
+            "held_frames": 0,
+            "active": False,
+            "skippable": False,
+            "pulsed_shoot": True,
+        },
+    ]
+    frames = [
+        _frame(0, 127, 0x00, "stay_fast", "up_fast"),
+        _frame(
+            1,
+            131,
+            0x01,
+            "stay_fast",
+            None,
+            dialogue_delivery=samples,
+        ),
+        _frame(2, 132, 0x11, "up_fast", "up_fast"),
+    ]
+    transitions = [
+        _transition(0, 127, 131, "up_fast", "up_fast"),
+        _transition(1, 131, 132, "up_fast", None),
+    ]
+
+    stream = build_retail_action_stream(_prefix(tmp_path), transitions, frames)
+
+    assert [
+        (segment.start_tick, segment.count, segment.input_mask)
+        for segment in stream.retail_dialogue_inputs
+    ] == [(127, 2, 1), (129, 1, 0), (130, 1, 1)]
+    assert stream.provenance["retail_dialogue_input_evidence"] == {
+        "sample_records": 3,
+        "sampled_current_frames": 3,
+        "sampled_previous_frames": 3,
+        "held_backfilled_frames": 0,
+        "exact_frames": 4,
+        "segments": 3,
+        "first_exact_frame": 128,
+        "last_exact_frame": 131,
+        "first_runtime_input_tick": 127,
+        "last_runtime_input_tick": 130,
+    }
+    assert "rendering, numeric, and RNG" in stream.provenance["known_limit"]
+
+
+def test_retail_export_refuses_bomb_in_dialogue_delivery(tmp_path: Path) -> None:
+    sample = {
+        "game_frame": 130,
+        "current_input_mask": 0x02,
+        "previous_input_mask": 0,
+        "published_input_mask": 0,
+        "held_repeat": 0,
+        "held_frames": 0,
+        "active": True,
+        "skippable": False,
+        "pulsed_shoot": False,
+    }
+    frames = [
+        _frame(0, 127, 0x00, "stay_fast", "up_fast"),
+        _frame(1, 131, 0x11, "up_fast", None, dialogue_delivery=[sample]),
+        _frame(2, 132, 0x11, "up_fast", "up_fast"),
+    ]
+    transitions = [
+        _transition(0, 127, 131, "up_fast", "up_fast"),
+        _transition(1, 131, 132, "up_fast", None),
+    ]
+
+    with pytest.raises(ValueError, match="Bomb-bearing"):
+        build_retail_action_stream(_prefix(tmp_path), transitions, frames)
 
 
 def test_retail_export_refuses_terminal_or_scope_drift(tmp_path: Path) -> None:

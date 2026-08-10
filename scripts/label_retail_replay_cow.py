@@ -29,7 +29,10 @@ try:
         _runtime_provenance,
         label_checkpoint,
     )
-    from run_source_platform_differential import render_action_file
+    from run_source_platform_differential import (
+        render_action_file,
+        render_dialogue_input_file,
+    )
 except ModuleNotFoundError:  # Imported as scripts.label_retail_replay_cow.
     from scripts.audit_retail_source_replay import _retail_state, _source_state
     from scripts.compare_headless_traces import first_difference
@@ -43,7 +46,10 @@ except ModuleNotFoundError:  # Imported as scripts.label_retail_replay_cow.
         _runtime_provenance,
         label_checkpoint,
     )
-    from scripts.run_source_platform_differential import render_action_file
+    from scripts.run_source_platform_differential import (
+        render_action_file,
+        render_dialogue_input_file,
+    )
 
 
 SCHEMA = "th06-rl-retail-replay-cow-v1"
@@ -148,6 +154,12 @@ def label_retail_checkpoints(
         workspace = Path(raw)
         actions = workspace / "retail-prefix-actions.txt"
         actions.write_text(render_action_file(stream), encoding="ascii")
+        dialogue_inputs = None
+        if stream.retail_dialogue_inputs:
+            dialogue_inputs = workspace / "retail-dialogue-inputs.txt"
+            dialogue_inputs.write_text(
+                render_dialogue_input_file(stream), encoding="ascii"
+            )
         server = HeadlessForkserver(
             binary=binary,
             game_directory=game_directory,
@@ -160,6 +172,7 @@ def label_retail_checkpoints(
             retail_dialogue_control_after_tick=(
                 stream.retail_dialogue_control_after_tick
             ),
+            retail_dialogue_inputs_path=dialogue_inputs,
         )
         try:
             root_tick = server.start()

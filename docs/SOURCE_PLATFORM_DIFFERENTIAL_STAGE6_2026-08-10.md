@@ -158,6 +158,18 @@ the old corpus's dialogue gap.  Future frame-v5 Wine corpus records that tiny
 delivery stream separately from movement and learning.  See
 `WINE_FIRST_STAGE6_LATE_FAILURE_AUDIT_2026-08-10.md`.
 
+## Frame-v5 supplement
+
+The first new frame-v5 Wine prefix retained 251 dialogue-delivery records.
+After correcting the source input-request tick versus emitted-game-frame
+offset, both Linux source and MinGW source-under-Wine matched all 238 unique
+sampled retail input frames.  The independent platform result still diverged:
+exact physical state at tick 441, birth events at tick 446, and RNG at tick
+1206.  The RNG divergence preceded dialogue, so exact delivery does not erase
+or explain it.  See `WINE_FIRST_STAGE6_FRAMEV5_PANEL_2026-08-10.md` for hashes,
+retail comparisons, and the decision to collect more independent Wine episodes
+without fitting.
+
 ## Reproduction
 
 ```bash

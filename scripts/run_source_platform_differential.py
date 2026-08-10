@@ -69,6 +69,13 @@ class ActionSegment:
 
 
 @dataclass(frozen=True)
+class DialogueInputSegment:
+    start_tick: int
+    count: int
+    input_mask: int
+
+
+@dataclass(frozen=True)
 class SourceActionStream:
     difficulty: int
     character: int
@@ -82,6 +89,7 @@ class SourceActionStream:
     auto_shoot_after_tick: int | None = None
     retail_dialogue_control: bool = False
     retail_dialogue_control_after_tick: int | None = None
+    retail_dialogue_inputs: tuple[DialogueInputSegment, ...] = ()
     description: str | None = None
     provenance: dict[str, Any] | None = None
 
@@ -119,6 +127,15 @@ class SourceActionStream:
             result["retail_dialogue_control_after_tick"] = (
                 self.retail_dialogue_control_after_tick
             )
+        if self.retail_dialogue_inputs:
+            result["retail_dialogue_inputs"] = [
+                {
+                    "start_tick": segment.start_tick,
+                    "count": segment.count,
+                    "input_mask": segment.input_mask,
+                }
+                for segment in self.retail_dialogue_inputs
+            ]
         if self.provenance is not None:
             result["provenance"] = self.provenance
         return result
@@ -142,6 +159,7 @@ def parse_action_stream(raw: object) -> SourceActionStream:
         "auto_shoot_after_tick",
         "retail_dialogue_control",
         "retail_dialogue_control_after_tick",
+        "retail_dialogue_inputs",
         "max_ticks",
         "auto_shoot",
         "segments",
@@ -209,6 +227,53 @@ def parse_action_stream(raw: object) -> SourceActionStream:
         raise ValueError(
             "retail_dialogue_control_after_tick requires retail_dialogue_control"
         )
+    dialogue_inputs_raw = raw.get("retail_dialogue_inputs", [])
+    if not isinstance(dialogue_inputs_raw, list):
+        raise ValueError("retail_dialogue_inputs must be a list")
+    dialogue_inputs: list[DialogueInputSegment] = []
+    previous_end = -1
+    allowed_dialogue_mask = 0x01 | 0x04 | 0x10 | 0x20 | 0x40 | 0x80 | 0x100
+    for index, segment in enumerate(dialogue_inputs_raw):
+        if not isinstance(segment, dict) or set(segment) != {
+            "start_tick",
+            "count",
+            "input_mask",
+        }:
+            raise ValueError(
+                f"retail dialogue segment {index} must contain exactly "
+                "start_tick/count/input_mask"
+            )
+        start_tick = _strict_int(
+            segment["start_tick"],
+            f"retail dialogue segment {index} start_tick",
+            0,
+            max_ticks,
+        )
+        count = _strict_int(
+            segment["count"],
+            f"retail dialogue segment {index} count",
+            1,
+            max_ticks,
+        )
+        input_mask = _strict_int(
+            segment["input_mask"],
+            f"retail dialogue segment {index} input_mask",
+            0,
+            0xFFFF,
+        )
+        end_tick = start_tick + count - 1
+        if end_tick > max_ticks:
+            raise ValueError(f"retail dialogue segment {index} exceeds max_ticks")
+        if start_tick <= previous_end:
+            raise ValueError("retail dialogue input segments overlap or are unordered")
+        if input_mask & 0x02 or input_mask & ~allowed_dialogue_mask:
+            raise ValueError(
+                f"retail dialogue segment {index} has forbidden or Bomb-bearing input"
+            )
+        dialogue_inputs.append(DialogueInputSegment(start_tick, count, input_mask))
+        previous_end = end_tick
+    if dialogue_inputs and not retail_dialogue_control:
+        raise ValueError("retail_dialogue_inputs requires retail_dialogue_control")
     segments_raw = raw.get("segments")
     if not isinstance(segments_raw, list) or not segments_raw:
         raise ValueError("segments must be a non-empty list")
@@ -245,6 +310,7 @@ def parse_action_stream(raw: object) -> SourceActionStream:
         auto_shoot_after_tick=auto_shoot_after_tick,
         retail_dialogue_control=retail_dialogue_control,
         retail_dialogue_control_after_tick=retail_dialogue_control_after_tick,
+        retail_dialogue_inputs=tuple(dialogue_inputs),
         description=description,
         provenance=dict(provenance) if provenance is not None else None,
     )
@@ -265,6 +331,13 @@ def load_action_stream(path: Path) -> SourceActionStream:
 
 def render_action_file(stream: SourceActionStream) -> str:
     return "".join(f"{segment.count} {segment.action}\n" for segment in stream.segments)
+
+
+def render_dialogue_input_file(stream: SourceActionStream) -> str:
+    return "".join(
+        f"{segment.start_tick} {segment.count} {segment.input_mask}\n"
+        for segment in stream.retail_dialogue_inputs
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -313,6 +386,7 @@ def _runtime_command(
     binary: str,
     actions: str,
     trace: str,
+    dialogue_inputs: str | None = None,
 ) -> list[str]:
     command = [
         binary,
@@ -351,6 +425,10 @@ def _runtime_command(
                 str(stream.retail_dialogue_control_after_tick),
             )
         )
+    if stream.retail_dialogue_inputs:
+        if dialogue_inputs is None:
+            raise ValueError("retail dialogue inputs require a rendered input file")
+        command.extend(("--retail-dialogue-inputs", dialogue_inputs))
     return command
 
 
@@ -813,6 +891,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     actions = output / "actions.txt"
     actions.write_text(render_action_file(stream), encoding="ascii")
+    dialogue_inputs = None
+    if stream.retail_dialogue_inputs:
+        dialogue_inputs = output / "retail-dialogue-inputs.txt"
+        dialogue_inputs.write_text(
+            render_dialogue_input_file(stream), encoding="ascii"
+        )
     linux_trace = output / "linux.trace.jsonl"
     wine_trace = output / "wine.trace.jsonl"
 
@@ -822,6 +906,7 @@ def main(argv: list[str] | None = None) -> int:
         binary=str(linux_binary),
         actions=str(actions),
         trace=str(linux_trace),
+        dialogue_inputs=(str(dialogue_inputs) if dialogue_inputs is not None else None),
     )
     linux_run = _run_process(
         linux_command,
@@ -864,6 +949,9 @@ def main(argv: list[str] | None = None) -> int:
         binary=_windows_path(windows_binary),
         actions=_windows_path(actions),
         trace=_windows_path(wine_trace),
+        dialogue_inputs=(
+            _windows_path(dialogue_inputs) if dialogue_inputs is not None else None
+        ),
     )
     wine_command = [str(wine), *windows_runtime_command]
     wine_run = _run_process(
@@ -945,6 +1033,9 @@ def main(argv: list[str] | None = None) -> int:
             "path": str(normalized_stream),
             "sha256": _sha256(normalized_stream),
             "action_file_sha256": _sha256(actions),
+            "dialogue_input_file_sha256": (
+                _sha256(dialogue_inputs) if dialogue_inputs is not None else None
+            ),
             "action_count": stream.action_count,
         },
         "source": _git_snapshot(source_repository),

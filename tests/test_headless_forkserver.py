@@ -82,6 +82,8 @@ def test_forkserver_runs_children_without_a_pty(tmp_path: Path) -> None:
 
 
 def test_forkserver_passes_retail_delivery_options(tmp_path: Path) -> None:
+    dialogue_inputs = tmp_path / "dialogue-inputs.txt"
+    dialogue_inputs.write_text("4996 2 1\n", encoding="ascii")
     server = HeadlessForkserver(
         binary=_fake_forkserver(tmp_path / "fake-forkserver"),
         game_directory=tmp_path,
@@ -92,6 +94,7 @@ def test_forkserver_passes_retail_delivery_options(tmp_path: Path) -> None:
         auto_shoot_after_tick=127,
         retail_dialogue_control=True,
         retail_dialogue_control_after_tick=4995,
+        retail_dialogue_inputs_path=dialogue_inputs,
     )
 
     command = server._command()
@@ -99,6 +102,9 @@ def test_forkserver_passes_retail_delivery_options(tmp_path: Path) -> None:
     assert command[command.index("--stage-rng-seed") + 1] == "3193"
     assert command[command.index("--auto-shoot-after-tick") + 1] == "127"
     assert command[command.index("--retail-dialogue-control-after-tick") + 1] == "4995"
+    assert command[command.index("--retail-dialogue-inputs") + 1] == str(
+        dialogue_inputs.resolve()
+    )
 
     with pytest.raises(ValueError, match="requires auto_shoot"):
         HeadlessForkserver(
@@ -126,6 +132,15 @@ def test_forkserver_passes_retail_delivery_options(tmp_path: Path) -> None:
             seed=0,
             auto_shoot=True,
             retail_dialogue_control_after_tick=4995,
+        )
+    with pytest.raises(ValueError, match="requires retail dialogue control"):
+        HeadlessForkserver(
+            binary=server.binary,
+            game_directory=tmp_path,
+            scope=server.scope,
+            seed=0,
+            auto_shoot=True,
+            retail_dialogue_inputs_path=dialogue_inputs,
         )
 
 

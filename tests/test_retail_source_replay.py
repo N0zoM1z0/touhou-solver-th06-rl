@@ -106,3 +106,50 @@ def test_retail_source_comparison_can_retain_an_early_source_terminal(tmp_path: 
     assert result["common_snapshots"] == 1
     assert result["missing_retail_snapshots"] == 1
     assert result["first_missing_retail_frame"] == 131
+
+
+def test_retail_source_comparison_audits_dialogue_input_samples(tmp_path: Path) -> None:
+    frames = [
+        _frame(0, 127, mask=0, x=192.0),
+        _frame(1, 131, mask=1, x=192.0),
+    ]
+    frames[1]["decision"] = {
+        "dialogue_delivery": [
+            {"game_frame": 128, "current_input_mask": 1},
+            {"game_frame": 129, "current_input_mask": 0},
+            {"game_frame": 129, "current_input_mask": 0},
+        ]
+    }
+    source = [
+        _source(127, mask=0, x=192.0),
+        _source(128, mask=1, x=192.0),
+        _source(129, mask=0, x=192.0),
+        _source(131, mask=1, x=192.0),
+    ]
+    trace = tmp_path / "dialogue.jsonl"
+    trace.write_text(
+        "".join(json.dumps(row) + "\n" for row in source), encoding="utf-8"
+    )
+
+    result = compare_retail_source_states(frames, trace)
+
+    assert result["dialogue_delivery"] == {
+        "available": True,
+        "equal": True,
+        "sample_records": 3,
+        "unique_sample_frames": 2,
+        "matched_sample_frames": 2,
+        "missing_sample_frames": 0,
+        "first_missing_sample_frame": None,
+        "first_sample_frame": 128,
+        "last_sample_frame": 129,
+        "first_divergence": None,
+    }
+
+    source[2]["input"] = 1
+    trace.write_text(
+        "".join(json.dumps(row) + "\n" for row in source), encoding="utf-8"
+    )
+    mismatched = compare_retail_source_states(frames, trace)
+    assert mismatched["dialogue_delivery"]["equal"] is False
+    assert mismatched["dialogue_delivery"]["first_divergence"]["frame"] == 129
