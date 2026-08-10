@@ -80,6 +80,9 @@ corrected COW still favored the incumbent and creates no candidate. This is a
 local reject-only repair, not proof of whole-runtime equivalence. Complete
 natural original-retail Wine Stage HIT count remains the final promotion
 metric; stopped 0-HIT prefixes and headless COW are filters only.
+The next one-shot exploratory COW is predeclared in
+`docs/WINE_FIRST_STAGE6_FIRST_ACTION_SCAN_PROTOCOL_2026-08-10.md`; its fixed
+robust selection rule must not be changed after discovery.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
