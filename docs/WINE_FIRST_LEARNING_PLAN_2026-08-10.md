@@ -570,3 +570,20 @@ shape of a future first-failure data-acquisition protocol; the post-HIT trace
 itself remains prohibited from fitting, labeling, candidate construction, or
 promotion.  Complete natural retail-Wine HIT count remains the only final
 Stage 6 improvement gate.
+
+That diagnostic is complete in
+`WINE_FIRST_STAGE6_FULL_STAGE_HIT_WINDOW_AUDIT_2026-08-10.md`.  Hard-empty
+arrived only 2--5 frames before each HIT, while all ten HITs had a final
+contiguous 4-frame emergency-horizon run beginning 6--14 frames before the
+HIT.  A narrow Hard-set trigger covers only seven HITs; three collapsed from
+10/12 actions directly to zero.  The policy and offline feature boundary
+currently omit `effort_horizon`, aliasing normal 12-frame survival with the
+four-frame fallback when Hard and legal masks happen to match.
+
+The next infrastructure change is therefore additive and behavior-preserving:
+carry the already computed effort horizon through `PolicyContext`, compact
+corpus context, exact replay, and a new versioned Wine risk feature schema.
+Frozen UCB must continue to ignore the field and reproduce all r1-r10 actions.
+Only after that audit passes may a fresh Wine acquisition use the third
+consecutive degraded-horizon decision as a recorder/anchor trigger.  It is a
+data trigger, never a movement rule or promotion shortcut.
