@@ -128,6 +128,11 @@ The final exhaustive use of that unchanged anchor is frozen in
 `docs/WINE_FIRST_STAGE6_SUB10_SAFE_SCAN_PROTOCOL_2026-08-10.md`; it scans the
 entire recorded native-safe first-action set once and forbids further r1
 mining if no unique winner emerges.
+The result is closed in
+`docs/WINE_FIRST_STAGE6_SUB10_SAFE_SCAN_RESULT_2026-08-10.md`: `up_right` was
+the unique r1 discovery winner but was not native-admissible at fixed r2, so
+confirmation failed closed and no candidate exists. Do not select a runner-up
+or another r1 frame.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

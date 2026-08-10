@@ -467,3 +467,10 @@ That final scan is frozen in
 already recorded retail-native-safe first actions under restored UCB and uses
 the unchanged unique robust-winner rule. Only one winner may proceed to the
 fixed r2 confirmation; a discovery tie or incumbent win closes r1 permanently.
+
+The exhaustive result is closed in
+`WINE_FIRST_STAGE6_SUB10_SAFE_SCAN_RESULT_2026-08-10.md`. `up_right` uniquely
+extended r1 from seven to 45 source ticks, but the native gate excluded it at
+the fixed r2 checkpoint, so confirmation failed closed and the candidate count
+is zero. This rules out a fixed action residual; any later learner must rank
+the current native-safe set action-relatively and use episode-grouped holdout.
