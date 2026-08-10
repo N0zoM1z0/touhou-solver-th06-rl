@@ -420,3 +420,11 @@ future ECL interpretation. At the fixed r5 checkpoint, source replay restored
 actions, and reached the same Hard-empty stop at the same frame. A small
 policy-faithful one-step counterfactual may now be predeclared at that anchor;
 this does not relax the disjoint Wine shadow or complete-Stage HIT-count gates.
+
+The policy-faithful discovery is closed in
+`WINE_FIRST_STAGE6_POLICY_COW_RESULT_2026-08-10.md`. Its factual branch matched
+the eight-action Wine suffix and terminal frame. Both `stay` and `stay_fast`
+then survived 600 ticks, but their robust outcomes tied, so the unique-winner
+gate produced zero candidates and the conditional r6 confirmation was not run.
+The two focus variants may only seed a newly predeclared neutral-action family
+test on disjoint Wine episodes; they may not be merged or selected from Panel 2.

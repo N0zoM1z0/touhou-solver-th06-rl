@@ -99,6 +99,13 @@ winner remains a headless hypothesis until disjoint Wine shadow evidence.
 The fixed policy-faithful discovery/confirmation rule is predeclared in
 `docs/WINE_FIRST_STAGE6_POLICY_COW_PROTOCOL_2026-08-10.md`; commit it before
 observing any substituted-action branch.
+That result is closed in
+`docs/WINE_FIRST_STAGE6_POLICY_COW_RESULT_2026-08-10.md`. `stay` and
+`stay_fast` both survived 600 source ticks under restored frozen-UCB
+continuation, while factual `down_right` reproduced the eight-tick failure.
+Their robust tie creates zero candidates and forbids the conditional r6 run.
+Treat them only as a fixed neutral-action hypothesis family for a newly
+predeclared, disjoint Wine panel.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
