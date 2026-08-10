@@ -454,3 +454,10 @@ conditional confirmation, and only `down_right` versus `down_fast` is tested.
 The new question is whether a one-action substitution helps when restored
 frozen UCB owns every later choice, rather than when the offline teacher owns
 the continuation. Any unanimous result remains a headless hypothesis only.
+
+The fixed sub10 pair is rejected in
+`WINE_FIRST_STAGE6_SUB10_POLICY_COW_RESULT_2026-08-10.md`: `down_right` and
+`down_fast` both reproduced a seven-tick Hard-empty outcome and tied under the
+robust rank. The conditional r2 run was therefore forbidden. At most one final
+predeclared all-native-safe scan may inspect the unchanged r1 anchor; do not
+select another pair iteratively from this result.

@@ -120,6 +120,10 @@ The different policy-faithful estimand for the already fixed sub10 r1/r2
 anchors is predeclared in
 `docs/WINE_FIRST_STAGE6_SUB10_POLICY_COW_PROTOCOL_2026-08-10.md`; discovery
 must pass before its single conditional confirmation is allowed.
+That pair result is closed in
+`docs/WINE_FIRST_STAGE6_SUB10_POLICY_COW_RESULT_2026-08-10.md`: both actions
+reached the same seven-tick terminal and robust tie, so r2 was not run and the
+candidate count remains zero.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
