@@ -11,6 +11,7 @@ from th06_rl.headless_geometry import (
     HEADLESS_DELIVERY_DELAYS,
     OBSERVATION_SCHEMA,
     certify_headless_actions,
+    certify_lowered_headless_actions,
     lower_headless_hard_hazards,
     lower_headless_hazards,
     reactive_headless_action,
@@ -193,6 +194,26 @@ def test_hard_lowering_routes_final_player_aim_to_native_candidate_paths() -> No
 def test_headless_step_delivery_contract_is_exactly_synchronous() -> None:
     assert HEADLESS_DELIVERY_CONTRACT == "synchronous-step-v1"
     assert HEADLESS_DELIVERY_DELAYS == (0,)
+
+
+def test_lowered_certificate_can_audit_an_explicit_delivery_contract() -> None:
+    value = observation()
+    hazards = lower_headless_hard_hazards(value)
+    observed: list[tuple[int, ...]] = []
+
+    class RecordingKernel:
+        def certify_actions(self, **kwargs):
+            observed.append(kwargs["delivery_delays"])
+            return ()
+
+    certify_lowered_headless_actions(
+        value,
+        hazards,
+        kernel=RecordingKernel(),  # type: ignore[arg-type]
+        delivery_delays=(0, 1, 2, 3),
+    )
+
+    assert observed == [(0, 1, 2, 3)]
 
 
 def test_hard_lowering_keeps_multiturn_player_aim_fail_closed() -> None:

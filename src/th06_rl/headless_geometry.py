@@ -768,8 +768,15 @@ def certify_lowered_headless_actions(
     hazards: PackedHazards | PreparedHazards,
     *,
     kernel: NativeKernel | None = None,
+    delivery_delays: tuple[int, ...] = HEADLESS_DELIVERY_DELAYS,
 ) -> tuple[NativeCertifiedAction, ...]:
-    """Run Hard on one already-lowered immutable physical snapshot."""
+    """Run Hard on one already-lowered immutable physical snapshot.
+
+    Source STEP callers retain the exact synchronous default.  A diagnostic
+    that reconstructs a retail-Wine checkpoint may explicitly supply the
+    Windows adapter's wider delivery set when it audits the recorded retail
+    Hard certificate; that does not change source branch execution.
+    """
     validate_headless_observation(observation)
     player = observation["player"]
     assert isinstance(player, Mapping)
@@ -781,10 +788,9 @@ def certify_lowered_headless_actions(
         kinematics=KINEMATICS,
         current_action=action_from_input(_integer(observation, "input")),
         hazards=hazards,
-        # The headless STEP protocol publishes one action before the same
-        # physical RunTick. Its complete delivery set is exactly {0}; the
-        # asynchronous Windows adapter retains its separate bounded delays.
-        delivery_delays=HEADLESS_DELIVERY_DELAYS,
+        # The default remains the synchronous STEP contract.  Explicit wider
+        # sets are used only to reconstruct another runtime's certificate.
+        delivery_delays=delivery_delays,
         collision_margin=COLLISION_MARGIN,
     )
 

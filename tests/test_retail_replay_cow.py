@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.label_retail_replay_cow import retail_checkpoint_contract
+from scripts.label_retail_replay_cow import (
+    RETAIL_NATIVE_DELIVERY_DELAYS,
+    SCHEMA,
+    retail_checkpoint_contract,
+)
 from scripts.label_headless_cow_counterfactuals import label_checkpoint
 
 
@@ -69,3 +73,8 @@ def test_targeted_label_api_exposes_a_native_legal_subset() -> None:
     # Signature-level regression: retail COW may compare a targeted pair
     # without redefining the full native authority set stored in the row.
     assert "evaluated_first_actions" in label_checkpoint.__annotations__
+
+
+def test_retail_replay_cow_uses_the_windows_delivery_contract() -> None:
+    assert SCHEMA == "th06-rl-retail-replay-cow-v2"
+    assert RETAIL_NATIVE_DELIVERY_DELAYS == (0, 1, 2, 3)

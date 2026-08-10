@@ -13,6 +13,10 @@ from typing import Any, Mapping, Sequence
 from th06_rl.headless import HeadlessScope
 from th06_rl.headless_corpus import NativeOfflineTeacher, canonical_observation_sha256
 from th06_rl.headless_forkserver import HeadlessForkserver
+from th06_rl.headless_geometry import (
+    HEADLESS_DELIVERY_DELAYS,
+    certify_lowered_headless_actions,
+)
 from th06_rl.native import NativeKernel
 from th06_rl.wine_risk import FROZEN_INCUMBENT_POLICY_ID
 
@@ -52,7 +56,8 @@ except ModuleNotFoundError:  # Imported as scripts.label_retail_replay_cow.
     )
 
 
-SCHEMA = "th06-rl-retail-replay-cow-v1"
+SCHEMA = "th06-rl-retail-replay-cow-v2"
+RETAIL_NATIVE_DELIVERY_DELAYS = (0, 1, 2, 3)
 
 
 def retail_checkpoint_contract(
@@ -201,12 +206,51 @@ def label_retail_checkpoints(
                             f"retail/source checkpoint mismatch at sequence {sequence}: "
                             f"{difference}"
                         )
-                    certified, _ = _certify(observation, kernel)
+                    # The reconstructed source branch publishes synchronously,
+                    # but the recorded retail Hard certificate covered the
+                    # asynchronous Windows adapter's complete bounded pickup
+                    # set.  Compare like with like.  Using the source STEP set
+                    # here falsely broadened boundary checkpoints by up to
+                    # three movement ticks and rejected valid anchors.
+                    certified, prepared = _certify(observation, kernel)
                     certified_names = [item.action.name for item in certified]
-                    if certified_names != contract["native_legal_actions"]:
+                    retail_delivery_certified = certify_lowered_headless_actions(
+                        observation,
+                        prepared,
+                        kernel=kernel,
+                        delivery_delays=RETAIL_NATIVE_DELIVERY_DELAYS,
+                    )
+                    retail_delivery_names = [
+                        item.action.name for item in retail_delivery_certified
+                    ]
+                    if retail_delivery_names != contract["native_legal_actions"]:
+                        server.abort_step_session()
+                        only_retail = sorted(
+                            set(contract["native_legal_actions"])
+                            - set(retail_delivery_names)
+                        )
+                        only_source = sorted(
+                            set(retail_delivery_names)
+                            - set(contract["native_legal_actions"])
+                        )
+                        raise ValueError(
+                            "retail/source native hard set mismatch under the retail "
+                            f"delivery contract at sequence {sequence}: "
+                            f"only_retail={only_retail}, only_source={only_source}"
+                        )
+                    requested_actions = (
+                        ()
+                        if evaluated_first_actions is None
+                        else tuple(dict.fromkeys(evaluated_first_actions))
+                    )
+                    if any(
+                        action not in retail_delivery_names
+                        for action in requested_actions
+                    ):
                         server.abort_step_session()
                         raise ValueError(
-                            f"retail/source native hard set mismatch at sequence {sequence}"
+                            "requested first action is not native-safe under the "
+                            f"retail delivery contract at sequence {sequence}"
                         )
                     digest = canonical_observation_sha256(observation)
                     terminal = server.step_session(str(contract["factual_action"]))
@@ -240,6 +284,12 @@ def label_retail_checkpoints(
                             "retail_snapshot_id": contract["snapshot_id"],
                             "retail_source_state_match_at_1e_6": True,
                             "retail_source_native_hard_set_match": True,
+                            "retail_native_delivery_delays": list(
+                                RETAIL_NATIVE_DELIVERY_DELAYS
+                            ),
+                            "source_branch_delivery_delays": list(
+                                HEADLESS_DELIVERY_DELAYS
+                            ),
                         }
                     )
                     labels.append(label)
@@ -269,6 +319,10 @@ def label_retail_checkpoints(
         },
         "branch_frames": branch_frames,
         "teacher_horizon": teacher_horizon,
+        "delivery_contracts": {
+            "retail_native_gate": list(RETAIL_NATIVE_DELIVERY_DELAYS),
+            "source_step_branch": list(HEADLESS_DELIVERY_DELAYS),
+        },
         "requested_first_actions": (
             None
             if evaluated_first_actions is None
