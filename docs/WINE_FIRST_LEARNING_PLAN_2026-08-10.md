@@ -356,3 +356,43 @@ completed panel therefore has zero residual candidates.  It cannot enter
 shadow or active canary, and it must not be repeatedly threshold-mined.  The
 next work is a separately predeclared small frozen-UCB Wine panel with no fit
 between episodes, looking only for a new repeated generic opportunity.
+
+That second panel is now complete in
+`WINE_FIRST_STAGE6_PANEL2_RESULT_2026-08-10.md`. Three immutable original-retail
+Wine prefixes reached the same late sub31 context with zero physical HIT before
+native fail-close. The only newly repeated action pair favored frozen UCB at
+its first exact checkpoint, making unanimous alternative support impossible;
+no residual was created and no further COW compute was spent on that pair.
+
+The panel also narrows the simulator boundary. Linux source and MinGW
+source-under-Wine retained equal action/RNG streams, and every sampled retail
+dialogue input matched, but both source domains temporarily reported zero
+bullets where original retail reported 289--308. Therefore equal RNG and
+delivery are not sufficient proxies for equal hazard state.
+
+The required same-frame audit is now complete in
+`WINE_FIRST_STAGE6_ENEMY_MOTION_AUDIT_2026-08-10.md`. It found a concrete
+offline-infrastructure error: the old portable observation omitted enemy
+interpolation state, so the solver conservatively but incorrectly extrapolated
+the current enemy velocity as constant. The corrected additive observation and
+bounded projector restore exact native-safe-set agreement at all 19,120
+retained r4--r6 snapshots in both source domains. Hazard-count and numeric
+platform drift still remain, so this agreement authorizes only locally matched
+reject-only COW. It does not authorize a candidate or make source replay a
+promotion domain. Re-running the one predeclared COW pair with the repaired
+state still favored frozen UCB and retained zero candidates.
+
+The next experiment must be separately predeclared and small. A bounded
+exploratory scan may branch every retail-native-safe first action at the
+already-fixed r5 discovery anchor, then use the already-fixed r6 anchor only to
+confirm a unique non-incumbent winner. That scan is hypothesis generation, not
+retroactive panel-2 evidence; at most one survivor may enter a new disjoint
+original-retail Wine shadow episode. No broad fit, sweep, or panel-2 threshold
+mining is authorized.
+
+The decisive Stage 6 score remains complete natural original-retail Wine HIT
+count versus the immutable frozen incumbent, including whether the stage is
+cleared with zero HIT. First-failure survival and headless COW only decide
+which candidates deserve that expensive alternating full-Stage A/B; they do
+not replace it. Full-Stage HIT continuation remains benchmark-only and may
+not flow back into fitting.

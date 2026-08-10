@@ -8,8 +8,14 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
+from th06_rl.headless_geometry import (
+    HeadlessAuthorityUnavailable,
+    certify_lowered_headless_actions,
+    lower_headless_hard_hazards,
+)
+from th06_rl.native import NativeKernel
 from th06_rl.wine_risk import FROZEN_INCUMBENT_POLICY_ID, load_first_failure_prefix
 
 try:
@@ -22,8 +28,10 @@ except ModuleNotFoundError:  # Imported as scripts.audit_retail_source_replay.
     from scripts.run_source_platform_differential import DRIFT_TOLERANCES, _trace_summary
 
 
-REPORT_SCHEMA = "th06-rl-retail-source-replay-audit-v1"
+REPORT_SCHEMA = "th06-rl-retail-source-replay-audit-v2"
 PLATFORM_REPORT_SCHEMA = "th06-rl-source-platform-differential-v1"
+RETAIL_NATIVE_DELIVERY_DELAYS = (0, 1, 2, 3)
+TERMINAL_NATIVE_SET_WINDOW_FRAMES = 120
 
 
 def _sha256(path: Path) -> str:
@@ -112,13 +120,43 @@ def _record(frame: int, difference: Mapping[str, Any]) -> dict[str, Any]:
     return {"frame": frame, "difference": dict(difference)}
 
 
+def _retail_hard_action_names(
+    decision: Mapping[str, Any],
+    *,
+    sequence: int,
+) -> tuple[str, ...]:
+    hard = decision.get("hard_actions")
+    if not isinstance(hard, list):
+        raise TypeError(f"retail frame {sequence} hard_actions is not a list")
+    names: list[str] = []
+    for index, item in enumerate(hard):
+        if (
+            not isinstance(item, (list, tuple))
+            or not item
+            or not isinstance(item[0], str)
+            or not item[0]
+        ):
+            raise TypeError(
+                f"retail frame {sequence} hard action {index} is invalid"
+            )
+        names.append(item[0])
+    if len(names) != len(set(names)):
+        raise ValueError(f"retail frame {sequence} hard_actions contains duplicates")
+    return tuple(names)
+
+
 def compare_retail_source_states(
     frame_rows: Sequence[Mapping[str, Any]],
     trace_path: Path,
     *,
     require_full_coverage: bool = True,
+    native_safe_set_resolver: (
+        Callable[[Mapping[str, Any]], Sequence[str]] | None
+    ) = None,
+    native_delivery_delays: tuple[int, ...] = RETAIL_NATIVE_DELIVERY_DELAYS,
 ) -> dict[str, Any]:
     retail_by_frame: dict[int, dict[str, Any]] = {}
+    retail_hard_by_frame: dict[int, tuple[str, ...]] = {}
     dialogue_input_by_frame: dict[int, int] = {}
     dialogue_sample_records = 0
     for expected_sequence, row in enumerate(frame_rows):
@@ -137,6 +175,11 @@ def compare_retail_source_states(
             continue
         if not isinstance(decision, Mapping):
             raise TypeError(f"retail frame {expected_sequence} decision is invalid")
+        if "hard_actions" in decision:
+            retail_hard_by_frame[frame] = _retail_hard_action_names(
+                decision,
+                sequence=expected_sequence,
+            )
         dialogue = decision.get("dialogue_delivery", [])
         if not isinstance(dialogue, list):
             raise TypeError(
@@ -187,6 +230,15 @@ def compare_retail_source_states(
         name: None for name in categories
     }
     matched_frames: list[int] = []
+    matched_native_frames: list[int] = []
+    equal_native_frames: list[int] = []
+    differing_native_frames: list[int] = []
+    unavailable_native_frames: list[int] = []
+    first_native_difference: dict[str, Any] | None = None
+    last_native_difference: dict[str, Any] | None = None
+    first_native_unavailable: dict[str, Any] | None = None
+    first_native_reconvergence: int | None = None
+    native_divergence_seen = False
     matched_dialogue_frames: set[int] = set()
     first_dialogue_input: dict[str, Any] | None = None
     seen_trace_ticks: set[int] = set()
@@ -229,6 +281,43 @@ def compare_retail_source_states(
                 continue
             source_state = _source_state(observation)
             matched_frames.append(tick)
+            if native_safe_set_resolver is not None and tick in retail_hard_by_frame:
+                matched_native_frames.append(tick)
+                retail_names = retail_hard_by_frame[tick]
+                try:
+                    source_names = tuple(native_safe_set_resolver(observation))
+                except HeadlessAuthorityUnavailable as error:
+                    unavailable_native_frames.append(tick)
+                    native_divergence_seen = True
+                    if first_native_unavailable is None:
+                        first_native_unavailable = {
+                            "frame": tick,
+                            "reason": str(error),
+                        }
+                else:
+                    if len(source_names) != len(set(source_names)):
+                        raise ValueError(
+                            f"source native safe set contains duplicates at frame {tick}"
+                        )
+                    retail_set = set(retail_names)
+                    source_set = set(source_names)
+                    if retail_set == source_set:
+                        equal_native_frames.append(tick)
+                        if native_divergence_seen and first_native_reconvergence is None:
+                            first_native_reconvergence = tick
+                    else:
+                        differing_native_frames.append(tick)
+                        native_divergence_seen = True
+                        difference = {
+                            "frame": tick,
+                            "retail_hard_actions": list(retail_names),
+                            "source_hard_actions": list(source_names),
+                            "only_retail": sorted(retail_set - source_set),
+                            "only_source": sorted(source_set - retail_set),
+                        }
+                        if first_native_difference is None:
+                            first_native_difference = difference
+                        last_native_difference = difference
             if first_exact is None:
                 difference = first_difference(retail, source_state)
                 if difference is not None:
@@ -293,6 +382,61 @@ def compare_retail_source_states(
         }
         for name, difference in first_category.items()
     }
+    missing_native = sorted(
+        set(retail_hard_by_frame) - set(matched_native_frames)
+    )
+    terminal_frame = max(retail_by_frame)
+    terminal_window_start = terminal_frame - TERMINAL_NATIVE_SET_WINDOW_FRAMES + 1
+    terminal_native_frames = [
+        frame
+        for frame in matched_native_frames
+        if frame >= terminal_window_start
+    ]
+    equal_native_set = set(equal_native_frames)
+    differing_native_set = set(differing_native_frames)
+    unavailable_native_set = set(unavailable_native_frames)
+    native_set_audit = {
+        "available": native_safe_set_resolver is not None,
+        "delivery_delays": list(native_delivery_delays),
+        "retail_snapshots_with_hard_set": len(retail_hard_by_frame),
+        "common_snapshots": len(matched_native_frames),
+        "missing_snapshots": len(missing_native),
+        "first_missing_frame": missing_native[0] if missing_native else None,
+        "equal": (
+            None
+            if native_safe_set_resolver is None
+            else not missing_native
+            and not differing_native_frames
+            and not unavailable_native_frames
+        ),
+        "equal_snapshots": len(equal_native_frames),
+        "differing_snapshots": len(differing_native_frames),
+        "authority_unavailable_snapshots": len(unavailable_native_frames),
+        "agreement_fraction": (
+            len(equal_native_frames) / len(matched_native_frames)
+            if matched_native_frames
+            else None
+        ),
+        "first_divergence": first_native_difference,
+        "last_divergence": last_native_difference,
+        "first_authority_unavailable": first_native_unavailable,
+        "first_reconvergence_after_divergence": first_native_reconvergence,
+        "terminal_window": {
+            "window_frames": TERMINAL_NATIVE_SET_WINDOW_FRAMES,
+            "first_frame": terminal_window_start,
+            "last_frame": terminal_frame,
+            "common_snapshots": len(terminal_native_frames),
+            "equal_snapshots": sum(
+                frame in equal_native_set for frame in terminal_native_frames
+            ),
+            "differing_snapshots": sum(
+                frame in differing_native_set for frame in terminal_native_frames
+            ),
+            "authority_unavailable_snapshots": sum(
+                frame in unavailable_native_set for frame in terminal_native_frames
+            ),
+        },
+    }
     return {
         "retail_snapshots": len(retail_by_frame),
         "common_snapshots": common,
@@ -313,6 +457,7 @@ def compare_retail_source_states(
             for tolerance, difference in first_by_tolerance.items()
         ],
         "categories": category_results,
+        "native_safe_set": native_set_audit,
         "dialogue_delivery": {
             "available": bool(dialogue_input_by_frame),
             "equal": (
@@ -386,6 +531,7 @@ def audit_retail_source_replay(
     expected_native_kernel_sha256: str,
     expected_source_commit: str,
     require_full_source_coverage: bool = True,
+    native_library: Path | None = None,
 ) -> dict[str, Any]:
     run_directory = run_directory.resolve()
     platform_directory = platform_directory.resolve()
@@ -410,6 +556,20 @@ def audit_retail_source_replay(
         raise TypeError("source platform report trace evidence is absent")
     comparisons: dict[str, Any] = {}
     trace_evidence: dict[str, Any] = {}
+    native_kernel = NativeKernel(native_library)
+
+    def resolve_native_safe_set(observation: Mapping[str, Any]) -> tuple[str, ...]:
+        hazards = lower_headless_hard_hazards(observation)
+        return tuple(
+            item.action.name
+            for item in certify_lowered_headless_actions(
+                observation,
+                hazards,
+                kernel=native_kernel,
+                delivery_delays=RETAIL_NATIVE_DELIVERY_DELAYS,
+            )
+        )
+
     for domain in ("linux", "wine"):
         stated = traces.get(domain)
         if not isinstance(stated, Mapping):
@@ -423,6 +583,7 @@ def audit_retail_source_replay(
             frames,
             trace,
             require_full_coverage=require_full_source_coverage,
+            native_safe_set_resolver=resolve_native_safe_set,
         )
         trace_evidence[domain] = _trace_summary(trace)
 
@@ -500,6 +661,11 @@ def audit_retail_source_replay(
             "source_commit": expected_source_commit,
             "conclusion": platform_report.get("conclusion"),
         },
+        "source_native_kernel": {
+            "path": str(native_kernel.path),
+            "sha256": _sha256(native_kernel.path),
+            "retail_delivery_delays": list(RETAIL_NATIVE_DELIVERY_DELAYS),
+        },
         "known_dialogue_gap_target_frames": known_gap_frames,
         "dialogue_delivery": {
             "available": dialogue_available,
@@ -528,6 +694,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expected-executable-sha256", required=True)
     parser.add_argument("--expected-native-kernel-sha256", required=True)
     parser.add_argument("--expected-source-commit", required=True)
+    parser.add_argument("--native-library", type=Path)
     parser.add_argument("--difficulty", type=int, default=3)
     parser.add_argument("--character", type=int, default=0)
     parser.add_argument("--shot-type", type=int, default=0)
@@ -555,6 +722,7 @@ def main(argv: list[str] | None = None) -> int:
             expected_native_kernel_sha256=args.expected_native_kernel_sha256,
             expected_source_commit=args.expected_source_commit,
             require_full_source_coverage=not args.allow_source_terminal_prefix,
+            native_library=args.native_library,
         )
     except (KeyError, OSError, TypeError, ValueError) as error:
         parser.error(str(error))

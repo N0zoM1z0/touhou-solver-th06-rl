@@ -65,9 +65,21 @@ their full prefixes.  The panel found and fixed a COW audit bug that confused
 Wine delivery delays `(0,1,2,3)` with synchronous source STEP `(0,)`.  Corrected
 targeted COW still produced disagreement under the robust rank, so the panel
 has zero residual candidates.  Do not fit or enter shadow from it.
-The next three-run collection is predeclared in
-`docs/WINE_FIRST_STAGE6_PANEL2_PROTOCOL_2026-08-10.md`; do not select or fit
-between its r4, r5, and r6 episodes.
+The second predeclared three-run result is recorded in
+`docs/WINE_FIRST_STAGE6_PANEL2_RESULT_2026-08-10.md`. All three frozen-UCB
+prefixes stopped 0-HIT at a sub31 native authority failure. Their only new
+cross-episode residual pair strongly favored the incumbent at its first exact
+COW checkpoint, so panel 2 also has zero candidates. Exact dialogue delivery
+and RNG matched both source domains, yet both source domains temporarily had
+zero bullets where retail had 289--308. The resulting geometry audit is in
+`docs/WINE_FIRST_STAGE6_ENEMY_MOTION_AUDIT_2026-08-10.md`: the old source trace
+omitted enemy interpolation state and produced 24/33/26 false native-set
+differences. After the additive source fix, all 19,120 same-frame native sets
+matched retail in each source domain, including every terminal window. The
+corrected COW still favored the incumbent and creates no candidate. This is a
+local reject-only repair, not proof of whole-runtime equivalence. Complete
+natural original-retail Wine Stage HIT count remains the final promotion
+metric; stopped 0-HIT prefixes and headless COW are filters only.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

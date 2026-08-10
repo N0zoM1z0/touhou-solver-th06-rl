@@ -153,3 +153,62 @@ def test_retail_source_comparison_audits_dialogue_input_samples(tmp_path: Path) 
     mismatched = compare_retail_source_states(frames, trace)
     assert mismatched["dialogue_delivery"]["equal"] is False
     assert mismatched["dialogue_delivery"]["first_divergence"]["frame"] == 129
+
+
+def test_retail_source_comparison_audits_native_safe_set_and_reconvergence(
+    tmp_path: Path,
+) -> None:
+    frames = [
+        _frame(0, 127, mask=0, x=192.0),
+        _frame(1, 128, mask=0, x=192.0),
+        _frame(2, 129, mask=0, x=192.0),
+    ]
+    for frame, actions in zip(
+        frames,
+        (("stay",), ("left",), ("up",)),
+        strict=True,
+    ):
+        frame["decision"] = {
+            "hard_actions": [
+                [action, None, 192.0, 384.0] for action in actions
+            ],
+            "dialogue_delivery": [],
+        }
+    trace = tmp_path / "native-sets.jsonl"
+    trace.write_text(
+        "".join(
+            json.dumps(_source(frame, mask=0, x=192.0)) + "\n"
+            for frame in (127, 128, 129)
+        ),
+        encoding="utf-8",
+    )
+
+    source_sets = {
+        127: ("stay",),
+        128: ("right",),
+        129: ("up",),
+    }
+    result = compare_retail_source_states(
+        frames,
+        trace,
+        native_safe_set_resolver=lambda observation: source_sets[
+            int(observation["tick"])
+        ],
+    )
+
+    native = result["native_safe_set"]
+    assert native["available"] is True
+    assert native["delivery_delays"] == [0, 1, 2, 3]
+    assert native["common_snapshots"] == 3
+    assert native["equal_snapshots"] == 2
+    assert native["differing_snapshots"] == 1
+    assert native["first_divergence"] == {
+        "frame": 128,
+        "retail_hard_actions": ["left"],
+        "source_hard_actions": ["right"],
+        "only_retail": ["left"],
+        "only_source": ["right"],
+    }
+    assert native["last_divergence"]["frame"] == 128
+    assert native["first_reconvergence_after_divergence"] == 129
+    assert native["terminal_window"]["equal_snapshots"] == 2
