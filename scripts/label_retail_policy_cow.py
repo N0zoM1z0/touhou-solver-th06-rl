@@ -23,6 +23,7 @@ from th06_rl.wine_risk import FROZEN_INCUMBENT_POLICY_ID, load_first_failure_pre
 try:
     from audit_retail_policy_continuation import (
         RETAIL_DELIVERY_DELAYS,
+        _is_recorded_policy_call,
         _sha256,
         _source_policy_context,
     )
@@ -42,6 +43,7 @@ try:
 except ModuleNotFoundError:  # Imported as scripts.label_retail_policy_cow.
     from scripts.audit_retail_policy_continuation import (
         RETAIL_DELIVERY_DELAYS,
+        _is_recorded_policy_call,
         _sha256,
         _source_policy_context,
     )
@@ -93,22 +95,24 @@ def _restore_policy_before_checkpoint(
     mismatches = []
     for sequence in range(checkpoint_sequence):
         transition = transitions[sequence]
-        proposed = transition.get("proposed_action")
-        if proposed is None:
-            continue
         decision = frames[sequence].get("decision")
         if not isinstance(decision, dict):
             raise TypeError(f"retail decision {sequence} is absent")
+        if not _is_recorded_policy_call(transition, decision):
+            continue
+        proposed = transition["proposed_action"]
         context = recorded_policy_context(dict(transition), decision)
         selected = policy.decide(context)
         calls += 1
         if selected.action != proposed and len(mismatches) < 20:
-            mismatches.append({
-                "sequence": sequence,
-                "frame": context.frame,
-                "recorded": proposed,
-                "replayed": selected.action,
-            })
+            mismatches.append(
+                {
+                    "sequence": sequence,
+                    "frame": context.frame,
+                    "recorded": proposed,
+                    "replayed": selected.action,
+                }
+            )
     if mismatches:
         raise ValueError(f"frozen policy restore mismatch: {mismatches[0]}")
     return policy, {"calls": calls, "action_mismatches": mismatches}
@@ -175,9 +179,7 @@ def label_policy_cow(
     transitions, transition_evidence = _verified_stream_rows(
         run_directory, manifest, "transitions"
     )
-    frames, frame_evidence = _verified_stream_rows(
-        run_directory, manifest, "frames"
-    )
+    frames, frame_evidence = _verified_stream_rows(run_directory, manifest, "frames")
     if checkpoint_sequence >= len(transitions):
         raise ValueError("checkpoint is outside the retail prefix")
     policy, restore = _restore_policy_before_checkpoint(
@@ -194,9 +196,7 @@ def label_policy_cow(
         checkpoint_snapshot, dict
     ):
         raise TypeError("retail checkpoint evidence is absent")
-    retail_context = recorded_policy_context(
-        checkpoint_transition, checkpoint_decision
-    )
+    retail_context = recorded_policy_context(checkpoint_transition, checkpoint_decision)
     factual_action = str(checkpoint_transition.get("proposed_action"))
     if factual_action not in requested:
         raise ValueError("requested actions omit the factual incumbent")
@@ -284,15 +284,11 @@ def label_policy_cow(
                                 "phase_elapsed_frames": context.phase_elapsed_frames,
                                 "factual_action": factual_action,
                                 "baseline_action": context.baseline_action,
-                                "hard_actions": list(
-                                    context.hard_admissible_actions
-                                ),
+                                "hard_actions": list(context.hard_admissible_actions),
                                 "legal_actions": list(
                                     context.locally_admissible_actions
                                 ),
-                                "retail_delivery_delays": list(
-                                    RETAIL_DELIVERY_DELAYS
-                                ),
+                                "retail_delivery_delays": list(RETAIL_DELIVERY_DELAYS),
                                 "retail_source_state_match_at_1e_6": True,
                                 "restored_policy_action_match": True,
                             }
@@ -335,9 +331,7 @@ def label_policy_cow(
                                 terminal_observation["terminal_reason"]
                             )
                             terminal_tick = int(terminal_observation["tick"])
-                            terminal_reserve = _boundary_reserve(
-                                terminal_observation
-                            )
+                            terminal_reserve = _boundary_reserve(terminal_observation)
                         expected_factual = [
                             str(row.get("proposed_action"))
                             for row in transitions[checkpoint_sequence:]
@@ -345,26 +339,28 @@ def label_policy_cow(
                         ]
                         factual_suffix_matches = (
                             first_action != factual_action
-                            or issued == expected_factual[:len(issued)]
+                            or issued == expected_factual[: len(issued)]
                         )
-                        outcomes.append({
-                            "first_action": first_action,
-                            "termination_reason": termination_reason,
-                            "authority_reason": authority_reason,
-                            "terminal_tick": terminal_tick,
-                            "survival_ticks": terminal_tick - checkpoint_tick,
-                            "actions_issued": len(issued),
-                            "action_sha256": _action_sha256(issued),
-                            "first_32_actions": issued[:32],
-                            "action_counts": dict(sorted(Counter(issued).items())),
-                            "minimum_native_legal_actions": minimum_width,
-                            "terminal_boundary_reserve": terminal_reserve,
-                            "physical_deaths_delta": (
-                                int(terminal_observation["deaths"])
-                                - checkpoint_deaths
-                            ),
-                            "factual_suffix_matches": factual_suffix_matches,
-                        })
+                        outcomes.append(
+                            {
+                                "first_action": first_action,
+                                "termination_reason": termination_reason,
+                                "authority_reason": authority_reason,
+                                "terminal_tick": terminal_tick,
+                                "survival_ticks": terminal_tick - checkpoint_tick,
+                                "actions_issued": len(issued),
+                                "action_sha256": _action_sha256(issued),
+                                "first_32_actions": issued[:32],
+                                "action_counts": dict(sorted(Counter(issued).items())),
+                                "minimum_native_legal_actions": minimum_width,
+                                "terminal_boundary_reserve": terminal_reserve,
+                                "physical_deaths_delta": (
+                                    int(terminal_observation["deaths"])
+                                    - checkpoint_deaths
+                                ),
+                                "factual_suffix_matches": factual_suffix_matches,
+                            }
+                        )
                     finally:
                         if session_active:
                             server.abort_step_session()
@@ -375,8 +371,7 @@ def label_policy_cow(
 
     assert checkpoint_contract is not None
     factual = next(
-        outcome for outcome in outcomes
-        if outcome["first_action"] == factual_action
+        outcome for outcome in outcomes if outcome["first_action"] == factual_action
     )
     factual_regression = {
         "action_suffix_matches": factual["factual_suffix_matches"],
@@ -488,13 +483,18 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    print(json.dumps({
-        "schema": report["schema"],
-        "run_id": report["input"]["run_id"],
-        "checkpoint": report["checkpoint"]["sequence"],
-        "outcomes": len(report["outcomes"]),
-        "output": str(args.output.resolve()),
-    }, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "schema": report["schema"],
+                "run_id": report["input"]["run_id"],
+                "checkpoint": report["checkpoint"]["sequence"],
+                "outcomes": len(report["outcomes"]),
+                "output": str(args.output.resolve()),
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

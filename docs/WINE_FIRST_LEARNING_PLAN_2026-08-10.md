@@ -481,3 +481,10 @@ exactly one lag-seven checkpoint from each of four current-kernel sub10 Wine
 episodes and branches the complete recorded native-safe set under restored
 UCB. Three unique non-incumbent episode winners are required merely to permit
 a separately predeclared fit of at most three small residual candidates.
+
+The first action-relative panel is closed as insufficient in
+`WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_RESULT_2026-08-10.md`. r2 wrote
+a sealed document, while r3 failed before branching because restore counted an
+`input-lease` carried proposal as a fictitious policy call. The implementation
+now skips every non-`ok` decision and a factual r3 audit restores 3,327 calls
+with zero mismatch, but the old panel remains closed and permits no fit.

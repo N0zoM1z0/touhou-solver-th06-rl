@@ -138,6 +138,11 @@ The next label-support gate is predeclared in
 It scans one fixed lag-seven native-safe set in each of four independent sub10
 Wine episodes; at least three unique non-incumbent winners are required before
 any small action-relative fit is allowed.
+That first panel is closed as insufficient in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_RESULT_2026-08-10.md`.
+An input-lease row with a carried proposal exposed a policy-restore bug before
+r3 branching; restore now counts only real `reason=ok` policy calls, but the
+failed panel is not retroactively rescued and authorizes zero models.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

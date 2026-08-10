@@ -79,6 +79,22 @@ def _policy_keys(policy: AdaptivePolicy, context: PolicyContext) -> dict[str, st
     }
 
 
+def _is_recorded_policy_call(
+    transition: Mapping[str, Any],
+    decision: Mapping[str, Any],
+) -> bool:
+    """Exclude delivery-only rows that carried an earlier proposal.
+
+    An input lease can retain ``proposed_action`` in the transition even
+    though the policy was not called and the decision has no reactive
+    baseline. Replaying it would advance immutable UCB state on a fictitious
+    call and can fail before an otherwise valid later checkpoint.
+    """
+    return (
+        transition.get("proposed_action") is not None and decision.get("reason") == "ok"
+    )
+
+
 def _source_policy_context(
     observation: Mapping[str, Any],
     *,
@@ -204,9 +220,7 @@ def audit_factual_continuation(
     transitions, transition_evidence = _verified_stream_rows(
         run_directory, manifest, "transitions"
     )
-    frames, frame_evidence = _verified_stream_rows(
-        run_directory, manifest, "frames"
-    )
+    frames, frame_evidence = _verified_stream_rows(run_directory, manifest, "frames")
     if checkpoint_sequence >= len(transitions):
         raise ValueError("checkpoint is outside the retail prefix")
 
@@ -216,22 +230,24 @@ def audit_factual_continuation(
     replay_calls = 0
     for sequence in range(checkpoint_sequence):
         transition = transitions[sequence]
-        proposed = transition.get("proposed_action")
-        if proposed is None:
-            continue
         decision = frames[sequence].get("decision")
         if not isinstance(decision, dict):
             raise TypeError(f"retail decision {sequence} is absent")
+        if not _is_recorded_policy_call(transition, decision):
+            continue
+        proposed = transition["proposed_action"]
         context = recorded_policy_context(transition, decision)
         selected = policy.decide(context)
         replay_calls += 1
         if selected.action != proposed and len(replay_mismatches) < 20:
-            replay_mismatches.append({
-                "sequence": sequence,
-                "frame": context.frame,
-                "recorded": proposed,
-                "replayed": selected.action,
-            })
+            replay_mismatches.append(
+                {
+                    "sequence": sequence,
+                    "frame": context.frame,
+                    "recorded": proposed,
+                    "replayed": selected.action,
+                }
+            )
 
     checkpoint_transition = transitions[checkpoint_sequence]
     checkpoint_frame = frames[checkpoint_sequence]
@@ -241,9 +257,7 @@ def audit_factual_continuation(
         checkpoint_snapshot, dict
     ):
         raise TypeError("retail checkpoint evidence is absent")
-    retail_context = recorded_policy_context(
-        checkpoint_transition, checkpoint_decision
-    )
+    retail_context = recorded_policy_context(checkpoint_transition, checkpoint_decision)
     checkpoint_tick = retail_context.frame
     phase_state: dict[str, int | str] = {
         "context": retail_context.source_context,
@@ -322,7 +336,9 @@ def audit_factual_continuation(
                     expected_transition = (
                         transitions[sequence] if sequence < len(transitions) else None
                     )
-                    expected_frame = frames[sequence] if sequence < len(frames) else None
+                    expected_frame = (
+                        frames[sequence] if sequence < len(frames) else None
+                    )
                     expected_context = None
                     expected_action = None
                     if expected_transition is not None and expected_frame is not None:
@@ -331,9 +347,7 @@ def audit_factual_continuation(
                             expected_context = recorded_policy_context(
                                 expected_transition, expected_decision
                             )
-                            expected_action = expected_transition.get(
-                                "proposed_action"
-                            )
+                            expected_action = expected_transition.get("proposed_action")
                     source_keys = _policy_keys(policy, source_context)
                     expected_keys = (
                         None
@@ -341,32 +355,38 @@ def audit_factual_continuation(
                         else _policy_keys(policy, expected_context)
                     )
                     if expected_keys is not None and source_keys != expected_keys:
-                        context_mismatches.append({
-                            "sequence": sequence,
-                            "tick": terminal_tick,
-                            "source_keys": source_keys,
-                            "retail_keys": expected_keys,
-                            "source": diagnostics,
-                        })
+                        context_mismatches.append(
+                            {
+                                "sequence": sequence,
+                                "tick": terminal_tick,
+                                "source_keys": source_keys,
+                                "retail_keys": expected_keys,
+                                "source": diagnostics,
+                            }
+                        )
                     selected = policy.decide(source_context)
                     if (
                         expected_action is not None
                         and selected.action != expected_action
                     ):
-                        policy_action_mismatches.append({
+                        policy_action_mismatches.append(
+                            {
+                                "sequence": sequence,
+                                "tick": terminal_tick,
+                                "source": selected.action,
+                                "retail": expected_action,
+                            }
+                        )
+                    action_rows.append(
+                        {
                             "sequence": sequence,
                             "tick": terminal_tick,
-                            "source": selected.action,
-                            "retail": expected_action,
-                        })
-                    action_rows.append({
-                        "sequence": sequence,
-                        "tick": terminal_tick,
-                        "action": selected.action,
-                        "expected_retail_action": expected_action,
-                        "policy_keys_equal": expected_keys == source_keys,
-                        **diagnostics,
-                    })
+                            "action": selected.action,
+                            "expected_retail_action": expected_action,
+                            "policy_keys_equal": expected_keys == source_keys,
+                            **diagnostics,
+                        }
+                    )
                     observation = server.step_session(selected.action)
                     sequence += 1
                 if session_active:
@@ -387,8 +407,7 @@ def audit_factual_continuation(
         "frame": prefix.failure_frame,
     }
     terminal_matches = (
-        termination_reason
-        == "authority-failure:retail-envelope Hard safe set empty"
+        termination_reason == "authority-failure:retail-envelope Hard safe set empty"
         and terminal_tick == prefix.failure_frame
     )
     passed = (
@@ -496,13 +515,18 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    print(json.dumps({
-        "schema": report["schema"],
-        "passed": report["passed"],
-        "termination_reason": report["continuation"]["termination_reason"],
-        "terminal_tick": report["continuation"]["terminal_tick"],
-        "output": str(args.output.resolve()),
-    }, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "schema": report["schema"],
+                "passed": report["passed"],
+                "termination_reason": report["continuation"]["termination_reason"],
+                "terminal_tick": report["continuation"]["terminal_tick"],
+                "output": str(args.output.resolve()),
+            },
+            sort_keys=True,
+        )
+    )
     return 0 if report["passed"] else 2
 
 
