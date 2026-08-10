@@ -73,6 +73,20 @@ artifacts, and ordered next experiments, start with
 Wine baseline used mutable online UCB rather than an offline distilled ranker,
 so it is not evidence of an offline-to-Wine regression.
 
+The first immutable offline-ranker Wine experiment is now complete. The
+portable adapter and isolated native scorer worked against original retail,
+but the tested Stage 6 XGBoost selector did not beat frozen UCB and is not a
+promotion candidate. See
+[docs/WINE_OFFLINE_RANKER_AB_2026-08-10.md](docs/WINE_OFFLINE_RANKER_AB_2026-08-10.md)
+for the exact contract, commands, natural-run results, and evidence hashes.
+
+The next generation is deliberately Wine-first. Broad offline fitting is
+frozen; original-retail Wine supplies the independent episode groups and all
+promotion evidence, while headless is limited to geometry tests, targeted
+counterfactual proposals, and same-action-stream platform differentials. Read
+[docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md](docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md)
+before collecting or training another candidate.
+
 Generate a compact factual trajectory with the paired runtime, then audit it
 independently:
 
