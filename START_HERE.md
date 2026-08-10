@@ -83,6 +83,13 @@ metric; stopped 0-HIT prefixes and headless COW are filters only.
 The next one-shot exploratory COW is predeclared in
 `docs/WINE_FIRST_STAGE6_FIRST_ACTION_SCAN_PROTOCOL_2026-08-10.md`; its fixed
 robust selection rule must not be changed after discovery.
+That scan is complete in
+`docs/WINE_FIRST_STAGE6_FIRST_ACTION_SCAN_RESULT_2026-08-10.md`:
+`down_right` was the unique robust winner across all 14 retail-native-safe
+first actions, so the conditional r6 confirmation was not run and the result
+creates zero candidates. Do not mine another Panel-2 frame. The next audit is
+whether source COW can restore and advance the immutable frozen-UCB state after
+one substituted action; the current offline-teacher continuation is reject-only.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

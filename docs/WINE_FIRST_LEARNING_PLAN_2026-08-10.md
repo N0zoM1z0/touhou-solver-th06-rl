@@ -396,3 +396,18 @@ cleared with zero HIT. First-failure survival and headless COW only decide
 which candidates deserve that expensive alternating full-Stage A/B; they do
 not replace it. Full-Stage HIT continuation remains benchmark-only and may
 not flow back into fitting.
+
+The bounded first-action scan is now closed in
+`WINE_FIRST_STAGE6_FIRST_ACTION_SCAN_RESULT_2026-08-10.md`. At the fixed r5
+anchor, frozen UCB's `down_right` was the unique robust winner across all 14
+retail-native-safe alternatives. The conditional r6 confirmation was therefore
+not run, and the population remains empty.
+
+Do not respond by scanning adjacent Panel-2 frames. The current branch tool
+substitutes one action and then follows `NativeOfflineTeacher`; it does not
+continue the immutable frozen UCB policy. The next infrastructure audit should
+determine whether frozen-UCB decision state can be restored at a retail replay
+checkpoint and advanced under source COW. Only if exact factual continuation
+is demonstrated should a separately predeclared policy-faithful action
+comparison run. Otherwise future intervention evidence must come from new
+disjoint original-retail Wine shadow episodes.
