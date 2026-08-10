@@ -428,3 +428,12 @@ then survived 600 ticks, but their robust outcomes tied, so the unique-winner
 gate produced zero candidates and the conditional r6 confirmation was not run.
 The two focus variants may only seed a newly predeclared neutral-action family
 test on disjoint Wine episodes; they may not be merged or selected from Panel 2.
+
+That disjoint test is frozen in
+`WINE_FIRST_STAGE6_NEUTRAL_PANEL_PROTOCOL_2026-08-10.md`: collect exactly two
+new first-failure Wine episodes without intervening adaptation, select the
+closest eligible generic sub31 anchor in each by a fixed rule, and test
+`down_right`, `stay`, and `stay_fast` under restored frozen-UCB continuation.
+Only the same unique neutral winner in both episodes can become one headless
+hypothesis. It still requires a new Wine shadow and active canary before the
+decisive complete natural Stage HIT-count A/B.

@@ -106,6 +106,11 @@ continuation, while factual `down_right` reproduced the eight-tick failure.
 Their robust tie creates zero candidates and forbids the conditional r6 run.
 Treat them only as a fixed neutral-action hypothesis family for a newly
 predeclared, disjoint Wine panel.
+That next two-episode r7/r8 collection and its deterministic anchor/COW gate
+are frozen in
+`docs/WINE_FIRST_STAGE6_NEUTRAL_PANEL_PROTOCOL_2026-08-10.md`. It still creates
+at most one headless hypothesis, never an active residual; a later new Wine
+shadow and ultimately complete natural Stage HIT-count A/B remain mandatory.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
