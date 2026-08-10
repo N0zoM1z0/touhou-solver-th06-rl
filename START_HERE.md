@@ -147,6 +147,11 @@ The corrected clean-path rerun is separately frozen in
 `docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V2_PROTOCOL_2026-08-10.md`.
 It keeps the same four anchors/actions and three-of-four support gate; v1
 artifacts are not reused.
+v2 is closed in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V2_RESULT_2026-08-10.md`:
+r3 had 14 Hard actions but only factual `down_left` in its local set, so the
+Hard-wide request was rejected before alternatives. COW now preflights against
+the recorded local set; v2 still authorizes zero models.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

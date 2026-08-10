@@ -494,3 +494,10 @@ The clean corrected rerun is separately predeclared in
 It repeats all four fixed documents from new output paths under the repaired
 restore code and preserves the original three-of-four unique non-incumbent
 support threshold. The sealed v1 r2 file is not reused.
+
+v2 is closed in
+`WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V2_RESULT_2026-08-10.md`. Its
+corrected r1/r2 documents are valid, but r3's 14-action Hard set collapses to
+the single factual `down_left` local action. The protocol had crossed the
+learner authority boundary and was rejected before alternatives. COW now
+preflights requests against the recorded local set; v2 permits no fit.

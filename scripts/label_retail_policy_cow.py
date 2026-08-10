@@ -82,6 +82,25 @@ def _action_sha256(actions: Sequence[str]) -> str:
     ).hexdigest()
 
 
+def _validate_recorded_local_actions(
+    requested: Sequence[str],
+    checkpoint_transition: Mapping[str, Any],
+) -> tuple[str, ...]:
+    raw = checkpoint_transition.get("legal_actions")
+    if not isinstance(raw, list) or not raw:
+        raise TypeError("retail checkpoint local action set is absent")
+    recorded = tuple(str(action) for action in raw)
+    if len(recorded) != len(set(recorded)):
+        raise ValueError("retail checkpoint local action set contains duplicates")
+    missing = [action for action in requested if action not in recorded]
+    if missing:
+        raise ValueError(
+            "requested first actions are outside the recorded local set: "
+            + ",".join(missing)
+        )
+    return recorded
+
+
 def _restore_policy_before_checkpoint(
     transitions: Sequence[Mapping[str, Any]],
     frames: Sequence[Mapping[str, Any]],
@@ -190,6 +209,7 @@ def label_policy_cow(
     )
     checkpoint_transition = transitions[checkpoint_sequence]
     checkpoint_frame = frames[checkpoint_sequence]
+    _validate_recorded_local_actions(requested, checkpoint_transition)
     checkpoint_decision = checkpoint_frame.get("decision")
     checkpoint_snapshot = checkpoint_frame.get("snapshot")
     if not isinstance(checkpoint_decision, dict) or not isinstance(
