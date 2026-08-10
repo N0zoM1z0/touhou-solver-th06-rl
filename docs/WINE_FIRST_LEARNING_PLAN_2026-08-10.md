@@ -461,3 +461,9 @@ The fixed sub10 pair is rejected in
 robust rank. The conditional r2 run was therefore forbidden. At most one final
 predeclared all-native-safe scan may inspect the unchanged r1 anchor; do not
 select another pair iteratively from this result.
+
+That final scan is frozen in
+`WINE_FIRST_STAGE6_SUB10_SAFE_SCAN_PROTOCOL_2026-08-10.md`. It branches the 14
+already recorded retail-native-safe first actions under restored UCB and uses
+the unchanged unique robust-winner rule. Only one winner may proceed to the
+fixed r2 confirmation; a discovery tie or incumbent win closes r1 permanently.

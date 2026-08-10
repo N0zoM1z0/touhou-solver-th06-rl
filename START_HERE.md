@@ -124,6 +124,10 @@ That pair result is closed in
 `docs/WINE_FIRST_STAGE6_SUB10_POLICY_COW_RESULT_2026-08-10.md`: both actions
 reached the same seven-tick terminal and robust tie, so r2 was not run and the
 candidate count remains zero.
+The final exhaustive use of that unchanged anchor is frozen in
+`docs/WINE_FIRST_STAGE6_SUB10_SAFE_SCAN_PROTOCOL_2026-08-10.md`; it scans the
+entire recorded native-safe first-action set once and forbids further r1
+mining if no unique winner emerges.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
