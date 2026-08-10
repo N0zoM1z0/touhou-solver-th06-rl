@@ -446,3 +446,11 @@ without mismatch and found sub10 support four, sub31 support three, and sub18
 support one, but no new repeated action pair. Future work must not mine an
 alternate r7/r8 row; the only next bounded counterfactual is a separately
 predeclared policy-faithful continuation at an already fixed old anchor.
+
+That counterfactual is fixed in
+`WINE_FIRST_STAGE6_SUB10_POLICY_COW_PROTOCOL_2026-08-10.md`. It revisits no
+selection decision: r1 sequence 2904 is discovery, r2 sequence 3193 is a
+conditional confirmation, and only `down_right` versus `down_fast` is tested.
+The new question is whether a one-action substitution helps when restored
+frozen UCB owns every later choice, rather than when the offline teacher owns
+the continuation. Any unanimous result remains a headless hypothesis only.

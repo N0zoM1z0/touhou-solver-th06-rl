@@ -116,6 +116,10 @@ The r7/r8 result is closed in
 failed in sub18 and sub10, yielding zero predeclared sub31 anchors and zero
 candidates. The combined current-kernel r1--r8 audit adds no new repeated
 action pair. Do not mine alternate r7/r8 frames or fit a global classifier.
+The different policy-faithful estimand for the already fixed sub10 r1/r2
+anchors is predeclared in
+`docs/WINE_FIRST_STAGE6_SUB10_POLICY_COW_PROTOCOL_2026-08-10.md`; discovery
+must pass before its single conditional confirmation is allowed.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
