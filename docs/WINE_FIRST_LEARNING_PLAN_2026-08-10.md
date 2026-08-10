@@ -474,3 +474,10 @@ extended r1 from seven to 45 source ticks, but the native gate excluded it at
 the fixed r2 checkpoint, so confirmation failed closed and the candidate count
 is zero. This rules out a fixed action residual; any later learner must rank
 the current native-safe set action-relatively and use episode-grouped holdout.
+
+The corresponding label-support panel is frozen in
+`WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_PROTOCOL_2026-08-10.md`. It uses
+exactly one lag-seven checkpoint from each of four current-kernel sub10 Wine
+episodes and branches the complete recorded native-safe set under restored
+UCB. Three unique non-incumbent episode winners are required merely to permit
+a separately predeclared fit of at most three small residual candidates.

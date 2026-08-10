@@ -133,6 +133,11 @@ The result is closed in
 the unique r1 discovery winner but was not native-admissible at fixed r2, so
 confirmation failed closed and no candidate exists. Do not select a runner-up
 or another r1 frame.
+The next label-support gate is predeclared in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_PROTOCOL_2026-08-10.md`.
+It scans one fixed lag-seven native-safe set in each of four independent sub10
+Wine episodes; at least three unique non-incumbent winners are required before
+any small action-relative fit is allowed.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
