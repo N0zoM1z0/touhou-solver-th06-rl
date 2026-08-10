@@ -1,4 +1,16 @@
-from th06_rl.th06.control_capture import _completed_calc_lag
+import struct
+
+import pytest
+
+from th06_rl.th06.control_capture import (
+    _completed_calc_lag,
+    read_passive_input_delivery,
+)
+from th06_rl.th06.donor import enable_donor_imports
+
+
+enable_donor_imports()
+import th06.native as native  # noqa: E402
 
 
 def test_active_calc_phase_uses_initial_equal_clock_witness():
@@ -62,3 +74,34 @@ def test_stage_change_does_not_reuse_prior_lag():
         bullet_time=1,
         passive=False,
     ) == (5, 0, True)
+
+
+def test_passive_input_delivery_reads_one_coherent_game_frame(monkeypatch):
+    frames = iter((123, 123))
+    monkeypatch.setattr(native, "read_game_frame", lambda _process: next(frames))
+
+    block = bytearray(14)
+    for offset, value in ((0, 0x101), (4, 0x001), (8, 3), (12, 7)):
+        struct.pack_into("<H", block, offset, value)
+
+    class Process:
+        @staticmethod
+        def read(address, size):
+            assert address == native.ADDR_CURRENT_INPUT
+            assert size == 14
+            return bytes(block)
+
+    assert read_passive_input_delivery(Process()) == (123, 0x101, 1, 3, 7)
+
+
+def test_passive_input_delivery_rejects_repeated_cross_frame_reads(monkeypatch):
+    frames = iter(range(16))
+    monkeypatch.setattr(native, "read_game_frame", lambda _process: next(frames))
+
+    class Process:
+        @staticmethod
+        def read(_address, size):
+            return bytes(size)
+
+    with pytest.raises(RuntimeError, match="crossed game frames"):
+        read_passive_input_delivery(Process())

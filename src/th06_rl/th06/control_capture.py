@@ -801,6 +801,24 @@ def observe_passive_control_clock(process) -> bool:
     return True
 
 
+def read_passive_input_delivery(process) -> tuple[int, int, int, int, int]:
+    """Read one coherent retail input sample without copying battle hazards."""
+    enable_donor_imports()
+    import th06.native as native
+
+    for _attempt in range(MAX_CAPTURE_ATTEMPTS):
+        before = native.read_game_frame(process)
+        block = process.read(native.ADDR_CURRENT_INPUT, 14)
+        current, previous, held_repeat, held_frames = (
+            struct.unpack_from("<H", block, offset)[0]
+            for offset in (0, 4, 8, 12)
+        )
+        after = native.read_game_frame(process)
+        if before == after:
+            return before, current, previous, held_repeat, held_frames
+    raise RuntimeError("passive input delivery sample crossed game frames")
+
+
 def with_tracked_lasers(snapshot: ControlSnapshot, lasers) -> ControlSnapshot:
     return replace(snapshot, lasers=tuple(lasers))
 
