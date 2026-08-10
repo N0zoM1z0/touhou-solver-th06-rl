@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <numbers>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -294,6 +295,76 @@ HazardSample sample_hazards(
     return HazardSample{result.collisions, clearance};
 }
 
+struct PlayerAimedBulletState {
+    Th06RlPlayerAimedBullet source;
+    bool has_turned{false};
+};
+
+HazardSample advance_and_sample_player_aimed(
+    std::vector<PlayerAimedBulletState>& bullets,
+    Position player,
+    float player_half_width,
+    float player_half_height,
+    float collision_margin) {
+    HazardAccumulator result;
+    for (auto& state : bullets) {
+        auto& bullet = state.source;
+        if (!state.has_turned) {
+            const auto threshold = bullet.direction_interval
+                * (bullet.direction_num_times + 1);
+            if (bullet.timer >= threshold) {
+                bullet.direction_num_times++;
+                const float relative_x = player.x - bullet.x;
+                const float relative_y = player.y - bullet.y;
+                const float target_angle = (
+                    relative_x == 0.0f && relative_y == 0.0f)
+                    ? static_cast<float>(std::numbers::pi / 2.0)
+                    : std::atan2(relative_y, relative_x);
+                bullet.angle = target_angle + bullet.direction_rotation;
+                bullet.speed = bullet.turn_speed;
+                bullet.vx = std::cos(bullet.angle) * bullet.speed;
+                bullet.vy = std::sin(bullet.angle) * bullet.speed;
+                state.has_turned = true;
+            } else {
+                const float step_speed = bullet.speed
+                    - ((bullet.timer_float
+                        - static_cast<float>(
+                            bullet.direction_interval
+                            * bullet.direction_num_times))
+                        * bullet.speed)
+                        / static_cast<float>(bullet.direction_interval);
+                bullet.vx = std::cos(bullet.angle) * step_speed;
+                bullet.vy = std::sin(bullet.angle) * step_speed;
+            }
+        }
+        bullet.x += bullet.vx;
+        bullet.y += bullet.vy;
+        bullet.timer++;
+        bullet.timer_float += 1.0f;
+        accumulate_aabb(
+            player.x,
+            player.y,
+            player_half_width,
+            player_half_height,
+            Th06RlAabb{
+                bullet.x - bullet.half_width,
+                bullet.y - bullet.half_height,
+                bullet.x + bullet.half_width,
+                bullet.y + bullet.half_height,
+            },
+            collision_margin,
+            result);
+    }
+    const float clearance = std::isfinite(result.overlap_clearance)
+        ? result.overlap_clearance
+        : (
+            std::isfinite(result.minimum_distance_squared)
+                ? std::hypot(result.minimum_gap_x, result.minimum_gap_y)
+                : std::numeric_limits<float>::infinity()
+        );
+    return HazardSample{result.collisions, clearance};
+}
+
 std::vector<LaserBasis> prepare_laser_bases(
     std::int32_t horizon,
     const std::uint32_t* laser_offsets,
@@ -405,9 +476,38 @@ bool valid_common_inputs(
         && laser_offsets != nullptr;
 }
 
-}  // namespace
+bool valid_player_aimed_bullets(
+    const Th06RlPlayerAimedBullet* bullets,
+    std::int32_t count) {
+    if (count < 0 || (count > 0 && bullets == nullptr)) return false;
+    for (std::int32_t index = 0; index < count; ++index) {
+        const auto& bullet = bullets[index];
+        if (!std::isfinite(bullet.x)
+            || !std::isfinite(bullet.y)
+            || !std::isfinite(bullet.vx)
+            || !std::isfinite(bullet.vy)
+            || !std::isfinite(bullet.half_width)
+            || !std::isfinite(bullet.half_height)
+            || !std::isfinite(bullet.speed)
+            || !std::isfinite(bullet.angle)
+            || !std::isfinite(bullet.turn_speed)
+            || !std::isfinite(bullet.direction_rotation)
+            || !std::isfinite(bullet.timer_float)
+            || bullet.half_width <= 0.0f
+            || bullet.half_height <= 0.0f
+            || bullet.timer < 0
+            || bullet.direction_interval < 0
+            || bullet.direction_num_times < 0
+            || bullet.direction_max_times <= 0
+            || bullet.direction_num_times >= bullet.direction_max_times
+            || bullet.direction_num_times + 1 < bullet.direction_max_times) {
+            return false;
+        }
+    }
+    return true;
+}
 
-extern "C" int th06_rl_certify_actions_v1(
+int certify_actions_impl(
     float player_x,
     float player_y,
     float player_half_width,
@@ -425,6 +525,8 @@ extern "C" int th06_rl_certify_actions_v1(
     const Th06RlAabb* aabbs,
     const std::uint32_t* laser_frame_offsets,
     const Th06RlLaserRect* lasers,
+    const Th06RlPlayerAimedBullet* aimed_bullets,
+    std::int32_t aimed_bullet_count,
     float collision_margin,
     std::uint32_t* safe_mask,
     float* action_min_clearance,
@@ -443,6 +545,8 @@ extern "C" int th06_rl_certify_actions_v1(
             horizon,
             aabb_frame_offsets,
             laser_frame_offsets)
+        || !valid_player_aimed_bullets(aimed_bullets, aimed_bullet_count)
+        || (aimed_bullet_count > 0 && horizon > 4)
         || delivery_delays == nullptr
         || delivery_delay_count <= 0
         || safe_mask == nullptr
@@ -485,6 +589,251 @@ extern "C" int th06_rl_certify_actions_v1(
             }
             for (const auto prefix : prefixes) {
                 Position position{player_x, player_y};
+                std::vector<PlayerAimedBulletState> scenario_bullets;
+                scenario_bullets.reserve(
+                    static_cast<std::size_t>(aimed_bullet_count));
+                for (std::int32_t index = 0;
+                     index < aimed_bullet_count;
+                     ++index) {
+                    scenario_bullets.push_back(
+                        PlayerAimedBulletState{aimed_bullets[index], false});
+                }
+                for (std::int32_t frame = 1; frame <= horizon; ++frame) {
+                    std::int32_t applied = action;
+                    if (prefix >= 0 && frame == delay) {
+                        applied = prefix;
+                    } else if (frame < delay || (prefix < 0 && frame <= delay)) {
+                        applied = current_action;
+                    }
+                    position = advance(position, applied, kinematics);
+                    const auto common = sample_hazards(
+                        hazards,
+                        frame,
+                        position,
+                        player_half_width,
+                        player_half_height,
+                        collision_margin);
+                    const auto aimed = advance_and_sample_player_aimed(
+                        scenario_bullets,
+                        position,
+                        player_half_width,
+                        player_half_height,
+                        collision_margin);
+                    minimum = std::min(
+                        minimum,
+                        std::min(common.clearance, aimed.clearance));
+                    if (common.collisions + aimed.collisions > 0) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (prefix < 0
+                    && delay_index == delivery_delay_count - 1) {
+                    action_final_xy[action * 2] = position.x;
+                    action_final_xy[action * 2 + 1] = position.y;
+                }
+                if (!valid) break;
+            }
+        }
+        action_min_clearance[action] = minimum;
+        if (valid) *safe_mask |= 1u << action;
+    }
+    return 0;
+}
+
+}  // namespace
+
+extern "C" int th06_rl_certify_actions_v1(
+    float player_x,
+    float player_y,
+    float player_half_width,
+    float player_half_height,
+    float normal_speed,
+    float focus_speed,
+    float normal_diagonal_speed,
+    float focus_diagonal_speed,
+    std::int32_t current_action,
+    std::int32_t horizon,
+    const std::int32_t* delivery_delays,
+    std::int32_t delivery_delay_count,
+    std::uint32_t candidate_mask,
+    const std::uint32_t* aabb_frame_offsets,
+    const Th06RlAabb* aabbs,
+    const std::uint32_t* laser_frame_offsets,
+    const Th06RlLaserRect* lasers,
+    float collision_margin,
+    std::uint32_t* safe_mask,
+    float* action_min_clearance,
+    float* action_final_xy) {
+    return certify_actions_impl(
+        player_x,
+        player_y,
+        player_half_width,
+        player_half_height,
+        normal_speed,
+        focus_speed,
+        normal_diagonal_speed,
+        focus_diagonal_speed,
+        current_action,
+        horizon,
+        delivery_delays,
+        delivery_delay_count,
+        candidate_mask,
+        aabb_frame_offsets,
+        aabbs,
+        laser_frame_offsets,
+        lasers,
+        nullptr,
+        0,
+        collision_margin,
+        safe_mask,
+        action_min_clearance,
+        action_final_xy);
+}
+
+extern "C" int th06_rl_certify_actions_aimed_v1(
+    float player_x,
+    float player_y,
+    float player_half_width,
+    float player_half_height,
+    float normal_speed,
+    float focus_speed,
+    float normal_diagonal_speed,
+    float focus_diagonal_speed,
+    std::int32_t current_action,
+    std::int32_t horizon,
+    const std::int32_t* delivery_delays,
+    std::int32_t delivery_delay_count,
+    std::uint32_t candidate_mask,
+    const std::uint32_t* aabb_frame_offsets,
+    const Th06RlAabb* aabbs,
+    const std::uint32_t* laser_frame_offsets,
+    const Th06RlLaserRect* lasers,
+    const Th06RlPlayerAimedBullet* aimed_bullets,
+    std::int32_t aimed_bullet_count,
+    float collision_margin,
+    std::uint32_t* safe_mask,
+    float* action_min_clearance,
+    float* action_final_xy) {
+    return certify_actions_impl(
+        player_x,
+        player_y,
+        player_half_width,
+        player_half_height,
+        normal_speed,
+        focus_speed,
+        normal_diagonal_speed,
+        focus_diagonal_speed,
+        current_action,
+        horizon,
+        delivery_delays,
+        delivery_delay_count,
+        candidate_mask,
+        aabb_frame_offsets,
+        aabbs,
+        laser_frame_offsets,
+        lasers,
+        aimed_bullets,
+        aimed_bullet_count,
+        collision_margin,
+        safe_mask,
+        action_min_clearance,
+        action_final_xy);
+}
+
+extern "C" int th06_rl_profile_actions_v1(
+    float player_x,
+    float player_y,
+    float player_half_width,
+    float player_half_height,
+    float normal_speed,
+    float focus_speed,
+    float normal_diagonal_speed,
+    float focus_diagonal_speed,
+    std::int32_t current_action,
+    std::int32_t horizon,
+    const std::int32_t* delivery_delays,
+    std::int32_t delivery_delay_count,
+    std::uint32_t candidate_mask,
+    const std::uint32_t* aabb_frame_offsets,
+    const Th06RlAabb* aabbs,
+    const std::uint32_t* laser_frame_offsets,
+    const Th06RlLaserRect* lasers,
+    float collision_margin,
+    const std::int32_t* checkpoints,
+    std::int32_t checkpoint_count,
+    float* action_checkpoint_min_clearance) {
+    const Kinematics kinematics{
+        normal_speed,
+        focus_speed,
+        normal_diagonal_speed,
+        focus_diagonal_speed,
+    };
+    if (!valid_common_inputs(
+            player_half_width,
+            player_half_height,
+            kinematics,
+            current_action,
+            horizon,
+            aabb_frame_offsets,
+            laser_frame_offsets)
+        || delivery_delays == nullptr
+        || delivery_delay_count <= 0
+        || checkpoints == nullptr
+        || checkpoint_count <= 0
+        || action_checkpoint_min_clearance == nullptr) {
+        return 2;
+    }
+    for (std::int32_t index = 0; index < checkpoint_count; ++index) {
+        if (checkpoints[index] <= 0
+            || checkpoints[index] > horizon
+            || (index > 0 && checkpoints[index] <= checkpoints[index - 1])) {
+            return 2;
+        }
+    }
+    const auto laser_bases = prepare_laser_bases(
+        horizon,
+        laser_frame_offsets,
+        lasers);
+    const HazardView hazards{
+        horizon,
+        aabb_frame_offsets,
+        aabbs,
+        laser_frame_offsets,
+        lasers,
+        laser_bases.data(),
+    };
+    for (std::int32_t action = 0; action < kActionCount; ++action) {
+        for (std::int32_t checkpoint = 0;
+             checkpoint < checkpoint_count;
+             ++checkpoint) {
+            action_checkpoint_min_clearance[action * checkpoint_count + checkpoint]
+                = -std::numeric_limits<float>::infinity();
+        }
+        if ((candidate_mask & (1u << action)) == 0) continue;
+        for (std::int32_t checkpoint = 0;
+             checkpoint < checkpoint_count;
+             ++checkpoint) {
+            action_checkpoint_min_clearance[action * checkpoint_count + checkpoint]
+                = std::numeric_limits<float>::infinity();
+        }
+        for (std::int32_t delay_index = 0;
+             delay_index < delivery_delay_count;
+             ++delay_index) {
+            const auto delay = delivery_delays[delay_index];
+            if (delay < 0 || delay > horizon) return 2;
+            std::vector<std::int32_t> prefixes{-1};
+            if (delay > 0) {
+                const auto transition = transition_prefix_actions(
+                    current_action,
+                    action);
+                prefixes.insert(
+                    prefixes.end(), transition.begin(), transition.end());
+            }
+            for (const auto prefix : prefixes) {
+                Position position{player_x, player_y};
+                float running_minimum = std::numeric_limits<float>::infinity();
+                std::int32_t checkpoint_index = 0;
                 for (std::int32_t frame = 1; frame <= horizon; ++frame) {
                     std::int32_t applied = action;
                     if (prefix >= 0 && frame == delay) {
@@ -500,22 +849,17 @@ extern "C" int th06_rl_certify_actions_v1(
                         player_half_width,
                         player_half_height,
                         collision_margin);
-                    minimum = std::min(minimum, sample.clearance);
-                    if (sample.collisions > 0) {
-                        valid = false;
-                        break;
+                    running_minimum = std::min(running_minimum, sample.clearance);
+                    if (checkpoint_index < checkpoint_count
+                        && frame == checkpoints[checkpoint_index]) {
+                        auto& output = action_checkpoint_min_clearance[
+                            action * checkpoint_count + checkpoint_index];
+                        output = std::min(output, running_minimum);
+                        ++checkpoint_index;
                     }
                 }
-                if (prefix < 0
-                    && delay_index == delivery_delay_count - 1) {
-                    action_final_xy[action * 2] = position.x;
-                    action_final_xy[action * 2 + 1] = position.y;
-                }
-                if (!valid) break;
             }
         }
-        action_min_clearance[action] = minimum;
-        if (valid) *safe_mask |= 1u << action;
     }
     return 0;
 }

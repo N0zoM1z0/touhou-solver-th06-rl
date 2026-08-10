@@ -36,6 +36,7 @@ MEM_RESERVE = 0x2000
 MEM_RELEASE = 0x8000
 PAGE_EXECUTE_READWRITE = 0x40
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+PROCESS_SUSPEND_RESUME = 0x0800
 SYNCHRONIZE = 0x00100000
 STILL_ACTIVE = 259
 
@@ -151,16 +152,44 @@ class BackgroundInputBridge:
         self.ntdll.NtResumeProcess.restype = wintypes.LONG
 
     @contextmanager
-    def _suspended(self):
-        status = int(self.ntdll.NtSuspendProcess(self.process.handle))
-        if status < 0:
-            raise RuntimeError(f"NtSuspendProcess failed: NTSTATUS {status:#010x}")
+    def suspended(self):
+        # The capture donor deliberately owns a narrow read/write process
+        # handle. Wine enforces PROCESS_SUSPEND_RESUME on NtSuspendProcess,
+        # so acquire that one right explicitly for the tiny hook transaction
+        # instead of widening the long-lived capture handle.
+        suspend_handle = self.kernel32.OpenProcess(
+            PROCESS_SUSPEND_RESUME,
+            False,
+            self.process.pid,
+        )
+        if not suspend_handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        suspended = False
         try:
+            status = int(self.ntdll.NtSuspendProcess(suspend_handle))
+            if status < 0:
+                rendered = ctypes.c_uint32(status).value
+                raise RuntimeError(
+                    f"NtSuspendProcess failed: NTSTATUS 0x{rendered:08x}"
+                )
+            suspended = True
             yield
         finally:
-            status = int(self.ntdll.NtResumeProcess(self.process.handle))
-            if status < 0:
-                raise RuntimeError(f"NtResumeProcess failed: NTSTATUS {status:#010x}")
+            try:
+                if suspended:
+                    status = int(self.ntdll.NtResumeProcess(suspend_handle))
+                    if status < 0:
+                        rendered = ctypes.c_uint32(status).value
+                        raise RuntimeError(
+                            f"NtResumeProcess failed: NTSTATUS 0x{rendered:08x}"
+                        )
+            finally:
+                self.kernel32.CloseHandle(suspend_handle)
+
+    # Retain the old private spelling for the already-audited hook
+    # transaction and downstream tests. New snapshot code uses the explicit
+    # public name.
+    _suspended = suspended
 
     def _process_alive(self) -> bool:
         if not self.process.handle:

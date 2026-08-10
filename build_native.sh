@@ -19,5 +19,5 @@ x86_64-w64-mingw32-g++ \
 
 sha256sum \
   "$TH06_RL_BUILD/native/libth06_rl_native.so" \
+  "$TH06_RL_BUILD/native/libth06_rl_ranker.so" \
   "$TH06_RL_BUILD/th06_rl_native.dll"
-

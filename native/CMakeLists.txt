@@ -6,9 +6,28 @@ target_compile_features(th06_rl_native PRIVATE cxx_std_20)
 target_include_directories(th06_rl_native PUBLIC include)
 target_compile_definitions(th06_rl_native PRIVATE TH06_RL_NATIVE_BUILD=1)
 
+add_library(th06_rl_ranker SHARED src/th06_rl_ranker.cpp)
+target_compile_features(th06_rl_ranker PRIVATE cxx_std_20)
+target_include_directories(th06_rl_ranker PUBLIC include)
+target_compile_definitions(th06_rl_ranker PRIVATE TH06_RL_RANKER_BUILD=1)
+
 if(MSVC)
   target_compile_options(th06_rl_native PRIVATE /W4 /permissive-)
+  target_compile_options(th06_rl_ranker PRIVATE /W4 /permissive-)
 else()
   target_compile_options(th06_rl_native PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(th06_rl_ranker PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+# The Windows controller is also exercised under Wine with an embeddable
+# 32-bit Python. Keep that validation DLL self-contained instead of requiring
+# compiler-runtime DLLs to be copied into either the Python or retail-game
+# directory.
+if(MINGW)
+  target_link_options(
+    th06_rl_native PRIVATE -static -static-libgcc -static-libstdc++
+  )
+  target_link_options(
+    th06_rl_ranker PRIVATE -static -static-libgcc -static-libstdc++
+  )
+endif()

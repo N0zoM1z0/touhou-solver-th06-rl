@@ -6,6 +6,16 @@ movement set, lets a lightweight learned policy rank that set, and freshly
 certifies the selected action immediately before publication. It performs no
 timeline/ECL expansion or combinatorial beam search in the resident hot path.
 
+Its accelerated Linux simulation and lockstep environment backend lives in
+[`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless). That
+source-only fork is for corpus generation, replay, and learning acceleration;
+the shipped Windows game remains this solver's final physical validation gate.
+The currently paired local checkout is `2e0c416` on the headless fork's
+`th06-rl-headless-spike` branch. Its latest game/observation behavior revision
+is `1cc49f0`; `2e0c416` adds the reproducible Win32 cross-build. Historical
+models remain bound to the exact source and binary recorded by their manifests
+and are not silently made compatible by this checkout update.
+
 Online UCB and future imitation/RL policies own long-horizon/global-local
 tradeoffs but cannot enlarge the native safe set, change collision physics,
 lower margins, request Bomb, or bypass fail-close behavior. Cold start uses
@@ -20,12 +30,117 @@ specific phase/control prior before falling back to the heavily aliased coarse
 state. No level reads raw bullet geometry or runs a model in the resident hot
 path.
 
-The active learning target is Lunatic / Reimu-A / Stages 4, 5, and 6. Hard /
+The active learning target is Lunatic / Reimu-A / Stages 1 through 6. Hard /
 Reimu-A / Stage 4 is retained only as prior baseline evidence. Difficulty,
 character, shot type, stage, and automatically derived source context remain
-separate corpus/model scopes.
+separate corpus/model scopes. The 2026-08-08 offline snapshot predates this
+expansion and contains only Stages 4 through 6.
 
-`run_lunatic_stage456_learning.bat` rotates exact Practice Stages 4, 5, and 6,
+For source-simulator counterfactual evaluation,
+`scripts/benchmark_headless_branches.py` replays one generic action prefix once,
+forks all 18 Bomb-free actions from the resulting physical state, and compares
+every terminal observation against a cold full-prefix replay. It runs at nice
+15 / low I/O priority and writes a revisioned JSON report under ignored
+`artifacts/`; this is an offline teacher/benchmark path, never resident search.
+
+The paired runtime also supports dynamic `STEP` children from a replayed COW
+checkpoint. `scripts/label_headless_cow_counterfactuals.py` substitutes each
+native-legal first action and then re-runs the native gate plus teacher on every
+counterfactual tick. `scripts/audit_headless_counterfactuals.py` independently
+recomputes outcome rankings and useful-label yield, while
+`scripts/train_headless_cow_value.py` trains seed-grouped LambdaMART action
+values from every branch outcome. The portable schema and game-adapter boundary
+are documented in [docs/COUNTERFACTUAL_LEARNING.md](docs/COUNTERFACTUAL_LEARNING.md).
+None of these offline searches enters the resident control path.
+The evidence and decision history behind the transition from online UCB-only
+learning to this hybrid design is maintained in
+[docs/LEARNING_RETROSPECTIVE.md](docs/LEARNING_RETROSPECTIVE.md).
+
+The original Japanese retail executable can now be validated non-interactively
+under Wine with exact hashing, source-grounded menu/input handling, natural
+Practice completion, full Start-to-Ending routing, physical HIT continuation,
+and exact-prefix cleanup. See
+[docs/WINE_RETAIL_VALIDATION.md](docs/WINE_RETAIL_VALIDATION.md) for the runner
+contract and
+[docs/WINE_RETAIL_BASELINE_2026-08-09.md](docs/WINE_RETAIL_BASELINE_2026-08-09.md)
+for the first complete Stage 6-to-1 and full-route baseline. Wine is closer to
+the shipped execution path than the reconstructed Linux runtime, but real
+Windows remains the final NMNB gate.
+
+For the current cross-domain diagnosis, repository/source revisions, retained
+artifacts, and ordered next experiments, start with
+[docs/HANDOFF_2026-08-10.md](docs/HANDOFF_2026-08-10.md). In particular, the
+Wine baseline used mutable online UCB rather than an offline distilled ranker,
+so it is not evidence of an offline-to-Wine regression.
+
+The first immutable offline-ranker Wine experiment is now complete. The
+portable adapter and isolated native scorer worked against original retail,
+but the tested Stage 6 XGBoost selector did not beat frozen UCB and is not a
+promotion candidate. See
+[docs/WINE_OFFLINE_RANKER_AB_2026-08-10.md](docs/WINE_OFFLINE_RANKER_AB_2026-08-10.md)
+for the exact contract, commands, natural-run results, and evidence hashes.
+
+The next generation is deliberately Wine-first. Broad offline fitting is
+frozen; original-retail Wine supplies the independent episode groups and all
+promotion evidence, while headless is limited to geometry tests, targeted
+counterfactual proposals, and same-action-stream platform differentials. Read
+[docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md](docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md)
+before collecting or training another candidate.
+
+Generate a compact factual trajectory with the paired runtime, then audit it
+independently:
+
+```bash
+PYTHONPATH=src python scripts/generate_headless_corpus.py \
+  --seed 7 --difficulty 3 --character 0 --shot-type 0 --stage 6 \
+  --max-ticks 1200 --epsilon 0.02 --teacher-horizon 12
+PYTHONPATH=src python scripts/audit_headless_corpus.py artifacts/headless-corpus \
+  --output artifacts/benchmarks/headless-corpus-audit.json
+```
+
+For Windows-style full-stage HIT counting, add `--continue-after-hit`. This is
+an explicit benchmark-only override: an empty native set releases movement as
+`stay_fast`, every death delta is counted, and the entire run is marked
+`training_eligible=false`. Default collection still stops on the first HIT or
+authority failure. Use `--max-ticks 0` for a natural stage termination rather
+than a shared timeout. Bomb remains forbidden in both modes.
+
+The same flag is available on `collect_headless_dagger.py`, so an immutable
+ranker weight can be measured by HIT count rather than only by its first
+failure point. Interrupted long runs remain valid benchmark evidence but never
+training data. Continuation mode skips the unused offline teacher search and
+marks its behavior metadata `benchmark-ranker-only`; native gating, ranker
+profiles, immediate issue revalidation, HIT accounting, and Bomb prohibition
+remain unchanged. Default first-failure DAgger still records teacher labels.
+Recover all complete newline-terminated rows and build the
+model-linked population archive with:
+
+```bash
+PYTHONPATH=.:src python scripts/summarize_headless_continuation.py \
+  artifacts/headless-hit-continuation-natural-stage \
+  --output artifacts/benchmarks/headless-hit-continuation-summary.json
+PYTHONPATH=.:src python scripts/build_headless_policy_population.py \
+  --models-root artifacts/models --rollouts-root artifacts \
+  --output artifacts/benchmarks/headless-policy-population.json
+```
+
+The archive keeps a per-scope Pareto population rather than selecting one
+offline winner. It also partitions candidates by exact clean source commit and
+binary hash; incompatible historical weights remain visible but cannot enter
+the active runtime queue. It separates offline-only, first-failure, and
+HIT-continuation evidence; only the last tier has an observed HIT rate.
+Population membership does not authorize Windows promotion.
+
+The offline teacher may run bounded local search, but its selected action is
+rechecked against the four-frame native gate immediately before the synchronous
+step. Every compact row stores exact behavior probability, the native legal
+set, candidate clearance/reserve features, automatic source context, and both
+observation hashes. Full source observations are gzip anchors every 120 ticks
+and at terminal/failure boundaries. Neither timeline identity nor RNG selects
+a handwritten movement route, and RNG is excluded from deployable state
+features.
+
+`run_lunatic_stage123456_learning.bat` rotates exact Practice Stages 1 through 6,
 records one complete sharded stage trajectory at a time, checkpoints each
 stage's independent bounded online model, cleans up the exact game PID, and
 starts the next full stage. The verified life patch prevents Game Over without
@@ -37,8 +152,10 @@ input-backend failure still stops the loop. Transient capture, source-context,
 policy-reload, trace, and corpus failures fail closed without destroying
 the physical Stage episode. Create
 `artifacts\pause-lunatic-stage456` to pause between complete stages. The
-single-stage `run_lunatic_stage4_learning.bat` remains useful for focused
-experiments. `run_lunatic_stage5_learning.bat` and
+Stages 4 through 6 can also be rotated with the older
+`run_lunatic_stage456_learning.bat`. The single-stage
+`run_lunatic_stage4_learning.bat` remains useful for focused experiments.
+`run_lunatic_stage5_learning.bat` and
 `run_lunatic_stage6_learning.bat` are the focused Stage 5 and Stage 6 training
 entry points and retain the same complete-episode/storage/audit contracts. The
 `run_hard_stage4_learning.bat` entry point and its independent policy state are
@@ -139,6 +256,37 @@ Fine legal-action opportunities and behavior choices are already losslessly
 present in the corpus; the restart checkpoint retains only observed fine
 counters so its RAM and disk cost scales with feedback actually consumed
 rather than every action that happened to be legal or merely selected.
+
+Run the immutable corpus audit and CPU-only offline policy zoo with:
+
+```bash
+PYTHONPATH=src python scripts/audit_offline_corpus.py CORPUS_DIR \
+  --revision HUGGING_FACE_COMMIT --output artifacts/offline/corpus-audit.json
+PYTHONPATH=src python scripts/train_offline_cpu.py CORPUS_DIR \
+  --revision HUGGING_FACE_COMMIT --scope 3/0/0/6 --view exact-v5 \
+  --threads 12 --output artifacts/offline/stage6-exact-policy-zoo
+```
+
+The trainer fits CatBoost, LightGBM, CPU XGBoost, and Extra Trees sequentially,
+uses chronological complete-Stage splits, and evaluates only native-safe action
+sets. Offline ranking never authorizes policy promotion. The source-grounded
+geometry/planning benchmark, recorded physical-frame coherence check, effective
+corpus ratios, exact fixed revision, and conservative VPS commands are recorded
+in [`notes/OFFLINE_TRAINING_BENCHMARK_20260808.md`](notes/OFFLINE_TRAINING_BENCHMARK_20260808.md).
+
+Before fitting another long-horizon learner, use the exact-checkpoint
+multi-continuation feasibility benchmark in
+[`docs/FEASIBILITY_ORACLE.md`](docs/FEASIBILITY_ORACLE.md). It distinguishes a
+constructive native-action feasibility witness, an observed policy-selection
+error, and compact-versus-exact-derived representation evidence without moving
+search or source-only features into the resident controller.
+
+Confirmed source-physical geometry failures and their before/after authority
+evidence are recorded in
+[`docs/GEOMETRY_AUTHORITY_FINDINGS.md`](docs/GEOMETRY_AUTHORITY_FINDINGS.md).
+Headless corpora declare the synchronous `STEP` delivery contract explicitly;
+training and audits refuse to mix it silently with legacy or Windows delivery
+semantics.
 
 Online reward version `survival-reserve-hit-trace-v2` delivers a confirmed
 physical HIT independently of the one-step publication outcome. It assigns a

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import struct
 import time
 from collections.abc import Callable
 
+from .background_input import KEY_MASKS
 from .donor import enable_donor_imports
 
 enable_donor_imports()
@@ -18,11 +20,16 @@ STATE_CHARACTER_SELECT = 9
 STATE_SHOT_SELECT = 11
 STATE_PRACTICE_LVL_SELECT = 17
 BACKGROUND_MENU_TIMEOUT = 15.0
-# A background TH06 instance can be throttled to roughly four updates/second.
-# The donor's foreground-oriented 50 ms tap may then begin and end between two
-# game updates. The authoritative Supervisor starts key repeat after 30 equal
-# input frames; 350 ms is only 21 frames at 60 Hz but spans a throttled update.
+# Maximum wait for the authoritative Supervisor to sample a published edge. A
+# background TH06 instance can be throttled to roughly four updates/second, so
+# the donor's foreground-oriented 50 ms tap is insufficient. We release as soon
+# as the real current/last pair proves the edge, rather than holding for all
+# 350 ms and risking source key repeat when Wine runs faster than expected.
 BACKGROUND_TAP_SECONDS = 0.35
+ADDR_CURRENT_INPUT = 0x0069D904
+ADDR_LAST_INPUT = 0x0069D908
+ADDR_HELD_REPEAT = 0x0069D90C
+ADDR_HELD_FRAMES = 0x0069D910
 
 
 class MenuNavigationError(RuntimeError):
@@ -34,7 +41,24 @@ def _maintain_activity(maintain: Callable[[], object] | None) -> None:
         maintain()
 
 
+def _read_input_state(process) -> tuple[int, int, int, int]:
+    block = process.read(
+        ADDR_CURRENT_INPUT,
+        ADDR_HELD_FRAMES + 2 - ADDR_CURRENT_INPUT,
+    )
+    return tuple(
+        struct.unpack_from("<H", block, address - ADDR_CURRENT_INPUT)[0]
+        for address in (
+            ADDR_CURRENT_INPUT,
+            ADDR_LAST_INPUT,
+            ADDR_HELD_REPEAT,
+            ADDR_HELD_FRAMES,
+        )
+    )
+
+
 def _tap(
+    process,
     keyboard,
     key: str,
     *,
@@ -48,17 +72,33 @@ def _tap(
     # tap. A focus change during Keyboard.tap's blocking sleep could otherwise
     # clear GameWindow::lastActiveAppValue after the one pre-tap maintenance.
     keyboard.set_auxiliary(key, True)
+    expected_mask = getattr(keyboard, "published_input_mask", None)
+    key_mask = KEY_MASKS[key]
+    input_sampled = expected_mask is None
+    last_input_state = None
     try:
         deadline = time.monotonic() + BACKGROUND_TAP_SECONDS
         while time.monotonic() < deadline:
             _maintain_activity(maintain_activity)
+            if expected_mask is not None:
+                last_input_state = _read_input_state(process)
+                current, _previous, _repeat, _held = last_input_state
+                # The preceding settled tap proved that TH06 sampled the
+                # released mask. Once current equals this new publication, a
+                # Supervisor transition (and therefore a WAS_PRESSED edge)
+                # necessarily occurred even if a cross-process read missed
+                # the one frame where ``previous`` still held the release.
+                input_sampled = current == expected_mask and current & key_mask != 0
+                if input_sampled:
+                    break
             time.sleep(0.02)
     finally:
         keyboard.set_auxiliary(key, False)
-    deadline = time.monotonic() + 0.12
-    while time.monotonic() < deadline:
-        _maintain_activity(maintain_activity)
-        time.sleep(0.02)
+    if not input_sampled:
+        raise MenuNavigationError(
+            "retail menu did not sample the exact background input mask "
+            f"0x{expected_mask:04x}; last_input_state={last_input_state}"
+        )
 
 
 def _wait_release_tick(
@@ -66,19 +106,27 @@ def _wait_release_tick(
     timeout: float = BACKGROUND_MENU_TIMEOUT,
     *,
     maintain_activity: Callable[[], object] | None = None,
+    expected_mask: int | None = None,
 ):
-    """Wait until TH06 has sampled one menu tick after the bridge release."""
+    """Wait until TH06 has sampled the release, with a legacy timer fallback."""
     initial = read_menu_state(process)
     deadline = time.monotonic() + timeout
     last = initial
+    last_input_state = None
     while time.monotonic() < deadline:
         _maintain_activity(maintain_activity)
         last = read_menu_state(process)
-        if last[0] != initial[0] or last[2] != initial[2]:
+        if expected_mask is not None:
+            last_input_state = _read_input_state(process)
+            if last_input_state[0] == expected_mask:
+                return last
+        elif last[0] != initial[0] or last[2] != initial[2]:
             return last
         time.sleep(0.02)
     raise MenuNavigationError(
-        f"menu did not sample released input; last={last}"
+        "menu did not sample released input; "
+        f"expected_mask={expected_mask}, last_input_state={last_input_state}, "
+        f"last_menu_state={last}"
     )
 
 
@@ -89,13 +137,16 @@ def _settled_tap(
     *,
     maintain_activity: Callable[[], object] | None = None,
 ) -> None:
-    _tap(keyboard, key, maintain_activity=maintain_activity)
+    _tap(process, keyboard, key, maintain_activity=maintain_activity)
     # MainMenu uses WAS_PRESSED, which compares the current and previous
-    # sampled masks (authoritative utils.hpp).  A background-throttled game
-    # can otherwise miss the short zero-mask interval between two taps and
-    # treat the next Select as one continuous hold.  A state/timer tick proves
-    # that the bridge's release was sampled before another key is published.
-    _wait_release_tick(process, maintain_activity=maintain_activity)
+    # sampled masks (authoritative utils.hpp). Require the source input global
+    # itself to equal the released bridge mask before publishing another key.
+    # Keyboard-like test/donor implementations retain the old timer fallback.
+    _wait_release_tick(
+        process,
+        maintain_activity=maintain_activity,
+        expected_mask=getattr(keyboard, "published_input_mask", None),
+    )
 
 
 def _wait_state(
@@ -205,6 +256,7 @@ def _select_reimu_a(
     keyboard,
     difficulty: int,
     *,
+    main_menu_cursor: int,
     maintain_activity: Callable[[], object] | None = None,
 ) -> None:
     if difficulty not in range(4):
@@ -213,7 +265,7 @@ def _select_reimu_a(
         process,
         keyboard,
         STATE_MAIN_MENU,
-        target=2,
+        target=main_menu_cursor,
         length=8,
         maintain_activity=maintain_activity,
     )
@@ -303,6 +355,7 @@ def start_reimu_a_practice(
         process,
         keyboard,
         difficulty,
+        main_menu_cursor=2,
         maintain_activity=maintain_activity,
     )
     _wait_timer(
@@ -322,6 +375,7 @@ def start_reimu_a_practice(
             )
         if cursor == target:
             _tap(
+                process,
                 keyboard,
                 "shoot",
                 maintain_activity=maintain_activity,
@@ -338,3 +392,26 @@ def start_reimu_a_practice(
             maintain_activity=maintain_activity,
         )
     raise MenuNavigationError(f"could not select Practice stage {stage}")
+
+
+def start_reimu_a_route(
+    process,
+    keyboard,
+    difficulty: int,
+    *,
+    maintain_activity: Callable[[], object] | None = None,
+) -> None:
+    """Enter ordinary Start with Reimu-A; battle movement remains generic."""
+    _enter_main_menu(
+        process,
+        keyboard,
+        maintain_activity=maintain_activity,
+    )
+    _select_reimu_a(
+        process,
+        keyboard,
+        difficulty,
+        main_menu_cursor=0,
+        maintain_activity=maintain_activity,
+    )
+    time.sleep(1.0)

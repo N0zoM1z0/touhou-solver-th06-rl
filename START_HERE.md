@@ -17,6 +17,28 @@ scripts and online planning with a small native hazard gate plus learning.
 6. Learn only inside the native survival frontier, with independent
    difficulty/character/shot/stage/source-phase state.
 
+For Linux-VPS validation against the original retail executable, read
+`docs/WINE_RETAIL_VALIDATION.md`. The first complete natural Stage 6-to-1 and
+Start-to-Ending measurements are frozen in
+`docs/WINE_RETAIL_BASELINE_2026-08-09.md`. Those HIT-continuation runs are
+benchmark evidence only and are never training corpus.
+
+The current project state, the distinction between offline fitting,
+Linux-headless closed-loop behavior, original-retail Wine validation, and real
+Windows evidence, plus the ordered continuation plan are frozen in
+`docs/HANDOFF_2026-08-10.md`.
+
+The first real immutable offline-ranker-to-original-retail Wine A/B is recorded
+in `docs/WINE_OFFLINE_RANKER_AB_2026-08-10.md`. The adapter works, but the
+tested Stage 6 XGBoost selector was not promoted: frozen UCB scored 8/9 HITs
+and the offline selector scored 12/9 across two natural trials each.
+
+The current continuation contract is Wine-first and is authoritative over the
+older broad-training recommendations in the handoff. Read
+`docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md` before starting another fit. It
+records the failed offline assumptions, the episode-grouped data funnel, the
+small residual-population rule, and the ordered Stage 6-to-1 promotion gates.
+
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
 

@@ -88,3 +88,25 @@ def test_optional_failure_feedback_does_not_require_policy_callback(
     ))
 
     assert loader.last_error is None
+
+
+def test_immutable_policy_disables_reload_feedback_and_checkpoint(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "policy.py"
+    path.write_bytes(POLICY)
+    loader = HotReloadPolicy(path, immutable=True)
+
+    monkeypatch.setattr(
+        Path,
+        "stat",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("immutable policy polled its source")
+        ),
+    )
+    assert loader.maybe_reload(0) is False
+    assert loader.checkpoint() is False
+    loader.observe(object())
+    loader.observe_failure(object())
+    assert loader.status()["immutable"] is True

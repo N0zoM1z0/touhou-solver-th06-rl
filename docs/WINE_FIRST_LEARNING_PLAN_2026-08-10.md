@@ -1,0 +1,295 @@
+# Wine-first learning reset, 2026-08-10
+
+## Decision
+
+The next learning generation is Wine-first and proceeds from Stage 6 through
+Stage 1.  Original-retail Wine is the promotion domain.  Linux headless remains
+an accelerator for geometry tests, counterfactual proposal generation, and
+same-action-stream platform differentials; headless scores never authorize a
+policy promotion.
+
+This decision freezes the broad offline-training generation.  Do not resume a
+large model zoo, global policy replacement, ensemble sweep, or hyperparameter
+sweep before the Wine-first gates below have been satisfied.  The frozen UCB
+plus generic native reactive fallback remains the incumbent.  Every learned
+candidate is a residual above that incumbent and may rank only the native-safe
+set.  Fresh issue certification, fail-close behavior, and Bomb prohibition are
+unchanged.
+
+The target is not perfect offline ranking.  The target is a small number of
+repeatable interventions that improve original-retail Wine survival without
+regressing delivery or native authority.
+
+## Evidence that forced the reset
+
+### The offline-to-Wine path works, but the tested ranker did not help
+
+The portable XGBoost adapter, isolated Win32 scorer, immutable policy state,
+native action gate, and original-retail runner all worked end to end.  In the
+first natural Stage 6 A/B, however, frozen UCB recorded 8 and 9 HITs while the
+offline support32/margin1 selector recorded 12 and 9.  Retail RNG is not yet
+controlled, so this small panel is not a powered comparison, but it supplies
+no evidence of benefit and the model was not promoted.  See
+`docs/WINE_OFFLINE_RANKER_AB_2026-08-10.md`.
+
+The model's apparent training size was misleading.  Its exact-v5 split had
+56,533 training rows but only two complete training runs and one validation
+run.  Adjacent frames are correlated observations, not independent routes.
+The run or seed, not the frame, is the statistical group.
+
+### Strong headless metrics did not predict headless closed-loop survival
+
+The conservative Stage 6 COW value artifact used 392 informative groups and
+6,480 branch outcomes.  On seeds 163/164 it reached 80% completed-or-best
+top-1 while retaining the factual behavior on about 95.5% of ordinary holdout
+groups.  Yet an earlier direct route-wide value candidate stopped after only
+3,097/15,365 decisions on seeds 157/158, versus 18,810/20,040 for the
+incumbent.  These were native-legal, Bomb-free policy-selection regressions.
+
+This failure happened within Linux headless on fresh seeds.  It proves that
+Linux-to-Wine platform drift cannot be the only explanation.  The dominant
+demonstrated problem is closed-loop covariate shift: a global learner can fit
+sparse corrections while perturbing many upstream decisions.
+
+### Factual Wine failure prediction did not generalize
+
+Twenty-three immutable Wine first-failure prefixes were replayed against the
+exact frozen incumbent.  The factual action audit covered 95,768 policy calls
+with zero incumbent mismatch, zero policy mismatch, and zero shadow action
+contract violation.  That makes the rows factual incumbent evidence; it does
+not make later failure a causal label for an alternative action.
+
+The context-reactive v2 r11 guard initially looked precise on its training
+folds.  On two later long disjoint Wine shadow prefixes it produced 30 and 51
+candidates but no labeled true positive: the first had 26 false positives and
+4 unlabeled rows, and the second had 50 false positives and 1 unlabeled row.
+
+The subsequent exact residual audit retained only rows where the offline
+ranker proposed a supported native-safe action different from both incumbent
+and generic baseline.  After removing 39 non-training replayable frames, the
+bound audit retained 983 rows across 21 nonempty run groups.  Only 51 rows were
+within factual terminal windows.  The r13 group-held-out result was rejected:
+
+- OOF average precision: 0.1322;
+- OOF ROC AUC: 0.6116;
+- best nonempty point under the activation limit: 2 TP / 4 FP, one protected
+  run, one-sided 95% precision lower bound 0.1173;
+- best point protecting two runs: 3 TP / 12 FP, lower bound 0.0829.
+
+No deployable r13 model was produced.  Threshold tuning cannot turn
+"incumbent will fail later" into evidence that a counterfactual action will
+help.
+
+### Headless and Wine have different execution contracts
+
+Headless synchronous `STEP` has delivery delay exactly zero.  Original-retail
+Wine includes coherent process capture, input publication, stale retries, and
+fresh issue revalidation.  The current headless ranker schema has 73 features,
+including source clocks, Boss-relative state, hazard sectors, and multi-horizon
+clearance profiles.  The current portable Wine ranker schema has 33 coarser
+features.  A headless model is not deployable merely because similarly named
+state exists online.
+
+The magnitude of platform drift is still unknown.  No experiment has yet run
+the same seed and frozen action stream through native Linux source and the
+MinGW source build under Wine and compared the first physical divergence.
+Until that differential exists, do not claim either equivalence or harmful
+drift.  Original retail remains a further boundary because its RNG is not yet
+settable through the existing runner.
+
+## What remains valuable from the offline generation
+
+Keep the infrastructure:
+
+- source-grounded native geometry and the native-safe first-action set;
+- coherent capture, fresh issue certification, fail-close, and exact input
+  cleanup;
+- immutable policy states, hashes, manifests, and scope separation;
+- lossless first-failure prefixes and benchmark-only continuation isolation;
+- exact COW outcome generation and grouped seed/run evaluation;
+- negative artifacts and rejected-model reports;
+- compact native model scoring after a schema has been reproduced exactly.
+
+Stop using the following experiment shapes as promotion evidence:
+
+- frame-random splits or row counts presented as independent sample counts;
+- high imitation, COW top-1, AP, or AUC without unseen closed-loop evidence;
+- one global ranker replacing the incumbent across the route;
+- one seed or one counterexample treated as a general correction;
+- terminal-window prediction treated as causal alternative-action value;
+- broad route-wide COW generation before Wine identifies a repeated need;
+- many near-duplicate hyperparameter candidates selected on one holdout;
+- HIT-continuation rows entering any training set;
+- headless-only features silently approximated in Wine;
+- a single favorable Wine route presented as promotion evidence.
+
+## Wine-first data funnel
+
+### Gold: immutable Wine first-failure episodes
+
+The independent episode is the unit of evidence.  Use frozen UCB, exploration
+zero, an immutable copied state, natural Practice, lossless corpus collection,
+and the default stop on first HIT, native authority failure, or Bomb request.
+Do not patch lives.  Record:
+
+- no-HIT completion versus first terminal;
+- game frame and wall time to first terminal;
+- terminal kind and automatic source context;
+- coherent-capture failures, stale retries, release rows, and solve latency;
+- native-safe set, incumbent action, generic baseline, and bounded
+  per-action geometry already computed by the gate;
+- immutable hashes and exact cleanup results.
+
+Use benchmark continuation only as a separate full-Stage HIT count.  It is
+always `training_eligible=false`.
+
+Current telemetry shows that Wine-first collection is affordable.  Across 47
+recorded Stage 6 first-failure trials from several policy generations, total
+trial wall time was about 1.62 hours; the median was 95.8 seconds and median
+terminal frame was 3,400.  Natural full-Stage trials took roughly 7--8
+minutes.  Therefore first-failure episodes provide the high-volume physical
+stratum; full Stage is reserved for milestones and promotion.
+
+Do not turbo the game or run canonical trials concurrently.  The controller
+requires a normal frame multiplier, and CPU contention changes capture and
+delivery behavior.  Parallelize replay, clustering, model scoring, and
+headless COW instead.
+
+### Silver: replay every candidate on each Wine prefix
+
+One Wine corpus should screen the entire small candidate population offline.
+Replay must reconstruct the exact frozen incumbent and assert recorded-action
+equality.  It may report where each candidate would intervene, whether its
+action was in the recorded native-safe set, normal-region activation, and
+terminal-window overlap.  It never publishes the candidate action and cannot
+prove causal benefit.
+
+This is the primary scaling mechanism: collect one physical trajectory and
+reuse it for every current and future schema-compatible candidate.
+
+### Bronze: targeted multi-seed headless COW
+
+Headless generates counterfactual action outcomes only after Wine identifies a
+generic failure region repeated across independent physical episodes.  Match
+regions using Wine-reproducible physical features, then sample several
+independent headless seeds and branch every native-safe first action.  Require
+agreement across seeds and preserve seed-grouped holdouts.
+
+The current COW mechanism cannot restore an original-retail memory snapshot as
+an exact headless checkpoint.  Wine anchors are audit and matching evidence,
+not COW roots.  Exact cross-domain state transfer must not be claimed until an
+explicit validated converter or deterministic replay contract exists.
+
+## Failure-region and candidate rules
+
+Mine the existing audited Wine prefixes before collecting more data.  Group by
+run, then identify repeated regions from bounded generic physical features:
+
+- player position and boundary reserve;
+- current, incumbent, and generic baseline actions;
+- native hard/legal masks and action count;
+- already-computed per-action clearance and final boundary reserve;
+- bullet and laser counts;
+- automatic source context as a partition/support key, never a handwritten
+  movement branch.
+
+Do not use captured frame, RNG seed, counterexample identity, Boss name, or a
+hand-authored phase state as control input.  Collect a new Wine episode only
+when it can increase independent support for an unresolved region or provide a
+disjoint shadow/canary evaluation.
+
+The first residual generation should be support-driven rather than another
+global risk classifier:
+
+1. insufficient independent Wine failure-region support -> incumbent;
+2. insufficient multi-seed headless COW support -> incumbent;
+3. small independent COW models disagree on the action -> incumbent;
+4. proposed action absent from the current native-safe set -> incumbent;
+5. fresh issue revalidation fails -> fail closed;
+6. otherwise publish at most one native-safe residual action.
+
+Measure intervention events, not only activated rows.  Repeated adjacent
+frames can represent one decision region.  The first canary should target only
+one to three intervention events in a natural Stage, with generic bounded
+hysteresis/cooldown if needed.  This is an initial conservatism target, not a
+claim that the number is already optimal.
+
+## Small population, not one offline winner
+
+Retain the population idea but change its role.  Keep:
+
+- one frozen UCB incumbent;
+- at most two to four small residual candidates representing materially
+  different data partitions or learning hypotheses;
+- the immutable historical archive of all rejected models and evidence.
+
+Do not create a population from dozens of near-identical hyperparameters or
+random seeds.  A candidate must differ by a declared hypothesis, data view, or
+complete run/seed partition.  Use a fixed small committee only to measure
+disagreement.  Unanimous action agreement and independent empirical support
+grant shadow eligibility, not active authority.
+
+Replay the whole small population on every Wine prefix.  Test only one active
+canary at a time so survival changes remain attributable.  Prune or retain
+candidates only on fixed disjoint Wine panels; never repeatedly select against
+the same holdout.
+
+## Ordered implementation, Stage 6 through Stage 1
+
+For each Stage, beginning with Stage 6:
+
+1. implement deterministic action-stream recording/replay and compare the
+   same seed/action stream between native Linux source and MinGW source under
+   Wine; report the first physical snapshot/HIT divergence;
+2. audit existing frozen-UCB Wine prefixes with episode-grouped failure-region
+   clustering;
+3. separate repeated generic regions from single-run RNG events;
+4. generate targeted multi-seed headless COW only for repeated unresolved
+   regions;
+5. build at most three small residual candidates using only exactly
+   reproducible Wine features and complete run/seed group splits;
+6. replay every candidate against all eligible existing and new Wine prefixes;
+7. run one selected extremely-low-intervention candidate in new disjoint Wine
+   shadow episodes;
+8. after clean shadow evidence, alternate frozen-UCB and one active-canary
+   first-failure trials; stop the canary immediately on a native contract
+   violation or clear survival regression;
+9. only after first-failure survival improves, run natural full Stage trials
+   and seek repeatable no-HIT/no-Bomb completion.
+
+Advance from Stage 6 to Stage 5 and then through Stage 1 only with separate
+data, models, evaluation panels, and promotion records.  A Stage-specific
+candidate never silently shares data or state with another Stage.
+
+## Promotion evidence
+
+Offline and headless evidence can reject a candidate but cannot promote it.
+Wine shadow can reject a candidate but cannot prove its counterfactual action
+helped.  Promotion requires active original-retail Wine evidence with:
+
+- immutable frozen incumbent and candidate identities;
+- alternating/disjoint trials rather than one unrelated route;
+- native-safe and fresh-issue action contracts intact;
+- zero Bomb request and exact input/process cleanup;
+- no regression in capture/stale/release/latency behavior attributable to the
+  candidate;
+- improved no-HIT completion rate or time/frame to first terminal;
+- later, repeated natural full-Stage NMNB completion.
+
+Wine remains closer to shipped execution than reconstructed Linux.  Real
+Windows is still the final equivalence gate for a product claim, but the
+Wine-first loop is the authoritative development and promotion environment for
+the Stage 6-to-1 program.
+
+## Immediate next branch scope
+
+The new branch starts with no large fit.  Its first deliverables are:
+
+1. a bounded deterministic action-stream schema and recorder;
+2. native Linux source replay and MinGW source-under-Wine replay using the same
+   seed and action stream;
+3. an exact first-divergence report with hashes and physical state fields;
+4. an episode-grouped audit of the already validated Stage 6 Wine prefixes.
+
+Only after these four deliverables are verified may targeted COW generation or
+residual training begin.
