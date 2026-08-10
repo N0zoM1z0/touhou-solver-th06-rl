@@ -14,9 +14,11 @@ state.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass, replace
 import math
 import struct
+import time
 
 from .donor import enable_donor_imports
 
@@ -514,12 +516,25 @@ def _decode_control_once(
         raw_bullet_tails.extend(tail)
         occupied_bullets.append((slot, state, sprite_pointer, tail))
 
-    sprite_dimensions = _control_sprite_dimensions(
-        process,
-        native,
-        stage,
-        {item[2] for item in occupied_bullets},
-    )
+    # BulletManager::SpawnBullet sets state=FIRED before copying the template
+    # AnmVm and before SetActiveSprite (authoritative BulletManager.cpp
+    # lines 171-180, 286-287). Suspending inside that short function can
+    # therefore expose an active slot with a null/transient sprite pointer.
+    # It is not a decodable hazard root; resume and retry the entire snapshot.
+    sprite_pointers = {item[2] for item in occupied_bullets}
+    if 0 in sprite_pointers:
+        raise native._SnapshotReadTorn(
+            "active bullet is between state publication and sprite setup"
+        )
+    try:
+        sprite_dimensions = _control_sprite_dimensions(
+            process,
+            native,
+            stage,
+            sprite_pointers,
+        )
+    except RuntimeError as error:
+        raise native._SnapshotReadTorn(str(error)) from error
     for slot, state, sprite_pointer, tail in occupied_bullets:
         if state == 5 or not _tail_may_reach_player(
             tail,
@@ -694,8 +709,15 @@ def read_control_snapshot(
     *,
     horizon: int = 12,
     collision_margin: float = 0.35,
+    suspend=None,
 ) -> ControlSnapshot:
-    """Return one coherent observed-hazard root or fail closed."""
+    """Return one coherent observed-hazard root or fail closed.
+
+    Armed Windows control supplies a narrow exact-PID suspend context for
+    each attempt.  This makes the multi-region copy physically atomic while
+    the existing source timer witnesses still reject a process suspended in
+    the middle of its update chain.
+    """
     enable_donor_imports()
     import th06.native as native
 
@@ -703,13 +725,14 @@ def read_control_snapshot(
     last_error: BaseException | None = None
     for attempt in range(1, MAX_CAPTURE_ATTEMPTS + 1):
         try:
-            return _decode_control_once(
-                process,
-                native,
-                attempt,
-                horizon,
-                collision_margin,
-            )
+            with suspend() if suspend is not None else nullcontext():
+                return _decode_control_once(
+                    process,
+                    native,
+                    attempt,
+                    horizon,
+                    collision_margin,
+                )
         except (
             native._SnapshotEpochChanged,
             native._SnapshotPhaseIncomplete,
@@ -718,6 +741,13 @@ def read_control_snapshot(
         ) as error:
             observed_epochs.append(native.read_game_frame(process))
             last_error = error
+            if suspend is not None:
+                # Let the exact process advance out of a source-defined
+                # priority-4..10 partial update before suspending the retry.
+                # Wine needs a real host scheduling window; 0.5 ms can
+                # repeatedly suspend the exact same source instruction. Eight
+                # 2 ms windows remain a fixed 16 ms worst-case retry budget.
+                time.sleep(0.002)
     raise RuntimeError(
         "compact coherent capture exhausted retries; "
         f"epochs={observed_epochs}; last={last_error}"

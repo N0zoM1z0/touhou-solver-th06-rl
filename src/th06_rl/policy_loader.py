@@ -25,12 +25,14 @@ class HotReloadPolicy:
         *,
         state_path: Path | None = None,
         check_interval_frames: int = 30,
+        immutable: bool = False,
     ) -> None:
         if check_interval_frames <= 0:
             raise ValueError("check interval must be positive")
         self.path = path.resolve()
         self.state_path = state_path.resolve() if state_path else None
         self.check_interval_frames = check_interval_frames
+        self.immutable = immutable
         self.policy = None
         self.digest: str | None = None
         self.signature: tuple[int, int] | None = None
@@ -83,6 +85,8 @@ class HotReloadPolicy:
         return policy
 
     def maybe_reload(self, frame: int, *, force: bool = False) -> bool:
+        if self.immutable and not force:
+            return False
         if not force and frame % self.check_interval_frames:
             return False
         try:
@@ -166,6 +170,8 @@ class HotReloadPolicy:
             )
 
     def checkpoint(self) -> bool:
+        if self.immutable:
+            return False
         # Hot reload is deliberately coupled to this low-frequency durability
         # boundary, not to game-frame modulo checks in decide().
         self.maybe_reload(0)
@@ -201,6 +207,8 @@ class HotReloadPolicy:
         return True
 
     def observe(self, outcome: PolicyOutcome) -> None:
+        if self.immutable:
+            return
         if self.policy is None:
             return
         callback = getattr(self.policy, "observe", None)
@@ -217,6 +225,8 @@ class HotReloadPolicy:
 
     def observe_failure(self, event: PolicyFailureEvent) -> None:
         """Deliver sparse physical feedback outside the action publish path."""
+        if self.immutable:
+            return
         if self.policy is None:
             return
         callback = getattr(self.policy, "observe_failure", None)
@@ -243,6 +253,7 @@ class HotReloadPolicy:
         except Exception as error:
             metrics = {"error": f"{type(error).__name__}: {error}"}
         return {
+            "immutable": self.immutable,
             "generation": self.generation,
             "reloads": self.reloads,
             "reload_failures": self.reload_failures,

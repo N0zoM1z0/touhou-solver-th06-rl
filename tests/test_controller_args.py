@@ -39,3 +39,28 @@ def test_route_scope_accepts_only_next_stage_in_same_scope() -> None:
 def test_controller_rejects_route_and_practice_together() -> None:
     with pytest.raises(SystemExit):
         parse_args(["--start-route", "--practice-stage", "1"])
+
+
+def test_controller_accepts_immutable_policy_evaluation() -> None:
+    args = parse_args([
+        "--practice-stage",
+        "6",
+        "--immutable-policy",
+        "--exploration-rate",
+        "0",
+    ])
+    assert args.immutable_policy
+
+
+def test_controller_rejects_exploration_for_immutable_policy() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(["--practice-stage", "6", "--immutable-policy"])
+
+
+def test_controller_accepts_fail_closed_capture_gap_resume() -> None:
+    args = parse_args([
+        "--practice-stage",
+        "6",
+        "--resume-after-incoherent-capture",
+    ])
+    assert args.resume_after_incoherent_capture

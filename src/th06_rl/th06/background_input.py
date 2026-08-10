@@ -152,7 +152,7 @@ class BackgroundInputBridge:
         self.ntdll.NtResumeProcess.restype = wintypes.LONG
 
     @contextmanager
-    def _suspended(self):
+    def suspended(self):
         # The capture donor deliberately owns a narrow read/write process
         # handle. Wine enforces PROCESS_SUSPEND_RESUME on NtSuspendProcess,
         # so acquire that one right explicitly for the tiny hook transaction
@@ -185,6 +185,11 @@ class BackgroundInputBridge:
                         )
             finally:
                 self.kernel32.CloseHandle(suspend_handle)
+
+    # Retain the old private spelling for the already-audited hook
+    # transaction and downstream tests. New snapshot code uses the explicit
+    # public name.
+    _suspended = suspended
 
     def _process_alive(self) -> bool:
         if not self.process.handle:

@@ -93,6 +93,7 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
         "last_frame": None,
         "max_bullets": 0,
         "physical_hit_events": None,
+        "physical_hits_in_run": 0,
         "decisions": None,
     }
     if not path.is_file():
@@ -118,6 +119,11 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
             metrics = (record.get("policy") or {}).get("metrics")
             if isinstance(metrics, dict):
                 last_policy_metrics = metrics
+            if record.get("reason") in {
+                "physical-hit",
+                "authority-stop:physical HIT",
+            }:
+                summary["physical_hits_in_run"] += 1
     summary["event_counts"] = dict(sorted(events.items()))
     if frames:
         summary["first_frame"] = min(frames)
@@ -183,6 +189,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=repository / "src/th06_rl/policies/adaptive.py",
     )
     parser.add_argument("--policy-state", type=Path)
+    parser.add_argument(
+        "--policy-scorer-library",
+        type=Path,
+        help="isolated native batch scorer used by an offline policy plug-in",
+    )
+    parser.add_argument(
+        "--immutable-policy",
+        action="store_true",
+        help=(
+            "copy the declared policy state into the run artifact, disable "
+            "learning/checkpoint writes, and assert before/after SHA equality"
+        ),
+    )
+    parser.add_argument(
+        "--first-failure-corpus-root",
+        type=Path,
+        help=(
+            "collect one lossless physical Practice prefix and stop on the first "
+            "HIT or authority failure; unlike continuation benchmarks, this "
+            "mode does not patch lives"
+        ),
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--practice-stage", type=int, choices=range(1, 7))
     mode.add_argument("--start-route", action="store_true")
@@ -211,6 +239,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--seconds cannot be negative")
     if not 0.0 <= args.exploration_rate <= 1.0:
         parser.error("--exploration-rate must be in [0, 1]")
+    if args.immutable_policy and args.exploration_rate != 0.0:
+        parser.error("--immutable-policy requires --exploration-rate 0")
+    if args.first_failure_corpus_root is not None:
+        if args.start_route:
+            parser.error("first-failure corpus collection currently requires Practice")
+        if args.seconds != 0.0:
+            parser.error("first-failure corpus collection requires --seconds 0")
+        if not args.immutable_policy:
+            parser.error(
+                "first-failure corpus collection requires --immutable-policy"
+            )
     if not args.display.startswith(":") or not args.display[1:].isdigit():
         parser.error("--display must look like :97")
     if args.artifact_dir is None:
@@ -247,6 +286,16 @@ def run(args: argparse.Namespace) -> int:
     windows_python = args.windows_python.resolve()
     policy_plugin = args.policy_plugin.resolve()
     policy_state = args.policy_state.resolve()
+    policy_scorer_library = (
+        args.policy_scorer_library.resolve()
+        if args.policy_scorer_library is not None
+        else None
+    )
+    first_failure_corpus_root = (
+        args.first_failure_corpus_root.resolve()
+        if args.first_failure_corpus_root is not None
+        else None
+    )
     artifact_dir = args.artifact_dir.resolve()
     artifact_dir.mkdir(parents=True, exist_ok=False)
     report_path = artifact_dir / "report.json"
@@ -260,6 +309,17 @@ def run(args: argparse.Namespace) -> int:
         "difficulty": args.difficulty,
         "seconds": args.seconds,
         "exploration_rate": args.exploration_rate,
+        "immutable_policy": args.immutable_policy,
+        "evaluation_mode": (
+            "first-failure-corpus"
+            if first_failure_corpus_root is not None
+            else "hit-continuation-benchmark"
+        ),
+        "first_failure_corpus_root": (
+            str(first_failure_corpus_root)
+            if first_failure_corpus_root is not None
+            else None
+        ),
         "display": args.display,
         "wine_prefix": str(prefix),
         "retail_executable": str(executable),
@@ -274,6 +334,9 @@ def run(args: argparse.Namespace) -> int:
     controller_log = (artifact_dir / "controller.log").open("wb")
     game_log = (artifact_dir / "game.log").open("wb")
     xvfb_log = (artifact_dir / "xvfb.log").open("wb")
+    controller_policy_state = policy_state
+    policy_state_sha256_before = None
+    controller_policy_state_sha256_before = None
     try:
         for required in (
             executable,
@@ -285,6 +348,25 @@ def run(args: argparse.Namespace) -> int:
         ):
             if not required.is_file():
                 raise RuntimeError(f"required Wine retail input is absent: {required}")
+        if policy_scorer_library is not None and not policy_scorer_library.is_file():
+            raise RuntimeError(
+                f"required offline scorer is absent: {policy_scorer_library}"
+            )
+        if args.immutable_policy:
+            if not policy_state.is_file():
+                raise RuntimeError(
+                    "immutable Wine evaluation requires an existing policy state"
+                )
+            controller_policy_state = artifact_dir / "policy-state-input.json"
+            shutil.copy2(policy_state, controller_policy_state)
+        policy_state_sha256_before = (
+            _sha256(policy_state) if policy_state.is_file() else None
+        )
+        controller_policy_state_sha256_before = (
+            _sha256(controller_policy_state)
+            if controller_policy_state.is_file()
+            else None
+        )
         score_template_sha = _sha256(score_template)
         if score_template_sha != FULL_UNLOCK_SCORE_SHA256:
             raise RuntimeError(
@@ -307,11 +389,23 @@ def run(args: argparse.Namespace) -> int:
                 "policy_plugin": str(policy_plugin),
                 "policy_plugin_sha256": _sha256(policy_plugin),
                 "policy_state": str(policy_state),
-                "policy_state_sha256_before": (
-                    _sha256(policy_state) if policy_state.is_file() else None
-                ),
+                "policy_state_sha256_before": policy_state_sha256_before,
                 "policy_state_size_before": (
                     policy_state.stat().st_size if policy_state.is_file() else None
+                ),
+                "controller_policy_state": str(controller_policy_state),
+                "controller_policy_state_sha256_before": (
+                    controller_policy_state_sha256_before
+                ),
+                "policy_scorer_library": (
+                    str(policy_scorer_library)
+                    if policy_scorer_library is not None
+                    else None
+                ),
+                "policy_scorer_library_sha256": (
+                    _sha256(policy_scorer_library)
+                    if policy_scorer_library is not None
+                    else None
                 ),
             }
         )
@@ -367,6 +461,10 @@ def run(args: argparse.Namespace) -> int:
                 "WINEDLLOVERRIDES": "mscoree,mshtml=",
             }
         )
+        if policy_scorer_library is not None:
+            environment["TH06_RL_OFFLINE_SCORER_LIBRARY"] = _windows_path(
+                policy_scorer_library
+            )
         xvfb_process = subprocess.Popen(
             ["Xvfb", args.display, "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
             stdin=subprocess.DEVNULL,
@@ -452,13 +550,10 @@ def run(args: argparse.Namespace) -> int:
             "--difficulty",
             args.difficulty,
             "--armed",
-            "--patch-lives",
-            "--continuous-stage",
             "--seconds",
             str(args.seconds),
             "--exploration-rate",
             str(args.exploration_rate),
-            "--no-corpus",
             "--no-post-run-audit",
             "--stop-game",
             "--min-commit-headroom-gib",
@@ -466,6 +561,15 @@ def run(args: argparse.Namespace) -> int:
             "--trace",
             _windows_path(trace_path),
         ]
+        if first_failure_corpus_root is None:
+            controller.extend(("--patch-lives", "--continuous-stage", "--no-corpus"))
+        else:
+            controller.extend(
+                (
+                    "--corpus-root",
+                    _windows_path(first_failure_corpus_root),
+                )
+            )
         if args.start_route:
             controller.append("--start-route")
         else:
@@ -478,7 +582,11 @@ def run(args: argparse.Namespace) -> int:
                 )
             )
         controller.extend(("--policy-plugin", _windows_path(policy_plugin)))
-        controller.extend(("--policy-state", _windows_path(policy_state)))
+        controller.extend(
+            ("--policy-state", _windows_path(controller_policy_state))
+        )
+        if args.immutable_policy:
+            controller.append("--immutable-policy")
         report["controller_command"] = controller
         result = subprocess.run(
             controller,
@@ -490,6 +598,17 @@ def run(args: argparse.Namespace) -> int:
             check=False,
         )
         report["controller_returncode"] = result.returncode
+        if args.immutable_policy:
+            source_after = _sha256(policy_state) if policy_state.is_file() else None
+            controller_after = (
+                _sha256(controller_policy_state)
+                if controller_policy_state.is_file()
+                else None
+            )
+            if source_after != policy_state_sha256_before:
+                raise RuntimeError("immutable source policy state changed during run")
+            if controller_after != controller_policy_state_sha256_before:
+                raise RuntimeError("immutable evaluation policy state changed during run")
         return result.returncode
     except BaseException as error:
         report["error"] = f"{type(error).__name__}: {error}"
@@ -518,6 +637,18 @@ def run(args: argparse.Namespace) -> int:
         )
         report["policy_state_size_after"] = (
             policy_state.stat().st_size if policy_state.is_file() else None
+        )
+        report["controller_policy_state_sha256_after"] = (
+            _sha256(controller_policy_state)
+            if controller_policy_state.is_file()
+            else None
+        )
+        report["immutable_policy_state_equal"] = (
+            args.immutable_policy
+            and report.get("policy_state_sha256_after")
+            == policy_state_sha256_before
+            and report.get("controller_policy_state_sha256_after")
+            == controller_policy_state_sha256_before
         )
         if score.is_file():
             report["score_sha256_after"] = _sha256(score)

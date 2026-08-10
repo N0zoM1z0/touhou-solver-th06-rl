@@ -25,6 +25,12 @@ class PolicyContext:
     current_action: str = "stay"
     hard_admissible_actions: tuple[str, ...] = ()
     phase_elapsed_frames: int = 0
+    # Already-computed four-frame native certificates.  Policies may use this
+    # bounded geometry as ranking evidence, but cannot add an action to the
+    # authoritative safe set.
+    hard_action_evaluations: tuple[
+        tuple[str, float | None, float, float], ...
+    ] = ()
 
 
 @dataclass(frozen=True)

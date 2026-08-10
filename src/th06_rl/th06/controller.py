@@ -323,11 +323,13 @@ def run(args: argparse.Namespace) -> int:
                 return exit_code
 
         kernel = NativeKernel(args.native_library)
-        policy_transaction = StagePolicyTransaction(args.policy_state)
-        policy_state_recovered = policy_transaction.begin()
+        if not args.immutable_policy:
+            policy_transaction = StagePolicyTransaction(args.policy_state)
+            policy_state_recovered = policy_transaction.begin()
         plugin = HotReloadPolicy(
             args.policy_plugin,
             state_path=args.policy_state,
+            immutable=args.immutable_policy,
         )
         args.trace.parent.mkdir(parents=True, exist_ok=True)
         # Corpus is the durable evidence. Live status may lag by one second;
@@ -402,7 +404,11 @@ def run(args: argparse.Namespace) -> int:
         def retain_continuous_stage(kind: str, error: BaseException) -> bool:
             """Fail closed on transient infra faults without ending the episode."""
             nonlocal infrastructure_failure_count
-            if not args.continuous_stage:
+            capture_gap_resume = (
+                args.resume_after_incoherent_capture
+                and kind == "coherent-snapshot"
+            )
+            if not args.continuous_stage and not capture_gap_resume:
                 return False
             # WAIT_TIMEOUT (258) proves the exact process handle is still live.
             if (
@@ -421,7 +427,11 @@ def run(args: argparse.Namespace) -> int:
             infrastructure_failures[kind] = count
             emit_trace({
                 "time": time.time(),
-                "event": "continuous-fail-close",
+                "event": (
+                    "capture-gap-fail-close"
+                    if capture_gap_resume and not args.continuous_stage
+                    else "continuous-fail-close"
+                ),
                 "kind": kind,
                 "count": count,
                 "error_type": type(error).__name__,
@@ -429,8 +439,8 @@ def run(args: argparse.Namespace) -> int:
             })
             if count == 1 or count % 60 == 0:
                 print(
-                    f"{kind} unavailable; input released and continuous Stage "
-                    f"retained (count={count}): {type(error).__name__}: {error}",
+                    f"{kind} unavailable; input released and Stage retained "
+                    f"(count={count}): {type(error).__name__}: {error}",
                     flush=True,
                 )
             time.sleep(0.001)
@@ -604,12 +614,29 @@ def run(args: argparse.Namespace) -> int:
                 snapshot = read_control_snapshot(
                     process,
                     horizon=args.horizon,
+                    suspend=(bridge.suspended if bridge is not None else None),
                 )
             except (NativeDecodeError, OSError, RuntimeError) as error:
                 # A compact control root is still epoch/manager-phase strict.
                 # A torn observation can never reach the Hard gate.
                 if not retain_continuous_stage("coherent-snapshot", error):
-                    raise
+                    termination_reason = (
+                        "authority-stop:coherent snapshot unavailable:"
+                        f"{type(error).__name__}:{str(error)[:160]}"
+                    )
+                    exit_code = 2
+                    if keyboard is not None:
+                        keyboard.release_all()
+                    lease.cleared()
+                    emit_trace({
+                        "time": time.time(),
+                        "event": "capture-stop",
+                        "kind": "coherent-snapshot",
+                        "error_type": type(error).__name__,
+                        "error": str(error),
+                    })
+                    print(termination_reason, flush=True)
+                    break
                 capture_failure_count += 1
                 emit_trace({
                     "time": time.time(),
@@ -839,6 +866,15 @@ def run(args: argparse.Namespace) -> int:
                                 item.action.name for item in hard
                             ),
                             phase_elapsed_frames=phase_elapsed_frames,
+                            hard_action_evaluations=tuple(
+                                (
+                                    item.action.name,
+                                    _finite(item.min_clearance),
+                                    item.final_x,
+                                    item.final_y,
+                                )
+                                for item in hard
+                            ),
                         ))
                         selected = next(
                             item.action for item in legal
@@ -1411,6 +1447,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "ordinary route until its natural terminal"
         ),
     )
+    parser.add_argument(
+        "--resume-after-incoherent-capture",
+        action="store_true",
+        help=(
+            "release every input on a torn compact snapshot and resume only "
+            "after a later coherent capture; HIT and geometry authority "
+            "failures still stop the run"
+        ),
+    )
     parser.add_argument("--stop-game", action="store_true")
     parser.add_argument("--seconds", type=float, default=0.0)
     parser.add_argument("--horizon", type=int, default=12)
@@ -1434,6 +1479,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--policy-state",
         type=Path,
         default=None,
+    )
+    parser.add_argument(
+        "--immutable-policy",
+        action="store_true",
+        help=(
+            "disable policy feedback, hot reload, checkpoint writes, and the "
+            "Stage state transaction for a frozen evaluation"
+        ),
     )
     parser.add_argument(
         "--trace",
@@ -1477,6 +1530,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--full-anchor-frames cannot be negative")
     if not 0.0 <= args.exploration_rate <= 1.0:
         parser.error("--exploration-rate must be in [0, 1]")
+    if args.immutable_policy and args.exploration_rate != 0.0:
+        parser.error("--immutable-policy requires --exploration-rate 0")
     if args.min_commit_headroom_gib < 0.0:
         parser.error("--min-commit-headroom-gib cannot be negative")
     expected_stage = args.practice_stage or args.expected_stage
