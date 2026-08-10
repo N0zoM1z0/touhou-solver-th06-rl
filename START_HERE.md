@@ -65,6 +65,9 @@ their full prefixes.  The panel found and fixed a COW audit bug that confused
 Wine delivery delays `(0,1,2,3)` with synchronous source STEP `(0,)`.  Corrected
 targeted COW still produced disagreement under the robust rank, so the panel
 has zero residual candidates.  Do not fit or enter shadow from it.
+The next three-run collection is predeclared in
+`docs/WINE_FIRST_STAGE6_PANEL2_PROTOCOL_2026-08-10.md`; do not select or fit
+between its r4, r5, and r6 episodes.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
