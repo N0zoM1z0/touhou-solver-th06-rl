@@ -111,6 +111,11 @@ are frozen in
 `docs/WINE_FIRST_STAGE6_NEUTRAL_PANEL_PROTOCOL_2026-08-10.md`. It still creates
 at most one headless hypothesis, never an active residual; a later new Wine
 shadow and ultimately complete natural Stage HIT-count A/B remain mandatory.
+The r7/r8 result is closed in
+`docs/WINE_FIRST_STAGE6_NEUTRAL_PANEL_RESULT_2026-08-10.md`: the two episodes
+failed in sub18 and sub10, yielding zero predeclared sub31 anchors and zero
+candidates. The combined current-kernel r1--r8 audit adds no new repeated
+action pair. Do not mine alternate r7/r8 frames or fit a global classifier.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

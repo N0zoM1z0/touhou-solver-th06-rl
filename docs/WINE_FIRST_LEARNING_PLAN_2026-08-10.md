@@ -437,3 +437,12 @@ closest eligible generic sub31 anchor in each by a fixed rule, and test
 Only the same unique neutral winner in both episodes can become one headless
 hypothesis. It still requires a new Wine shadow and active canary before the
 decisive complete natural Stage HIT-count A/B.
+
+The r7/r8 neutral panel is closed in
+`WINE_FIRST_STAGE6_NEUTRAL_PANEL_RESULT_2026-08-10.md`. r7 first failed in
+sub18 and r8 in sub10, so the fixed sub31 selector found zero anchors and COW
+was not run. A current-kernel r1--r8 audit reproduced 36,106 frozen-UCB calls
+without mismatch and found sub10 support four, sub31 support three, and sub18
+support one, but no new repeated action pair. Future work must not mine an
+alternate r7/r8 row; the only next bounded counterfactual is a separately
+predeclared policy-faithful continuation at an already fixed old anchor.
