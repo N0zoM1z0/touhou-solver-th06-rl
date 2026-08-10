@@ -55,13 +55,16 @@ and both repeated sub18 anchors exposed missing retail dialogue-delivery edges
 in the old corpus.  All three Stage 6 families currently have zero residual
 candidates.  Collect a small new frozen-UCB Wine first-failure panel with frame
 schema v5 dialogue-delivery evidence; do not resume broad training.
-The first new v5 episode and its corrected exact-delivery differential are in
+The completed three-episode v5 panel and its corrected exact-delivery
+differential are in
 `docs/WINE_FIRST_STAGE6_FRAMEV5_PANEL_2026-08-10.md`.  All 238 unique retained
-dialogue-input frames matched both source domains, but MinGW source RNG had
-already diverged from retail at frame 1206, before dialogue.  This validates
-the delivery instrumentation while independently rejecting source equivalence.
-One episode does not authorize COW or a residual; continue the small disjoint
-frozen-UCB Wine panel.
+dialogue-input frames in run one matched both source domains, as did 239/239
+and 238/238 in runs two and three.  Run one retained a pre-dialogue MinGW RNG
+divergence at frame 1206; the other two matched retail discrete state through
+their full prefixes.  The panel found and fixed a COW audit bug that confused
+Wine delivery delays `(0,1,2,3)` with synchronous source STEP `(0,)`.  Corrected
+targeted COW still produced disagreement under the robust rank, so the panel
+has zero residual candidates.  Do not fit or enter shadow from it.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

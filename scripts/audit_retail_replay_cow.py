@@ -14,11 +14,19 @@ from typing import Any, Mapping, Sequence
 try:
     from audit_targeted_headless_cow import compare_actions
     from export_wine_action_stream import _object, _verified_stream_rows
-    from label_retail_replay_cow import SCHEMA as INPUT_SCHEMA
+    from label_retail_replay_cow import (
+        RETAIL_NATIVE_DELIVERY_DELAYS,
+        SCHEMA as INPUT_SCHEMA,
+    )
 except ModuleNotFoundError:  # Imported as scripts.audit_retail_replay_cow.
     from scripts.audit_targeted_headless_cow import compare_actions
     from scripts.export_wine_action_stream import _object, _verified_stream_rows
-    from scripts.label_retail_replay_cow import SCHEMA as INPUT_SCHEMA
+    from scripts.label_retail_replay_cow import (
+        RETAIL_NATIVE_DELIVERY_DELAYS,
+        SCHEMA as INPUT_SCHEMA,
+    )
+
+from th06_rl.headless_geometry import HEADLESS_DELIVERY_DELAYS
 
 
 REPORT_SCHEMA = "th06-rl-retail-replay-cow-audit-v1"
@@ -74,6 +82,11 @@ def audit_retail_replay_cow(
         document = _object(path)
         if document.get("schema") != INPUT_SCHEMA:
             raise ValueError(f"unsupported retail replay COW document: {path}")
+        if document.get("delivery_contracts") != {
+            "retail_native_gate": list(RETAIL_NATIVE_DELIVERY_DELAYS),
+            "source_step_branch": list(HEADLESS_DELIVERY_DELAYS),
+        }:
+            raise ValueError(f"retail replay COW delivery contract mismatch: {path}")
         source = document.get("source")
         boundary = document.get("evidence_boundary")
         if (
@@ -121,6 +134,10 @@ def audit_retail_replay_cow(
             if (
                 checkpoint.get("retail_source_state_match_at_1e_6") is not True
                 or checkpoint.get("retail_source_native_hard_set_match") is not True
+                or checkpoint.get("retail_native_delivery_delays")
+                != list(RETAIL_NATIVE_DELIVERY_DELAYS)
+                or checkpoint.get("source_branch_delivery_delays")
+                != list(HEADLESS_DELIVERY_DELAYS)
                 or checkpoint.get("factual_action") != right_action
                 or checkpoint.get("local_teacher_action") != left_action
                 or set(checkpoint.get("evaluated_first_actions", ()))
@@ -164,6 +181,10 @@ def audit_retail_replay_cow(
         "source": {
             "commit": expected_source_commit,
             "binary_sha256": expected_binary_sha256,
+        },
+        "delivery_contracts": {
+            "retail_native_gate": list(RETAIL_NATIVE_DELIVERY_DELAYS),
+            "source_step_branch": list(HEADLESS_DELIVERY_DELAYS),
         },
         "policy_support": dict(sorted(Counter(
             str(record["policy_id"]) for record in records

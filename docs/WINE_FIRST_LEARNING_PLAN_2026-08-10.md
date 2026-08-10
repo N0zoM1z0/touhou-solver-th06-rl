@@ -338,12 +338,21 @@ to verify exact retail/source delivery; only repeated, exact COW support may
 create a residual.  No candidate, shadow policy, active canary, or new fit is
 currently authorized.
 
-The first frame-v5 Wine episode is now audited in
-`WINE_FIRST_STAGE6_FRAMEV5_PANEL_2026-08-10.md`.  Its 251 dialogue records
-covered 238 unique sampled frames, and corrected tick-aligned replay matched
-all 238 in both source domains.  The audit also found a pre-dialogue MinGW
-source-versus-retail RNG divergence at frame 1206, so delivery equality is
-kept separate from RNG/physical equivalence and cannot authorize COW by
-itself.  This is one independent episode: the active gate remains collection
-and audit of a few additional disjoint frozen-UCB frame-v5 first-failure
-episodes, with no fit in between.
+The frame-v5 Wine panel is now complete and audited in
+`WINE_FIRST_STAGE6_FRAMEV5_PANEL_2026-08-10.md`.  Across three independent
+episodes, corrected tick-aligned replay matched every retained dialogue input
+in both source domains.  Run one still exposed a pre-dialogue MinGW
+source-versus-retail RNG divergence, while runs two and three matched retail
+discrete state through their full prefixes.
+
+The panel also found a COW preflight bug: it compared the synchronous source
+STEP safe set `(0,)` against the retail Wine Hard set, whose publication
+coverage is `(0,1,2,3)`.  COW-v2 now reconstructs the retail set with the
+retail delivery contract while retaining synchronous delivery only inside the
+source branch.  Two exact independent anchors then disagreed on the strongest
+`down_right` to `down_fast` hypothesis under the robust outcome buckets; the
+second repeated pair already favored its incumbent at an exact anchor.  The
+completed panel therefore has zero residual candidates.  It cannot enter
+shadow or active canary, and it must not be repeatedly threshold-mined.  The
+next work is a separately predeclared small frozen-UCB Wine panel with no fit
+between episodes, looking only for a new repeated generic opportunity.

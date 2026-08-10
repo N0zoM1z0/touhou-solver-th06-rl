@@ -2,9 +2,21 @@
 
 ## Decision
 
-The first new frame-v5 frozen-UCB original-retail Wine episode validates the
-dialogue-delivery evidence and exact replay plumbing, but it does not authorize
-a residual candidate or COW label. Frozen UCB remains the sole incumbent.
+The fixed three-episode frame-v5 frozen-UCB original-retail Wine panel is
+complete.  It validates the dialogue-delivery evidence and exact replay
+plumbing, identifies two repeated generic fallback-opportunity regions, and
+finds **zero** residual candidates after the robust independent-prefix COW
+gate.  Frozen UCB remains the sole incumbent; no shadow or active policy is
+authorized.
+
+The panel also exposed and fixed a diagnostic contract bug.  Retail Wine Hard
+certification covers asynchronous input pickup delays `(0, 1, 2, 3)`, while a
+source STEP branch publishes synchronously with `(0,)`.  The first COW
+preflight compared the synchronous source safe set with the retail safe set
+and falsely rejected two exact boundary checkpoints.  Re-certifying the same
+source observation with the retail delivery set reproduces the recorded
+retail action set.  The corrected COW-v2 audit keeps the two delivery domains
+separate; it does not weaken delivery coverage or change the resident gate.
 
 Exact sampled input delivery is now audited separately from RNG and physical
 state. Both reconstructed-source domains reproduced every retained retail
@@ -15,7 +27,7 @@ work, compiler arithmetic, platform libraries, and other source-versus-retail
 paths may change RNG-consuming branches; the audit records the first observed
 divergence without assigning unsupported causality.
 
-## Original-retail Wine episode
+## First original-retail Wine episode
 
 Run `20260810T124531Z-310133600` used Lunatic / Reimu-A / Stage 6, immutable
 frozen UCB, exploration zero, natural Practice, no life patch, and default
@@ -32,6 +44,39 @@ first-failure stopping. It ended at retail frame 3303 with
 
 The run is one independent episode. Its 2,911 adjacent transitions are not
 2,911 independent examples and no fit was made from them.
+
+## Completed three-episode panel
+
+Two further runs were collected before any fit or policy change.  All three
+used the same immutable retail executable, native kernel, frozen-UCB policy,
+scope, exploration-zero setting, first-failure stop, and frame-v5 recorder.
+
+| Run | Terminal frame | Frames / transitions | Dialogue records / unique frames | Physical HIT / Bomb | Terminal |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `20260810T124531Z-310133600` | 3303 | 2,912 / 2,911 | 251 / 238 | 0 / 0 | Hard safe set empty |
+| `20260810T131002Z-681278300` | 3573 | 3,201 / 3,200 | 256 / 239 | 0 / 0 | Hard safe set empty |
+| `20260810T131344Z-316672800` | 3722 | 3,337 / 3,336 | 253 / 238 | 0 / 0 | Hard safe set empty |
+
+Every retained dialogue current-input frame matched both reconstructed-source
+domains: 238/238, 239/239, and 238/238 respectively.  Runs two and three had
+no RNG, game-state, hazard-count, or input divergence from retail at any
+coherent snapshot in either source domain.  Their first player half-width
+difference above `1e-6` occurred at frames 709 and 2438.  Run one retains the
+independent pre-dialogue MinGW RNG divergence at frame 1206 described below.
+Thus pixel/draw/platform effects remain an explicit possibility, but they are
+not inferred where the trace only proves floating-point or RNG divergence.
+
+The exact frozen-incumbent replay covered 9,440 policy calls across the three
+runs with zero recorded-incumbent mismatch, zero policy mismatch, and zero
+shadow action-contract violation.  Episode grouping then reduced 69 correlated
+positive rows to three physical failure units.  All terminal failures were the
+same sub10 boundary/dense-bullet family.  Two action opportunities had support
+from two independent runs:
+
+- incumbent `down_right`, native baseline `down_fast` in runs one and two;
+- incumbent `up_fast`, native baseline `down_fast` in runs two and three.
+
+Adjacent frames and multiple rows inside one run never add independent support.
 
 ## Exact dialogue replay
 
@@ -96,6 +141,42 @@ This closes the old unknown-dialogue-delivery defect for this one episode. It
 does not make a later checkpoint COW-valid if RNG, game state, hazard counts,
 geometry, or the native hard set has already diverged.
 
+## Delivery-contract correction and targeted COW
+
+At run-one sequence 2904 / frame 3296, retail and Linux source both contained
+524 live bullets.  Bullet state, hitbox size, sprite size, and ordering matched;
+the largest observed bullet-position difference was about `1.61e-4`.  The
+source synchronous `(0,)` Hard set nevertheless contained 16 actions while the
+recorded retail set contained 14.  The discrepancy was exactly the three-tick
+input-pickup envelope: applying `(0, 1, 2, 3)` to the same source observation
+produced the same 14 action names as retail, with clearance differences around
+`3e-5` at that checkpoint.
+
+`label_retail_replay_cow.py` now emits schema
+`th06-rl-retail-replay-cow-v2`.  Its preflight:
+
+1. matches retail/source shared physical state at `1e-6`;
+2. reconstructs the recorded retail Hard set using `(0, 1, 2, 3)`;
+3. requires every requested first action to be retail-Hard-safe;
+4. retains `(0,)` only for the diagnostic source STEP branch.
+
+The strongest repeated pair, `down_right` versus `down_fast`, then completed
+two independent 600-tick COW branches:
+
+| Wine anchor | `down_right` | `down_fast` | Robust result |
+| --- | --- | --- | --- |
+| run one, seq 2904 / frame 3296 | survives 600; min safe width 2; reserve 32.998 | survives 600; min safe width 3; reserve 30.091 | incumbent `down_right` better |
+| run two, seq 3193 / frame 3566 | survives 600; min safe width 3; reserve 17.154 | survives 600; min safe width 3; reserve 35.799 | `down_fast` better |
+
+The raw diagnostic rank selects `down_fast` in both rows, because it uses the
+exact safe-set width before reserve.  Candidate construction deliberately uses
+the predeclared robust rank: safe-set width and boundary reserve are bucketed
+to avoid learning from pixel-level accidental argmaxes.  Under that rank the
+two independent anchors disagree, so the alternative is rejected and the
+candidate count is zero.  The second repeated pair already has an exact anchor
+favoring incumbent `up_fast`; no additional branch can make the alternative
+unanimous, so it also creates no candidate.
+
 ## Evidence
 
 - retail run JSON SHA-256:
@@ -115,21 +196,39 @@ geometry, or the native hard set has already diverged.
 - tested MinGW source binary SHA-256:
   `92dc7184acb010d6a8c2fd85799f2e81460c1436cad00c89fb221d6f6745d5fd`.
 
+Three-episode and COW evidence:
+
+- factual action replay SHA-256:
+  `b1984a370914f458a98f8d0b33796fdff2c7af745387b9cf4ca3d1f396d6e566`;
+- episode-grouped failure-region audit SHA-256:
+  `9f80aa102d37e555043ccce15ce7182262307f230232a53c78056713f7eef694`;
+- run-one COW-v2 SHA-256:
+  `b7c9c0b2092d64debd92c2bf34fa9f6cd02b6bf329edc24f8a60251add146b27`;
+- run-two COW-v2 SHA-256:
+  `1a67be59418b1cc2d0965a5db6a20806f4d9f469a94a276f76b9d29e67f723ec`;
+- robust COW aggregate SHA-256:
+  `efd6509bfeb33bdfe66c1b16ce02fc7ce57acf18068faa654146d9cff39f66a6`.
+
 Ignored local evidence is under
 `artifacts/wine-first-stage6/framev5-panel-r1-exact-v2/`.
 
 ## Next gate
 
-Collect a few additional independent frame-v5 frozen-UCB original-retail Wine
-first-failure episodes under the same safety contract. For each episode:
+This fixed panel is closed and must not be repeatedly mined until a favorable
+threshold appears.  It authorizes no fit or shadow run.  The next bounded
+experiment is another predeclared small frozen-UCB Wine first-failure panel,
+with no model changes between episodes.  Its purpose is to discover whether a
+new generic failure opportunity repeats; the two rejected action pairs above
+remain rejected regardless of later favorable rows.  For each new episode:
 
 1. export and audit exact dialogue delivery;
 2. record first RNG, game, hazard, geometry, and native-hard-set divergence
    separately for Linux and MinGW source;
 3. group failure regions by episode using only Wine-reproducible generic
    features;
-4. allow targeted COW only for a repeated region whose chosen checkpoint is
-   still exact in the relevant reconstructed-source domain.
+4. compare native hard sets under the correct retail delivery contract;
+5. allow targeted COW only for a new repeated region whose chosen checkpoint
+   is still exact in the relevant reconstructed-source domain.
 
-Do not train from this single episode, do not repair RNG drift by relaxing a
-tolerance, and do not use full-Stage HIT continuation as training data.
+Do not train from this panel, do not repair RNG drift by relaxing a tolerance,
+and do not use full-Stage HIT continuation as training data.
