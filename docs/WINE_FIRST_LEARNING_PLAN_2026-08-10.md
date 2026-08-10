@@ -587,3 +587,6 @@ Frozen UCB must continue to ignore the field and reproduce all r1-r10 actions.
 Only after that audit passes may a fresh Wine acquisition use the third
 consecutive degraded-horizon decision as a recorder/anchor trigger.  It is a
 data trigger, never a movement rule or promotion shortcut.
+
+The exact no-training implementation and rejection gates are frozen in
+`WINE_FIRST_STAGE6_EFFORT_HORIZON_FEATURE_PROTOCOL_2026-08-10.md`.
