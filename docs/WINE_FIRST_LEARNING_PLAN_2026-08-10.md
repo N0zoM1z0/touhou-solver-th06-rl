@@ -524,3 +524,14 @@ fixed eight-seed, policy-faithful source panel in
 `WINE_FIRST_STAGE6_SUB10_HEADLESS_SUPPORT_PROTOCOL_2026-08-10.md`.  Headless
 support cannot promote a policy; complete natural retail-Wine Stage 6 HIT
 count remains the final metric.
+
+That source panel is closed in
+`WINE_FIRST_STAGE6_SUB10_HEADLESS_SUPPORT_RESULT_2026-08-10.md`.  All eight
+seeds supplied valid policy-faithful COW checkpoints, but unique
+non-incumbent support was 0/4 development and 1/4 confirmation episodes.
+The gate failed and candidate count remains zero.  The next run is therefore
+the evaluation-only current-kernel complete-Stage incumbent calibration
+predeclared in
+`WINE_FIRST_STAGE6_CURRENT_INCUMBENT_FULL_STAGE_PROTOCOL_2026-08-10.md`.
+It measures HIT count directly but its post-HIT continuation cannot train a
+policy or replace a later fresh alternating A/B control.
