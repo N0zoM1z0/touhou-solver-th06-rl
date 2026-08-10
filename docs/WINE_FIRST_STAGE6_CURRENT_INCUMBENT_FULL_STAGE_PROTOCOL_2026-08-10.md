@@ -33,10 +33,13 @@ Run exactly one complete Lunatic / Reimu-A / Practice Stage 6 attempt named
   continuation so all physical HITs can be counted;
 - ordinary pipes, never a PTY, exact input release and exact trial PID cleanup.
 
-The wrapper must return zero, preserve policy/config/score hashes, reach the
-natural Practice result, record zero Bombs, and report an empty dedicated
-prefix process list.  Any authority failure is counted and retained rather
-than hidden.  Do not rerun merely to improve the HIT count.
+The wrapper must return zero, preserve policy/config hashes, reach the natural
+Practice result, record zero Bombs, and report an empty dedicated-prefix
+process list.  The score file is restored from its fixed template before the
+trial but original retail may write normal score progress during play; its
+post-run hash is evidence, not an immutability gate.  Any authority failure is
+counted and retained rather than hidden.  Do not rerun merely to improve the
+HIT count.
 
 ## Interpretation
 
@@ -46,4 +49,3 @@ successful calibration, not yet repeatable NMNB.  A nonzero result becomes the
 current point baseline.  A future candidate reaches this gate only after
 Wine shadow and alternating first-failure canary; final evidence must be fresh
 alternating complete-Stage incumbent/candidate HIT-count trials.
-

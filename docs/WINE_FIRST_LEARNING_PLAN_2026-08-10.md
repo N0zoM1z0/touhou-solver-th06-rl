@@ -535,3 +535,12 @@ predeclared in
 `WINE_FIRST_STAGE6_CURRENT_INCUMBENT_FULL_STAGE_PROTOCOL_2026-08-10.md`.
 It measures HIT count directly but its post-HIT continuation cannot train a
 policy or replace a later fresh alternating A/B control.
+
+The current-kernel calibration is complete in
+`WINE_FIRST_STAGE6_CURRENT_INCUMBENT_FULL_STAGE_RESULT_2026-08-10.md`: frozen
+UCB completed Stage 6 with 10 physical HITs, zero Bombs, and all ten HITs
+preceded by a native Hard-empty interval.  This is the current point baseline,
+not a powered comparison; the historical 8/9-HIT controls used a different
+native DLL identity.  No candidate reached the full-Stage gate, so the next
+data acquisition returns to a small first-failure Wine panel rather than
+training on the evaluation-only continuation trace.
