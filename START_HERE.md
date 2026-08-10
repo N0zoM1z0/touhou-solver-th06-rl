@@ -90,6 +90,12 @@ first actions, so the conditional r6 confirmation was not run and the result
 creates zero candidates. Do not mine another Panel-2 frame. The next audit is
 whether source COW can restore and advance the immutable frozen-UCB state after
 one substituted action; the current offline-teacher continuation is reject-only.
+That prerequisite now passes in
+`docs/WINE_FIRST_STAGE6_POLICY_CONTINUATION_AUDIT_2026-08-10.md`: r5 restored
+6,175 prior policy calls with zero mismatch, then reproduced all eight UCB
+lookup keys/actions and the exact frame-6842 Hard-empty stop. A separately
+predeclared policy-faithful COW may now use that same fixed checkpoint, but its
+winner remains a headless hypothesis until disjoint Wine shadow evidence.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

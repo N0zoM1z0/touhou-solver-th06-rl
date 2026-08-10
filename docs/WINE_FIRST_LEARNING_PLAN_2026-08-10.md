@@ -411,3 +411,12 @@ checkpoint and advanced under source COW. Only if exact factual continuation
 is demonstrated should a separately predeclared policy-faithful action
 comparison run. Otherwise future intervention evidence must come from new
 disjoint original-retail Wine shadow episodes.
+
+The feasibility audit now passes in
+`WINE_FIRST_STAGE6_POLICY_CONTINUATION_AUDIT_2026-08-10.md`. Additive current
+boss/callback/spell metadata reconstructs the exact resident context without
+future ECL interpretation. At the fixed r5 checkpoint, source replay restored
+6,175 prior immutable-UCB calls, matched all eight subsequent lookup keys and
+actions, and reached the same Hard-empty stop at the same frame. A small
+policy-faithful one-step counterfactual may now be predeclared at that anchor;
+this does not relax the disjoint Wine shadow or complete-Stage HIT-count gates.
