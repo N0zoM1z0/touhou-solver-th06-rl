@@ -544,3 +544,11 @@ not a powered comparison; the historical 8/9-HIT controls used a different
 native DLL identity.  No candidate reached the full-Stage gate, so the next
 data acquisition returns to a small first-failure Wine panel rather than
 training on the evaluation-only continuation trace.
+
+The next bounded physical acquisition is fixed in
+`WINE_FIRST_STAGE6_FRESH_PANEL_R9_R10_PROTOCOL_2026-08-10.md`: two immutable
+frame-v5 first-failure episodes, followed by an r1-r10 factual replay and
+episode-grouped region audit.  It cannot reopen closed pairs or use the
+10-HIT continuation trace for training.  A new COW protocol is allowed only
+for an untested generic region with support from at least two physical
+episodes, including at least one new episode.
