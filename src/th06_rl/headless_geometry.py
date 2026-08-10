@@ -871,6 +871,7 @@ def certify_lowered_headless_actions(
     hazards: PackedHazards | PreparedHazards,
     *,
     kernel: NativeKernel | None = None,
+    candidates: tuple[Action, ...] = ACTIONS,
     delivery_delays: tuple[int, ...] = HEADLESS_DELIVERY_DELAYS,
 ) -> tuple[NativeCertifiedAction, ...]:
     """Run Hard on one already-lowered immutable physical snapshot.
@@ -891,6 +892,7 @@ def certify_lowered_headless_actions(
         kinematics=KINEMATICS,
         current_action=action_from_input(_integer(observation, "input")),
         hazards=hazards,
+        candidates=candidates,
         # The default remains the synchronous STEP contract.  Explicit wider
         # sets are used only to reconstruct another runtime's certificate.
         delivery_delays=delivery_delays,

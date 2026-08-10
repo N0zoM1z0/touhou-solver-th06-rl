@@ -16,6 +16,7 @@ from th06_rl.headless_geometry import (
     lower_headless_hazards,
     reactive_headless_action,
 )
+from th06_rl.native import ACTIONS
 
 
 def observation() -> dict[str, object]:
@@ -289,21 +290,22 @@ def test_headless_step_delivery_contract_is_exactly_synchronous() -> None:
 def test_lowered_certificate_can_audit_an_explicit_delivery_contract() -> None:
     value = observation()
     hazards = lower_headless_hard_hazards(value)
-    observed: list[tuple[int, ...]] = []
+    observed: list[tuple[tuple[int, ...], tuple[object, ...]]] = []
 
     class RecordingKernel:
         def certify_actions(self, **kwargs):
-            observed.append(kwargs["delivery_delays"])
+            observed.append((kwargs["delivery_delays"], kwargs["candidates"]))
             return ()
 
     certify_lowered_headless_actions(
         value,
         hazards,
         kernel=RecordingKernel(),  # type: ignore[arg-type]
+        candidates=ACTIONS[:2],
         delivery_delays=(0, 1, 2, 3),
     )
 
-    assert observed == [(0, 1, 2, 3)]
+    assert observed == [((0, 1, 2, 3), ACTIONS[:2])]
 
 
 def test_hard_lowering_keeps_multiturn_player_aim_fail_closed() -> None:
