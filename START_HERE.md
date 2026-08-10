@@ -152,6 +152,10 @@ v2 is closed in
 r3 had 14 Hard actions but only factual `down_left` in its local set, so the
 Hard-wide request was rejected before alternatives. COW now preflights against
 the recorded local set; v2 still authorizes zero models.
+The authority-correct v3 completion is frozen in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V3_PROTOCOL_2026-08-10.md`.
+It reuses hash-bound corrected r1/r2 documents, runs factual-only r3 and the
+complete r8 local set, and keeps the unchanged three-of-four gate.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

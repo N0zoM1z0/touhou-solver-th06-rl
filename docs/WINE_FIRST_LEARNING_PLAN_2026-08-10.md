@@ -501,3 +501,9 @@ corrected r1/r2 documents are valid, but r3's 14-action Hard set collapses to
 the single factual `down_left` local action. The protocol had crossed the
 learner authority boundary and was rejected before alternatives. COW now
 preflights requests against the recorded local set; v2 permits no fit.
+
+The authority-correct completion is separately frozen in
+`WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V3_PROTOCOL_2026-08-10.md`. It
+reuses the exact corrected r1/r2 documents, treats r3's single factual local
+action as a negative support unit, scans only r8's complete recorded local
+set, and preserves the original three-of-four fit threshold.
