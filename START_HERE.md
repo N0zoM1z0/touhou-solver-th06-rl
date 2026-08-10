@@ -143,6 +143,10 @@ That first panel is closed as insufficient in
 An input-lease row with a carried proposal exposed a policy-restore bug before
 r3 branching; restore now counts only real `reason=ok` policy calls, but the
 failed panel is not retroactively rescued and authorizes zero models.
+The corrected clean-path rerun is separately frozen in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V2_PROTOCOL_2026-08-10.md`.
+It keeps the same four anchors/actions and three-of-four support gate; v1
+artifacts are not reused.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

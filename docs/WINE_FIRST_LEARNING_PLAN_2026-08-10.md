@@ -488,3 +488,9 @@ a sealed document, while r3 failed before branching because restore counted an
 `input-lease` carried proposal as a fictitious policy call. The implementation
 now skips every non-`ok` decision and a factual r3 audit restores 3,327 calls
 with zero mismatch, but the old panel remains closed and permits no fit.
+
+The clean corrected rerun is separately predeclared in
+`WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V2_PROTOCOL_2026-08-10.md`.
+It repeats all four fixed documents from new output paths under the repaired
+restore code and preserves the original three-of-four unique non-incumbent
+support threshold. The sealed v1 r2 file is not reused.
