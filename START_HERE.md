@@ -156,6 +156,11 @@ The authority-correct v3 completion is frozen in
 `docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V3_PROTOCOL_2026-08-10.md`.
 It reuses hash-bound corrected r1/r2 documents, runs factual-only r3 and the
 complete r8 local set, and keeps the unchanged three-of-four gate.
+v3 passes exactly in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V3_RESULT_2026-08-10.md`:
+r1, r2, and r8 have different unique non-incumbent winners, while r3 has no
+local alternative. This permits a separately predeclared fit capped at three
+small action-relative candidates, but creates zero active candidates itself.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

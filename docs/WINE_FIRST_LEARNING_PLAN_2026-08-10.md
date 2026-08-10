@@ -507,3 +507,10 @@ The authority-correct completion is separately frozen in
 reuses the exact corrected r1/r2 documents, treats r3's single factual local
 action as a negative support unit, scans only r8's complete recorded local
 set, and preserves the original three-of-four fit threshold.
+
+v3 passes exactly in
+`WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V3_RESULT_2026-08-10.md`.
+r1 `up_right`, r2 `down`, and r8 `up_left_fast` are unique non-incumbent robust
+winners; r3 has only factual `down_left` locally admissible. The differing
+directions rule out a fixed action rule but permit a separate fit protocol for
+at most three generic action-relative candidates. No candidate is active yet.
