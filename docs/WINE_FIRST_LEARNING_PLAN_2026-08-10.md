@@ -514,3 +514,13 @@ r1 `up_right`, r2 `down`, and r8 `up_left_fast` are unique non-incumbent robust
 winners; r3 has only factual `down_left` locally admissible. The differing
 directions rule out a fixed action rule but permit a separate fit protocol for
 at most three generic action-relative candidates. No candidate is active yet.
+
+The first possible implementation, an exact fine-context lookup of the three
+positive Wine anchors, was rejected in
+`WINE_FIRST_STAGE6_EXACT_LOOKUP_REJECTION_2026-08-10.md`: it activated only
+three times in 36,106 r1-r8 policy calls, each time on its own training anchor,
+with zero independent-episode reuse.  The next reject-only accelerator is the
+fixed eight-seed, policy-faithful source panel in
+`WINE_FIRST_STAGE6_SUB10_HEADLESS_SUPPORT_PROTOCOL_2026-08-10.md`.  Headless
+support cannot promote a policy; complete natural retail-Wine Stage 6 HIT
+count remains the final metric.
