@@ -299,3 +299,9 @@ measured in `SOURCE_PLATFORM_DIFFERENTIAL_STAGE6_2026-08-10.md`.  The result
 shows exact discrete action/RNG delivery but accumulating subpixel physical
 drift beginning at tick 441; the next active deliverable is the episode-grouped
 audit of existing Stage 6 Wine prefixes.  No model training has resumed.
+
+The episode-grouped audit is now recorded in
+`WINE_FAILURE_REGION_AUDIT_STAGE6_2026-08-10.md`.  It reduces 1,290 correlated
+positive frames to 23 independent authority-failure episodes, separates 19
+episodes in repeated contexts from four singletons, and queues only three
+bounded families for targeted multi-seed COW.  No residual has been trained.

@@ -42,6 +42,9 @@ The first paired reconstructed-source Linux/MinGW-under-Wine action-stream
 result is recorded in
 `docs/SOURCE_PLATFORM_DIFFERENTIAL_STAGE6_2026-08-10.md`; it found exact
 discrete delivery but accumulating floating-point geometry drift.
+The next episode-grouped original-retail audit is in
+`docs/WINE_FAILURE_REGION_AUDIT_STAGE6_2026-08-10.md`; it is the authority for
+which repeated Stage 6 regions may enter targeted COW.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
