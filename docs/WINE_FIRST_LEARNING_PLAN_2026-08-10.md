@@ -293,3 +293,9 @@ The new branch starts with no large fit.  Its first deliverables are:
 
 Only after these four deliverables are verified may targeted COW generation or
 residual training begin.
+
+The source-platform differential and action recorder are now implemented and
+measured in `SOURCE_PLATFORM_DIFFERENTIAL_STAGE6_2026-08-10.md`.  The result
+shows exact discrete action/RNG delivery but accumulating subpixel physical
+drift beginning at tick 441; the next active deliverable is the episode-grouped
+audit of existing Stage 6 Wine prefixes.  No model training has resumed.

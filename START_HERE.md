@@ -38,6 +38,10 @@ older broad-training recommendations in the handoff. Read
 `docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md` before starting another fit. It
 records the failed offline assumptions, the episode-grouped data funnel, the
 small residual-population rule, and the ordered Stage 6-to-1 promotion gates.
+The first paired reconstructed-source Linux/MinGW-under-Wine action-stream
+result is recorded in
+`docs/SOURCE_PLATFORM_DIFFERENTIAL_STAGE6_2026-08-10.md`; it found exact
+discrete delivery but accumulating floating-point geometry drift.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
