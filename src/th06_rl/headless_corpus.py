@@ -28,7 +28,6 @@ from .headless_geometry import (
     validate_headless_observation,
 )
 from .native import (
-    ACTIONS,
     NativeActionProfile,
     NativeCertifiedAction,
     NativeKernel,
@@ -122,6 +121,71 @@ def source_context_id(observation: Mapping[str, Any]) -> str:
     except (KeyError, TypeError, ValueError) as error:
         raise HeadlessAuthorityUnavailable("headless timeline identity is invalid") from error
     return f"timeline:{time}/{opcode}/{argument}"
+
+
+def retail_policy_source_context_id(observation: Mapping[str, Any]) -> str:
+    """Reconstruct the resident policy partition from observed source state.
+
+    This is deliberately separate from the historical compact headless
+    partition above. It consumes only current boss/callback/spell or current
+    timeline identity and never interprets a future ECL action.
+    """
+    enemies = observation.get("enemies")
+    if not isinstance(enemies, list):
+        raise HeadlessAuthorityUnavailable("headless enemies are incoherent")
+    bosses = []
+    for enemy in enemies:
+        if not isinstance(enemy, Mapping) or enemy.get("boss") is not True:
+            continue
+        try:
+            bosses.append((
+                int(enemy["boss_id"]),
+                int(enemy["slot"]),
+                int(enemy["ecl_sub"]),
+                int(enemy["life_callback_sub"]),
+                int(enemy["timer_callback_sub"]),
+            ))
+        except (KeyError, TypeError, ValueError) as error:
+            raise HeadlessAuthorityUnavailable(
+                "headless boss policy context is invalid"
+            ) from error
+    if bosses:
+        spell_active = observation.get("spell_active")
+        if type(spell_active) is not bool:
+            raise HeadlessAuthorityUnavailable(
+                "headless spell policy context is invalid"
+            )
+        boss_id, _slot, subroutine, life_callback, timer_callback = min(bosses)
+        return ":".join((
+            "boss",
+            str(boss_id),
+            f"sub{subroutine}",
+            f"life_cb{life_callback}",
+            f"timer_cb{timer_callback}",
+            "spell" if spell_active else "nonspell",
+        ))
+
+    raw = observation.get("source_context")
+    if not isinstance(raw, Mapping):
+        raise HeadlessAuthorityUnavailable(
+            "headless timeline policy context is unavailable"
+        )
+    next_instruction = raw.get("next")
+    if next_instruction is None:
+        return "timeline-complete"
+    if not isinstance(next_instruction, Mapping):
+        raise HeadlessAuthorityUnavailable(
+            "headless timeline policy context is incoherent"
+        )
+    try:
+        time = int(next_instruction["time"])
+        opcode = int(next_instruction["opcode"])
+        argument = int(next_instruction["arg0"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HeadlessAuthorityUnavailable(
+            "headless timeline policy identity is invalid"
+        ) from error
+    return f"timeline:before-t{time}:op{opcode}:arg{argument}"
 
 
 def _optional_finite(value: float) -> float | None:
