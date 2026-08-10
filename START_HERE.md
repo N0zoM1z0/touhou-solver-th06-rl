@@ -96,6 +96,9 @@ That prerequisite now passes in
 lookup keys/actions and the exact frame-6842 Hard-empty stop. A separately
 predeclared policy-faithful COW may now use that same fixed checkpoint, but its
 winner remains a headless hypothesis until disjoint Wine shadow evidence.
+The fixed policy-faithful discovery/confirmation rule is predeclared in
+`docs/WINE_FIRST_STAGE6_POLICY_COW_PROTOCOL_2026-08-10.md`; commit it before
+observing any substituted-action branch.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.
