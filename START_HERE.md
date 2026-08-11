@@ -10,11 +10,13 @@ Read in this order:
 1. `AGENTS.md` for safety and product boundaries;
 2. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the data, training, and
    promotion contract;
-3. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the current learner,
-   observation, Hard-empty audit, and evidence contract;
-4. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+3. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the frozen
+   generation-2 learner, observation, Hard-empty audit, and evidence contract;
+4. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
+   evidence and ineffective verdict;
+5. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-5. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+6. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 ## Non-negotiable separation
 

@@ -59,13 +59,28 @@ The ignored JSON artifact contains the source commit, source-file hashes,
 per-action clearances at horizons 1 through 4, conservative/source collision
 witnesses, exact action sets, and any factual continuous-stage follow-up.
 
-## Remaining evidence
+## Complete-stage follow-up
 
-Generation 1 stopped at Hard-empty, so it cannot provide the physical
+Generation 1 stopped at Hard-empty, so it could not provide the physical
 follow-up needed to distinguish eventual HIT from recovery. Generation 2
-collects complete Wine stages with continue-on-hit. The same audit must be run
-on that corpus after collection; physical HIT, source-geometry closure,
-margin-only closure, and recovery remain separate measurements.
+completed eight full Wine stages with continue-on-HIT and supplied that
+evidence. The source-bound audit examined 1,468 recorded true Hard-empty
+decision roots:
+
+- recorded and recomputed conservative masks agreed at all 1,468 roots;
+- all 1,468 remained empty under source-exact margin-0 geometry;
+- zero were conservative-margin-only closures;
+- 809 were followed by a physical HIT in 1 to 9 frames, mean 2.42;
+- 659 recovered a native safe set in 1 to 76 frames, mean 6.20;
+- all eight complete-stage run audits passed.
+
+Consecutive control frames may each contribute a root, so these are not 1,468
+independent episodes. They are continuous factual follow-ups, and they show
+that the fallback repaired the margin-only false-empty class without hiding
+true source-geometry closures. There is no evidence-backed Hard-empty
+infrastructure change to make after generation 2. See
+`AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for the learner verdict and exact
+artifact paths.
 
 An already-issued input lease that becomes source-unsafe on the next coherent
 Wine frame is likewise a control dead-end, not an infrastructure failure. The

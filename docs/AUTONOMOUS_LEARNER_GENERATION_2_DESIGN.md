@@ -12,6 +12,11 @@ This document fixes the generation-2 method before new Wine outcomes are
 observed.  A later algorithm change is a new generation, not an adjustment to
 this one.
 
+Generation 2 is now complete and frozen. Its authoritative natural-RNG result
+was baseline 17 HITs versus candidate 18 HITs, so the predeclared verdict is
+`ineffective`. See `AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md`; this design is
+not retroactively changed to fit that outcome.
+
 ## Generation-1 evidence
 
 The 10 original-retail Wine episodes contained 40,976 decisions and 30,634
