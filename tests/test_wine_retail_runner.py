@@ -151,3 +151,26 @@ def test_trace_summary_counts_default_first_hit_stop(tmp_path: Path) -> None:
     )
 
     assert _summarize_trace(trace)["physical_hits_in_run"] == 1
+
+
+def test_fixed_rng_is_allowed_only_for_training_corpus(tmp_path: Path) -> None:
+    common = [
+        "--practice-stage",
+        "6",
+        "--immutable-policy",
+        "--exploration-rate",
+        "0",
+        "--diagnostic-rng-seed",
+        "0x1234",
+        "--artifact-dir",
+        str(tmp_path / "run"),
+    ]
+    with pytest.raises(SystemExit):
+        parse_args(common)
+
+    args = parse_args([
+        *common,
+        "--first-failure-corpus-root",
+        str(tmp_path / "corpus"),
+    ])
+    assert args.diagnostic_rng_seed == 0x1234

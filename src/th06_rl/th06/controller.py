@@ -216,6 +216,14 @@ def run(args: argparse.Namespace) -> int:
         raise RuntimeError("--patch-lives requires --armed")
     if args.patch_lives and not args.stop_game:
         raise RuntimeError("--patch-lives requires exact-process cleanup via --stop-game")
+    if args.diagnostic_rng_seed is not None and not args.armed:
+        raise RuntimeError("--diagnostic-rng-seed requires --armed")
+    if args.diagnostic_rng_seed is not None and (
+        args.practice_stage is None and not args.start_route
+    ):
+        raise RuntimeError(
+            "--diagnostic-rng-seed requires a fresh menu-started trial"
+        )
     if args.continuous_stage and (
         not args.armed
         or (args.practice_stage is None and not args.start_route)
@@ -292,6 +300,18 @@ def run(args: argparse.Namespace) -> int:
                 f"at 0x{ADDR_LIFE_PATCH:08X}; physical HIT remains observable",
                 flush=True,
             )
+        if args.diagnostic_rng_seed is not None:
+            old_seed, old_generation = process.set_diagnostic_rng_seed(
+                args.diagnostic_rng_seed
+            )
+            print(
+                "diagnostic RNG: "
+                f"0x{old_seed:04X}/{old_generation} -> "
+                f"0x{args.diagnostic_rng_seed:04X}/0; "
+                "original generator and consumer order retained; "
+                "training evidence only",
+                flush=True,
+            )
         if args.practice_stage is not None or args.start_route:
             assert keyboard is not None
             try:
@@ -354,6 +374,7 @@ def run(args: argparse.Namespace) -> int:
                         "observed_horizon": args.horizon,
                         "hard_horizon": 4,
                         "exploration_rate": args.exploration_rate,
+                        "diagnostic_rng_seed": args.diagnostic_rng_seed,
                     },
                 ),
                 deferred_compression=args.defer_corpus_compression,
@@ -1505,6 +1526,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--exploration-rate", type=float, default=0.03)
+    parser.add_argument(
+        "--diagnostic-rng-seed",
+        type=lambda value: int(value, 0),
+        choices=range(0x10000),
+        metavar="0..0xffff",
+        help=(
+            "training diagnostic: fix the original source RNG initial seed "
+            "while retaining its generator and consumer order"
+        ),
+    )
     parser.add_argument("--native-library", type=Path)
     parser.add_argument(
         "--policy-plugin",

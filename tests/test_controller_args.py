@@ -64,3 +64,14 @@ def test_controller_accepts_fail_closed_capture_gap_resume() -> None:
         "--resume-after-incoherent-capture",
     ])
     assert args.resume_after_incoherent_capture
+
+
+def test_controller_accepts_source_u16_diagnostic_rng_seed() -> None:
+    args = parse_args([
+        "--armed",
+        "--practice-stage",
+        "6",
+        "--diagnostic-rng-seed",
+        "0x1234",
+    ])
+    assert args.diagnostic_rng_seed == 0x1234

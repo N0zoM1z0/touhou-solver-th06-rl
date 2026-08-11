@@ -232,6 +232,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "explicit frozen-action-selection evaluation"
         ),
     )
+    parser.add_argument(
+        "--diagnostic-rng-seed",
+        type=lambda value: int(value, 0),
+        choices=range(0x10000),
+        metavar="0..0xffff",
+        help=(
+            "fixed original-retail RNG seed for paired intervention training; "
+            "forbidden in final HIT-continuation evaluation"
+        ),
+    )
     parser.add_argument("--display", default=":97")
     parser.add_argument("--artifact-dir", type=Path)
     args = parser.parse_args(argv)
@@ -250,6 +260,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error(
                 "first-failure corpus collection requires --immutable-policy"
             )
+    if (
+        args.diagnostic_rng_seed is not None
+        and args.first_failure_corpus_root is None
+    ):
+        parser.error(
+            "--diagnostic-rng-seed is training-only and requires "
+            "--first-failure-corpus-root"
+        )
     if not args.display.startswith(":") or not args.display[1:].isdigit():
         parser.error("--display must look like :97")
     if args.artifact_dir is None:
@@ -310,8 +328,11 @@ def run(args: argparse.Namespace) -> int:
         "seconds": args.seconds,
         "exploration_rate": args.exploration_rate,
         "immutable_policy": args.immutable_policy,
+        "diagnostic_rng_seed": args.diagnostic_rng_seed,
         "evaluation_mode": (
-            "first-failure-corpus"
+            "fixed-rng-first-failure-intervention"
+            if args.diagnostic_rng_seed is not None
+            else "first-failure-corpus"
             if first_failure_corpus_root is not None
             else "hit-continuation-benchmark"
         ),
@@ -561,6 +582,11 @@ def run(args: argparse.Namespace) -> int:
             "--trace",
             _windows_path(trace_path),
         ]
+        if args.diagnostic_rng_seed is not None:
+            controller.extend((
+                "--diagnostic-rng-seed",
+                hex(args.diagnostic_rng_seed),
+            ))
         if first_failure_corpus_root is None:
             controller.extend(("--patch-lives", "--continuous-stage", "--no-corpus"))
         else:
