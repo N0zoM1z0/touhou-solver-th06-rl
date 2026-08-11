@@ -36,9 +36,9 @@ class WineInterventionPolicy:
         self.alternative_probability = 0.5
         self.min_player_y = 420.0
         self.min_bullets = 256
-        self.max_hard_actions = 12
+        self.max_hard_actions = 18
+        self.max_local_actions = 6
         self.max_reserve_deficit = 4.0
-        self.required_effort_horizon = 4
         self.intervened = False
         self.eligible_frontiers = 0
         self.event: dict[str, object] | None = None
@@ -72,21 +72,19 @@ class WineInterventionPolicy:
         self.alternative_probability = probability
         self.min_player_y = float(eligibility.get("min_player_y", 420.0))
         self.min_bullets = int(eligibility.get("min_bullets", 256))
-        self.max_hard_actions = int(eligibility.get("max_hard_actions", 12))
+        self.max_hard_actions = int(eligibility.get("max_hard_actions", 18))
+        self.max_local_actions = int(eligibility.get("max_local_actions", 6))
         self.max_reserve_deficit = float(
             eligibility.get("max_reserve_deficit", 4.0)
-        )
-        self.required_effort_horizon = int(
-            eligibility.get("required_effort_horizon", 4)
         )
         if not (
             math.isfinite(self.min_player_y)
             and 16.0 <= self.min_player_y <= 432.0
             and self.min_bullets >= 0
             and 1 <= self.max_hard_actions <= 18
+            and 2 <= self.max_local_actions <= 18
             and math.isfinite(self.max_reserve_deficit)
             and self.max_reserve_deficit >= 0.0
-            and self.required_effort_horizon == 4
         ):
             raise ValueError("invalid generic intervention eligibility")
         self.loaded = True
@@ -108,7 +106,8 @@ class WineInterventionPolicy:
             or context.player_y < self.min_player_y
             or context.bullet_count < self.min_bullets
             or context.hard_action_count > self.max_hard_actions
-            or context.effort_horizon != self.required_effort_horizon
+            or not 2 <= len(context.locally_admissible_actions)
+            <= self.max_local_actions
         ):
             return None
         evaluations = self._evaluation_rows(context)

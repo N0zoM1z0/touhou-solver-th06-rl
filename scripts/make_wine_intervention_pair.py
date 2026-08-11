@@ -17,7 +17,8 @@ def write_pair(
     pair_id: str,
     min_player_y: float = 420.0,
     min_bullets: int = 256,
-    max_hard_actions: int = 12,
+    max_hard_actions: int = 18,
+    max_local_actions: int = 6,
     max_reserve_deficit: float = 4.0,
 ) -> None:
     if output_dir.exists():
@@ -27,8 +28,8 @@ def write_pair(
         "min_player_y": min_player_y,
         "min_bullets": min_bullets,
         "max_hard_actions": max_hard_actions,
+        "max_local_actions": max_local_actions,
         "max_reserve_deficit": max_reserve_deficit,
-        "required_effort_horizon": 4,
     }
     for arm in ARMS:
         state = {
@@ -52,7 +53,8 @@ def main() -> int:
     parser.add_argument("--pair-id", required=True)
     parser.add_argument("--min-player-y", type=float, default=420.0)
     parser.add_argument("--min-bullets", type=int, default=256)
-    parser.add_argument("--max-hard-actions", type=int, default=12)
+    parser.add_argument("--max-hard-actions", type=int, default=18)
+    parser.add_argument("--max-local-actions", type=int, default=6)
     parser.add_argument("--max-reserve-deficit", type=float, default=4.0)
     args = parser.parse_args()
 
@@ -67,6 +69,7 @@ def main() -> int:
             min_player_y=args.min_player_y,
             min_bullets=args.min_bullets,
             max_hard_actions=args.max_hard_actions,
+            max_local_actions=args.max_local_actions,
             max_reserve_deficit=args.max_reserve_deficit,
         )
     except FileExistsError as error:

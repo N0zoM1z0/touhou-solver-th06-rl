@@ -48,9 +48,9 @@ def _state(arm: str) -> dict[str, object]:
         "eligibility": {
             "min_player_y": 420.0,
             "min_bullets": 256,
-            "max_hard_actions": 12,
+            "max_hard_actions": 18,
+            "max_local_actions": 6,
             "max_reserve_deficit": 4.0,
-            "required_effort_horizon": 4,
         },
         "incumbent_state": AdaptivePolicy().export_state(),
     }
@@ -88,11 +88,13 @@ def test_ineligible_physical_frontier_stays_with_incumbent() -> None:
     assert policy.metrics()["interventions"] == 0
 
 
-def test_long_advisory_frontier_is_not_an_intervention_root() -> None:
+def test_broad_local_frontier_is_not_an_intervention_root() -> None:
     policy = WineInterventionPolicy()
     policy.import_state(_state("alternative"))
 
-    decision = policy.decide(_context(effort_horizon=12))
+    decision = policy.decide(_context(locally_admissible_actions=(
+        "left", "up", "up_left", "down", "right", "stay", "stay_fast",
+    )))
 
     assert decision.action == "left"
     assert policy.metrics()["interventions"] == 0
