@@ -158,4 +158,7 @@ No intermediate offline metric is a verdict.
 Generation 1 completed two unattended Wine collection/fit rounds and was
 rejected by its unchanged shadow gate. See
 `AUTONOMOUS_GENERATION_1_RESULT.md`. Its negative result does not alter the
-autonomous-learning boundary above.
+autonomous-learning boundary above. Generation 2 replaces the learner and
+collects factual complete-Stage HIT outcomes under the predeclared contract in
+`AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md`; this is an algorithm-generation
+change, not a failure-region adjustment.

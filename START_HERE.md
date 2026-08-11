@@ -10,7 +10,9 @@ Read in this order:
 1. `AGENTS.md` for safety and product boundaries;
 2. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the data, training, and
    promotion contract;
-3. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+3. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the current learner,
+   observation, Hard-empty audit, and evidence contract;
+4. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 ## Non-negotiable separation
 
