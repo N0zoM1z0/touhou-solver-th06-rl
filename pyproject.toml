@@ -11,6 +11,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+offline = ["numpy>=2"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
@@ -19,4 +20,3 @@ pythonpath = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
