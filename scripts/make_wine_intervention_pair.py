@@ -18,7 +18,7 @@ def main() -> int:
     parser.add_argument("--min-player-y", type=float, default=420.0)
     parser.add_argument("--min-bullets", type=int, default=256)
     parser.add_argument("--max-hard-actions", type=int, default=12)
-    parser.add_argument("--min-reserve-gain", type=float, default=4.0)
+    parser.add_argument("--max-reserve-deficit", type=float, default=4.0)
     args = parser.parse_args()
 
     incumbent = json.loads(args.incumbent_state.read_text(encoding="utf-8"))
@@ -31,7 +31,7 @@ def main() -> int:
         "min_player_y": args.min_player_y,
         "min_bullets": args.min_bullets,
         "max_hard_actions": args.max_hard_actions,
-        "min_reserve_gain": args.min_reserve_gain,
+        "max_reserve_deficit": args.max_reserve_deficit,
     }
     for arm in ARMS:
         state = {

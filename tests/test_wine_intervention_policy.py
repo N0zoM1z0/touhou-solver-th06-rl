@@ -48,7 +48,7 @@ def _state(arm: str) -> dict[str, object]:
             "min_player_y": 420.0,
             "min_bullets": 256,
             "max_hard_actions": 12,
-            "min_reserve_gain": 4.0,
+            "max_reserve_deficit": 4.0,
         },
         "incumbent_state": AdaptivePolicy().export_state(),
     }

@@ -37,7 +37,7 @@ class WineInterventionPolicy:
         self.min_player_y = 420.0
         self.min_bullets = 256
         self.max_hard_actions = 12
-        self.min_reserve_gain = 4.0
+        self.max_reserve_deficit = 4.0
         self.intervened = False
         self.eligible_frontiers = 0
         self.event: dict[str, object] | None = None
@@ -72,14 +72,16 @@ class WineInterventionPolicy:
         self.min_player_y = float(eligibility.get("min_player_y", 420.0))
         self.min_bullets = int(eligibility.get("min_bullets", 256))
         self.max_hard_actions = int(eligibility.get("max_hard_actions", 12))
-        self.min_reserve_gain = float(eligibility.get("min_reserve_gain", 4.0))
+        self.max_reserve_deficit = float(
+            eligibility.get("max_reserve_deficit", 4.0)
+        )
         if not (
             math.isfinite(self.min_player_y)
             and 16.0 <= self.min_player_y <= 432.0
             and self.min_bullets >= 0
             and 1 <= self.max_hard_actions <= 18
-            and math.isfinite(self.min_reserve_gain)
-            and self.min_reserve_gain >= 0.0
+            and math.isfinite(self.max_reserve_deficit)
+            and self.max_reserve_deficit >= 0.0
         ):
             raise ValueError("invalid generic intervention eligibility")
         self.loaded = True
@@ -126,7 +128,7 @@ class WineInterventionPolicy:
             ),
         )
         candidate_reserve = _boundary_reserve(values[1], values[2])
-        if candidate_reserve < incumbent_reserve + self.min_reserve_gain:
+        if candidate_reserve < incumbent_reserve - self.max_reserve_deficit:
             return None
         return action
 
