@@ -57,4 +57,3 @@ calibration may run as evaluation-only HIT continuation.  It cannot enter
 training and cannot serve as the sole future A/B control; any eventual
 candidate still requires alternating fresh full-Stage control/candidate Wine
 runs.
-

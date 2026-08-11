@@ -80,4 +80,3 @@ factual-prefix shadow audit.  It does not authorize active Wine input.  Any
 candidate that later survives shadow and alternating first-failure canary must
 still improve complete natural original-retail Wine Stage 6 HIT count before
 promotion.
-

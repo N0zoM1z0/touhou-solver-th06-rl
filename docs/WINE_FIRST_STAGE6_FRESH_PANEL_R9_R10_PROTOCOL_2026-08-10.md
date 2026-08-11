@@ -56,4 +56,3 @@ Existing shadow-model scores in factual replay are diagnostics only and may
 not choose a candidate.  Full-stage HIT continuation, including the new
 10-HIT calibration trace, remains evaluation-only and cannot enter this
 corpus or any fit.
-

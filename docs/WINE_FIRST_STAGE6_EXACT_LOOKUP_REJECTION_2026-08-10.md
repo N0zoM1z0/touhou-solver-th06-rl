@@ -28,4 +28,3 @@ by `framev5-frozen-ucb-r1-r8-factual-action-audit.json` (SHA-256
 This feasibility count is a reject-only diagnostic.  It is not training or
 promotion evidence.  Complete natural original-retail Wine Stage 6 HIT count
 remains the eventual acceptance metric.
-

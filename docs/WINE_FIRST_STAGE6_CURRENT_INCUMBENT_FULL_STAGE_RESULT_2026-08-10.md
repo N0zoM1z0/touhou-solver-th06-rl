@@ -78,4 +78,3 @@ the sub10 source support gate created zero candidates, do not run a candidate
 full Stage yet.  Acquire a small new first-failure Wine panel, group by
 episode, and use only new repeated generic regions to propose another bounded
 residual.  Complete HIT continuation remains quarantined from training.
-
