@@ -32,6 +32,7 @@ def main() -> int:
         "min_bullets": args.min_bullets,
         "max_hard_actions": args.max_hard_actions,
         "max_reserve_deficit": args.max_reserve_deficit,
+        "required_effort_horizon": 4,
     }
     for arm in ARMS:
         state = {

@@ -927,6 +927,7 @@ def run(args: argparse.Namespace) -> int:
                                 )
                                 for item in hard
                             ),
+                            effort_horizon=effort_horizon,
                         ))
                         selected = next(
                             item.action for item in legal

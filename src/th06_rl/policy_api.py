@@ -31,6 +31,10 @@ class PolicyContext:
     hard_action_evaluations: tuple[
         tuple[str, float | None, float, float], ...
     ] = ()
+    # The controller's already-computed advisory horizon. Four means the
+    # longer constant-action frontier closed and only the authoritative
+    # Hard-4 set remains. It is generic pressure evidence, not a phase key.
+    effort_horizon: int = 0
 
 
 @dataclass(frozen=True)

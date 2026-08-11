@@ -34,6 +34,7 @@ def _context(**changes) -> PolicyContext:
             ("up", 1.5, 100.0, 424.0),
             ("up_left", 1.0, 94.0, 424.0),
         ),
+        effort_horizon=4,
     )
     return replace(value, **changes)
 
@@ -49,6 +50,7 @@ def _state(arm: str) -> dict[str, object]:
             "min_bullets": 256,
             "max_hard_actions": 12,
             "max_reserve_deficit": 4.0,
+            "required_effort_horizon": 4,
         },
         "incumbent_state": AdaptivePolicy().export_state(),
     }
@@ -83,6 +85,16 @@ def test_ineligible_physical_frontier_stays_with_incumbent() -> None:
 
     assert decision.action == "left"
     assert decision.behavior_probability == 1.0
+    assert policy.metrics()["interventions"] == 0
+
+
+def test_long_advisory_frontier_is_not_an_intervention_root() -> None:
+    policy = WineInterventionPolicy()
+    policy.import_state(_state("alternative"))
+
+    decision = policy.decide(_context(effort_horizon=12))
+
+    assert decision.action == "left"
     assert policy.metrics()["interventions"] == 0
 
 
