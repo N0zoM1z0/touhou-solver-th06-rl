@@ -218,10 +218,29 @@ def main() -> int:
             _write_json(manifest_path, batch)
             print(f"DONE seed=0x{seed:04x} arm={arm} run={run_id}", flush=True)
 
-        pair_report = audit(
-            Path(pair["runs"]["incumbent"]["run_dir"]),
-            Path(pair["runs"]["alternative"]["run_dir"]),
-        )
+        try:
+            pair_report = audit(
+                Path(pair["runs"]["incumbent"]["run_dir"]),
+                Path(pair["runs"]["alternative"]["run_dir"]),
+            )
+        except ValueError as error:
+            # A physical run can jump from a long advisory frontier directly
+            # to Hard-empty without ever offering the predeclared urgent
+            # intervention. That is an ineligible training episode, not an
+            # infrastructure or safety failure. Retain it and continue; the
+            # grouped dataset builder will exclude the missing event.
+            if "expected exactly one propensity-recorded intervention" not in str(error):
+                raise
+            pair_report = {
+                "schema": "th06-rl-wine-intervention-pair-audit-v1",
+                "pair_accepted": False,
+                "root_match": False,
+                "contract_errors": ["no-eligible-intervention-in-one-or-more-arms"],
+                "causal_effect_available": False,
+                "survival_frame_delta_alternative_minus_incumbent": None,
+                "physical_hit_delta_alternative_minus_incumbent": None,
+                "ineligible_reason": str(error),
+            }
         audit_path = output_root / "audits" / f"{pair_id}.json"
         audit_path.parent.mkdir(parents=True, exist_ok=True)
         _write_json(audit_path, pair_report)
