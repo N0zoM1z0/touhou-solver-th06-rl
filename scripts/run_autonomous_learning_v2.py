@@ -61,6 +61,16 @@ def _seed_schedule(seed: int, count: int) -> list[dict[str, int]]:
     } for game_seed in game_seeds]
 
 
+def _fit_boundaries(args: argparse.Namespace) -> tuple[int, ...]:
+    boundaries = set(range(
+        args.initial_fit_episodes,
+        args.collection_episodes + 1,
+        args.round_size,
+    ))
+    boundaries.add(args.collection_episodes)
+    return tuple(sorted(boundaries))
+
+
 def _policy_state(
     path: Path, *, policy_seed: int, exploration_probability: float
 ) -> None:
@@ -80,6 +90,60 @@ def _corpus_runs(root: Path) -> set[str]:
     }
 
 
+def _archive_incomplete(path: Path) -> None:
+    """Preserve a partial autonomous artifact before retrying its exact unit."""
+    if not path.exists():
+        return
+    index = 1
+    while True:
+        archived = path.with_name(f"{path.name}.incomplete-{index:03d}")
+        if not archived.exists():
+            path.rename(archived)
+            return
+        index += 1
+
+
+def _validate_complete_run(
+    *,
+    artifact_dir: Path,
+    difficulty: str,
+    stage: int,
+    rng_seed: int | None,
+    corpus_root: Path | None,
+) -> tuple[dict[str, object], Path | None]:
+    report = _object(artifact_dir / "report.json")
+    mode = (
+        "fixed-rng-complete-stage-training"
+        if corpus_root is not None else "hit-continuation-benchmark"
+    )
+    _validate_retail_report(
+        report,
+        mode=mode,
+        diagnostic_rng_seed=rng_seed,
+        full_stage=stage,
+    )
+    run_dir = None
+    if corpus_root is not None:
+        trace = report.get("trace")
+        run_ids = trace.get("corpus_run_ids") if isinstance(trace, dict) else None
+        if not isinstance(run_ids, list) or len(run_ids) != 1:
+            raise RuntimeError("complete Stage report must bind one corpus run")
+        run_dir = corpus_root / str(run_ids[0])
+        _run, manifest = _validate_run(run_dir)
+        outcome = manifest.get("run_outcome")
+        completion = report.get("controller_completion")
+        if (
+            manifest.get("stage_trajectory_complete") is not True
+            or not isinstance(outcome, dict)
+            or outcome.get("stage_completed") is not True
+            or not isinstance(completion, dict)
+            or int(outcome.get("physical_hits", -1))
+            != int(completion.get("physical_hits", -2))
+        ):
+            raise RuntimeError("complete training corpus HIT/stage binding failed")
+    return report, run_dir
+
+
 def _complete_run(
     *,
     artifact_dir: Path,
@@ -91,6 +155,17 @@ def _complete_run(
     rng_seed: int | None,
     corpus_root: Path | None,
 ) -> tuple[dict[str, object], Path | None]:
+    report_path = artifact_dir / "report.json"
+    if report_path.is_file():
+        return _validate_complete_run(
+            artifact_dir=artifact_dir,
+            difficulty=difficulty,
+            stage=stage,
+            rng_seed=rng_seed,
+            corpus_root=corpus_root,
+        )
+    if artifact_dir.exists():
+        _archive_incomplete(artifact_dir)
     before = _corpus_runs(corpus_root) if corpus_root is not None else set()
     command = [
         sys.executable,
@@ -113,38 +188,22 @@ def _complete_run(
             "--diagnostic-rng-seed", hex(rng_seed),
         ))
     completed = subprocess.run(command, cwd=REPOSITORY, check=False)
-    report = _object(artifact_dir / "report.json")
-    mode = (
-        "fixed-rng-complete-stage-training"
-        if corpus_root is not None else "hit-continuation-benchmark"
-    )
-    _validate_retail_report(
-        report,
-        mode=mode,
-        diagnostic_rng_seed=rng_seed,
-        full_stage=stage,
+    report, bound_run_dir = _validate_complete_run(
+        artifact_dir=artifact_dir,
+        difficulty=difficulty,
+        stage=stage,
+        rng_seed=rng_seed,
+        corpus_root=corpus_root,
     )
     if completed.returncode != int(report["controller_returncode"]):
         raise RuntimeError("outer and recorded controller return codes differ")
-    run_dir = None
     if corpus_root is not None:
         created = sorted(_corpus_runs(corpus_root) - before)
         if len(created) != 1:
             raise RuntimeError(f"complete Stage created {len(created)} corpus runs")
-        run_dir = corpus_root / created[0]
-        _run, manifest = _validate_run(run_dir)
-        outcome = manifest.get("run_outcome")
-        completion = report.get("controller_completion")
-        if (
-            manifest.get("stage_trajectory_complete") is not True
-            or not isinstance(outcome, dict)
-            or outcome.get("stage_completed") is not True
-            or not isinstance(completion, dict)
-            or int(outcome.get("physical_hits", -1))
-            != int(completion.get("physical_hits", -2))
-        ):
-            raise RuntimeError("complete training corpus HIT/stage binding failed")
-    return report, run_dir
+        if bound_run_dir != corpus_root / created[0]:
+            raise RuntimeError("new complete Stage report bound a different corpus run")
+    return report, bound_run_dir
 
 
 def _config(args: argparse.Namespace) -> dict[str, object]:
@@ -169,6 +228,12 @@ def _fit(
     run_dirs: list[Path],
     round_dir: Path,
 ) -> tuple[Path, dict[str, object]]:
+    state_path = round_dir / "policy-shadow.json"
+    report_path = round_dir / "report.json"
+    if state_path.is_file() and report_path.is_file():
+        return state_path, _object(report_path)
+    if round_dir.exists():
+        _archive_incomplete(round_dir)
     command = [
         sys.executable,
         str(REPOSITORY / "scripts/fit_conservative_q.py"),
@@ -192,8 +257,7 @@ def _fit(
     fit = subprocess.run(command, cwd=REPOSITORY, check=False)
     if fit.returncode:
         raise RuntimeError(f"conservative offline fit failed with {fit.returncode}")
-    state_path = round_dir / "policy-shadow.json"
-    report = _object(round_dir / "report.json")
+    report = _object(report_path)
     return state_path, report
 
 
@@ -217,19 +281,44 @@ def _candidate_round(
     }
     state["rounds"].append(row)
     _atomic_json(state_path, state)
+    return _continue_candidate_round(
+        args,
+        state,
+        state_path,
+        output_root,
+        collection_dirs,
+        seeds,
+        row,
+    )
+
+
+def _continue_candidate_round(
+    args: argparse.Namespace,
+    state: dict[str, Any],
+    state_path: Path,
+    output_root: Path,
+    collection_dirs: list[Path],
+    seeds: list[dict[str, int]],
+    row: dict[str, Any],
+) -> Path | None:
     if not row["fit_eligible"]:
         return None
+    round_dir = Path(row["fit_dir"])
+    shadow_state = round_dir / "policy-shadow.json"
     validation = collection_dirs[-args.validation_episodes:]
     shadow_path = round_dir / "shadow-audit.json"
-    audit = shadow(
-        shadow_state,
-        validation,
-        minimum_rows=args.minimum_shadow_rows,
-        minimum_proposals=args.minimum_shadow_proposals,
-        maximum_p95_ms=args.maximum_shadow_p95_ms,
-        native_scorer=args.host_native_scorer,
-    )
-    _atomic_json(shadow_path, audit)
+    if shadow_path.is_file():
+        audit = _object(shadow_path)
+    else:
+        audit = shadow(
+            shadow_state,
+            validation,
+            minimum_rows=args.minimum_shadow_rows,
+            minimum_proposals=args.minimum_shadow_proposals,
+            maximum_p95_ms=args.maximum_shadow_p95_ms,
+            native_scorer=args.host_native_scorer,
+        )
+        _atomic_json(shadow_path, audit)
     row.update({
         "shadow_audit": str(shadow_path),
         "shadow_eligible": bool(audit["shadow_eligible"]),
@@ -239,11 +328,53 @@ def _candidate_round(
     if not audit["shadow_eligible"]:
         return None
     active_path = round_dir / "policy-canary.json"
-    _atomic_json(active_path, authorize(shadow_state, shadow_path))
+    if not active_path.is_file():
+        _atomic_json(active_path, authorize(shadow_state, shadow_path))
     row.update({"status": "canary-ready", "canary_state": str(active_path)})
     _atomic_json(state_path, state)
     return _paired_canary(
         args, state, state_path, output_root, row, active_path, seeds
+    )
+
+
+def _resume_candidate(
+    args: argparse.Namespace,
+    state: dict[str, Any],
+    state_path: Path,
+    output_root: Path,
+    collection_dirs: list[Path],
+    seeds: list[dict[str, int]],
+) -> Path | None:
+    if not state["rounds"]:
+        return None
+    row = state["rounds"][-1]
+    status = row.get("status")
+    if status == "canary-passed":
+        path = (
+            output_root / "canary"
+            / f"round-{int(row['round']):02d}"
+            / "policy-full-evaluation.json"
+        )
+        if not path.is_file():
+            raise RuntimeError("passed canary is missing full-evaluation state")
+        return path
+    if status in ("canary-rejected", "shadow-ineligible"):
+        return None
+    if status == "fit-ineligible" and not row.get("fit_eligible"):
+        return None
+    if status not in ("fit-ineligible", "canary-ready"):
+        raise RuntimeError(f"cannot resume generation-2 round status {status!r}")
+    offset = args.collection_episodes + (
+        (int(row["round"]) - 1) * args.canary_pairs
+    )
+    return _continue_candidate_round(
+        args,
+        state,
+        state_path,
+        output_root,
+        collection_dirs,
+        seeds[offset:offset + args.canary_pairs],
+        row,
     )
 
 
@@ -424,12 +555,46 @@ def run(args: argparse.Namespace) -> int:
         _atomic_json(state_path, state)
     seeds = _seed_schedule(
         args.generation_seed,
-        args.collection_episodes + args.canary_pairs * 4,
+        args.collection_episodes + args.canary_pairs * len(_fit_boundaries(args)),
     )
     corpus_root = output_root / "collection-corpus"
     try:
-        candidate = None
-        while len(state["episodes"]) < args.collection_episodes:
+        state.pop("infra_failure", None)
+        collection_dirs = [
+            Path(row["corpus_run_dir"]) for row in state["episodes"]
+        ]
+        for run_dir in collection_dirs:
+            _validate_run(run_dir)
+        candidate = _resume_candidate(
+            args,
+            state,
+            state_path,
+            output_root,
+            collection_dirs,
+            seeds,
+        )
+        completed = len(state["episodes"])
+        boundaries = _fit_boundaries(args)
+        if (
+            candidate is None
+            and completed in boundaries
+            and len(state["rounds"]) < boundaries.index(completed) + 1
+        ):
+            offset = args.collection_episodes + (
+                len(state["rounds"]) * args.canary_pairs
+            )
+            candidate = _candidate_round(
+                args,
+                state,
+                state_path,
+                output_root,
+                collection_dirs,
+                seeds[offset:offset + args.canary_pairs],
+            )
+        while (
+            candidate is None
+            and len(state["episodes"]) < args.collection_episodes
+        ):
             index = len(state["episodes"])
             policy_state = output_root / "behavior-states" / f"episode-{index:03d}.json"
             _policy_state(
