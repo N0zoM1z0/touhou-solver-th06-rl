@@ -1,6 +1,6 @@
 # TH06-RL working rules
 
-Read `START_HERE.md` and `docs/WINE_ONLY_INTERVENTION_LEARNING.md` before
+Read `START_HERE.md` and `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` before
 changing code. The authoritative source clone is the ignored checkout at
 `reference/GensokyoClub-th06/`. Source and shipped-game claims must be
 traceable to it. Do not use REA, REA-provided tools, or LeanToken.
@@ -8,7 +8,7 @@ traceable to it. Do not use REA, REA-provided tools, or LeanToken.
 ## Wine-only environment boundary
 
 Original Japanese TH06 1.02h under Wine is the only environment allowed to
-create trajectories, rewards, intervention outcomes, counterfactual branch
+create trajectories, rewards, exploration outcomes, counterfactual branch
 labels, or promotion evidence. Do not use the reconstructed Linux/headless
 runtime for training, evaluation, action proposals, or compatibility claims.
 Historical headless code and ignored artifacts are quarantined history.
@@ -36,14 +36,36 @@ resident hot path.
 
 The active method is:
 
-`Wine intervention -> episode-grouped offline fit/replay -> small residual -> Wine canary`
+`Wine exploration -> grouped offline learning -> immutable candidate -> Wine canary`
 
-Online policy state is immutable. Data collection may make a small number of
-predeclared, propensity-recorded randomized choices inside the native-safe set;
-it may not update weights. Split training and validation by complete physical
-episode or fixed-RNG pair, never by adjacent frame. A residual defaults to the
-frozen incumbent outside supported physical features and abstains on model
-disagreement.
+Online policy state is immutable. Data collection may make predeclared,
+propensity-recorded randomized choices inside the native-safe set; it may not
+update weights. Split training and validation by complete physical episode,
+never by adjacent frame. A learned policy defaults to the frozen incumbent
+outside supported physical features and abstains on model disagreement.
+
+## Autonomous-learning boundary
+
+Gameplay improvement belongs to the fixed learning algorithm and repeated
+Wine data rounds, not to human case-by-case policy edits. Do not tune collection
+eligibility, reward terms, feature thresholds, activation regions, or action
+preferences after inspecting a failure location. Do not add stage, boss, spell,
+frame-window, RNG-seed, bullet-pattern, or counterexample-specific logic.
+
+Humans may change gameplay-facing code only to repair a demonstrated
+infrastructure defect: incoherent capture, incorrect memory semantics, action
+delivery, native geometry/safety, factual label alignment, process isolation,
+or evaluation accounting. Every such repair needs a reproducer and a contract
+test. If contracts pass and play is poor, collect more Wine experience and let
+the unchanged learner update. The unattended round runner, not a human, decides
+when to fit, shadow, canary, evaluate, continue collecting, or stop at a
+predeclared evidence limit.
+
+The learning interface must be game-agnostic: observations, native-safe action
+sets, chosen-action propensities, transitions, episode groups, rewards, and HIT
+outcomes. TH06-specific memory and input details stay in the environment
+adapter. Porting to TH08 should replace that adapter and configuration, not the
+dataset, fitting, validation, or orchestration algorithm.
 
 RNG control, accelerated Wine, snapshots, and parallel workers are diagnostic
 or training accelerators only. Final comparison uses normal-speed original

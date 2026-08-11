@@ -1,13 +1,14 @@
 # Start here
 
-The project now has one learning path: original-retail Wine interventions feed
-episode-grouped offline residual learning, followed by Wine shadow, canary, and
-complete-Stage HIT-count evaluation.
+The project now has one learning path: original-retail Wine exploration feeds
+episode-grouped offline learning, followed by Wine shadow, canary, and
+complete-Stage HIT-count evaluation. A resumable runner owns repeated rounds;
+people repair infrastructure but do not hand-tune gameplay cases.
 
 Read in this order:
 
 1. `AGENTS.md` for safety and product boundaries;
-2. `docs/WINE_ONLY_INTERVENTION_LEARNING.md` for the data, training, and
+2. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the data, training, and
    promotion contract;
 3. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
@@ -20,6 +21,9 @@ Read in this order:
 - Normal-speed full-Stage Wine HIT count is the final metric.
 - Native geometry owns the safe set; learning only ranks it.
 - Bomb is forbidden.
+- Poor play means more autonomous Wine learning, not a handwritten exception.
+- TH06-specific capture/control stays behind an adapter so the same learner and
+  round orchestration can be reused for TH08.
 
 ## Repository layout
 

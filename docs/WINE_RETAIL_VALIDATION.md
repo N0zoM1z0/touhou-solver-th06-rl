@@ -97,9 +97,9 @@ controller/game/GDB logs, a frame trace, configuration evidence, and
 `report.json` with process cleanup and provenance.
 
 The runner records the explicit policy plug-in and policy-state paths,
-before/after hashes, and the exact controller command. Active learning runs use
-an immutable policy plus an explicit propensity-recorded intervention policy.
-Final comparisons require `--immutable-policy` and exploration zero.
+before/after hashes, and the exact controller command. Learning runs use an
+immutable policy plus an explicit propensity-recorded randomized exploration
+policy. Final comparisons require `--immutable-policy` and exploration zero.
 
 ## Evidence boundary
 
@@ -107,4 +107,4 @@ Passing this runner proves that the original retail executable accepted the
 controller's background input, exposed coherent live state, counted physical
 HITs, completed a Practice stage, or reached the original Ending state. It does
 not prove policy quality by itself. Promotion follows the complete-Stage
-alternating HIT-count contract in `WINE_ONLY_INTERVENTION_LEARNING.md`.
+alternating HIT-count contract in `WINE_ONLY_AUTONOMOUS_LEARNING.md`.
