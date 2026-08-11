@@ -12,7 +12,9 @@ Read in this order:
    promotion contract;
 3. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the current learner,
    observation, Hard-empty audit, and evidence contract;
-4. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+4. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+   and conservative-to-source-exact fallback;
+5. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 ## Non-negotiable separation
 

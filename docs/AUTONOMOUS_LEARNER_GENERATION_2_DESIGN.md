@@ -105,6 +105,13 @@ A native/safety change is allowed only if this audit produces a reproducible
 contract violation.  Poor earlier positioning, short learning credit, or an
 ineffective policy is not a safety defect.
 
+The completed source audit is recorded in `docs/HARD_EMPTY_SOURCE_AUDIT.md`.
+It found that 3 of 10 generation-1 roots were closures of the repo's extra
+0.35 px uncertainty margin, not closures of the shipped game's exact collision
+geometry. Consequently the controller now prefers the conservative set and
+falls back to the source-exact native set only when the conservative set is
+empty. No learner can invoke, widen, or otherwise alter this fallback.
+
 ## Evidence and promotion
 
 Offline prediction loss may reject malformed or non-generalizing fits but

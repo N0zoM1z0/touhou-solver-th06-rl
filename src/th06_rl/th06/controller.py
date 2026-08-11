@@ -43,6 +43,7 @@ from .menu import (
 from .learning_adapter import project_learning_features
 from .source import (
     AuthorityUnavailable,
+    COLLISION_MARGIN,
     automatic_source_context,
     core_action_from_input,
     donor_action,
@@ -200,6 +201,25 @@ def _reactive_baseline(candidates, current_action):
     )
 
 
+def _certify_hard_with_source_fallback(kernel, **kwargs):
+    """Prefer the uncertainty margin, but never erase source-legal control.
+
+    TH06's shipped collision test has no extra geometric margin.  The resident
+    0.35 px margin remains the normal contract; only an empty conservative set
+    triggers a second certificate under the exact shipped AABB contract.
+    """
+    conservative = kernel.certify_actions(
+        **kwargs,
+        collision_margin=COLLISION_MARGIN,
+    )
+    if conservative:
+        return conservative, COLLISION_MARGIN
+    return (
+        kernel.certify_actions(**kwargs, collision_margin=0.0),
+        0.0,
+    )
+
+
 def _code_commit(repository: Path) -> str:
     head = (repository / ".git/HEAD").read_text(encoding="utf-8").strip()
     if not head.startswith("ref: "):
@@ -272,6 +292,7 @@ def run(args: argparse.Namespace) -> int:
     stage_completed = False
     hit_count = 0
     control_dead_end_count = 0
+    source_exact_fallback_count = 0
     capture_failure_count = 0
     infrastructure_failure_count = 0
     infrastructure_failures: dict[str, int] = {}
@@ -759,6 +780,7 @@ def run(args: argparse.Namespace) -> int:
             baseline_action = None
             selected_evaluation = None
             hard_count = 0
+            hard_collision_margin = None
             effort_horizon = 0
             observation_features = ()
             action_features = ()
@@ -835,19 +857,24 @@ def run(args: argparse.Namespace) -> int:
                             _donor_action_mask(lease_status.action)
                         )
                         hard_forecast = lower_observed_hazards(snapshot, 4)
-                        retained = kernel.certify_actions(
-                            x=snapshot.x,
-                            y=snapshot.y,
-                            half_width=snapshot.half_width,
-                            half_height=snapshot.half_height,
-                            kinematics=kinematics,
-                            current_action=current_core,
-                            hazards=hard_forecast.hazards,
-                            candidates=(desired_core,),
-                            delivery_delays=lease_status.delivery_delays,
+                        retained, hard_collision_margin = (
+                            _certify_hard_with_source_fallback(
+                                kernel,
+                                x=snapshot.x,
+                                y=snapshot.y,
+                                half_width=snapshot.half_width,
+                                half_height=snapshot.half_height,
+                                kinematics=kinematics,
+                                current_action=current_core,
+                                hazards=hard_forecast.hazards,
+                                candidates=(desired_core,),
+                                delivery_delays=lease_status.delivery_delays,
+                            )
                         )
                         if not retained:
                             raise AuthorityUnavailable("in-flight input unsafe")
+                        if hard_collision_margin == 0.0:
+                            source_exact_fallback_count += 1
                         selected = desired_core
                         proposed = desired_core
                         published = desired_core.name if keyboard is not None else None
@@ -868,18 +895,23 @@ def run(args: argparse.Namespace) -> int:
                         prepared_hard = prepared_forecast.prefix(
                             forecast.hard_horizon,
                         )
-                        hard = kernel.certify_actions(
-                            x=snapshot.x,
-                            y=snapshot.y,
-                            half_width=snapshot.half_width,
-                            half_height=snapshot.half_height,
-                            kinematics=kinematics,
-                            current_action=current_core,
-                            hazards=prepared_hard,
+                        hard, hard_collision_margin = (
+                            _certify_hard_with_source_fallback(
+                                kernel,
+                                x=snapshot.x,
+                                y=snapshot.y,
+                                half_width=snapshot.half_width,
+                                half_height=snapshot.half_height,
+                                kinematics=kinematics,
+                                current_action=current_core,
+                                hazards=prepared_hard,
+                            )
                         )
                         hard_count = len(hard)
                         if not hard:
                             raise AuthorityUnavailable("Hard safe set empty")
+                        if hard_collision_margin == 0.0:
+                            source_exact_fallback_count += 1
                         lookahead = kernel.certify_actions(
                             x=snapshot.x,
                             y=snapshot.y,
@@ -889,6 +921,7 @@ def run(args: argparse.Namespace) -> int:
                             current_action=current_core,
                             hazards=prepared_forecast,
                             candidates=tuple(item.action for item in hard),
+                            collision_margin=hard_collision_margin,
                         )
                         # A longer constant-action gate is advisory: when every
                         # constant path closes, retain the immediate Hard set so
@@ -908,6 +941,7 @@ def run(args: argparse.Namespace) -> int:
                             hazards=prepared_forecast,
                             candidates=tuple(item.action for item in hard),
                             checkpoints=(1, 2, 3, 4, 6, 8, 10, 12),
+                            collision_margin=hard_collision_margin,
                         )
                         locally_admissible = tuple(
                             item.action.name for item in legal
@@ -973,6 +1007,7 @@ def run(args: argparse.Namespace) -> int:
                             current_action=current_core,
                             hazards=prepared_hard,
                             candidates=(selected,),
+                            collision_margin=hard_collision_margin,
                         )
                         if not fresh:
                             raise AuthorityUnavailable(
@@ -1262,6 +1297,9 @@ def run(args: argparse.Namespace) -> int:
                             "controller_exit_code": 0,
                             "physical_hits": hit_count,
                             "control_dead_ends": control_dead_end_count,
+                            "source_exact_hard_fallbacks": (
+                                source_exact_fallback_count
+                            ),
                             "capture_failures": capture_failure_count,
                             "anchor_failures": anchor_failure_count,
                             "corpus_failure": corpus_failure,
@@ -1288,6 +1326,7 @@ def run(args: argparse.Namespace) -> int:
                 "bullets": snapshot.live_bullet_count,
                 "lasers": snapshot.laser_count,
                 "hard_count": hard_count,
+                "hard_collision_margin": hard_collision_margin,
                 "effort_horizon": effort_horizon,
                 "action": selected.name if selected is not None else None,
                 "reason": reason,
@@ -1393,6 +1432,9 @@ def run(args: argparse.Namespace) -> int:
                             "controller_exit_code": exit_code,
                             "physical_hits": hit_count,
                             "control_dead_ends": control_dead_end_count,
+                            "source_exact_hard_fallbacks": (
+                                source_exact_fallback_count
+                            ),
                             "capture_failures": capture_failure_count,
                             "anchor_failures": anchor_failure_count,
                             "infrastructure_failures": infrastructure_failure_count,

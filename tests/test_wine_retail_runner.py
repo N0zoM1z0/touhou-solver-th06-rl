@@ -32,6 +32,7 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
             "frame": 121,
             "bullets": 9,
             "reason": "physical-hit",
+            "hard_collision_margin": 0.0,
             "policy": {
                 "metrics": {"physical_hit_events": 2, "decisions": 77}
             },
@@ -48,6 +49,7 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
     assert summary["max_bullets"] == 9
     assert summary["physical_hit_events"] == 2
     assert summary["physical_hits_in_run"] == 1
+    assert summary["source_exact_hard_fallbacks"] == 1
     assert summary["decisions"] == 77
     assert summary["corpus_run_ids"] == ["run-a"]
     assert summary["last_policy_metrics"] == {
