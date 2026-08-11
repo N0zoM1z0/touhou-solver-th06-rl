@@ -487,6 +487,7 @@ def fit_grouped_ridge(
             "minimum_action_ess": minimum_action_ess,
             "score_margin": margin_rmse_fraction * model_rmse,
             "committee_rule": "unanimous-best-and-margin",
+            "active_override_budget": 64,
         },
         "authorization": {
             "fit_gates": gates,

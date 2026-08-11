@@ -95,6 +95,7 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
         "physical_hit_events": None,
         "physical_hits_in_run": 0,
         "decisions": None,
+        "last_policy_metrics": None,
     }
     if not path.is_file():
         return summary
@@ -129,6 +130,7 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
         summary["first_frame"] = min(frames)
         summary["last_frame"] = max(frames)
     if last_policy_metrics is not None:
+        summary["last_policy_metrics"] = last_policy_metrics
         summary["physical_hit_events"] = last_policy_metrics.get(
             "physical_hit_events"
         )

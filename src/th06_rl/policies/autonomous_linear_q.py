@@ -27,12 +27,14 @@ class AutonomousLinearQPolicy:
         self.committee: tuple[dict[str, object], ...] = ()
         self.supported_actions: frozenset[str] = frozenset()
         self.margin = 0.0
+        self.active_override_budget: int | None = 64
         self.decisions = 0
         self.supported_decisions = 0
         self.committee_abstentions = 0
         self.margin_abstentions = 0
         self.shadow_proposals = 0
         self.active_overrides = 0
+        self.budget_abstentions = 0
         self.proposals: Counter[str] = Counter()
 
     def import_state(self, state: dict[str, object]) -> None:
@@ -65,8 +67,12 @@ class AutonomousLinearQPolicy:
             if isinstance(row, dict) and row.get("authorized") is True
         )
         margin = float(selection.get("score_margin", float("nan")))
+        raw_budget = selection.get("active_override_budget", 64)
+        budget = None if raw_budget is None else int(raw_budget)
         if not supported or not math.isfinite(margin) or margin < 0.0:
             raise ValueError("autonomous policy support or margin is invalid")
+        if budget is not None and budget <= 0:
+            raise ValueError("active override budget must be positive or null")
         if mode == "active":
             if (
                 not isinstance(authorization, dict)
@@ -77,6 +83,15 @@ class AutonomousLinearQPolicy:
             audit_sha = authorization["active_canary"].get("shadow_audit_sha256")
             if not isinstance(audit_sha, str) or len(audit_sha) != 64:
                 raise ValueError("active autonomous policy shadow binding is invalid")
+            if budget is None:
+                evaluation = authorization.get("full_evaluation")
+                if not isinstance(evaluation, dict):
+                    raise ValueError(
+                        "unbounded active policy lacks canary-bound evaluation authorization"
+                    )
+                canary_sha = evaluation.get("canary_audit_sha256")
+                if not isinstance(canary_sha, str) or len(canary_sha) != 64:
+                    raise ValueError("full evaluation canary binding is invalid")
         # Conformance-check every model using a zero vector before accepting it.
         zero = (0.0,) * len(expected_names)
         for member in (full, *committee):
@@ -90,6 +105,7 @@ class AutonomousLinearQPolicy:
         self.committee = tuple(committee)
         self.supported_actions = supported
         self.margin = margin
+        self.active_override_budget = budget
         self.name = f"autonomous-linear-q-{mode}"
         self.loaded = True
 
@@ -151,7 +167,14 @@ class AutonomousLinearQPolicy:
             if self.mode == "shadow":
                 self.shadow_proposals += 1
             else:
-                self.active_overrides += 1
+                if (
+                    self.active_override_budget is not None
+                    and self.active_overrides >= self.active_override_budget
+                ):
+                    proposed = baseline
+                    self.budget_abstentions += 1
+                else:
+                    self.active_overrides += 1
         published = proposed if self.mode == "active" else baseline
         return PolicyDecision(published, self.name, 1.0)
 
@@ -165,6 +188,8 @@ class AutonomousLinearQPolicy:
             "margin_abstentions": self.margin_abstentions,
             "shadow_proposals": self.shadow_proposals,
             "active_overrides": self.active_overrides,
+            "active_override_budget": self.active_override_budget,
+            "budget_abstentions": self.budget_abstentions,
             "proposals": dict(sorted(self.proposals.items())),
         }
 

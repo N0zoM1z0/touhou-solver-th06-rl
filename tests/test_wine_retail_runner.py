@@ -43,6 +43,10 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
     assert summary["physical_hit_events"] == 2
     assert summary["physical_hits_in_run"] == 1
     assert summary["decisions"] == 77
+    assert summary["last_policy_metrics"] == {
+        "physical_hit_events": 2,
+        "decisions": 77,
+    }
 
 
 def test_runner_accepts_route_as_a_distinct_mode(tmp_path: Path) -> None:
