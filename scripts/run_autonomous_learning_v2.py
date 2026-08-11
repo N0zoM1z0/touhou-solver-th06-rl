@@ -157,13 +157,16 @@ def _complete_run(
 ) -> tuple[dict[str, object], Path | None]:
     report_path = artifact_dir / "report.json"
     if report_path.is_file():
-        return _validate_complete_run(
-            artifact_dir=artifact_dir,
-            difficulty=difficulty,
-            stage=stage,
-            rng_seed=rng_seed,
-            corpus_root=corpus_root,
-        )
+        try:
+            return _validate_complete_run(
+                artifact_dir=artifact_dir,
+                difficulty=difficulty,
+                stage=stage,
+                rng_seed=rng_seed,
+                corpus_root=corpus_root,
+            )
+        except (TypeError, ValueError, RuntimeError):
+            _archive_incomplete(artifact_dir)
     if artifact_dir.exists():
         _archive_incomplete(artifact_dir)
     before = _corpus_runs(corpus_root) if corpus_root is not None else set()
@@ -560,6 +563,8 @@ def run(args: argparse.Namespace) -> int:
     corpus_root = output_root / "collection-corpus"
     try:
         state.pop("infra_failure", None)
+        state["status"] = "collecting"
+        _atomic_json(state_path, state)
         collection_dirs = [
             Path(row["corpus_run_dir"]) for row in state["episodes"]
         ]

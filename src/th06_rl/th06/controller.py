@@ -130,8 +130,10 @@ def _authority_loss(reason: str) -> bool:
 
 def _control_dead_end(reason: str) -> bool:
     return reason in (
+        "control-dead-end:in-flight input unsafe",
         "control-dead-end:Hard safe set empty",
         "control-dead-end:local forecast has no safe continuation",
+        "authority-stop:in-flight input unsafe",
         "authority-stop:Hard safe set empty",
         "authority-stop:local forecast has no safe continuation",
     )
@@ -1028,6 +1030,7 @@ def run(args: argparse.Namespace) -> int:
             except AuthorityUnavailable as error:
                 error_text = str(error)
                 dead_end = error_text in (
+                        "in-flight input unsafe",
                         "Hard safe set empty",
                         "local forecast has no safe continuation",
                 )
@@ -1054,6 +1057,7 @@ def run(args: argparse.Namespace) -> int:
                         if error_text == "physical Bomb state/input"
                         else 12
                         if error_text in (
+                            "in-flight input unsafe",
                             "Hard safe set empty",
                             "local forecast has no safe continuation",
                         )

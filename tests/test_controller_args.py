@@ -2,10 +2,16 @@ import pytest
 
 from th06_rl.th06.controller import (
     RouteTrial,
+    _control_dead_end,
     _advance_route_scope,
     _valid_executable_basename,
     parse_args,
 )
+
+
+def test_in_flight_source_unsafe_is_a_control_dead_end_not_infra_loss() -> None:
+    assert _control_dead_end("control-dead-end:in-flight input unsafe")
+    assert _control_dead_end("authority-stop:in-flight input unsafe")
 
 
 def test_retail_executable_name_accepts_ascii_and_original_japanese_names() -> None:

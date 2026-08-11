@@ -66,3 +66,9 @@ follow-up needed to distinguish eventual HIT from recovery. Generation 2
 collects complete Wine stages with continue-on-hit. The same audit must be run
 on that corpus after collection; physical HIT, source-geometry closure,
 margin-only closure, and recovery remain separate measurements.
+
+An already-issued input lease that becomes source-unsafe on the next coherent
+Wine frame is likewise a control dead-end, not an infrastructure failure. The
+controller releases the in-flight input and records it separately as
+`control-dead-end:in-flight input unsafe`; it never converts that event into a
+HIT cost or silently treats the desired action as safe.
