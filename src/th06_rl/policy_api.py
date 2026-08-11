@@ -35,6 +35,13 @@ class PolicyContext:
     # longer constant-action frontier closed and only the authoritative
     # Hard-4 set remains. It is generic pressure evidence, not a phase key.
     effort_horizon: int = 0
+    # Adapter-normalized, game-neutral learner interface. The learner binds
+    # feature names in its generation manifest and never reads game memory or
+    # source context directly.
+    observation_features: tuple[tuple[str, float], ...] = ()
+    action_features: tuple[
+        tuple[str, tuple[tuple[str, float], ...]], ...
+    ] = ()
 
 
 @dataclass(frozen=True)

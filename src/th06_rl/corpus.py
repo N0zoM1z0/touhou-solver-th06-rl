@@ -27,7 +27,7 @@ RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
 FRAME_SCHEMA = "th06-rl-authoritative-frame-v5"
-TRANSITION_SCHEMA = "th06-rl-transition-v5"
+TRANSITION_SCHEMA = "th06-rl-transition-v6"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
@@ -140,6 +140,10 @@ class FrameEvidence:
     snapshot_tier: str = "authoritative-full"
     phase_elapsed_frames: int = 0
     dialogue_delivery: tuple[DialogueDeliverySample, ...] = ()
+    observation_features: tuple[tuple[str, float], ...] = ()
+    action_features: tuple[
+        tuple[str, tuple[tuple[str, float], ...]], ...
+    ] = ()
 
     def __post_init__(self) -> None:
         if not self.phase_id:
@@ -646,6 +650,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "proposed_action": before.evidence.proposed_action,
         "published_action": before.evidence.published_action,
         "behavior_probability": before.evidence.behavior_probability,
+        "policy_id": before.evidence.policy_id,
         # This compact projection is sufficient to reconstruct the exact
         # online UCB key without decoding the large raw hazard root. Raw
         # snapshots remain the learner-independent authority evidence.
@@ -661,6 +666,11 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             "bullet_count": before.snapshot.live_bullet_count,
             "laser_count": before.snapshot.laser_count,
             "hard_action_count": len(before.evidence.hard_actions),
+            "effort_horizon": before.evidence.effort_horizon,
+            "observation_features": _jsonable(
+                before.evidence.observation_features
+            ),
+            "action_features": _jsonable(before.evidence.action_features),
         },
         "outcome_terms": outcome,
         "learning_eligible": not learning_exclusions,

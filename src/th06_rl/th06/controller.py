@@ -40,6 +40,7 @@ from .menu import (
     start_reimu_a_practice,
     start_reimu_a_route,
 )
+from .learning_adapter import project_learning_features
 from .source import (
     AuthorityUnavailable,
     automatic_source_context,
@@ -759,6 +760,8 @@ def run(args: argparse.Namespace) -> int:
             selected_evaluation = None
             hard_count = 0
             effort_horizon = 0
+            observation_features = ()
+            action_features = ()
             solve_started = time.perf_counter()
             try:
                 if hit:
@@ -900,6 +903,14 @@ def run(args: argparse.Namespace) -> int:
                         )
                         baseline = _reactive_baseline(legal, current_core)
                         baseline_action = baseline.action.name
+                        observation_features, action_features = (
+                            project_learning_features(
+                                snapshot,
+                                hard,
+                                locally_admissible,
+                                effort_horizon,
+                            )
+                        )
                         policy = plugin.decide(PolicyContext(
                             frame=snapshot.frame,
                             scope=expected_scope,
@@ -928,6 +939,8 @@ def run(args: argparse.Namespace) -> int:
                                 for item in hard
                             ),
                             effort_horizon=effort_horizon,
+                            observation_features=observation_features,
+                            action_features=action_features,
                         ))
                         selected = next(
                             item.action for item in legal
@@ -1131,6 +1144,8 @@ def run(args: argparse.Namespace) -> int:
                     snapshot_tier=CONTROL_CAPTURE_TIER,
                     phase_elapsed_frames=phase_elapsed_frames,
                     dialogue_delivery=tuple(dialogue_delivery),
+                    observation_features=observation_features,
+                    action_features=action_features,
                 )
                 try:
                     snapshot_ref = recorder.record(snapshot, evidence)

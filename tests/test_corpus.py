@@ -412,7 +412,9 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "failure": None,
     }
     assert transition["policy_context"] == {
+        "action_features": [],
         "current_action": "stay",
+        "effort_horizon": 4,
         "hard_admissible_actions": ["stay"],
         "phase_elapsed_frames": 0,
         "player_x": 192.0,
@@ -420,5 +422,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "power": 64,
         "bullet_count": 1,
         "laser_count": 0,
+        "observation_features": [],
         "hard_action_count": 1,
     }
+    assert transition["policy_id"] == "test"

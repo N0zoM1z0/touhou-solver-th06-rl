@@ -291,7 +291,10 @@ def _replay_run(
     manifest: dict[str, object],
 ) -> dict[str, int]:
     transition_paths = _stream_paths(run_dir, manifest, "transitions")
-    compact = run.get("schemas", {}).get("transition") == "th06-rl-transition-v5"
+    compact = run.get("schemas", {}).get("transition") in (
+        "th06-rl-transition-v5",
+        "th06-rl-transition-v6",
+    )
     frame_rows = (
         None
         if compact
