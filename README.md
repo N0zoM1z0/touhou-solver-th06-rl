@@ -10,11 +10,13 @@ Its accelerated Linux simulation and lockstep environment backend lives in
 [`N0zoM1z0/th06-headless`](https://github.com/N0zoM1z0/th06-headless). That
 source-only fork is for corpus generation, replay, and learning acceleration;
 the shipped Windows game remains this solver's final physical validation gate.
-The currently paired local checkout is `2e0c416` on the headless fork's
-`th06-rl-headless-spike` branch. Its latest game/observation behavior revision
-is `1cc49f0`; `2e0c416` adds the reproducible Win32 cross-build. Historical
-models remain bound to the exact source and binary recorded by their manifests
-and are not silently made compatible by this checkout update.
+The currently paired local checkout is `604235a` on the headless fork's
+`th06-rl-headless-spike` branch. It adds current boss/callback/spell metadata
+for automatic retail policy-context reconstruction; `ed8c073` added the
+already-observed enemy motion/interpolation state needed to project contact
+bodies faithfully. Historical models remain bound to the exact source and
+binary recorded by their manifests and are not silently made compatible by
+this checkout update.
 
 Online UCB and future imitation/RL policies own long-horizon/global-local
 tradeoffs but cannot enlarge the native safe set, change collision physics,
@@ -86,6 +88,10 @@ promotion evidence, while headless is limited to geometry tests, targeted
 counterfactual proposals, and same-action-stream platform differentials. Read
 [docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md](docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md)
 before collecting or training another candidate.
+The decisive policy score is the HIT count in complete natural original-retail
+Wine Stage runs against the frozen incumbent, not a headless score or stopped
+first-failure prefix. Full-Stage HIT continuation is evaluation-only and never
+enters fitting.
 
 Generate a compact factual trajectory with the paired runtime, then audit it
 independently:

@@ -568,22 +568,125 @@ def _bullet_frames(
     return frames
 
 
+_ENEMY_EXACT_MOTION_FIELDS = (
+    "axis_vx",
+    "axis_vy",
+    "angle",
+    "angular_velocity",
+    "speed",
+    "acceleration",
+    "movement_mode",
+    "movement_ease",
+    "invert_x",
+    "move_interp_x",
+    "move_interp_y",
+    "move_start_x",
+    "move_start_y",
+    "move_timer",
+    "move_timer_float",
+    "move_start_time",
+)
+
+
+def _enemy_positions(
+    row: Mapping[str, Any],
+    horizon: int,
+) -> tuple[tuple[float, float], ...]:
+    """Project an observed enemy body without interpreting future ECL.
+
+    New source traces retain the complete already-observed motion/interpolation
+    state used by the physical controller. Older corpora expose only an
+    effective constant velocity and retain the conservative legacy projection.
+    A partial exact-motion record fails closed instead of silently mixing the
+    two contracts.
+    """
+    present = tuple(name in row for name in _ENEMY_EXACT_MOTION_FIELDS)
+    x = _finite_number(row, "x")
+    y = _finite_number(row, "y")
+    if not any(present):
+        vx = _finite_number(row, "vx")
+        vy = _finite_number(row, "vy")
+        positions = []
+        for _frame in range(horizon):
+            x = _f32(x + vx)
+            y = _f32(y + vy)
+            positions.append((x, y))
+        return tuple(positions)
+    if not all(present):
+        raise HeadlessAuthorityUnavailable("partial enemy motion state")
+
+    velocity_x = _finite_number(row, "axis_vx")
+    velocity_y = _finite_number(row, "axis_vy")
+    angle = _finite_number(row, "angle")
+    angular_velocity = _finite_number(row, "angular_velocity")
+    speed = _finite_number(row, "speed")
+    acceleration = _finite_number(row, "acceleration")
+    movement_mode = _integer(row, "movement_mode")
+    movement_ease = _integer(row, "movement_ease")
+    invert_x = row.get("invert_x")
+    move_interp_x = _finite_number(row, "move_interp_x")
+    move_interp_y = _finite_number(row, "move_interp_y")
+    move_start_x = _finite_number(row, "move_start_x")
+    move_start_y = _finite_number(row, "move_start_y")
+    move_timer = _integer(row, "move_timer")
+    move_timer_float = _finite_number(row, "move_timer_float")
+    move_start_time = _integer(row, "move_start_time")
+    if type(invert_x) is not bool:
+        raise HeadlessAuthorityUnavailable("invalid enemy invert_x state")
+    if movement_mode not in (0, 1, 2):
+        raise HeadlessAuthorityUnavailable("unsupported enemy movement mode")
+    if movement_mode == 2 and (
+        movement_ease not in range(5)
+        or move_start_time <= 0
+        or move_timer < 0
+    ):
+        raise HeadlessAuthorityUnavailable("invalid enemy interpolation state")
+
+    positions = []
+    for _frame in range(horizon):
+        x += -velocity_x if invert_x else velocity_x
+        y += velocity_y
+        if movement_mode == 1:
+            angle += angular_velocity
+            speed += acceleration
+            velocity_x = math.cos(angle) * speed
+            velocity_y = math.sin(angle) * speed
+        elif movement_mode == 2:
+            move_timer -= 1
+            move_timer_float -= 1.0
+            interpolation = min(1.0, move_timer_float / move_start_time)
+            if movement_ease == 0:
+                interpolation = 1.0 - interpolation
+            elif movement_ease == 1:
+                interpolation = 1.0 - interpolation * interpolation
+            elif movement_ease == 2:
+                interpolation = 1.0 - interpolation ** 4
+            elif movement_ease == 3:
+                interpolation = (1.0 - interpolation) ** 2
+            else:
+                interpolation = (1.0 - interpolation) ** 4
+            velocity_x = interpolation * move_interp_x + move_start_x - x
+            velocity_y = interpolation * move_interp_y + move_start_y - y
+            if move_timer <= 0:
+                movement_mode = 0
+                x = move_start_x + move_interp_x
+                y = move_start_y + move_interp_y
+                velocity_x = 0.0
+                velocity_y = 0.0
+        positions.append((x, y))
+    return tuple(positions)
+
+
 def _enemy_frames(rows: Iterable[Mapping[str, Any]], horizon: int) -> list[list[Aabb]]:
     frames: list[list[Aabb]] = [[] for _ in range(horizon)]
     for row in rows:
         if row.get("contact_active") is not True:
             continue
-        x = _finite_number(row, "x")
-        y = _finite_number(row, "y")
-        vx = _finite_number(row, "vx")
-        vy = _finite_number(row, "vy")
         half_width = _finite_number(row, "hitbox_width") / 2.0
         half_height = _finite_number(row, "hitbox_height") / 2.0
         if min(half_width, half_height) <= 0.0:
             raise HeadlessAuthorityUnavailable("invalid enemy contact hitbox")
-        for frame in range(horizon):
-            x = _f32(x + vx)
-            y = _f32(y + vy)
+        for frame, (x, y) in enumerate(_enemy_positions(row, horizon)):
             frames[frame].append(Aabb(
                 x - half_width,
                 y - half_height,
@@ -768,8 +871,16 @@ def certify_lowered_headless_actions(
     hazards: PackedHazards | PreparedHazards,
     *,
     kernel: NativeKernel | None = None,
+    candidates: tuple[Action, ...] = ACTIONS,
+    delivery_delays: tuple[int, ...] = HEADLESS_DELIVERY_DELAYS,
 ) -> tuple[NativeCertifiedAction, ...]:
-    """Run Hard on one already-lowered immutable physical snapshot."""
+    """Run Hard on one already-lowered immutable physical snapshot.
+
+    Source STEP callers retain the exact synchronous default.  A diagnostic
+    that reconstructs a retail-Wine checkpoint may explicitly supply the
+    Windows adapter's wider delivery set when it audits the recorded retail
+    Hard certificate; that does not change source branch execution.
+    """
     validate_headless_observation(observation)
     player = observation["player"]
     assert isinstance(player, Mapping)
@@ -781,10 +892,10 @@ def certify_lowered_headless_actions(
         kinematics=KINEMATICS,
         current_action=action_from_input(_integer(observation, "input")),
         hazards=hazards,
-        # The headless STEP protocol publishes one action before the same
-        # physical RunTick. Its complete delivery set is exactly {0}; the
-        # asynchronous Windows adapter retains its separate bounded delays.
-        delivery_delays=HEADLESS_DELIVERY_DELAYS,
+        candidates=candidates,
+        # The default remains the synchronous STEP contract.  Explicit wider
+        # sets are used only to reconstruct another runtime's certificate.
+        delivery_delays=delivery_delays,
         collision_margin=COLLISION_MARGIN,
     )
 

@@ -17,6 +17,7 @@ from ..corpus import (
     FRAME_BUDGET_MS,
     CorpusError,
     CorpusRecorder,
+    DialogueDeliverySample,
     FrameEvidence,
     RunMetadata,
 )
@@ -31,6 +32,7 @@ from .control_capture import (
     CONTROL_CAPTURE_TIER,
     observe_passive_control_clock,
     read_control_snapshot,
+    read_passive_input_delivery,
 )
 from .donor import enable_donor_imports
 from .menu import (
@@ -376,6 +378,8 @@ def run(args: argparse.Namespace) -> int:
         anchor_retry_after = 0
         last_reported_reason = None
         dialogue_active = False
+        dialogue_delivery: list[DialogueDeliverySample] = []
+        last_dialogue_delivery = None
         next_dialogue_probe = started
         next_reload_poll = started + RELOAD_POLL_SECONDS
         next_health_sample = started
@@ -400,6 +404,29 @@ def run(args: argparse.Namespace) -> int:
                     trace.close()
                 finally:
                     trace = None
+
+        def retain_dialogue_delivery(dialogue_state) -> None:
+            """Retain sampled menu delivery without creating a battle observation."""
+            nonlocal last_dialogue_delivery
+            if recorder is None or keyboard is None:
+                return
+            frame, current, previous, held_repeat, held_frames = (
+                read_passive_input_delivery(process)
+            )
+            sample = DialogueDeliverySample(
+                game_frame=frame,
+                current_input_mask=current,
+                previous_input_mask=previous,
+                published_input_mask=keyboard.published_input_mask,
+                held_repeat=held_repeat,
+                held_frames=held_frames,
+                active=bool(dialogue_state.active),
+                skippable=bool(dialogue_state.skippable),
+                pulsed_shoot=bool(dialogue_state.pulsed_shoot),
+            )
+            if sample != last_dialogue_delivery:
+                dialogue_delivery.append(sample)
+                last_dialogue_delivery = sample
 
         def retain_continuous_stage(kind: str, error: BaseException) -> bool:
             """Fail closed on transient infra faults without ending the episode."""
@@ -555,6 +582,7 @@ def run(args: argparse.Namespace) -> int:
                 assert dialogue is not None and keyboard is not None
                 try:
                     dialogue_state = dialogue.update(True)
+                    retain_dialogue_delivery(dialogue_state)
                     if dialogue_state.active:
                         observe_passive_control_clock(process)
                 except (OSError, RuntimeError) as error:
@@ -587,7 +615,9 @@ def run(args: argparse.Namespace) -> int:
                         # independently records any actual source time-stop.
                         keyboard.release_all()
                         keyboard.apply(action_from_input(0))
-                        dialogue_active = dialogue.update(True).active
+                        dialogue_state = dialogue.update(True)
+                        retain_dialogue_delivery(dialogue_state)
+                        dialogue_active = dialogue_state.active
                         observe_passive_control_clock(process)
                 except (OSError, RuntimeError) as error:
                     kind = "dialogue-control" if message_active else "dialogue-probe"
@@ -738,6 +768,7 @@ def run(args: argparse.Namespace) -> int:
                         # no previous dodge direction survives into dialogue.
                         keyboard.apply(action_from_input(0))
                         dialogue_state = dialogue.update(True)
+                        retain_dialogue_delivery(dialogue_state)
                         dialogue_active = dialogue_state.active
                         if not dialogue_active:
                             keyboard.release_all()
@@ -1077,9 +1108,12 @@ def run(args: argparse.Namespace) -> int:
                     observation_gap=observation_gap,
                     snapshot_tier=CONTROL_CAPTURE_TIER,
                     phase_elapsed_frames=phase_elapsed_frames,
+                    dialogue_delivery=tuple(dialogue_delivery),
                 )
                 try:
                     snapshot_ref = recorder.record(snapshot, evidence)
+                    dialogue_delivery.clear()
+                    last_dialogue_delivery = None
                     partition = _anchor_partition(source_context)
                     if (
                         last_anchor_partition is not None
@@ -1155,6 +1189,8 @@ def run(args: argparse.Namespace) -> int:
                     corpus_failure = f"{type(error).__name__}: {error}"
                     failed_recorder = recorder
                     recorder = None
+                    dialogue_delivery.clear()
+                    last_dialogue_delivery = None
                     if keyboard is not None:
                         keyboard.release_all()
                         lease.cleared()

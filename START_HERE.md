@@ -38,6 +38,129 @@ older broad-training recommendations in the handoff. Read
 `docs/WINE_FIRST_LEARNING_PLAN_2026-08-10.md` before starting another fit. It
 records the failed offline assumptions, the episode-grouped data funnel, the
 small residual-population rule, and the ordered Stage 6-to-1 promotion gates.
+The first paired reconstructed-source Linux/MinGW-under-Wine action-stream
+result is recorded in
+`docs/SOURCE_PLATFORM_DIFFERENTIAL_STAGE6_2026-08-10.md`; it found exact
+discrete delivery but accumulating floating-point geometry drift.
+The next episode-grouped original-retail audit is in
+`docs/WINE_FAILURE_REGION_AUDIT_STAGE6_2026-08-10.md`; it is the authority for
+which repeated Stage 6 regions may enter targeted COW.
+The first Wine-anchored targeted COW result is recorded in
+`docs/WINE_FIRST_STAGE6_TARGETED_COW_2026-08-10.md`.  Deterministic retail
+replay is now validated, but the proposed sub10 `right_fast` to `left_fast`
+residual was rejected and no candidate was created.  The completed late-family
+audit is in `docs/WINE_FIRST_STAGE6_LATE_FAILURE_AUDIT_2026-08-10.md`: sub31
+favored the incumbent at its one exact checkpoint, while a second sub31 anchor
+and both repeated sub18 anchors exposed missing retail dialogue-delivery edges
+in the old corpus.  All three Stage 6 families currently have zero residual
+candidates.  Collect a small new frozen-UCB Wine first-failure panel with frame
+schema v5 dialogue-delivery evidence; do not resume broad training.
+The completed three-episode v5 panel and its corrected exact-delivery
+differential are in
+`docs/WINE_FIRST_STAGE6_FRAMEV5_PANEL_2026-08-10.md`.  All 238 unique retained
+dialogue-input frames in run one matched both source domains, as did 239/239
+and 238/238 in runs two and three.  Run one retained a pre-dialogue MinGW RNG
+divergence at frame 1206; the other two matched retail discrete state through
+their full prefixes.  The panel found and fixed a COW audit bug that confused
+Wine delivery delays `(0,1,2,3)` with synchronous source STEP `(0,)`.  Corrected
+targeted COW still produced disagreement under the robust rank, so the panel
+has zero residual candidates.  Do not fit or enter shadow from it.
+The second predeclared three-run result is recorded in
+`docs/WINE_FIRST_STAGE6_PANEL2_RESULT_2026-08-10.md`. All three frozen-UCB
+prefixes stopped 0-HIT at a sub31 native authority failure. Their only new
+cross-episode residual pair strongly favored the incumbent at its first exact
+COW checkpoint, so panel 2 also has zero candidates. Exact dialogue delivery
+and RNG matched both source domains, yet both source domains temporarily had
+zero bullets where retail had 289--308. The resulting geometry audit is in
+`docs/WINE_FIRST_STAGE6_ENEMY_MOTION_AUDIT_2026-08-10.md`: the old source trace
+omitted enemy interpolation state and produced 24/33/26 false native-set
+differences. After the additive source fix, all 19,120 same-frame native sets
+matched retail in each source domain, including every terminal window. The
+corrected COW still favored the incumbent and creates no candidate. This is a
+local reject-only repair, not proof of whole-runtime equivalence. Complete
+natural original-retail Wine Stage HIT count remains the final promotion
+metric; stopped 0-HIT prefixes and headless COW are filters only.
+The next one-shot exploratory COW is predeclared in
+`docs/WINE_FIRST_STAGE6_FIRST_ACTION_SCAN_PROTOCOL_2026-08-10.md`; its fixed
+robust selection rule must not be changed after discovery.
+That scan is complete in
+`docs/WINE_FIRST_STAGE6_FIRST_ACTION_SCAN_RESULT_2026-08-10.md`:
+`down_right` was the unique robust winner across all 14 retail-native-safe
+first actions, so the conditional r6 confirmation was not run and the result
+creates zero candidates. Do not mine another Panel-2 frame. The next audit is
+whether source COW can restore and advance the immutable frozen-UCB state after
+one substituted action; the current offline-teacher continuation is reject-only.
+That prerequisite now passes in
+`docs/WINE_FIRST_STAGE6_POLICY_CONTINUATION_AUDIT_2026-08-10.md`: r5 restored
+6,175 prior policy calls with zero mismatch, then reproduced all eight UCB
+lookup keys/actions and the exact frame-6842 Hard-empty stop. A separately
+predeclared policy-faithful COW may now use that same fixed checkpoint, but its
+winner remains a headless hypothesis until disjoint Wine shadow evidence.
+The fixed policy-faithful discovery/confirmation rule is predeclared in
+`docs/WINE_FIRST_STAGE6_POLICY_COW_PROTOCOL_2026-08-10.md`; commit it before
+observing any substituted-action branch.
+That result is closed in
+`docs/WINE_FIRST_STAGE6_POLICY_COW_RESULT_2026-08-10.md`. `stay` and
+`stay_fast` both survived 600 source ticks under restored frozen-UCB
+continuation, while factual `down_right` reproduced the eight-tick failure.
+Their robust tie creates zero candidates and forbids the conditional r6 run.
+Treat them only as a fixed neutral-action hypothesis family for a newly
+predeclared, disjoint Wine panel.
+That next two-episode r7/r8 collection and its deterministic anchor/COW gate
+are frozen in
+`docs/WINE_FIRST_STAGE6_NEUTRAL_PANEL_PROTOCOL_2026-08-10.md`. It still creates
+at most one headless hypothesis, never an active residual; a later new Wine
+shadow and ultimately complete natural Stage HIT-count A/B remain mandatory.
+The r7/r8 result is closed in
+`docs/WINE_FIRST_STAGE6_NEUTRAL_PANEL_RESULT_2026-08-10.md`: the two episodes
+failed in sub18 and sub10, yielding zero predeclared sub31 anchors and zero
+candidates. The combined current-kernel r1--r8 audit adds no new repeated
+action pair. Do not mine alternate r7/r8 frames or fit a global classifier.
+The different policy-faithful estimand for the already fixed sub10 r1/r2
+anchors is predeclared in
+`docs/WINE_FIRST_STAGE6_SUB10_POLICY_COW_PROTOCOL_2026-08-10.md`; discovery
+must pass before its single conditional confirmation is allowed.
+That pair result is closed in
+`docs/WINE_FIRST_STAGE6_SUB10_POLICY_COW_RESULT_2026-08-10.md`: both actions
+reached the same seven-tick terminal and robust tie, so r2 was not run and the
+candidate count remains zero.
+The final exhaustive use of that unchanged anchor is frozen in
+`docs/WINE_FIRST_STAGE6_SUB10_SAFE_SCAN_PROTOCOL_2026-08-10.md`; it scans the
+entire recorded native-safe first-action set once and forbids further r1
+mining if no unique winner emerges.
+The result is closed in
+`docs/WINE_FIRST_STAGE6_SUB10_SAFE_SCAN_RESULT_2026-08-10.md`: `up_right` was
+the unique r1 discovery winner but was not native-admissible at fixed r2, so
+confirmation failed closed and no candidate exists. Do not select a runner-up
+or another r1 frame.
+The next label-support gate is predeclared in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_PROTOCOL_2026-08-10.md`.
+It scans one fixed lag-seven native-safe set in each of four independent sub10
+Wine episodes; at least three unique non-incumbent winners are required before
+any small action-relative fit is allowed.
+That first panel is closed as insufficient in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_RESULT_2026-08-10.md`.
+An input-lease row with a carried proposal exposed a policy-restore bug before
+r3 branching; restore now counts only real `reason=ok` policy calls, but the
+failed panel is not retroactively rescued and authorizes zero models.
+The corrected clean-path rerun is separately frozen in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V2_PROTOCOL_2026-08-10.md`.
+It keeps the same four anchors/actions and three-of-four support gate; v1
+artifacts are not reused.
+v2 is closed in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V2_RESULT_2026-08-10.md`:
+r3 had 14 Hard actions but only factual `down_left` in its local set, so the
+Hard-wide request was rejected before alternatives. COW now preflights against
+the recorded local set; v2 still authorizes zero models.
+The authority-correct v3 completion is frozen in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V3_PROTOCOL_2026-08-10.md`.
+It reuses hash-bound corrected r1/r2 documents, runs factual-only r3 and the
+complete r8 local set, and keeps the unchanged three-of-four gate.
+v3 passes exactly in
+`docs/WINE_FIRST_STAGE6_SUB10_ACTION_RELATIVE_PANEL_V3_RESULT_2026-08-10.md`:
+r1, r2, and r8 have different unique non-incumbent winners, while r3 has no
+local alternative. This permits a separately predeclared fit capped at three
+small action-relative candidates, but creates zero active candidates itself.
 
 The architecture deliberately has no handwritten phase movement table. A
 source context label is metadata, not control flow.

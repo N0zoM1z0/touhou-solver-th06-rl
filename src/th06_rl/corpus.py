@@ -26,7 +26,7 @@ from th06.model import BUTTON_BOMB  # noqa: E402
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v4"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v5"
 TRANSITION_SCHEMA = "th06-rl-transition-v5"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
@@ -82,6 +82,36 @@ class RunMetadata:
 
 
 @dataclass(frozen=True)
+class DialogueDeliverySample:
+    """Tiny retail input evidence retained while battle capture is paused."""
+
+    game_frame: int
+    current_input_mask: int
+    previous_input_mask: int
+    published_input_mask: int
+    held_repeat: int
+    held_frames: int
+    active: bool
+    skippable: bool
+    pulsed_shoot: bool
+
+    def __post_init__(self) -> None:
+        allowed = 0x01 | 0x04 | 0x10 | 0x20 | 0x40 | 0x80 | 0x100
+        if self.game_frame < 0:
+            raise ValueError("dialogue delivery frame must be nonnegative")
+        for name in (
+            "current_input_mask",
+            "previous_input_mask",
+            "published_input_mask",
+        ):
+            mask = int(getattr(self, name))
+            if mask & BUTTON_BOMB or mask & ~allowed:
+                raise ValueError(f"invalid or Bomb-bearing dialogue {name}")
+        if not 0 <= self.held_repeat <= 0xFFFF or not 0 <= self.held_frames <= 0xFFFF:
+            raise ValueError("dialogue delivery held counters must fit u16")
+
+
+@dataclass(frozen=True)
 class FrameEvidence:
     phase_id: str
     current_action: str | None
@@ -109,6 +139,7 @@ class FrameEvidence:
     observation_gap: int = 1
     snapshot_tier: str = "authoritative-full"
     phase_elapsed_frames: int = 0
+    dialogue_delivery: tuple[DialogueDeliverySample, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.phase_id:
@@ -119,6 +150,11 @@ class FrameEvidence:
             self.published_action not in self.locally_admissible_actions
         ):
             raise ValueError("published action is outside the recorded local set")
+        if any(
+            right.game_frame < left.game_frame
+            for left, right in zip(self.dialogue_delivery, self.dialogue_delivery[1:])
+        ):
+            raise ValueError("dialogue delivery samples must be frame ordered")
 
 
 @dataclass(frozen=True)

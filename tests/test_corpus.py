@@ -6,8 +6,11 @@ import json
 import struct
 from dataclasses import replace
 
+import pytest
+
 from th06_rl.corpus import (
     CorpusRecorder,
+    DialogueDeliverySample,
     FrameEvidence,
     RunMetadata,
     expand_compact,
@@ -125,6 +128,30 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
         capture_ms=1.0,
         solve_ms=0.1,
         reason="ok",
+        dialogue_delivery=(
+            DialogueDeliverySample(
+                game_frame=7,
+                current_input_mask=0x101,
+                previous_input_mask=0x001,
+                published_input_mask=0x101,
+                held_repeat=0,
+                held_frames=1,
+                active=True,
+                skippable=True,
+                pulsed_shoot=False,
+            ),
+            DialogueDeliverySample(
+                game_frame=8,
+                current_input_mask=0x001,
+                previous_input_mask=0x101,
+                published_input_mask=0x001,
+                held_repeat=0,
+                held_frames=0,
+                active=False,
+                skippable=False,
+                pulsed_shoot=False,
+            ),
+        ),
     ))
     run_dir = recorder.close({"stage_completed": True})
     manifest = json.loads((run_dir / "manifest.json").read_text())
@@ -139,12 +166,90 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
+    assert frame["schema_version"] == "th06-rl-authoritative-frame-v5"
+    assert frame["decision"]["dialogue_delivery"] == [
+        {
+            "game_frame": 7,
+            "current_input_mask": 0x101,
+            "previous_input_mask": 0x001,
+            "published_input_mask": 0x101,
+            "held_repeat": 0,
+            "held_frames": 1,
+            "active": True,
+            "skippable": True,
+            "pulsed_shoot": False,
+        },
+        {
+            "game_frame": 8,
+            "current_input_mask": 0x001,
+            "previous_input_mask": 0x101,
+            "published_input_mask": 0x001,
+            "held_repeat": 0,
+            "held_frames": 0,
+            "active": False,
+            "skippable": False,
+            "pulsed_shoot": False,
+        },
+    ]
     encoded_bullets = frame["snapshot"]["bullets"]
     assert encoded_bullets["codec"] == "dataclass-rows-v1"
     hydrated = expand_compact(frame["snapshot"], objects)
     assert len(hydrated["bullets"]) == 1
     assert hydrated["bullets"][0]["x"] == 10.0
     assert hydrated["bullets"][0]["slot"] == 7
+
+
+def test_dialogue_delivery_rejects_bomb_and_out_of_order_samples() -> None:
+    with pytest.raises(ValueError, match="Bomb-bearing"):
+        DialogueDeliverySample(
+            game_frame=1,
+            current_input_mask=0x02,
+            previous_input_mask=0,
+            published_input_mask=0,
+            held_repeat=0,
+            held_frames=0,
+            active=True,
+            skippable=False,
+            pulsed_shoot=False,
+        )
+
+    later = DialogueDeliverySample(
+        game_frame=2,
+        current_input_mask=1,
+        previous_input_mask=0,
+        published_input_mask=1,
+        held_repeat=0,
+        held_frames=1,
+        active=True,
+        skippable=False,
+        pulsed_shoot=True,
+    )
+    earlier = replace(later, game_frame=1)
+    with pytest.raises(ValueError, match="frame ordered"):
+        FrameEvidence(
+            phase_id="timeline:test",
+            current_action="stay",
+            hard_actions=(("stay", 10.0, 192.0, 400.0),),
+            baseline_action="stay",
+            locally_admissible_actions=("stay",),
+            proposed_action="stay",
+            published_action="stay",
+            behavior_probability=1.0,
+            policy_id="test",
+            policy_generation=1,
+            policy_sha256="abc",
+            effort_horizon=4,
+            plan_min_clearance=10.0,
+            cumulative_risk=None,
+            terminal_x=192.0,
+            terminal_y=400.0,
+            endpoint_count=1,
+            continuation_action_count=1,
+            capture_ms=1.0,
+            solve_ms=0.1,
+            reason="ok",
+            dialogue_delivery=(later, earlier),
+        )
 
 
 def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) -> None:
