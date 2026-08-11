@@ -634,6 +634,11 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         learning_exclusions.append("observation-gap")
     if before.evidence.capture_ms > FRAME_BUDGET_MS:
         learning_exclusions.append("capture-over-frame-budget")
+    if (
+        not before.evidence.observation_features
+        or not before.evidence.action_features
+    ):
+        learning_exclusions.append("learner-adapter-features-absent")
     if bomb:
         learning_exclusions.append("bomb")
     if authority:

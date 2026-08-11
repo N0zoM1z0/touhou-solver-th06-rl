@@ -33,3 +33,16 @@ Final policy evidence is the physical HIT count in alternating, normal-speed,
 complete original-retail Wine Practice Stages with HIT continuation. Fixed RNG,
 accelerated Wine, first-failure prefixes, shadow replay, and offline metrics may
 reject or select a candidate, but may not promote one.
+
+Run one fully predeclared, resumable generation with:
+
+```bash
+PYTHONPATH=.:src .venv/bin/python scripts/run_autonomous_learning.py \
+  --output-root artifacts/autonomous-wine-generation-1
+```
+
+The default generation owns two collection/fit rounds, held-out shadow,
+bounded Wine canaries, and (only after those gates pass) alternating complete
+Stage A/B. `generation.json` is the crash/audit ledger. Do not alter generation
+parameters after it has been created; start a new generation for a general
+algorithm change.

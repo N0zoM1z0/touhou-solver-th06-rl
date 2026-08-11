@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.run_wine_retail import _summarize_trace, _windows_path, parse_args
+from scripts.run_wine_retail import (
+    _summarize_controller_completion,
+    _summarize_trace,
+    _windows_path,
+    parse_args,
+)
 
 
 def test_windows_path_uses_wines_z_drive(tmp_path: Path) -> None:
@@ -21,6 +26,7 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
             "frame": 120,
             "bullets": 3,
             "event": "continuous-fail-close",
+            "run_id": "run-a",
         },
         {
             "frame": 121,
@@ -43,6 +49,7 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
     assert summary["physical_hit_events"] == 2
     assert summary["physical_hits_in_run"] == 1
     assert summary["decisions"] == 77
+    assert summary["corpus_run_ids"] == ["run-a"]
     assert summary["last_policy_metrics"] == {
         "physical_hit_events": 2,
         "decisions": 77,
@@ -155,6 +162,18 @@ def test_trace_summary_counts_default_first_hit_stop(tmp_path: Path) -> None:
     )
 
     assert _summarize_trace(trace)["physical_hits_in_run"] == 1
+
+
+def test_controller_completion_is_explicitly_parsed_for_full_stage(tmp_path: Path) -> None:
+    log = tmp_path / "controller.log"
+    log.write_bytes(
+        b"noise\nPractice Stage 6 complete; physical_hits=10\ncleanup\n"
+    )
+    assert _summarize_controller_completion(log) == {
+        "practice_stage_completed": True,
+        "practice_stage": 6,
+        "physical_hits": 10,
+    }
 
 
 def test_fixed_rng_is_allowed_only_for_training_corpus(tmp_path: Path) -> None:

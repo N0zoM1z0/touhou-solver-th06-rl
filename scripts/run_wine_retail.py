@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,9 @@ RETAIL_SHA256 = "9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb85224
 RETAIL_EXECUTABLE = "東方紅魔郷.exe"
 STARTUP_MARKER = "TH06_RL_WINE_STARTUP normalized=1"
 FULL_UNLOCK_SCORE_SHA256 = "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e94d26b749c71"
+_PRACTICE_COMPLETE_RE = re.compile(
+    rb"Practice Stage (\d+) complete; physical_hits=(\d+)"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -96,11 +100,13 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
         "physical_hits_in_run": 0,
         "decisions": None,
         "last_policy_metrics": None,
+        "corpus_run_ids": [],
     }
     if not path.is_file():
         return summary
     events: Counter[str] = Counter()
     frames = []
+    corpus_run_ids = set()
     last_policy_metrics = None
     with path.open("r", encoding="utf-8") as source:
         for line in source:
@@ -114,6 +120,9 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
             frame = record.get("frame")
             if isinstance(frame, int):
                 frames.append(frame)
+            run_id = record.get("run_id")
+            if isinstance(run_id, str) and run_id:
+                corpus_run_ids.add(run_id)
             bullets = record.get("bullets")
             if isinstance(bullets, int):
                 summary["max_bullets"] = max(summary["max_bullets"], bullets)
@@ -126,6 +135,7 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
             }:
                 summary["physical_hits_in_run"] += 1
     summary["event_counts"] = dict(sorted(events.items()))
+    summary["corpus_run_ids"] = sorted(corpus_run_ids)
     if frames:
         summary["first_frame"] = min(frames)
         summary["last_frame"] = max(frames)
@@ -135,6 +145,25 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
             "physical_hit_events"
         )
         summary["decisions"] = last_policy_metrics.get("decisions")
+    return summary
+
+
+def _summarize_controller_completion(path: Path) -> dict[str, Any]:
+    summary = {
+        "practice_stage_completed": False,
+        "practice_stage": None,
+        "physical_hits": None,
+    }
+    if not path.is_file():
+        return summary
+    matches = list(_PRACTICE_COMPLETE_RE.finditer(path.read_bytes()))
+    if matches:
+        stage, hits = matches[-1].groups()
+        summary.update({
+            "practice_stage_completed": True,
+            "practice_stage": int(stage),
+            "physical_hits": int(hits),
+        })
     return summary
 
 
@@ -660,6 +689,9 @@ def run(args: argparse.Namespace) -> int:
         game_log.close()
         xvfb_log.close()
         report["trace"] = _summarize_trace(trace_path)
+        report["controller_completion"] = _summarize_controller_completion(
+            artifact_dir / "controller.log"
+        )
         report["policy_state_sha256_after"] = (
             _sha256(policy_state) if policy_state.is_file() else None
         )

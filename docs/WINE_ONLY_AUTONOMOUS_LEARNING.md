@@ -82,6 +82,22 @@ atomically:
 The process may be interrupted and resumed without replaying completed work.
 It never starts concurrent Wine instances. Offline fitting may parallelize.
 
+The implemented entrypoint is `scripts/run_autonomous_learning.py`. Its first
+generation defaults are locked before Wine starts: two five-episode collection
+rounds, two whole-episode validation groups, 0.10 uniform safe-set exploration,
+a 120-frame factual return, clipped propensity 20, a grouped ridge committee,
+two bounded active canaries, and two alternating complete-Stage A/B pairs.
+These are algorithm-generation parameters, not failure-region knobs. The
+runner refuses to resume an existing `generation.json` with different values.
+
+Every active candidate is hash-chained:
+
+`fit state -> held-out shadow audit -> bounded canary state -> canary audit -> full-evaluation state`
+
+The online state loader rejects a missing or stale link. The canary has a fixed
+64-override exposure budget; only a clean canary audit can authorize an
+unbounded complete-Stage evaluation.
+
 ## Exploration and factual learning
 
 The bootstrap exploration rule is game-neutral: when the native-safe set has
