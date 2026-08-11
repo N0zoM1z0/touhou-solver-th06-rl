@@ -4,6 +4,7 @@ import pytest
 
 from th06_rl.th06.control_capture import (
     _completed_calc_lag,
+    _read_bulk_view,
     read_passive_input_delivery,
 )
 from th06_rl.th06.donor import enable_donor_imports
@@ -11,6 +12,19 @@ from th06_rl.th06.donor import enable_donor_imports
 
 enable_donor_imports()
 import th06.native as native  # noqa: E402
+
+
+def test_bulk_view_falls_back_to_ordinary_reader():
+    class Process:
+        @staticmethod
+        def read(address, size):
+            assert address == 0x1234
+            assert size == 4
+            return b"TH06"
+
+    view = _read_bulk_view(Process(), 0x1234, 4)
+    assert isinstance(view, memoryview)
+    assert bytes(view) == b"TH06"
 
 
 def test_active_calc_phase_uses_initial_equal_clock_witness():

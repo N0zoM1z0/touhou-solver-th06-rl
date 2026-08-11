@@ -1,10 +1,9 @@
 # Original-retail Wine validation
 
-This path runs the original Japanese TH06 1.02h executable under Wine. It is
-the closest automated validation domain currently available on the Linux VPS,
-but it is not a claim that Wine and a real Windows machine are equivalent.
-Linux headless remains the acceleration domain; a real Windows run remains the
-final NMNB gate.
+This path runs the original Japanese TH06 1.02h executable under Wine. Wine is
+the project's only gameplay, learning, and evaluation environment. Fixed RNG,
+accelerated Wine, and offline replay remain diagnostic/training strata; final
+policy comparison uses normal-speed complete original-retail Wine Stages.
 
 ## Fixed inputs
 
@@ -64,8 +63,8 @@ cmake -S native -B build/native-win32-fully-static \
 cmake --build build/native-win32-fully-static -j4
 ```
 
-The validated DLL SHA-256 on 2026-08-09 was
-`d5c79c30b4d46c72f0521d9653d5d99693c0fbc966e241f554732ad3ade3a37e`.
+Every run records the actual DLL SHA-256. Never infer compatibility from a
+historical DLL identity.
 
 ## Run
 
@@ -97,19 +96,15 @@ unrepresentable in the input bridge. Every artifact directory contains the
 controller/game/GDB logs, a frame trace, configuration evidence, and
 `report.json` with process cleanup and provenance.
 
-The adaptive baseline explores at 3% unless `--exploration-rate` is specified.
-The runner now records the explicit policy plug-in and policy-state paths,
-before/after hashes, and the exact controller command. Setting exploration to
-zero does not by itself freeze online UCB updates; a future model-comparison run
-must also use an immutable evaluation state contract.
+The runner records the explicit policy plug-in and policy-state paths,
+before/after hashes, and the exact controller command. Active learning runs use
+an immutable policy plus an explicit propensity-recorded intervention policy.
+Final comparisons require `--immutable-policy` and exploration zero.
 
 ## Evidence boundary
 
 Passing this runner proves that the original retail executable accepted the
-controller's background input, exposed coherent live state, counted source
-physical HITs, completed a Practice stage, or reached the original Ending
-state. It does not prove NMNB, Linux-source equivalence, deterministic policy
-quality, or real-Windows delivery equivalence.
-
-See [WINE_RETAIL_BASELINE_2026-08-09.md](WINE_RETAIL_BASELINE_2026-08-09.md)
-for the first complete Stage 6-to-1 and full-route measurements.
+controller's background input, exposed coherent live state, counted physical
+HITs, completed a Practice stage, or reached the original Ending state. It does
+not prove policy quality by itself. Promotion follows the complete-Stage
+alternating HIT-count contract in `WINE_ONLY_INTERVENTION_LEARNING.md`.

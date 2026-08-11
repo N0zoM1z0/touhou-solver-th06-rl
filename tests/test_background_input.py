@@ -45,7 +45,7 @@ def test_public_key_encoder_cannot_represent_bomb() -> None:
         keys_to_input_mask({"bomb"})
 
 
-def test_hook_transaction_uses_a_minimal_suspend_handle() -> None:
+def test_hook_transactions_reuse_one_minimal_suspend_handle() -> None:
     calls = []
 
     class Kernel:
@@ -71,12 +71,18 @@ def test_hook_transaction_uses_a_minimal_suspend_handle() -> None:
     bridge.process = type("Process", (), {"pid": 77})()
 
     with bridge._suspended():
-        calls.append(("transaction",))
+        calls.append(("transaction-1",))
+    with bridge._suspended():
+        calls.append(("transaction-2",))
+    bridge._close_suspend_handle()
 
     assert calls == [
         ("open", PROCESS_SUSPEND_RESUME, False, 77),
         ("suspend", 123),
-        ("transaction",),
+        ("transaction-1",),
+        ("resume", 123),
+        ("suspend", 123),
+        ("transaction-2",),
         ("resume", 123),
         ("close", 123),
     ]

@@ -15,6 +15,7 @@ state.
 from __future__ import annotations
 
 from contextlib import nullcontext
+import ctypes
 from dataclasses import dataclass, replace
 import math
 import struct
@@ -26,6 +27,37 @@ from .donor import enable_donor_imports
 CONTROL_CAPTURE_TIER = "control-v2"
 MAX_CAPTURE_ATTEMPTS = 8
 DYNAMIC_BULLET_FLAGS = 0xDF1
+
+
+def _read_bulk_view(process, address: int, size: int) -> memoryview:
+    """Read the hot manager interval into one process-owned reusable buffer.
+
+    The donor's general-purpose ``read`` API correctly returns an owning
+    ``bytes`` object, but that means allocating and zeroing a new ~2 MiB
+    ctypes buffer and then copying it into another ~2 MiB Python object every
+    controlled frame.  This capture consumes the interval synchronously, so
+    one exact-PID buffer can safely be reused until the next snapshot.
+
+    Tests and non-native readers retain the ordinary API as a strict fallback.
+    """
+    kernel32 = getattr(process, "kernel32", None)
+    handle = getattr(process, "handle", None)
+    if kernel32 is None or handle is None:
+        return memoryview(process.read(address, size))
+    buffer = getattr(process, "_th06_rl_control_pool_buffer", None)
+    if buffer is None or ctypes.sizeof(buffer) != size:
+        buffer = ctypes.create_string_buffer(size)
+        process._th06_rl_control_pool_buffer = buffer
+    count = ctypes.c_size_t()
+    if not kernel32.ReadProcessMemory(
+        handle,
+        ctypes.c_void_p(address),
+        buffer,
+        size,
+        ctypes.byref(count),
+    ) or count.value != size:
+        raise ctypes.WinError(ctypes.get_last_error())
+    return memoryview(buffer).cast("B")[:size]
 
 
 def _completed_calc_lag(
@@ -365,7 +397,7 @@ def _decode_control_once(
     )[0]
     pool_start = native.ADDR_ENEMY_MANAGER + native.ENEMY_ARRAY_OFFSET
     pool_end = native.ADDR_BULLET_MANAGER + native.BULLET_MANAGER_SIZE
-    manager_bytes = process.read(pool_start, pool_end - pool_start)
+    manager_bytes = _read_bulk_view(process, pool_start, pool_end - pool_start)
     enemy_pool = manager_bytes[: native.ENEMY_COUNT * native.ENEMY_STRIDE]
     bullet_offset = native.ADDR_BULLET_ARRAY - pool_start
     bullet_pool = manager_bytes[bullet_offset:]

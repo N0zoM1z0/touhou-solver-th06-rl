@@ -122,6 +122,7 @@ class BackgroundInputBridge:
         self.ntdll = ctypes.WinDLL("ntdll", use_last_error=True)
         self.cave: int | None = None
         self.control: int | None = None
+        self._suspend_handle = None
         self.installed = False
         self._configure_api()
 
@@ -155,15 +156,19 @@ class BackgroundInputBridge:
     def suspended(self):
         # The capture donor deliberately owns a narrow read/write process
         # handle. Wine enforces PROCESS_SUSPEND_RESUME on NtSuspendProcess,
-        # so acquire that one right explicitly for the tiny hook transaction
-        # instead of widening the long-lived capture handle.
-        suspend_handle = self.kernel32.OpenProcess(
-            PROCESS_SUSPEND_RESUME,
-            False,
-            self.process.pid,
-        )
+        # so acquire that one right explicitly and retain it for this exact
+        # PID's bridge lifetime instead of reopening it every controlled frame
+        # or widening the long-lived capture handle.
+        suspend_handle = getattr(self, "_suspend_handle", None)
         if not suspend_handle:
-            raise ctypes.WinError(ctypes.get_last_error())
+            suspend_handle = self.kernel32.OpenProcess(
+                PROCESS_SUSPEND_RESUME,
+                False,
+                self.process.pid,
+            )
+            if not suspend_handle:
+                raise ctypes.WinError(ctypes.get_last_error())
+            self._suspend_handle = suspend_handle
         suspended = False
         try:
             status = int(self.ntdll.NtSuspendProcess(suspend_handle))
@@ -175,16 +180,19 @@ class BackgroundInputBridge:
             suspended = True
             yield
         finally:
-            try:
-                if suspended:
-                    status = int(self.ntdll.NtResumeProcess(suspend_handle))
-                    if status < 0:
-                        rendered = ctypes.c_uint32(status).value
-                        raise RuntimeError(
-                            f"NtResumeProcess failed: NTSTATUS 0x{rendered:08x}"
-                        )
-            finally:
-                self.kernel32.CloseHandle(suspend_handle)
+            if suspended:
+                status = int(self.ntdll.NtResumeProcess(suspend_handle))
+                if status < 0:
+                    rendered = ctypes.c_uint32(status).value
+                    raise RuntimeError(
+                        f"NtResumeProcess failed: NTSTATUS 0x{rendered:08x}"
+                    )
+
+    def _close_suspend_handle(self) -> None:
+        suspend_handle = getattr(self, "_suspend_handle", None)
+        if suspend_handle:
+            self.kernel32.CloseHandle(suspend_handle)
+            self._suspend_handle = None
 
     # Retain the old private spelling for the already-audited hook
     # transaction and downstream tests. New snapshot code uses the explicit
@@ -316,6 +324,7 @@ class BackgroundInputBridge:
                 with self._suspended():
                     self._write_code(HOOK_ADDRESS, HOOK_ORIGINAL)
             self._discard_allocation()
+            self._close_suspend_handle()
             raise
 
     def _recover_verified_orphan(self, hook: bytes) -> None:
@@ -360,6 +369,7 @@ class BackgroundInputBridge:
 
     def close(self) -> None:
         if not self.installed and self.cave is None:
+            self._close_suspend_handle()
             return
         self.release_all()
         if self.installed and self._process_alive():
@@ -379,6 +389,7 @@ class BackgroundInputBridge:
         else:
             self.installed = False
         self._discard_allocation()
+        self._close_suspend_handle()
 
     def __enter__(self) -> "BackgroundInputBridge":
         self.install()
