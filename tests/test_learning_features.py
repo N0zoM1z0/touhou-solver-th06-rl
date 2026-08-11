@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from types import SimpleNamespace
 
 import pytest
@@ -46,7 +47,10 @@ def _projection():
         SimpleNamespace(
             action=actions["left"],
             checkpoints=checkpoints,
-            min_clearances=(float("inf"),) * len(checkpoints),
+            min_clearances=(
+                float("inf"), float("inf"), float("inf"), float("inf"),
+                8.0, 7.0, 6.0, 5.0,
+            ),
         ),
     )
     return project_learning_features(
@@ -59,10 +63,11 @@ def test_th06_adapter_emits_versioned_finite_named_features() -> None:
     assert tuple(name for name, _ in observation) == OBSERVATION_FEATURE_NAMES
     assert all(value == pytest.approx(value) for _, value in observation)
     assert tuple(name for name, _ in actions[0][1]) == ACTION_FEATURE_NAMES
+    assert all(math.isfinite(value) for _, values in actions for _, value in values)
     left = dict(actions)["left"]
     assert dict(left)["clearance_unbounded"] == 1.0
     assert dict(left)["clearance_log"] == 0.0
-    assert dict(left)["profile_unbounded_h12"] == 1.0
+    assert dict(left)["profile_unbounded_h12"] == 0.0
     assert dict(left)["profile_rank_h12"] == 1.0
     assert dict(dict(actions)["stay"])["profile_viable_h12"] == 0.0
     assert dict(dict(actions)["stay"])["profile_viable_h6"] == 0.0

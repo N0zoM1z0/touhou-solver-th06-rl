@@ -175,12 +175,12 @@ def project_learning_features(
     for evaluation in hard_evaluations:
         action = evaluation.action
         clearance = float(evaluation.min_clearance)
-        unbounded = not math.isfinite(clearance)
+        clearance_unbounded = not math.isfinite(clearance)
         profile = profiles[action.name]
         profile_features = []
         for index, checkpoint in enumerate(PROFILE_CHECKPOINTS):
             value = float(profile.min_clearances[index])
-            encoded, unbounded = _profile_value(value)
+            encoded, profile_unbounded = _profile_value(value)
             peers = by_checkpoint[checkpoint]
             rank = (
                 sum(peer < value for peer in peers) / max(1, len(peers) - 1)
@@ -189,7 +189,7 @@ def project_learning_features(
             )
             profile_features.extend((
                 (f"profile_clearance_h{checkpoint}", encoded),
-                (f"profile_unbounded_h{checkpoint}", unbounded),
+                (f"profile_unbounded_h{checkpoint}", profile_unbounded),
                 (f"profile_rank_h{checkpoint}", rank),
                 (
                     f"profile_viable_h{checkpoint}",
@@ -206,9 +206,9 @@ def project_learning_features(
                 ("diagonal", float(action.dx != 0 and action.dy != 0)),
                 (
                     "clearance_log",
-                    0.0 if unbounded else _signed_log1p(clearance),
+                    0.0 if clearance_unbounded else _signed_log1p(clearance),
                 ),
-                ("clearance_unbounded", float(unbounded)),
+                ("clearance_unbounded", float(clearance_unbounded)),
                 (
                     "terminal_delta_x_unit",
                     (float(evaluation.final_x) - float(snapshot.x)) / WIDTH,
