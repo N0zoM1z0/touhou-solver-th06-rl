@@ -152,3 +152,10 @@ inspection only when:
   aggregate without safety/latency regression (`effective`).
 
 No intermediate offline metric is a verdict.
+
+## Current evidence
+
+Generation 1 completed two unattended Wine collection/fit rounds and was
+rejected by its unchanged shadow gate. See
+`AUTONOMOUS_GENERATION_1_RESULT.md`. Its negative result does not alter the
+autonomous-learning boundary above.
