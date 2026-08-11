@@ -898,6 +898,17 @@ def run(args: argparse.Namespace) -> int:
                         effort_horizon = (
                             forecast.source_coverage if lookahead else 4
                         )
+                        action_profiles = kernel.profile_actions(
+                            x=snapshot.x,
+                            y=snapshot.y,
+                            half_width=snapshot.half_width,
+                            half_height=snapshot.half_height,
+                            kinematics=kinematics,
+                            current_action=current_core,
+                            hazards=prepared_forecast,
+                            candidates=tuple(item.action for item in hard),
+                            checkpoints=(1, 2, 3, 4, 6, 8, 10, 12),
+                        )
                         locally_admissible = tuple(
                             item.action.name for item in legal
                         )
@@ -909,6 +920,7 @@ def run(args: argparse.Namespace) -> int:
                                 hard,
                                 locally_admissible,
                                 effort_horizon,
+                                action_profiles,
                             )
                         )
                         policy = plugin.decide(PolicyContext(

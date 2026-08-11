@@ -58,3 +58,60 @@ extern "C" TH06_RL_RANKER_API int th06_rl_score_xgboost_v1(
     }
     return 0;
 }
+
+extern "C" TH06_RL_RANKER_API int th06_rl_min_support_distance_v1(
+    const float* features,
+    const std::int32_t row_count,
+    const std::int32_t feature_count,
+    const float* feature_mean,
+    const float* feature_scale,
+    const float* standardized_prototypes,
+    const std::int32_t prototype_count,
+    const std::int32_t* action_offsets,
+    const std::int32_t action_count,
+    const std::int32_t* row_actions,
+    float* outputs) {
+    if (features == nullptr || feature_mean == nullptr ||
+        feature_scale == nullptr || standardized_prototypes == nullptr ||
+        action_offsets == nullptr || row_actions == nullptr ||
+        outputs == nullptr || row_count <= 0 || feature_count <= 0 ||
+        prototype_count <= 0 || action_count <= 0 || action_offsets[0] != 0 ||
+        action_offsets[action_count] != prototype_count) {
+        return 1;
+    }
+    for (std::int32_t feature = 0; feature < feature_count; ++feature) {
+        if (!std::isfinite(feature_mean[feature]) ||
+            !std::isfinite(feature_scale[feature]) ||
+            feature_scale[feature] <= 0.0f) {
+            return 2;
+        }
+    }
+    for (std::int32_t action = 0; action < action_count; ++action) {
+        if (action_offsets[action] < 0 ||
+            action_offsets[action] >= action_offsets[action + 1] ||
+            action_offsets[action + 1] > prototype_count) {
+            return 3;
+        }
+    }
+    for (std::int32_t row = 0; row < row_count; ++row) {
+        const std::int32_t action = row_actions[row];
+        if (action < 0 || action >= action_count) return 4;
+        float best = INFINITY;
+        for (std::int32_t prototype = action_offsets[action];
+             prototype < action_offsets[action + 1]; ++prototype) {
+            float sum = 0.0f;
+            for (std::int32_t feature = 0; feature < feature_count; ++feature) {
+                const float value = features[row * feature_count + feature];
+                if (!std::isfinite(value)) return 5;
+                const float normalized =
+                    (value - feature_mean[feature]) / feature_scale[feature];
+                const float delta = normalized - standardized_prototypes[
+                    prototype * feature_count + feature];
+                sum += delta * delta;
+            }
+            best = std::fmin(best, sum / static_cast<float>(feature_count));
+        }
+        outputs[row] = best;
+    }
+    return 0;
+}

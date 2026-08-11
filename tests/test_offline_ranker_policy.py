@@ -21,6 +21,8 @@ from th06_rl.policies.offline_ranker import (
     STATE_SCHEMA,
     OfflineRankerPolicy,
     NativeXGBoostRegressor,
+    NativePrototypeSupport,
+    PortablePrototypeSupport,
     PortableXGBoostRegressor,
 )
 from th06_rl.policy_api import PolicyContext
@@ -179,4 +181,22 @@ def test_isolated_native_batch_scorer_matches_portable_model(tmp_path: Path) -> 
     assert native.predict_many(rows) == pytest.approx(
         portable.predict_many(rows),
         abs=1e-6,
+    )
+
+    support_artifact = {
+        "mean": [0.5, 1.0],
+        "scale": [2.0, 4.0],
+        "prototypes": [[[0.0, 0.0]]] * 18,
+    }
+    portable_support = PortablePrototypeSupport(
+        support_artifact, feature_count=2
+    )
+    native_support = NativePrototypeSupport(
+        library,
+        expected_sha256=hashlib.sha256(library.read_bytes()).hexdigest(),
+        portable=portable_support,
+    )
+    queries = [[0.5, 1.0], [2.5, 5.0]]
+    assert native_support.distances(queries, [0, 17]) == pytest.approx(
+        portable_support.distances(queries, [0, 17]), abs=1e-6
     )

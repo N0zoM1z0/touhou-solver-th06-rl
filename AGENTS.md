@@ -83,7 +83,7 @@ context may partition evidence but may not select a handwritten route.
 ## Physical-run safety
 
 - Stop on the first HIT, authority failure, or Bomb request unless running an
-  explicitly marked full-Stage HIT-continuation evaluation.
+  explicitly marked complete-Stage HIT-continuation training or evaluation.
 - Menu/dialogue control stays separate from battle movement.
 - Never launch the Windows game through a PTY.
 - Release every input, stop the exact trial PID, and check for leftover game,

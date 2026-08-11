@@ -197,3 +197,22 @@ def test_fixed_rng_is_allowed_only_for_training_corpus(tmp_path: Path) -> None:
         str(tmp_path / "corpus"),
     ])
     assert args.diagnostic_rng_seed == 0x1234
+
+
+def test_complete_stage_training_corpus_requires_fixed_rng_and_immutable(
+    tmp_path: Path,
+) -> None:
+    root = str(tmp_path / "complete-corpus")
+    with pytest.raises(SystemExit):
+        parse_args([
+            "--practice-stage", "6",
+            "--complete-stage-training-corpus-root", root,
+        ])
+    args = parse_args([
+        "--practice-stage", "6",
+        "--complete-stage-training-corpus-root", root,
+        "--diagnostic-rng-seed", "123",
+        "--immutable-policy",
+        "--exploration-rate", "0",
+    ])
+    assert args.complete_stage_training_corpus_root == tmp_path / "complete-corpus"

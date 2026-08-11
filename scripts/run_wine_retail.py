@@ -242,6 +242,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "mode does not patch lives"
         ),
     )
+    parser.add_argument(
+        "--complete-stage-training-corpus-root",
+        type=Path,
+        help=(
+            "collect one fixed-RNG, patched-life, HIT-continuation Practice "
+            "Stage for factual offline-RL training"
+        ),
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--practice-stage", type=int, choices=range(1, 7))
     mode.add_argument("--start-route", action="store_true")
@@ -292,12 +300,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                 "first-failure corpus collection requires --immutable-policy"
             )
     if (
+        args.first_failure_corpus_root is not None
+        and args.complete_stage_training_corpus_root is not None
+    ):
+        parser.error("first-failure and complete-Stage corpus modes are exclusive")
+    if args.complete_stage_training_corpus_root is not None:
+        if args.start_route:
+            parser.error("complete-Stage training corpus currently requires Practice")
+        if args.seconds != 0.0:
+            parser.error("complete-Stage training corpus requires --seconds 0")
+        if not args.immutable_policy:
+            parser.error(
+                "complete-Stage training corpus requires --immutable-policy"
+            )
+        if args.diagnostic_rng_seed is None:
+            parser.error(
+                "complete-Stage training corpus requires --diagnostic-rng-seed"
+            )
+    if (
         args.diagnostic_rng_seed is not None
         and args.first_failure_corpus_root is None
+        and args.complete_stage_training_corpus_root is None
     ):
         parser.error(
             "--diagnostic-rng-seed is training-only and requires "
-            "--first-failure-corpus-root"
+            "a declared corpus root"
         )
     if not args.display.startswith(":") or not args.display[1:].isdigit():
         parser.error("--display must look like :97")
@@ -345,6 +372,11 @@ def run(args: argparse.Namespace) -> int:
         if args.first_failure_corpus_root is not None
         else None
     )
+    complete_stage_training_corpus_root = (
+        args.complete_stage_training_corpus_root.resolve()
+        if args.complete_stage_training_corpus_root is not None
+        else None
+    )
     artifact_dir = args.artifact_dir.resolve()
     artifact_dir.mkdir(parents=True, exist_ok=False)
     report_path = artifact_dir / "report.json"
@@ -361,7 +393,9 @@ def run(args: argparse.Namespace) -> int:
         "immutable_policy": args.immutable_policy,
         "diagnostic_rng_seed": args.diagnostic_rng_seed,
         "evaluation_mode": (
-            "fixed-rng-first-failure-training"
+            "fixed-rng-complete-stage-training"
+            if complete_stage_training_corpus_root is not None
+            else "fixed-rng-first-failure-training"
             if args.diagnostic_rng_seed is not None
             else "first-failure-corpus"
             if first_failure_corpus_root is not None
@@ -370,6 +404,11 @@ def run(args: argparse.Namespace) -> int:
         "first_failure_corpus_root": (
             str(first_failure_corpus_root)
             if first_failure_corpus_root is not None
+            else None
+        ),
+        "complete_stage_training_corpus_root": (
+            str(complete_stage_training_corpus_root)
+            if complete_stage_training_corpus_root is not None
             else None
         ),
         "display": args.display,
@@ -618,7 +657,14 @@ def run(args: argparse.Namespace) -> int:
                 "--diagnostic-rng-seed",
                 hex(args.diagnostic_rng_seed),
             ))
-        if first_failure_corpus_root is None:
+        if complete_stage_training_corpus_root is not None:
+            controller.extend((
+                "--patch-lives",
+                "--continuous-stage",
+                "--corpus-root",
+                _windows_path(complete_stage_training_corpus_root),
+            ))
+        elif first_failure_corpus_root is None:
             controller.extend(("--patch-lives", "--continuous-stage", "--no-corpus"))
         else:
             controller.extend(
