@@ -238,7 +238,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=range(0x10000),
         metavar="0..0xffff",
         help=(
-            "fixed original-retail RNG seed for paired intervention training; "
+            "fixed original-retail RNG seed for diagnostic training variance; "
             "forbidden in final HIT-continuation evaluation"
         ),
     )
@@ -330,7 +330,7 @@ def run(args: argparse.Namespace) -> int:
         "immutable_policy": args.immutable_policy,
         "diagnostic_rng_seed": args.diagnostic_rng_seed,
         "evaluation_mode": (
-            "fixed-rng-first-failure-intervention"
+            "fixed-rng-first-failure-training"
             if args.diagnostic_rng_seed is not None
             else "first-failure-corpus"
             if first_failure_corpus_root is not None
