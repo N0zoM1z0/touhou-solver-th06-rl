@@ -168,6 +168,35 @@ population must abstain to the incumbent under disagreement. Synthetic delayed
 effect/null tests run before Wine development, and the untouched 13-episode
 qualification remains locked.
 
+## 2026-08-12: action-centered IQL actor synthetic smoke passed
+
+The first actor implementation used ordinary factual advantage-weighted
+behavior cloning. Its advantage direction was correct, but the deterministic
+64-episode fixture happened to contain 2,372 stay versus 2,236 left actions.
+The learned 5.9% weight advantage almost exactly cancelled this 6.1% empirical
+action imbalance, so every actor's mean beneficial-action logit had the wrong
+sign. It was rejected before Wine development.
+
+Complete behavior propensities make that sampling noise unnecessary. The
+repaired objective computes the behavior-cloning baseline exactly over the
+known safe-set distribution and estimates only the normalized
+advantage-weighted residual with the factual action. This action-centered
+control variate is unbiased for the listwise IQL actor objective, uses bounded
+factual residuals, and never divides by propensity.
+
+The formal repeat passed. All seven actor members assigned positive mean logit
+effect to the beneficial action, and the pessimistic population exercised it
+126 times in 4,608 delayed-effect decisions. On the matched randomized null,
+individual actors retained finite estimation noise but the complete
+pessimistic population made zero overrides. The physical effect occurred 12
+options after action assignment while each critic backup spanned four.
+
+The ignored report is
+`artifacts/autonomous-generation-6-development/iql-actor-causal-smoke-v1.json`,
+SHA-256
+`c69a45cc273fd421d872a53bec2a179f9e1d6803a57e7ad09f74442d2b69fb55`.
+This unlocks only frozen Wine development, not qualification or gameplay.
+
 ## Performance contract
 
 All development launchers apply the Linux process-tree CPU affinity contract
