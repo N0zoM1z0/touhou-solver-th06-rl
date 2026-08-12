@@ -63,3 +63,11 @@ def test_conservative_fit_is_grouped_nonlinear_and_exportable() -> None:
     assert state["fit_report"]["train_groups"] == [
         "train-a", "train-b", "train-c"
     ]
+    report = state["fit_report"]
+    assert report["exported_target_sha256"] == report["iterations"][-1][
+        "next_target_sha256"
+    ]
+    assert report["exported_target_iteration"] == 2
+    assert report["exported_nominal_horizon_frames"] == 120
+    assert "heldout_factual_cost_rmse" not in report
+    assert "matched_horizon_validation_rmse" in report

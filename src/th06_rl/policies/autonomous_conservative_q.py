@@ -31,6 +31,51 @@ from .offline_ranker import (
 _ACTION_INDEX = {action: index for index, action in enumerate(ACTION_NAMES)}
 
 
+def _pessimistic_candidate(
+    predictions: list[list[float]],
+    *,
+    supported: list[int],
+    baseline_index: int,
+    legal: tuple[str, ...],
+    uncertainty_scale: float,
+) -> tuple[int, str]:
+    """Select the strongest robust improvement across every supported action."""
+    candidates = [index for index in supported if index != baseline_index]
+    if not candidates:
+        return baseline_index, "no-candidate"
+    unanimous = [
+        index for index in candidates
+        if all(
+            member[index] < member[baseline_index]
+            for member in predictions
+        )
+    ]
+    if not unanimous:
+        return baseline_index, "committee"
+
+    def moments(index: int) -> tuple[float, float]:
+        values = [member[index] for member in predictions]
+        mean = sum(values) / len(values)
+        variance = sum((value - mean) ** 2 for value in values) / len(values)
+        return mean, math.sqrt(variance)
+
+    baseline_mean, baseline_std = moments(baseline_index)
+    baseline_lower = baseline_mean - uncertainty_scale * baseline_std
+    robust = []
+    for index in unanimous:
+        candidate_mean, candidate_std = moments(index)
+        candidate_upper = candidate_mean + uncertainty_scale * candidate_std
+        margin = baseline_lower - candidate_upper
+        if margin > 0.0:
+            robust.append((margin, legal[index], index))
+    if not robust:
+        return baseline_index, "bound"
+    # Maximize the pessimistic improvement, with a stable action-name tie break.
+    best_margin = max(row[0] for row in robust)
+    best = min(row for row in robust if row[0] == best_margin)
+    return best[2], "selected"
+
+
 def _decode_model(row: object) -> dict[str, object]:
     if not isinstance(row, dict) or row.get("codec") != MODEL_CODEC:
         raise TypeError("conservative model payload is invalid")
@@ -212,27 +257,20 @@ class AutonomousConservativeQPolicy:
         self.support_abstentions += len(legal) - len(supported)
         predictions = [scorer.predict_many(rows) for scorer in self.scorers]
         baseline_index = legal.index(baseline)
-        means = [
-            sum(member[index] for member in predictions) / len(predictions)
-            for index in range(len(legal))
-        ]
-        best = min(supported, key=lambda index: (means[index], legal[index]))
         proposed = baseline
-        if best != baseline_index:
-            if any(
-                member[best] >= member[baseline_index]
-                for member in predictions
-            ):
-                self.committee_abstentions += 1
-            else:
-                candidate_upper = max(member[best] for member in predictions)
-                baseline_lower = min(
-                    member[baseline_index] for member in predictions
-                )
-                if candidate_upper >= baseline_lower:
-                    self.bound_abstentions += 1
-                else:
-                    proposed = legal[best]
+        best, reason = _pessimistic_candidate(
+            predictions,
+            supported=supported,
+            baseline_index=baseline_index,
+            legal=legal,
+            uncertainty_scale=self.uncertainty_scale,
+        )
+        if reason == "committee":
+            self.committee_abstentions += 1
+        elif reason == "bound":
+            self.bound_abstentions += 1
+        elif reason == "selected":
+            proposed = legal[best]
         self.decisions += 1
         if proposed != baseline:
             self.proposals[proposed] += 1

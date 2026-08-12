@@ -105,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             (_sha256(args.shadow_native_scorer),)
             if args.shadow_native_scorer is not None else ()
         ),
+        n_step_frames=args.n_step_frames,
     )
     args.output_dir.mkdir(parents=True)
     _write(args.output_dir / "policy-shadow.json", state)

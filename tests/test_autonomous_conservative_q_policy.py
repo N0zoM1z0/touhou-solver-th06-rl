@@ -10,6 +10,7 @@ from th06_rl.learning_features import TREE_FEATURE_SCHEMA, tree_feature_names
 from th06_rl.offline import ACTION_NAMES
 from th06_rl.policies.autonomous_conservative_q import (
     AutonomousConservativeQPolicy,
+    _pessimistic_candidate,
 )
 from th06_rl.policies.offline_ranker import MODEL_SCHEMA
 from th06_rl.policy_api import PolicyContext
@@ -103,3 +104,38 @@ def test_shadow_conservative_q_never_publishes_proposal() -> None:
     policy.import_state(_state("shadow"))
     assert policy.decide(_context()).action == "stay"
     assert policy.metrics()["shadow_proposals"] == 1
+
+
+def test_selector_checks_every_candidate_for_the_best_robust_bound() -> None:
+    # Candidate 1 has the best mean but uncertainty crosses the incumbent's
+    # lower bound.  Candidate 2 is less optimistic on mean and robustly better.
+    selected, reason = _pessimistic_candidate(
+        [
+            [10.0, 0.0, 4.0],
+            [6.0, 5.9, 4.0],
+            [8.0, 5.9, 4.0],
+        ],
+        supported=[0, 1, 2],
+        baseline_index=0,
+        legal=("stay", "left", "right"),
+        uncertainty_scale=1.0,
+    )
+    assert (selected, reason) == (2, "selected")
+
+
+def test_selector_applies_declared_uncertainty_scale() -> None:
+    predictions = [[4.0, 2.0], [8.0, 3.0], [6.0, 2.5]]
+    assert _pessimistic_candidate(
+        predictions,
+        supported=[0, 1],
+        baseline_index=0,
+        legal=("stay", "left"),
+        uncertainty_scale=0.0,
+    ) == (1, "selected")
+    assert _pessimistic_candidate(
+        predictions,
+        supported=[0, 1],
+        baseline_index=0,
+        legal=("stay", "left"),
+        uncertainty_scale=2.0,
+    ) == (0, "bound")

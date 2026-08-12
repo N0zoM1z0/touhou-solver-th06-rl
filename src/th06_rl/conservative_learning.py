@@ -365,6 +365,74 @@ def _support_distances(artifact: dict[str, object], rows, actions):
     return result
 
 
+def _target_sha256(values) -> str:
+    """Commit a fitted target vector without embedding the training corpus."""
+    import numpy as np
+
+    array = np.asarray(values, dtype="<f4")
+    return hashlib.sha256(array.tobytes(order="C")).hexdigest()
+
+
+def _backup_layout(samples: list[NStepCost]):
+    rows = []
+    actions = []
+    slices = []
+    for sample in samples:
+        start = len(rows)
+        if sample.next_state is not None:
+            rows.extend(sample.next_state.candidate_vectors)
+            actions.extend(
+                ACTION_NAMES.index(action)
+                for action in sample.next_state.legal_actions
+            )
+        slices.append((start, len(rows), sample.next_state))
+    return rows, actions, slices
+
+
+def _bellman_backup(
+    *,
+    factual_cost,
+    layout,
+    models,
+    support: dict[str, object],
+    uncertainty_scale: float,
+):
+    """Apply one frozen conservative backup to either train or held-out rows."""
+    import numpy as np
+
+    rows, actions, slices = layout
+    updated = np.asarray(factual_cost, dtype=np.float32).copy()
+    if not rows:
+        return updated, 0
+    matrix = np.asarray(rows, dtype=np.float32)
+    predictions = np.asarray([model.predict(matrix) for model in models])
+    mean = predictions.mean(axis=0)
+    std = predictions.std(axis=0)
+    distances = _support_distances(support, rows, actions)
+    supported_backups = 0
+    for index, (start, stop, next_state) in enumerate(slices):
+        if next_state is None or stop == start:
+            continue
+        permitted = [
+            offset for offset in range(start, stop)
+            if next_state.legal_actions[offset - start]
+            == next_state.baseline_action
+            or distances[offset] <= float(support["threshold"])
+        ]
+        if not permitted:
+            permitted = [
+                start + next_state.legal_actions.index(
+                    next_state.baseline_action
+                )
+            ]
+        updated[index] += min(
+            float(mean[offset] + uncertainty_scale * std[offset])
+            for offset in permitted
+        )
+        supported_backups += len(permitted)
+    return updated, supported_backups
+
+
 def fit_conservative_fqi(
     train: list[NStepCost],
     validation: list[NStepCost],
@@ -380,6 +448,7 @@ def fit_conservative_fqi(
     threads: int,
     native_scorer_sha256: str,
     compatible_native_scorer_sha256: tuple[str, ...] = (),
+    n_step_frames: int = 60,
 ) -> dict[str, object]:
     import numpy as np
     from xgboost import XGBRegressor
@@ -420,25 +489,20 @@ def fit_conservative_fqi(
             counts[sample.state.episode_id] for sample in train
         ], dtype=np.float32))
 
-    next_rows = []
-    next_actions = []
-    next_slices = []
-    for sample in train:
-        start = len(next_rows)
-        if sample.next_state is not None:
-            next_rows.extend(sample.next_state.candidate_vectors)
-            next_actions.extend(
-                ACTION_NAMES.index(action)
-                for action in sample.next_state.legal_actions
-            )
-        next_slices.append((start, len(next_rows), sample.next_state))
-    next_matrix = np.asarray(next_rows, dtype=np.float32)
-    next_distances = _support_distances(support, next_rows, next_actions)
+    if n_step_frames <= 0:
+        raise ValueError("n-step frame horizon must be positive")
+    train_layout = _backup_layout(train)
+    validation_layout = _backup_layout(validation)
     targets = factual_cost.copy()
+    validation_factual_cost = np.asarray(
+        [sample.observed_hit_cost for sample in validation], dtype=np.float32
+    )
+    validation_targets = validation_factual_cost.copy()
     models = []
     iteration_report = []
-    for iteration in range(bellman_iterations):
-        models = []
+
+    def fit_ensemble(fit_targets, *, fit_round: int):
+        fitted = []
         for member in range(ensemble_members):
             model = XGBRegressor(
                 objective="reg:squarederror",
@@ -452,49 +516,50 @@ def fit_conservative_fqi(
                 reg_alpha=0.05,
                 tree_method="hist",
                 n_jobs=threads,
-                random_state=seed + iteration * 100 + member,
+                random_state=seed + fit_round * 100 + member,
             )
             member_weights = weights * bootstrap_counts[member]
-            model.fit(x, targets, sample_weight=member_weights)
-            models.append(model)
-        if len(next_rows):
-            predictions = np.asarray([
-                model.predict(next_matrix) for model in models
-            ])
-            mean = predictions.mean(axis=0)
-            std = predictions.std(axis=0)
-        updated = factual_cost.copy()
-        supported_backups = 0
-        for index, (start, stop, next_state) in enumerate(next_slices):
-            if next_state is None or stop == start:
-                continue
-            permitted = [
-                offset for offset in range(start, stop)
-                if next_state.legal_actions[offset - start]
-                == next_state.baseline_action
-                or next_distances[offset] <= float(support["threshold"])
-            ]
-            if not permitted:
-                permitted = [
-                    start + next_state.legal_actions.index(
-                        next_state.baseline_action
-                    )
-                ]
-            conservative = min(
-                float(mean[offset] + uncertainty_scale * std[offset])
-                for offset in permitted
-            )
-            updated[index] += conservative
-            supported_backups += len(permitted)
+            model.fit(x, fit_targets, sample_weight=member_weights)
+            fitted.append(model)
+        return fitted
+
+    for iteration in range(bellman_iterations):
+        fitted_target_sha256 = _target_sha256(targets)
+        models = fit_ensemble(targets, fit_round=iteration)
+        updated, supported_backups = _bellman_backup(
+            factual_cost=factual_cost,
+            layout=train_layout,
+            models=models,
+            support=support,
+            uncertainty_scale=uncertainty_scale,
+        )
+        validation_updated, validation_supported_backups = _bellman_backup(
+            factual_cost=validation_factual_cost,
+            layout=validation_layout,
+            models=models,
+            support=support,
+            uncertainty_scale=uncertainty_scale,
+        )
         delta = float(np.mean(np.abs(updated - targets)))
         targets = updated
+        validation_targets = validation_updated
         iteration_report.append({
             "iteration": iteration + 1,
             "mean_absolute_target_delta": delta,
             "target_mean": float(targets.mean()),
             "target_max": float(targets.max()),
             "supported_backup_candidates": supported_backups,
+            "validation_supported_backup_candidates": validation_supported_backups,
+            "fitted_target_sha256": fitted_target_sha256,
+            "next_target_sha256": _target_sha256(targets),
+            "next_nominal_horizon_frames": n_step_frames * (iteration + 2),
         })
+
+    # The loop's final models were fitted to the previous target generation.
+    # Refit once to the last reported target before export.  This explicit step
+    # prevents the generation-2 off-by-one model/fit-report mismatch.
+    models = fit_ensemble(targets, fit_round=bellman_iterations)
+    exported_target_sha256 = _target_sha256(targets)
 
     validation_x = np.asarray(
         [sample.state.vector for sample in validation], dtype=np.float32
@@ -503,11 +568,10 @@ def fit_conservative_fqi(
         model.predict(validation_x) for model in models
     ])
     prediction = validation_predictions.mean(axis=0)
-    actual = np.asarray(
-        [sample.observed_hit_cost for sample in validation], dtype=np.float32
-    )
-    rmse = float(np.sqrt(np.mean((prediction - actual) ** 2)))
-    constant = float(np.sqrt(np.mean((actual - factual_cost.mean()) ** 2)))
+    rmse = float(np.sqrt(np.mean((prediction - validation_targets) ** 2)))
+    constant = float(np.sqrt(np.mean(
+        (validation_targets - targets.mean()) ** 2
+    )))
     conformance_indices = np.linspace(
         0, len(train) - 1, min(8, len(train)), dtype=int
     )
@@ -519,7 +583,7 @@ def fit_conservative_fqi(
         "train_groups": len(groups) >= 3,
         "validation_groups": len({sample.state.episode_id for sample in validation}) >= 2,
         "train_has_hits": sum(sample.observed_hit_cost for sample in train) > 0.0,
-        "validation_has_hits": sum(sample.observed_hit_cost for sample in validation) > 0.0,
+        "validation_has_hits": float(validation_factual_cost.sum()) > 0.0,
         "all_actions_observed": all(
             any(sample.state.action == action for sample in train)
             for action in ACTION_NAMES
@@ -564,9 +628,17 @@ def fit_conservative_fqi(
             "train_rows": len(train),
             "validation_rows": len(validation),
             "train_n_step_hit_cost": float(factual_cost.sum()),
-            "validation_n_step_hit_cost": float(actual.sum()),
-            "heldout_factual_cost_rmse": rmse,
-            "heldout_constant_rmse": constant,
+            "validation_n_step_hit_cost": float(validation_factual_cost.sum()),
+            "exported_target_sha256": exported_target_sha256,
+            "exported_target_iteration": bellman_iterations + 1,
+            "exported_nominal_horizon_frames": n_step_frames * (
+                bellman_iterations + 1
+            ),
+            "matched_horizon_validation_target_mean": float(
+                validation_targets.mean()
+            ),
+            "matched_horizon_validation_rmse": rmse,
+            "matched_horizon_constant_rmse": constant,
             "iterations": iteration_report,
             "support": support_report,
         },
