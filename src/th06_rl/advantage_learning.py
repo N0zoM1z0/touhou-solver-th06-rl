@@ -12,7 +12,12 @@ from pathlib import Path
 import random
 
 from .autonomous_learning import _expected_probability
-from .conservative_learning import _encoded_model, _export_model, _kmeans
+from .conservative_learning import (
+    _encoded_model,
+    _export_model,
+    _kmeans,
+    _support_distances,
+)
 from .hazard_representation import (
     HAZARD_PRIMITIVE_FEATURE_NAMES,
     HISTORY_FEATURE_NAMES,
@@ -32,6 +37,9 @@ CROSSFIT_FOLDS = 3
 NUISANCE_MEMBERS = 3
 NUISANCE_TREES = 96
 POPULATION_TREES = 128
+DISTILLED_TREES = 48
+DISTILLATION_P95_ERROR = 0.05
+DISTILLATION_MAX_ERROR = 0.25
 RICH_FEATURE_SCHEMA = "learned-hazard-codebook-option-tree-v1"
 HAZARD_CODEBOOK_SCHEMA = "game-neutral-hazard-codebook-v1"
 HAZARD_PROTOTYPES = 24
@@ -530,6 +538,21 @@ def rich_candidate_vector(
     return result
 
 
+def rich_candidate_vector_from_encoding(
+    base_vector: tuple[float, ...],
+    hazard_encoding: tuple[float, ...],
+    history_features: tuple[float, ...],
+) -> tuple[float, ...]:
+    if len(hazard_encoding) != len(hazard_codebook_feature_names()):
+        raise ValueError("hazard encoding width mismatch")
+    if len(history_features) != len(HISTORY_FEATURE_NAMES):
+        raise ValueError("four-observation history width mismatch")
+    result = (*base_vector, *hazard_encoding, *history_features)
+    if len(result) != len(rich_feature_names()):
+        raise RuntimeError("rich candidate vector width mismatch")
+    return result
+
+
 def _augment_steps(
     samples: list[OptionStep], artifact: dict[str, object]
 ) -> list[OptionStep]:
@@ -581,6 +604,152 @@ def _regressor(*, trees: int, seed: int, threads: int):
         n_jobs=threads,
         random_state=seed,
     )
+
+
+def _student_regressor(*, seed: int, threads: int):
+    from xgboost import XGBRegressor
+
+    return XGBRegressor(
+        objective="reg:squarederror",
+        n_estimators=DISTILLED_TREES,
+        max_depth=4,
+        learning_rate=0.06,
+        min_child_weight=8.0,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        reg_lambda=8.0,
+        reg_alpha=0.05,
+        tree_method="hist",
+        n_jobs=threads,
+        random_state=seed,
+    )
+
+
+def _fit_rich_support(
+    train: list[OptionStep],
+    validation: list[OptionStep],
+    *,
+    seed: int,
+) -> tuple[dict[str, object], dict[str, object]]:
+    import numpy as np
+
+    matrix = np.asarray([sample.vector for sample in train], dtype=np.float64)
+    mean = matrix.mean(axis=0)
+    scale = matrix.std(axis=0)
+    scale[scale < 1e-6] = 1.0
+    prototypes = []
+    factual_counts = {}
+    supported_actions = []
+    for action_index, action in enumerate(ACTION_NAMES):
+        rows = np.asarray([
+            sample.vector for sample in train if sample.action == action
+        ], dtype=np.float64)
+        factual_counts[action] = len(rows)
+        if len(rows):
+            supported_actions.append(action)
+            prototypes.append(_kmeans(
+                (rows - mean) / scale,
+                count=12,
+                iterations=12,
+                seed=seed + action_index,
+            ))
+        else:
+            # Native batch support requires a nonempty group for each stable
+            # action index. This placeholder is unreachable because runtime
+            # first checks factual_supported_actions.
+            prototypes.append(np.zeros((1, matrix.shape[1]), dtype=np.float64))
+    if len(supported_actions) < 2:
+        raise ValueError("training options support fewer than two actions")
+    provisional = {
+        "schema": "autonomous-rich-local-prototype-support-v1",
+        "mean": mean.tolist(),
+        "scale": scale.tolist(),
+        "prototypes": [group.tolist() for group in prototypes],
+        "factual_supported_actions": supported_actions,
+        "threshold": 0.0,
+    }
+    validation_rows = [sample.vector for sample in validation]
+    validation_actions = [ACTION_NAMES.index(sample.action) for sample in validation]
+    if any(sample.action not in supported_actions for sample in validation):
+        raise ValueError("validation contains a factual action absent from training")
+    distances = _support_distances(
+        provisional, validation_rows, validation_actions
+    )
+    by_episode = {}
+    for sample, distance in zip(validation, distances, strict=True):
+        by_episode.setdefault(sample.episode_id, []).append(distance)
+    episode_scores = {
+        episode: max(values) for episode, values in by_episode.items()
+    }
+    ordered = sorted(episode_scores.values())
+    rank = min(len(ordered) - 1, math.ceil(0.90 * (len(ordered) + 1)) - 1)
+    threshold = float(ordered[max(0, rank)])
+    provisional["threshold"] = threshold
+    provisional["threshold_source"] = {
+        "kind": "whole-episode-one-sided-conformal-max-distance",
+        "nominal_coverage": 0.90,
+        "episode_scores": dict(sorted(episode_scores.items())),
+        "episode_groups": len(episode_scores),
+    }
+    report = {
+        "threshold": threshold,
+        "validation_rows": len(distances),
+        "validation_coverage": sum(
+            distance <= threshold for distance in distances
+        ) / len(distances),
+        "training_factual_action_counts": factual_counts,
+        "factual_supported_actions": supported_actions,
+        "prototypes_per_action": [len(group) for group in prototypes],
+        "distance_mean": float(np.mean(distances)),
+        "distance_p95": float(np.quantile(distances, 0.95)),
+        "distance_max": max(distances),
+    }
+    return provisional, report
+
+
+def _calibrate_population_upper(
+    validation: list[AdvantageSample],
+    predictions,
+) -> tuple[dict[str, object], dict[str, object]]:
+    import numpy as np
+
+    upper = np.asarray(predictions).max(axis=0)
+    actual = np.asarray([
+        sample.pseudo_advantage for sample in validation
+    ], dtype=np.float64)
+    by_episode: dict[str, list[float]] = {}
+    eligible = []
+    for index, sample in enumerate(validation):
+        if sample.action == sample.baseline_action:
+            continue
+        score = max(0.0, float(actual[index] - upper[index]))
+        by_episode.setdefault(sample.episode_id, []).append(score)
+        eligible.append(index)
+    if len(by_episode) < 3 or not eligible:
+        raise ValueError("calibration needs three nonbaseline episode groups")
+    episode_scores = {
+        episode: max(values) for episode, values in by_episode.items()
+    }
+    ordered = sorted(episode_scores.values())
+    rank = min(len(ordered) - 1, math.ceil(0.90 * (len(ordered) + 1)) - 1)
+    radius = float(ordered[max(0, rank)])
+    covered = [actual[index] <= upper[index] + radius for index in eligible]
+    artifact = {
+        "schema": "autonomous-dr-population-upper-conformal-v1",
+        "kind": "whole-episode-one-sided-max-residual",
+        "nominal_coverage": 0.90,
+        "radius": radius,
+        "episode_groups": sorted(by_episode),
+        "episode_scores": dict(sorted(episode_scores.items())),
+    }
+    report = {
+        "nonbaseline_rows": len(eligible),
+        "row_coverage": sum(bool(value) for value in covered) / len(covered),
+        "radius": radius,
+        "population_upper_mean": float(upper[eligible].mean()),
+        "pseudo_advantage_mean": float(actual[eligible].mean()),
+    }
+    return artifact, report
 
 
 def _fit_nuisance(
@@ -702,8 +871,23 @@ def fit_dr_option_advantage(
     if population_members != POPULATION_MEMBERS:
         raise ValueError("generation-3 population must contain seven members")
     representation = fit_hazard_codebook(train, seed=seed + 30_000)
+    conformance_indices = np.linspace(
+        0, len(train) - 1, min(4, len(train)), dtype=int
+    )
+    representation["conformance"] = [
+        {
+            "primitives": [list(row) for row in train[index].hazard_primitives],
+            "encoding": list(encode_hazard_set(
+                train[index].hazard_primitives, representation
+            )),
+        }
+        for index in conformance_indices
+    ]
     train = _augment_steps(train, representation)
     validation = _augment_steps(validation, representation)
+    support, support_report = _fit_rich_support(
+        train, validation, seed=seed + 40_000
+    )
     folds = _folds(train_groups, count=crossfit_folds, seed=seed)
     pseudo_train = []
     fold_report = []
@@ -747,6 +931,7 @@ def fit_dr_option_advantage(
     groups = sorted({sample.episode_id for sample in pseudo_train})
     generator = random.Random(seed + 20_000)
     models = []
+    population_weights = []
     bootstrap_report = []
     for member in range(population_members):
         chosen = [generator.choice(groups) for _ in groups]
@@ -761,6 +946,7 @@ def fit_dr_option_advantage(
         )
         model.fit(x, y, sample_weight=weights)
         models.append(model)
+        population_weights.append(weights)
         bootstrap_report.append({
             "member": member,
             "unique_episodes": len(counts),
@@ -773,9 +959,31 @@ def fit_dr_option_advantage(
     validation_y = np.asarray([
         sample.pseudo_advantage for sample in pseudo_validation
     ], dtype=np.float32)
+    teacher_validation_prediction = np.asarray([
+        model.predict(validation_x) for model in models
+    ])
+    teachers = models
+    models = []
+    for member, (teacher, weights) in enumerate(zip(
+        teachers, population_weights, strict=True
+    )):
+        student = _student_regressor(
+            seed=seed + 50_000 + member,
+            threads=threads,
+        )
+        student.fit(x, teacher.predict(x), sample_weight=weights)
+        models.append(student)
     validation_prediction = np.asarray([
         model.predict(validation_x) for model in models
     ])
+    distillation_error = np.abs(
+        validation_prediction - teacher_validation_prediction
+    )
+    distillation_p95 = float(np.quantile(distillation_error, 0.95))
+    distillation_max = float(distillation_error.max())
+    calibration, calibration_report = _calibrate_population_upper(
+        pseudo_validation, validation_prediction
+    )
     mean_prediction = validation_prediction.mean(axis=0)
     rmse = float(np.sqrt(np.mean((mean_prediction - validation_y) ** 2)))
     constant = float(np.sqrt(np.mean(validation_y ** 2)))
@@ -814,6 +1022,10 @@ def fit_dr_option_advantage(
         "baseline_advantage_identity": baseline_identity_error <= 1e-9,
         "finite_validation_diagnostics": finite,
         "population_complete": len(models) == POPULATION_MEMBERS,
+        "distillation_p95": distillation_p95 <= DISTILLATION_P95_ERROR,
+        "distillation_max": distillation_max <= DISTILLATION_MAX_ERROR,
+        "support_calibrated": support_report["validation_coverage"] >= 0.90,
+        "conformal_upper_coverage": calibration_report["row_coverage"] >= 0.90,
         "native_scorer_bound": len(native_scorer_sha256) == 64,
     }
     return {
@@ -829,6 +1041,13 @@ def fit_dr_option_advantage(
             "history_feature_names": list(HISTORY_FEATURE_NAMES),
         },
         "models": encoded_models,
+        "support": support,
+        "selection": {
+            "rule": "minimum-calibrated-population-upper-advantage",
+            "baseline_advantage": 0.0,
+            "conformal_radius": calibration["radius"],
+            "active_override_budget": None,
+        },
         "native_scorer": {
             "schema": "th06-rl-native-xgboost-scorer-v1",
             "sha256": native_scorer_sha256,
@@ -842,7 +1061,7 @@ def fit_dr_option_advantage(
         "authorization": {
             "fit_gates": gates,
             "fit_eligible": all(gates.values()),
-            "calibration": None,
+            "calibration": calibration,
             "active_canary": None,
         },
         "fit_report": {
@@ -858,6 +1077,16 @@ def fit_dr_option_advantage(
             "crossfit_folds": fold_report,
             "full_nuisance_bootstrap_unique_episodes": full_nuisance_unique,
             "population_bootstrap": bootstrap_report,
+            "distillation": {
+                "teacher_trees_per_member": population_trees,
+                "student_trees_per_member": DISTILLED_TREES,
+                "validation_p95_absolute_error": distillation_p95,
+                "validation_max_absolute_error": distillation_max,
+                "p95_gate": DISTILLATION_P95_ERROR,
+                "max_gate": DISTILLATION_MAX_ERROR,
+            },
+            "calibration": calibration_report,
+            "support": support_report,
             "hazard_codebook": {
                 key: representation[key]
                 for key in (

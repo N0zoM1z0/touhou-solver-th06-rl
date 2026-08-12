@@ -777,6 +777,8 @@ def run(args: argparse.Namespace) -> int:
             hit = physical_hit(previous_player_state, snapshot.player_state)
             previous_player_state = snapshot.player_state
             previous_snapshot = snapshot
+            if prior_frame is not None and snapshot.frame < prior_frame:
+                learning_history.clear()
             reason = "ok"
             selected = None
             proposed = None

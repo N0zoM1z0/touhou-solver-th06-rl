@@ -52,4 +52,18 @@ TH06_RL_RANKER_API int th06_rl_min_support_distance_v1(
     const std::int32_t* row_actions,
     float* outputs);
 
+// Encode one bounded, permutation-invariant observed-hazard set. Output is
+// prototype fractions, prototype minimum distances, normalized feature means,
+// normalized max-absolute values, log1p(count), and an empty-set indicator.
+TH06_RL_RANKER_API int th06_rl_encode_hazard_codebook_v1(
+    const float* primitives,
+    std::int32_t primitive_count,
+    std::int32_t feature_count,
+    const float* feature_mean,
+    const float* feature_scale,
+    const float* standardized_prototypes,
+    std::int32_t prototype_count,
+    float* outputs,
+    std::int32_t output_count);
+
 }

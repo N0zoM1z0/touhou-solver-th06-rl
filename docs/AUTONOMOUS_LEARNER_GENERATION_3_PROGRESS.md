@@ -59,3 +59,29 @@ The production causal smoke was rerun after adding the learned representation:
 - all causal-smoke gates passed.
 
 Repository tests after this checkpoint: 374 passed.
+
+## 2026-08-12: population-preserving native deployment smoke
+
+Each of the seven 128-tree teacher members is now distilled separately into a
+48-tree depth-four student. Runtime selection uses the maximum member advantage
+plus a whole-episode one-sided conformal residual; it does not use a selected
+winner or population mean. Unobserved factual actions and locally unsupported
+states fail closed to the incumbent.
+
+The host native scorer, support kernel, and new bounded native hazard-codebook
+encoder compiled successfully. A production-sized deterministic state was
+loaded through the complete native runtime and evaluated for 1,200 decisions:
+
+- native decision p95: 0.440 ms;
+- native decision maximum: 0.613 ms;
+- decisions over 4 ms: 0;
+- controller deadline misses: 0;
+- held-out distillation p95 absolute error: 0.0298 HIT;
+- held-out distillation maximum absolute error: 0.0321 HIT;
+- one-sided conformal radius on the fixture: 0.00173 HIT.
+
+The host and fully static Win32 scorer libraries both compile after adding the
+encoder. These are deterministic infrastructure smokes, not Wine outcome
+evidence.
+
+Repository tests after this checkpoint: 377 passed.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from th06_rl.advantage_learning import (
     POPULATION_MEMBERS,
     OptionStep,
@@ -100,6 +102,7 @@ def test_generation3_fit_crossfits_whole_episodes_and_keeps_population() -> None
     ]
     assert sorted(heldout) == [f"train-{index}" for index in range(9)]
     assert report["baseline_identity_max_error"] == 0.0
+    json.dumps(state, allow_nan=False)
 
 
 def test_causal_smoke_recovers_effect_instead_of_state_risk() -> None:

@@ -141,6 +141,13 @@ gate of at most 4 ms p95 per decision with zero controller-deadline misses.
 Python or a training framework may not run in the resident scoring hot path on
 Windows.
 
+Distillation preserves all seven population members separately. Each 128-tree
+teacher member is distilled to a 48-tree depth-four native student; population
+mean-only distillation is forbidden. On untouched episodes, per-member
+distillation absolute error must be at most 0.05 HIT at p95 and 0.25 HIT at the
+maximum. A failure rejects the fit and does not authorize larger runtime
+models or relaxed bounds inside this generation.
+
 ## 5. Calibrated uncertainty and pessimistic selection
 
 Raw episode-bootstrap range is not treated as a calibrated confidence

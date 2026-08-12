@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ctypes
+import hashlib
 import math
+from pathlib import Path
 
 
 HAZARD_PRIMITIVE_SCHEMA = "game-neutral-observed-hazard-primitives-v1"
@@ -257,3 +260,86 @@ def project_hazard_primitives(
         raise ValueError("hazard primitive projection produced invalid values")
     result.sort(key=lambda row: (row[6], row[11:14], row))
     return tuple(result[:MAX_HAZARD_PRIMITIVES])
+
+
+class NativeHazardCodebookEncoder:
+    """Bounded native facade for an immutable learned primitive codebook."""
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        expected_sha256: str,
+        artifact: dict[str, object],
+        output_count: int,
+    ) -> None:
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected_sha256:
+            raise ValueError("native hazard encoder SHA-256 mismatch")
+        mean = tuple(float(value) for value in artifact.get("mean", ()))
+        scale = tuple(float(value) for value in artifact.get("scale", ()))
+        prototypes = tuple(
+            tuple(float(value) for value in row)
+            for row in artifact.get("prototypes", ())
+        )
+        width = len(HAZARD_PRIMITIVE_FEATURE_NAMES)
+        if (
+            artifact.get("schema") != "game-neutral-hazard-codebook-v1"
+            or tuple(artifact.get("primitive_feature_names", ()))
+            != HAZARD_PRIMITIVE_FEATURE_NAMES
+            or len(mean) != width
+            or len(scale) != width
+            or not prototypes
+            or any(len(row) != width for row in prototypes)
+            or output_count != 2 * len(prototypes) + 2 * width + 2
+        ):
+            raise ValueError("native hazard encoder artifact shape mismatch")
+        library = ctypes.CDLL(str(path))
+        function = library.th06_rl_encode_hazard_codebook_v1
+        function.argtypes = [
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.c_int32,
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.c_int32,
+        ]
+        function.restype = ctypes.c_int
+        self.library = library
+        self.function = function
+        self.mean = (ctypes.c_float * width)(*mean)
+        self.scale = (ctypes.c_float * width)(*scale)
+        flat = tuple(value for row in prototypes for value in row)
+        self.prototypes = (ctypes.c_float * len(flat))(*flat)
+        self.feature_count = width
+        self.prototype_count = len(prototypes)
+        self.output_count = output_count
+
+    def encode(
+        self, primitives: tuple[tuple[float, ...], ...]
+    ) -> tuple[float, ...]:
+        if len(primitives) > MAX_HAZARD_PRIMITIVES or any(
+            len(row) != self.feature_count for row in primitives
+        ):
+            raise ValueError("native hazard encoder input shape mismatch")
+        flat_values = tuple(value for row in primitives for value in row)
+        flat = (ctypes.c_float * max(1, len(flat_values)))(
+            *(flat_values or (0.0,))
+        )
+        output = (ctypes.c_float * self.output_count)()
+        status = self.function(
+            flat,
+            len(primitives),
+            self.feature_count,
+            self.mean,
+            self.scale,
+            self.prototypes,
+            self.prototype_count,
+            output,
+            self.output_count,
+        )
+        if status != 0:
+            raise RuntimeError(f"native hazard encoder failed with status {status}")
+        return tuple(float(value) for value in output)
