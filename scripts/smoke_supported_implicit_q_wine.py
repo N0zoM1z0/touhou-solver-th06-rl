@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 import hashlib
 import json
 from pathlib import Path
@@ -22,7 +22,10 @@ from th06_rl.advantage_learning import (  # noqa: E402
     fit_hazard_codebook,
 )
 from th06_rl.implicit_learning import crossfit_implicit_q_report  # noqa: E402
-from th06_rl.option_cache import load_cached_option_episode  # noqa: E402
+from th06_rl.option_cache import (  # noqa: E402
+    load_cached_option_episode,
+    prime_option_episode_cache,
+)
 
 
 OPTION_CACHE_CONTRACT = (
@@ -35,6 +38,16 @@ OPTION_CACHE_CONTRACT = (
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _prime_cache(arguments: tuple[Path, Path]) -> tuple[bool, int]:
+    run, cache_root = arguments
+    return prime_option_episode_cache(
+        run,
+        loader=_load,
+        cache_root=cache_root,
+        contract_files=OPTION_CACHE_CONTRACT,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,10 +83,13 @@ def main(argv: list[str] | None = None) -> int:
             contract_files=OPTION_CACHE_CONTRACT,
         )
 
-    with ThreadPoolExecutor(
+    with ProcessPoolExecutor(
         max_workers=min(args.load_workers, len(runs))
     ) as executor:
-        cached = list(executor.map(load, runs))
+        prime_results = list(executor.map(
+            _prime_cache, ((run, args.cache_dir) for run in runs)
+        ))
+    cached = [load(run) for run in runs]
     loaded = [(rows, report) for rows, report, _hit in cached]
     loaded_at = time.perf_counter()
     samples = [sample for rows, _report in loaded for sample in rows]
@@ -106,8 +122,8 @@ def main(argv: list[str] | None = None) -> int:
         "new_development_episode_groups": len(new_episode_ids),
         "options": len(samples),
         "option_cache": {
-            "hits": sum(hit for _rows, _report, hit in cached),
-            "misses": sum(not hit for _rows, _report, hit in cached),
+            "hits": sum(hit for hit, _options in prime_results),
+            "misses": sum(not hit for hit, _options in prime_results),
             "root": str(args.cache_dir.resolve()),
         },
         "parameters": {

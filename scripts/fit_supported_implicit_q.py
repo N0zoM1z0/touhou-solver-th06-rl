@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 import hashlib
 import json
 from pathlib import Path
@@ -29,7 +29,10 @@ from th06_rl.implicit_learning import (  # noqa: E402
     VALUE_TREES,
     fit_supported_implicit_q,
 )
-from th06_rl.option_cache import load_cached_option_episode  # noqa: E402
+from th06_rl.option_cache import (  # noqa: E402
+    load_cached_option_episode,
+    prime_option_episode_cache,
+)
 from th06_rl.sequential_learning import (  # noqa: E402
     BEHAVIOR_POLICY as GENERATION4_POLICY,
     TRANSITION_SCHEMA as GENERATION4_TRANSITION,
@@ -74,6 +77,16 @@ def _load(run_dir: Path):
             transition_schema=GENERATION4_TRANSITION,
         )
     raise ValueError(f"unsupported implicit-Q Wine corpus schema: {transition}")
+
+
+def _prime_cache(arguments: tuple[Path, Path]) -> tuple[bool, int]:
+    run, cache_root = arguments
+    return prime_option_episode_cache(
+        run,
+        loader=_load,
+        cache_root=cache_root,
+        contract_files=OPTION_CACHE_CONTRACT,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -126,10 +139,13 @@ def main(argv: list[str] | None = None) -> int:
             contract_files=OPTION_CACHE_CONTRACT,
         )
 
-    with ThreadPoolExecutor(
+    with ProcessPoolExecutor(
         max_workers=min(args.load_workers, len(runs))
     ) as executor:
-        cached = list(executor.map(load, runs))
+        prime_results = list(executor.map(
+            _prime_cache, ((run, args.cache_dir) for run in runs)
+        ))
+    cached = [load(run) for run in runs]
     loaded = [(rows, report) for rows, report, _hit in cached]
     samples = [sample for rows, _report in loaded for sample in rows]
     run_to_episode = {
@@ -169,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
             "seed": args.seed,
             "total_threads": args.threads,
             "option_cache_hits": sum(
-                hit for _rows, _report, hit in cached
+                hit for hit, _options in prime_results
             ),
             "load_workers": args.load_workers,
             "native_scorer_sha256": _sha256(args.native_scorer),

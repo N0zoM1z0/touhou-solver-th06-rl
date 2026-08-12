@@ -54,14 +54,11 @@ def _atomic_bytes(path: Path, value: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def load_cached_option_episode(
+def _identity(
     run_dir: Path,
-    *,
-    loader: Callable[[Path], tuple[list[OptionStep], dict[str, object]]],
     cache_root: Path,
     contract_files: tuple[Path, ...],
-) -> tuple[list[OptionStep], dict[str, object], bool]:
-    """Load an exact audited result; source or loader changes force a miss."""
+) -> tuple[Path, str, str, Path, Path]:
     run_dir = run_dir.resolve()
     manifest = run_dir / "manifest.json"
     if not manifest.is_file() or manifest.is_symlink():
@@ -71,8 +68,24 @@ def load_cached_option_episode(
     key = _sha256_bytes(
         f"{CACHE_SCHEMA}\0{manifest_sha256}\0{contract_sha256}".encode()
     )
-    payload_path = cache_root.resolve() / f"{key}.pickle"
-    metadata_path = cache_root.resolve() / f"{key}.json"
+    root = cache_root.resolve()
+    return (
+        run_dir,
+        manifest_sha256,
+        contract_sha256,
+        root / f"{key}.pickle",
+        root / f"{key}.json",
+    )
+
+
+def _validated_metadata(
+    *,
+    run_dir: Path,
+    manifest_sha256: str,
+    contract_sha256: str,
+    payload_path: Path,
+    metadata_path: Path,
+) -> dict[str, object] | None:
     if payload_path.is_file() and metadata_path.is_file():
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         if (
@@ -82,21 +95,37 @@ def load_cached_option_episode(
             and metadata.get("run_dir") == str(run_dir)
             and metadata.get("payload_sha256") == _sha256(payload_path)
         ):
-            with payload_path.open("rb") as source:
-                value = pickle.load(source)  # noqa: S301 - hash-bound local cache
-            if (
-                isinstance(value, tuple)
-                and len(value) == 2
-                and isinstance(value[0], list)
-                and value[0]
-                and all(isinstance(row, OptionStep) for row in value[0])
-                and isinstance(value[1], dict)
-            ):
-                return value[0], value[1], True
-            raise ValueError(f"invalid option cache payload: {payload_path}")
+            return metadata
         raise ValueError(f"invalid option cache metadata: {metadata_path}")
     if payload_path.exists() or metadata_path.exists():
-        raise ValueError(f"partial option cache entry: {key}")
+        raise ValueError(f"partial option cache entry beside: {payload_path}")
+    return None
+
+
+def prime_option_episode_cache(
+    run_dir: Path,
+    *,
+    loader: Callable[[Path], tuple[list[OptionStep], dict[str, object]]],
+    cache_root: Path,
+    contract_files: tuple[Path, ...],
+) -> tuple[bool, int]:
+    """Create one audited cache entry without returning its large payload."""
+    (
+        run_dir,
+        manifest_sha256,
+        contract_sha256,
+        payload_path,
+        metadata_path,
+    ) = _identity(run_dir, cache_root, contract_files)
+    metadata = _validated_metadata(
+        run_dir=run_dir,
+        manifest_sha256=manifest_sha256,
+        contract_sha256=contract_sha256,
+        payload_path=payload_path,
+        metadata_path=metadata_path,
+    )
+    if metadata is not None:
+        return True, int(metadata["options"])
     rows, report = loader(run_dir)
     payload = pickle.dumps((rows, report), protocol=pickle.HIGHEST_PROTOCOL)
     metadata = {
@@ -112,4 +141,48 @@ def load_cached_option_episode(
         metadata_path,
         (json.dumps(metadata, indent=2, sort_keys=True) + "\n").encode(),
     )
-    return rows, report, False
+    return False, len(rows)
+
+
+def load_cached_option_episode(
+    run_dir: Path,
+    *,
+    loader: Callable[[Path], tuple[list[OptionStep], dict[str, object]]],
+    cache_root: Path,
+    contract_files: tuple[Path, ...],
+) -> tuple[list[OptionStep], dict[str, object], bool]:
+    """Load an exact audited result; source or loader changes force a miss."""
+    (
+        run_dir,
+        manifest_sha256,
+        contract_sha256,
+        payload_path,
+        metadata_path,
+    ) = _identity(run_dir, cache_root, contract_files)
+    cache_hit, _options = prime_option_episode_cache(
+        run_dir,
+        loader=loader,
+        cache_root=cache_root,
+        contract_files=contract_files,
+    )
+    metadata = _validated_metadata(
+        run_dir=run_dir,
+        manifest_sha256=manifest_sha256,
+        contract_sha256=contract_sha256,
+        payload_path=payload_path,
+        metadata_path=metadata_path,
+    )
+    if metadata is not None:
+        with payload_path.open("rb") as source:
+            value = pickle.load(source)  # noqa: S301 - hash-bound local cache
+        if (
+            isinstance(value, tuple)
+            and len(value) == 2
+            and isinstance(value[0], list)
+            and value[0]
+            and all(isinstance(row, OptionStep) for row in value[0])
+            and isinstance(value[1], dict)
+        ):
+            return value[0], value[1], cache_hit
+        raise ValueError(f"invalid option cache payload: {payload_path}")
+    raise RuntimeError("option cache disappeared after successful prime")

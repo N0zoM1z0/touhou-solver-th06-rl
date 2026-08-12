@@ -31,9 +31,11 @@ Read in this order:
    and estimator findings;
 10. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
-11. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+11. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
+   optimizations, failed attempts, and correctness differentials;
+12. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-12. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+13. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 Generations 3 and 4 are frozen. Generation 4 exhausted its evidence budget
 without canary authorization. Generation 5 is declared, but no new Wine
