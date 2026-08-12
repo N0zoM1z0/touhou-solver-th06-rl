@@ -372,6 +372,20 @@ SHA-256
 It is the development reference for freezing qualification gates, not efficacy
 evidence and not permission to inspect qualification data.
 
+Before qualification, evaluator refactoring exposed that the fixed bootstrap
+seed had still indexed episode effects in transient mapping insertion order.
+JSON key sorting could therefore change a finite 4,096-resample quantile while
+leaving the episode data and conclusion unchanged. Resampling now first sorts
+by immutable episode ID; a regression test reverses the mapping and requires
+an identical complete report. The canonical development summary is
+`artifacts/autonomous-generation-6-development/crossfit-actor-wine-canonical-summary-v1.json`,
+SHA-256
+`497f3359542c8523e568061cb5d01f08256b6c536b6823814737f33fd4e50457`.
+Canonical overall/full-policy and worst-LOO upper bounds are `-2.0157` and
+`-1.6945`; Stage-4 values are `-3.4837` and `-2.7370`; Stage-6 values are
+`-1.0536` and `-0.8577`. This order-only correction used saved episode scores
+and did not refit or disclose qualification.
+
 ## Frozen full-development candidate preflight
 
 All 31 development episodes were fitted once into a separate immutable

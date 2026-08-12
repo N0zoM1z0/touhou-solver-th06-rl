@@ -15,6 +15,7 @@ from th06_rl.iql_actor_learning import (
     cross_fitted_factual_advantages,
     iql_actor_model_artifact,
     iql_actor_model_from_artifact,
+    summarize_iql_actor_episodes,
 )
 from th06_rl.low_rank_learning import FeatureRoleLayout
 
@@ -143,3 +144,40 @@ def test_native_iql_actor_population_matches_portable_models() -> None:
     expected = np.asarray([item.predict(rows) for item in portable])
     actual = np.asarray(native.predict(rows))
     assert np.allclose(actual, expected, rtol=2e-5, atol=2e-5)
+
+
+def test_policy_episode_bootstrap_is_invariant_to_mapping_order() -> None:
+    rows = {
+        f"episode-{index}": {
+            "cohort": "stage-x",
+            "options": 10,
+            "full_proposals": 0,
+            "full_proposal_loo_exact": 0,
+            "loo_union": 0,
+            "loo_exact": 0,
+            "split_union": 0,
+            "split_exact": 0,
+            "individual_proposals": 0,
+            "individual_union": 0,
+            "individual_exact": 0,
+            "mean_proposals": 1,
+            "mean_loo_union": 1,
+            "mean_loo_exact": 1,
+            "policy_intervention_exposure": 0.1,
+            "policy_model_effect": -0.1 * index,
+            "policy_dr_effect": float(index - 4),
+            "policy_max_abs_correction": 0.2,
+            "policy_loo_dr_effect": [float(index - member) for member in range(7)],
+            "behavior_kl_sum": 0.3,
+        }
+        for index in range(8)
+    }
+
+    forward = summarize_iql_actor_episodes(
+        rows, cohort_names=("stage-x",)
+    )
+    reverse = summarize_iql_actor_episodes(
+        dict(reversed(tuple(rows.items()))), cohort_names=("stage-x",)
+    )
+
+    assert forward == reverse

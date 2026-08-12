@@ -838,6 +838,8 @@ def evaluate_iql_actor_fold(
     intervention_probability_cap: float = 0.10,
     intervention_density_ratio_cap: float = 2.0,
     fit_representation_on_train: bool = False,
+    frozen_actors: list[IqlActorMember] | None = None,
+    frozen_support: dict[str, object] | None = None,
 ) -> dict[str, object]:
     from collections import Counter
     import numpy as np
@@ -881,7 +883,16 @@ def evaluate_iql_actor_fold(
             "heldout_excluded": False,
         }
 
-    if actor_advantage_folds:
+    if frozen_actors is not None:
+        if len(frozen_actors) != 7:
+            raise ValueError("frozen actor candidate must contain seven members")
+        actors = list(frozen_actors)
+        critics = []
+        advantage_crossfit = {
+            "scope": "frozen-development-candidate",
+            "qualification_labels_used": False,
+        }
+    elif actor_advantage_folds:
         actors, advantage_crossfit = fit_cross_fitted_iql_actor_population(
             train,
             layout=layout,
@@ -959,9 +970,22 @@ def evaluate_iql_actor_fold(
             row_episodes, ordered_heldout, common_predictions, strict=True
         )
     }
-    support, support_report = _support_artifacts(
-        train, seed=seed + fold * 100_000 + 80_000
-    )
+    if frozen_support is None:
+        support, support_report = _support_artifacts(
+            train, seed=seed + fold * 100_000 + 80_000
+        )
+    else:
+        support = frozen_support
+        factual = []
+        for sample in train:
+            mask = _supported(sample, support)
+            factual.append(mask[sample.legal_actions.index(sample.action)])
+        support_report = {
+            "scope": "frozen-development-candidate",
+            "rows": len(factual),
+            "factual_coverage": sum(factual) / len(factual),
+            "threshold": float(support["threshold"]),
+        }
     all_members = tuple(range(len(actors)))
     left_members = (0, 1, 2)
     right_members = (3, 4, 5, 6)
@@ -1182,6 +1206,140 @@ def _run_forked_actor_job(index: int):
     return evaluate_iql_actor_fold(**_FORKED_ACTOR_JOBS[index])
 
 
+def summarize_iql_actor_episodes(
+    episode_reports: dict[str, dict[str, object]],
+    *,
+    cohort_names: tuple[str, ...],
+) -> dict[str, dict[str, object]]:
+    """Aggregate policy effects only across complete factual episodes."""
+    import numpy as np
+
+    def cohort(name: str | None) -> dict[str, object]:
+        rows = [
+            episode_reports[episode]
+            for episode in sorted(episode_reports)
+            if name is None or episode_reports[episode]["cohort"] == name
+        ]
+        if not rows:
+            raise ValueError("policy-effect cohort is empty")
+        options = sum(row["options"] for row in rows)
+        proposals = sum(row["full_proposals"] for row in rows)
+        proposal_exact = sum(row["full_proposal_loo_exact"] for row in rows)
+        loo_union = sum(row["loo_union"] for row in rows)
+        loo_exact = sum(row["loo_exact"] for row in rows)
+        split_union = sum(row["split_union"] for row in rows)
+        split_exact = sum(row["split_exact"] for row in rows)
+        individual_proposals = sum(
+            row["individual_proposals"] for row in rows
+        )
+        individual_union = sum(row["individual_union"] for row in rows)
+        individual_exact = sum(row["individual_exact"] for row in rows)
+        mean_proposals = sum(row["mean_proposals"] for row in rows)
+        mean_loo_union = sum(row["mean_loo_union"] for row in rows)
+        mean_loo_exact = sum(row["mean_loo_exact"] for row in rows)
+        policy_dr_effects = np.asarray([
+            row["policy_dr_effect"] for row in rows
+        ], dtype=np.float64)
+        policy_model_effects = np.asarray([
+            row["policy_model_effect"] for row in rows
+        ], dtype=np.float64)
+        policy_mean = float(policy_dr_effects.mean())
+        policy_se = float(
+            policy_dr_effects.std(ddof=1) / math.sqrt(len(rows))
+        ) if len(rows) > 1 else math.inf
+        cohort_seed = 960_813 + sum(map(ord, name or "overall"))
+        generator = np.random.default_rng(cohort_seed)
+        bootstrap_means = policy_dr_effects[generator.integers(
+            0, len(policy_dr_effects), size=(4096, len(policy_dr_effects))
+        )].mean(axis=1)
+        loo_effects = np.asarray([
+            [row["policy_loo_dr_effect"][member] for row in rows]
+            for member in range(7)
+        ], dtype=np.float64)
+        loo_bootstrap_upper = []
+        for member in range(7):
+            member_generator = np.random.default_rng(
+                cohort_seed + (member + 1) * 10_000
+            )
+            member_means = loo_effects[member][member_generator.integers(
+                0, len(rows), size=(4096, len(rows))
+            )].mean(axis=1)
+            loo_bootstrap_upper.append(float(np.quantile(member_means, 0.95)))
+        return {
+            "episode_groups": len(rows),
+            "options": options,
+            "full_proposals": proposals,
+            "full_proposal_rate": proposals / options,
+            "full_proposal_loo_exact_rate": (
+                proposal_exact / proposals if proposals else 0.0
+            ),
+            "loo_union_stability": (
+                loo_exact / loo_union if loo_union else 0.0
+            ),
+            "split_conditional_agreement": (
+                split_exact / split_union if split_union else 0.0
+            ),
+            "individual_member_proposal_rate": (
+                individual_proposals / (7 * options)
+            ),
+            "individual_union_rate": individual_union / options,
+            "individual_unanimous_conditional_rate": (
+                individual_exact / individual_union
+                if individual_union else 0.0
+            ),
+            "mean_population_proposal_rate": mean_proposals / options,
+            "mean_population_loo_stability": (
+                mean_loo_exact / mean_loo_union if mean_loo_union else 0.0
+            ),
+            "policy_intervention_exposure_rate": (
+                sum(row["policy_intervention_exposure"] for row in rows)
+                / options
+            ),
+            "policy_dr_hit_effect_mean": policy_mean,
+            "policy_dr_hit_effect_standard_error": policy_se,
+            "policy_dr_hit_effect_normal_upper_95": (
+                policy_mean + 1.6448536269514722 * policy_se
+            ),
+            "policy_dr_hit_effect_normal_lower_95": (
+                policy_mean - 1.6448536269514722 * policy_se
+            ),
+            "policy_dr_hit_effect_bootstrap_upper_95": float(
+                np.quantile(bootstrap_means, 0.95)
+            ),
+            "policy_dr_hit_effect_bootstrap_lower_95": float(
+                np.quantile(bootstrap_means, 0.05)
+            ),
+            "policy_dr_bootstrap_episode_groups": len(policy_dr_effects),
+            "policy_dr_bootstrap_resamples": 4096,
+            "policy_loo_dr_hit_effect_means": [
+                float(values.mean()) for values in loo_effects
+            ],
+            "policy_loo_dr_hit_effect_bootstrap_upper_95": (
+                loo_bootstrap_upper
+            ),
+            "policy_loo_worst_bootstrap_upper_95": max(
+                loo_bootstrap_upper
+            ),
+            "policy_dr_beneficial_episode_rate": float(
+                np.mean(policy_dr_effects < 0.0)
+            ),
+            "policy_model_hit_effect_mean": float(
+                policy_model_effects.mean()
+            ),
+            "policy_max_abs_correction": max(
+                row["policy_max_abs_correction"] for row in rows
+            ),
+            "mean_behavior_kl": (
+                sum(row["behavior_kl_sum"] for row in rows) / options
+            ),
+        }
+
+    return {
+        "overall": cohort(None),
+        **{name: cohort(name) for name in sorted(cohort_names)},
+    }
+
+
 def crossfit_iql_actor_report(
     samples: list[OptionStep],
     *,
@@ -1276,125 +1434,6 @@ def crossfit_iql_actor_report(
         for episode, report in fold_report["episodes"].items()
     }
 
-    def cohort(name: str | None) -> dict[str, object]:
-        rows = [
-            row for row in episode_reports.values()
-            if name is None or row["cohort"] == name
-        ]
-        options = sum(row["options"] for row in rows)
-        proposals = sum(row["full_proposals"] for row in rows)
-        proposal_exact = sum(row["full_proposal_loo_exact"] for row in rows)
-        loo_union = sum(row["loo_union"] for row in rows)
-        loo_exact = sum(row["loo_exact"] for row in rows)
-        split_union = sum(row["split_union"] for row in rows)
-        split_exact = sum(row["split_exact"] for row in rows)
-        individual_proposals = sum(
-            row["individual_proposals"] for row in rows
-        )
-        individual_union = sum(row["individual_union"] for row in rows)
-        individual_exact = sum(row["individual_exact"] for row in rows)
-        mean_proposals = sum(row["mean_proposals"] for row in rows)
-        mean_loo_union = sum(row["mean_loo_union"] for row in rows)
-        mean_loo_exact = sum(row["mean_loo_exact"] for row in rows)
-        policy_dr_effects = np.asarray([
-            row["policy_dr_effect"] for row in rows
-        ], dtype=np.float64)
-        policy_model_effects = np.asarray([
-            row["policy_model_effect"] for row in rows
-        ], dtype=np.float64)
-        policy_mean = float(policy_dr_effects.mean())
-        policy_se = float(
-            policy_dr_effects.std(ddof=1) / math.sqrt(len(rows))
-        ) if len(rows) > 1 else math.inf
-        # Complete episodes, not options, are the resampling unit.  The seed
-        # schedule is fixed by cohort identity and does not inspect outcomes.
-        cohort_seed = 960_813 + sum(map(ord, name or "overall"))
-        generator = np.random.default_rng(cohort_seed)
-        bootstrap_means = policy_dr_effects[generator.integers(
-            0, len(policy_dr_effects), size=(4096, len(policy_dr_effects))
-        )].mean(axis=1)
-        loo_effects = np.asarray([
-            [row["policy_loo_dr_effect"][member] for row in rows]
-            for member in range(7)
-        ], dtype=np.float64)
-        loo_bootstrap_upper = []
-        for member in range(7):
-            member_generator = np.random.default_rng(
-                cohort_seed + (member + 1) * 10_000
-            )
-            member_means = loo_effects[member][member_generator.integers(
-                0, len(rows), size=(4096, len(rows))
-            )].mean(axis=1)
-            loo_bootstrap_upper.append(float(np.quantile(member_means, 0.95)))
-        return {
-            "episode_groups": len(rows),
-            "options": options,
-            "full_proposals": proposals,
-            "full_proposal_rate": proposals / options,
-            "full_proposal_loo_exact_rate": (
-                proposal_exact / proposals if proposals else 0.0
-            ),
-            "loo_union_stability": (
-                loo_exact / loo_union if loo_union else 0.0
-            ),
-            "split_conditional_agreement": (
-                split_exact / split_union if split_union else 0.0
-            ),
-            "individual_member_proposal_rate": (
-                individual_proposals / (7 * options)
-            ),
-            "individual_union_rate": individual_union / options,
-            "individual_unanimous_conditional_rate": (
-                individual_exact / individual_union
-                if individual_union else 0.0
-            ),
-            "mean_population_proposal_rate": mean_proposals / options,
-            "mean_population_loo_stability": (
-                mean_loo_exact / mean_loo_union if mean_loo_union else 0.0
-            ),
-            "policy_intervention_exposure_rate": (
-                sum(row["policy_intervention_exposure"] for row in rows)
-                / options
-            ),
-            "policy_dr_hit_effect_mean": policy_mean,
-            "policy_dr_hit_effect_standard_error": policy_se,
-            "policy_dr_hit_effect_normal_upper_95": (
-                policy_mean + 1.6448536269514722 * policy_se
-            ),
-            "policy_dr_hit_effect_normal_lower_95": (
-                policy_mean - 1.6448536269514722 * policy_se
-            ),
-            "policy_dr_hit_effect_bootstrap_upper_95": float(
-                np.quantile(bootstrap_means, 0.95)
-            ),
-            "policy_dr_hit_effect_bootstrap_lower_95": float(
-                np.quantile(bootstrap_means, 0.05)
-            ),
-            "policy_dr_bootstrap_episode_groups": len(policy_dr_effects),
-            "policy_dr_bootstrap_resamples": 4096,
-            "policy_loo_dr_hit_effect_means": [
-                float(values.mean()) for values in loo_effects
-            ],
-            "policy_loo_dr_hit_effect_bootstrap_upper_95": (
-                loo_bootstrap_upper
-            ),
-            "policy_loo_worst_bootstrap_upper_95": max(
-                loo_bootstrap_upper
-            ),
-            "policy_dr_beneficial_episode_rate": float(
-                np.mean(policy_dr_effects < 0.0)
-            ),
-            "policy_model_hit_effect_mean": float(
-                policy_model_effects.mean()
-            ),
-            "policy_max_abs_correction": max(
-                row["policy_max_abs_correction"] for row in rows
-            ),
-            "mean_behavior_kl": (
-                sum(row["behavior_kl_sum"] for row in rows) / options
-            ),
-        }
-
     return {
         "execution": {
             "total_thread_budget": total_threads,
@@ -1403,13 +1442,10 @@ def crossfit_iql_actor_report(
         },
         "folds": reports,
         "episodes": episode_reports,
-        "cohorts": {
-            "overall": cohort(None),
-            **{
-                name: cohort(name)
-                for name in sorted(set(episode_cohorts.values()))
-            },
-        },
+        "cohorts": summarize_iql_actor_episodes(
+            episode_reports,
+            cohort_names=tuple(sorted(set(episode_cohorts.values()))),
+        ),
         "unsupported_candidates": sum(
             report["unsupported_candidates"] for report in reports
         ),
