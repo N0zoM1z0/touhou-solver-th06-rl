@@ -140,3 +140,13 @@ member against its portable conformance values. Under the identical
 1,200-decision maximum-load smoke, p95 fell to 3.16 ms, maximum latency to 3.26
 ms, and deadline misses remained zero. Thus Generation 4 retains all seven
 128-tree members without distillation or winner selection.
+
+A second run under competing host CPU load exposed p95 jitter to 4.45 ms even
+though mean latency remained 2.99 ms. The gate was again kept unchanged. The
+native traversal was reordered from member/row/tree to member/tree/row, keeping
+each compact tree hot while evaluating all action rows and preserving each
+row's floating-point tree-addition order. Under the same loaded host this
+reduced p95 to 2.19 ms and maximum latency to 2.36 ms. Passed causal/native
+offline preflight artifacts are now contract- and scorer-hash cached so an
+unrelated Wine startup failure can be retried without refitting or weakening a
+gate.

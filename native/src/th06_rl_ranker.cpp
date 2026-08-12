@@ -100,17 +100,22 @@ extern "C" TH06_RL_RANKER_API int th06_rl_score_xgboost_population_v1(
         const std::int32_t first_tree = model_tree_offsets[model];
         const std::int32_t last_tree = model_tree_offsets[model + 1];
         for (std::int32_t row = 0; row < row_count; ++row) {
-            float score = base_scores[model];
-            const float* row_features = features + row * feature_count;
-            for (std::int32_t tree = first_tree; tree < last_tree; ++tree) {
-                const std::int32_t start = tree_offsets[tree];
-                const std::int32_t size = tree_offsets[tree + 1] - start;
+            outputs[model * row_count + row] = base_scores[model];
+        }
+        // Keep one tree's compact node array hot while traversing every
+        // candidate row. Per-row floating-point accumulation remains in the
+        // original tree order, so this is bit-for-bit the same population.
+        for (std::int32_t tree = first_tree; tree < last_tree; ++tree) {
+            const std::int32_t start = tree_offsets[tree];
+            const std::int32_t size = tree_offsets[tree + 1] - start;
+            for (std::int32_t row = 0; row < row_count; ++row) {
+                const float* row_features = features + row * feature_count;
                 std::int32_t node_index = 0;
                 for (std::int32_t steps = 0; steps <= size; ++steps) {
                     if (node_index < 0 || node_index >= size) return 4;
                     const Th06RlTreeNode& node = nodes[start + node_index];
                     if (node.feature < 0) {
-                        score += node.leaf;
+                        outputs[model * row_count + row] += node.leaf;
                         break;
                     }
                     if (node.feature >= feature_count) return 5;
@@ -121,7 +126,6 @@ extern "C" TH06_RL_RANKER_API int th06_rl_score_xgboost_population_v1(
                     if (steps == size) return 6;
                 }
             }
-            outputs[model * row_count + row] = score;
         }
     }
     return 0;

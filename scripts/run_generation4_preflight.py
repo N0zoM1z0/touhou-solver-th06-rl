@@ -294,6 +294,28 @@ def _validate_cached(
     return state
 
 
+def _validate_offline_cached(
+    root: Path,
+    *,
+    wine_scorer: Path,
+    host_scorer: Path,
+) -> dict[str, object]:
+    state = _object(root / "offline-preflight.json")
+    expected = {
+        "schema": "autonomous-generation-4-offline-preflight-v1",
+        "passed": True,
+        "preflight_contract_sha256": _contract_sha256(),
+        "wine_native_scorer_sha256": _sha256(wine_scorer),
+        "host_native_scorer_sha256": _sha256(host_scorer),
+    }
+    if any(state.get(key) != value for key, value in expected.items()):
+        raise ValueError("cached Generation-4 offline preflight differs")
+    for name in ("causal-smoke.json", "native-population-smoke.json"):
+        if _object(root / name).get("passed") is not True:
+            raise ValueError(f"cached Generation-4 offline gate failed: {name}")
+    return state
+
+
 def run(
     root: Path,
     *,
@@ -314,25 +336,42 @@ def run(
             )
         except (FileNotFoundError, TypeError, ValueError):
             _archive_incomplete(root)
-    elif root.exists():
-        _archive_incomplete(root)
-    root.mkdir(parents=True)
+    offline_cached = False
+    if root.exists():
+        try:
+            _validate_offline_cached(
+                root,
+                wine_scorer=wine_scorer,
+                host_scorer=host_scorer,
+            )
+            offline_cached = True
+        except (FileNotFoundError, TypeError, ValueError):
+            _archive_incomplete(root)
+    root.mkdir(parents=True, exist_ok=True)
     seeds = _validate_seed_contract()
     historical = _validate_historical_contract()
 
-    samples, policy_state = fit_sequential_causal_fixture(
-        threads=threads,
-        native_scorer_sha256=_sha256(wine_scorer),
-        compatible_native_scorer_sha256=(_sha256(host_scorer),),
-    )
-    causal = audit_sequential_causal_fixture(samples, policy_state)
-    _atomic_json(root / "causal-smoke.json", causal)
-    if causal.get("passed") is not True:
-        raise RuntimeError("Generation-4 sequential causal smoke failed")
-    native = _native_latency_smoke(policy_state, host_scorer)
-    _atomic_json(root / "native-population-smoke.json", native)
-    if native.get("passed") is not True:
-        raise RuntimeError("Generation-4 full-population native smoke failed")
+    if not offline_cached:
+        samples, policy_state = fit_sequential_causal_fixture(
+            threads=threads,
+            native_scorer_sha256=_sha256(wine_scorer),
+            compatible_native_scorer_sha256=(_sha256(host_scorer),),
+        )
+        causal = audit_sequential_causal_fixture(samples, policy_state)
+        _atomic_json(root / "causal-smoke.json", causal)
+        if causal.get("passed") is not True:
+            raise RuntimeError("Generation-4 sequential causal smoke failed")
+        native = _native_latency_smoke(policy_state, host_scorer)
+        _atomic_json(root / "native-population-smoke.json", native)
+        if native.get("passed") is not True:
+            raise RuntimeError("Generation-4 full-population native smoke failed")
+        _atomic_json(root / "offline-preflight.json", {
+            "schema": "autonomous-generation-4-offline-preflight-v1",
+            "passed": True,
+            "preflight_contract_sha256": _contract_sha256(),
+            "wine_native_scorer_sha256": _sha256(wine_scorer),
+            "host_native_scorer_sha256": _sha256(host_scorer),
+        })
 
     exploration_state = root / "exploration-smoke-policy.json"
     _atomic_json(exploration_state, {
@@ -347,6 +386,9 @@ def run(
     })
     artifact = root / "wine"
     corpus = root / "wine-corpus"
+    for incomplete in (artifact, corpus):
+        if incomplete.exists():
+            _archive_incomplete(incomplete)
     command = [
         sys.executable,
         str(REPOSITORY / "scripts/run_wine_retail.py"),
