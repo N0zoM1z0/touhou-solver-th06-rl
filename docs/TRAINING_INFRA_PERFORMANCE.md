@@ -449,3 +449,18 @@ gate passed. Because the policy still returns all 126 actor outputs across the
 FFI and recomputes seven-member means in Win32 Python, the next model-invariant
 optimization returns the final mean-supported row directly. Exact portable
 action equality remains mandatory; the 4 ms gate is not rounded or relaxed.
+
+The next exact path computes the seven-member double-precision mean from the
+unchanged float actor outputs and applies the same positive-advantage/support
+choice in native code. Lexical tie ranks are passed explicitly to reproduce
+Python tuple `max`; the factual supported mask and native-safe rows are still
+provided by the immutable policy/controller contracts. Python `array` buffers
+also replace per-element ctypes argument expansion without sharing mutable
+state between decisions.
+
+On the same 181--256-hazard fixture, exact action equality held and isolated
+Wine p95 fell again to `1.7113 ms` (maximum `1.8918 ms`, zero >4 ms); Linux p95
+was `0.5227 ms`. Report SHA-256 is
+`b8ffb838bbf72adde6e68c20719bff4225dd5b28f581f80de911e8ffd21c3c47`.
+The third successor canary keeps the same 32-CPU partition and changes only
+experiment identity, policy RNG seed, display, and the preflighted DLL hash.

@@ -169,6 +169,9 @@ TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
     const float* history,
     std::int32_t history_count,
     const std::int32_t* row_actions,
+    const std::int32_t* row_supported,
+    const std::int32_t* row_tie_break_ranks,
+    double support_threshold,
     const float* support_mean,
     const float* support_scale,
     const float* support_prototypes,
@@ -196,7 +199,7 @@ TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
     const float* action_latent_bias,
     const float* action_score_weight,
     const float* action_score_bias,
-    float* support_outputs,
-    float* actor_outputs);
+    std::int32_t* proposal_row,
+    std::int32_t* supported_alternative_count);
 
 }

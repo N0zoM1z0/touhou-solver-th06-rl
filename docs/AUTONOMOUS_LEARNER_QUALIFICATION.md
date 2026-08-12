@@ -190,6 +190,15 @@ efficacy comparison. Stage-6 play remains unauthorized. A third contract may
 be created only after exact portable equivalence of a generic native population
 mean/proposal fusion; v2 is permanently closed.
 
+That fusion retained exact portable/Linux/Win32 actions on the maximum-width
+fixture and reduced isolated Wine p95 to `1.7113 ms`. The one permitted third
+wiring identity is
+`config/autonomous_generation6_wine_canary_v3.json`, SHA-256
+`cf51538bd8ccbf266a9442579078fc5373411f704814133c326203f25c6622a1`.
+It retains the same reward, candidate, support, propensity, option, gate, Wine
+speed, natural-RNG, and CPU-partition contracts. It is not Stage-6 efficacy
+authorization unless this final Stage-4 resident preflight passes.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

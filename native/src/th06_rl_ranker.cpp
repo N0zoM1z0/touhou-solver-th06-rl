@@ -497,6 +497,9 @@ extern "C" TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
     const float* history,
     const std::int32_t history_count,
     const std::int32_t* row_actions,
+    const std::int32_t* row_supported,
+    const std::int32_t* row_tie_break_ranks,
+    const double support_threshold,
     const float* support_mean,
     const float* support_scale,
     const float* support_prototypes,
@@ -524,12 +527,17 @@ extern "C" TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
     const float* action_latent_bias,
     const float* action_score_weight,
     const float* action_score_bias,
-    float* support_outputs,
-    float* actor_outputs) {
+    std::int32_t* proposal_row,
+    std::int32_t* supported_alternative_count) {
     const std::int32_t feature_count = observation_count +
         2 * action_feature_count + 2 + hazard_output_count + history_count;
     if (observation == nullptr || action_features == nullptr ||
-        history == nullptr || row_count <= 0 || row_count > 64 ||
+        history == nullptr || row_actions == nullptr ||
+        row_supported == nullptr || row_tie_break_ranks == nullptr ||
+        proposal_row == nullptr || supported_alternative_count == nullptr ||
+        !std::isfinite(support_threshold) || support_threshold < 0.0 ||
+        row_count <= 0 || row_count > 64 || model_count <= 0 ||
+        model_count > 16 ||
         observation_count <= 0 || action_feature_count <= 0 ||
         baseline_row < 0 || baseline_row >= row_count || current_row < -1 ||
         current_row >= row_count || hazard_output_count <= 0 ||
@@ -570,6 +578,8 @@ extern "C" TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
         }
         if (offset != feature_count) return 52;
     }
+    float support_outputs[64];
+    float actor_outputs[64 * 16];
     const int status = th06_rl_score_supported_iql_actor_v1(
         rows, row_count, feature_count, row_actions,
         support_mean, support_scale, support_prototypes,
@@ -581,5 +591,40 @@ extern "C" TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
         state_latent_bias, action_hidden_weight, action_hidden_bias,
         action_latent_weight, action_latent_bias, action_score_weight,
         action_score_bias, support_outputs, actor_outputs);
-    return status == 0 ? 0 : 80 + status;
+    if (status != 0) return 80 + status;
+
+    double baseline_mean = 0.0;
+    for (std::int32_t model = 0; model < model_count; ++model) {
+        baseline_mean += static_cast<double>(
+            actor_outputs[model * row_count + baseline_row]);
+    }
+    baseline_mean /= static_cast<double>(model_count);
+    std::int32_t selected = baseline_row;
+    std::int32_t selected_rank = row_tie_break_ranks[baseline_row];
+    std::int32_t supported_count = 0;
+    double best_advantage = 0.0;
+    for (std::int32_t row = 0; row < row_count; ++row) {
+        if (row == baseline_row || row_supported[row] == 0 ||
+            static_cast<double>(support_outputs[row]) > support_threshold) {
+            continue;
+        }
+        ++supported_count;
+        double mean = 0.0;
+        for (std::int32_t model = 0; model < model_count; ++model) {
+            mean += static_cast<double>(
+                actor_outputs[model * row_count + row]);
+        }
+        mean /= static_cast<double>(model_count);
+        const double advantage = mean - baseline_mean;
+        if (advantage > best_advantage ||
+            (advantage == best_advantage && advantage > 0.0 &&
+             row_tie_break_ranks[row] > selected_rank)) {
+            best_advantage = advantage;
+            selected = row;
+            selected_rank = row_tie_break_ranks[row];
+        }
+    }
+    *proposal_row = selected;
+    *supported_alternative_count = supported_count;
+    return 0;
 }

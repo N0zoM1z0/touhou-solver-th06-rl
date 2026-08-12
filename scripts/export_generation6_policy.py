@@ -107,6 +107,7 @@ def export_state(
         canary.get("schema") not in (
             "autonomous-generation-6-wine-canary-v1",
             "autonomous-generation-6-wine-canary-v2",
+            "autonomous-generation-6-wine-canary-v3",
         )
         or canary.get("candidate_sha256") != EXPECTED_CANDIDATE_SHA256
         or canary.get("qualification_result_sha256")
@@ -183,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--canary-contract", type=Path,
-        default=REPOSITORY / "config/autonomous_generation6_wine_canary.json",
+        default=REPOSITORY / "config/autonomous_generation6_wine_canary_v3.json",
     )
     args = parser.parse_args(argv)
     if args.output.exists():

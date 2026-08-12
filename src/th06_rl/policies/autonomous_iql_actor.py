@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from array import array
 from collections import Counter, deque
 import ctypes
 import hashlib
@@ -59,6 +60,7 @@ EXPECTED_DEPLOYABLE_AUDIT_SHA256 = (
 ALLOWED_CANARY_CONTRACT_SHA256 = frozenset((
     "161d6c0461dcd180777c020f97f701492061beda9610e0fe58bcf31269572f3c",
     "37f136deab0e162e76bb67bb4f55d88b76eeefb87e8af392fb165d9c24d99c6b",
+    "cf51538bd8ccbf266a9442579078fc5373411f704814133c326203f25c6622a1",
 ))
 ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     "8b99074e0d9eeae232d4a79286646b1688004d721ba288c605cde74743ef62ec",
@@ -73,8 +75,14 @@ ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     # Single adapter-array -> hazard/support/actor FFI path.
     "58c3a1aa82c73dba5f1200094546b16aa1d2044e0c5f046027719368ab5580ab",
     "507b7e2bb797b6d90b12dbebf1d77c431d6f3ce9086cf522c749f5f10305fa1b",
+    # Fused seven-member mean and supported-row proposal selection.
+    "377283b508e31a310fdfab32d2087a8da9d8d3fb70dd58433f3977caf4dc5cc4",
+    "87be7d7c3f5711e3f744214031696257ee045be00a8f62c229e3519155ea8c92",
 ))
 _ACTION_INDEX = {action: index for index, action in enumerate(ACTION_NAMES)}
+_LEXICAL_RANK = {
+    action: index for index, action in enumerate(sorted(ACTION_NAMES))
+}
 
 
 def _p95(values) -> float | None:
@@ -166,13 +174,13 @@ class _NativeActorPopulation:
             pointer, ctypes.c_int32, ctypes.c_int32,
             pointer, pointer, pointer, ctypes.c_int32, ctypes.c_int32,
             pointer, ctypes.c_int32,
-            integers,
+            integers, integers, integers, ctypes.c_double,
             pointer, pointer, pointer, ctypes.c_int32, integers, ctypes.c_int32,
             integers, ctypes.c_int32, integers, ctypes.c_int32,
             pointer, pointer, pointer, pointer,
             ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
             *(pointer for _index in range(10)),
-            pointer, pointer,
+            integers, integers,
         ]
         function.restype = ctypes.c_int
         support_flat = [
@@ -221,7 +229,7 @@ class _NativeActorPopulation:
         self.support_action_count = len(support.groups)
         self.hazard_encoder = hazard_encoder
 
-    def evaluate_context(
+    def choose_context(
         self,
         observation: tuple[float, ...],
         actions: list[tuple[float, ...]],
@@ -231,7 +239,10 @@ class _NativeActorPopulation:
         baseline_row: int,
         current_row: int,
         action_indices: list[int],
-    ) -> tuple[tuple[float, ...], tuple[tuple[float, ...], ...]]:
+        supported: list[int],
+        tie_break_ranks: list[int],
+        support_threshold: float,
+    ) -> tuple[int, int]:
         if (
             not observation
             or not actions
@@ -246,22 +257,49 @@ class _NativeActorPopulation:
             or not -1 <= current_row < len(actions)
         ):
             raise ValueError("Generation-6 policy input shape is invalid")
-        if len(action_indices) != len(actions):
+        if not (
+            len(action_indices) == len(actions)
+            == len(supported) == len(tie_break_ranks)
+        ):
             raise ValueError("Generation-6 support action shape is invalid")
-        observation_input = (ctypes.c_float * len(observation))(*observation)
-        flat_actions = (ctypes.c_float * (
-            len(actions) * len(actions[0])
-        ))(*(value for row in actions for value in row))
-        flat_hazard_values = tuple(value for row in hazards for value in row)
-        hazard_input = (ctypes.c_float * max(1, len(flat_hazard_values)))(
-            *(flat_hazard_values or (0.0,))
-        )
-        history_input = (ctypes.c_float * len(history))(*history)
-        row_actions = (ctypes.c_int32 * len(action_indices))(*action_indices)
-        support_output = (ctypes.c_float * len(actions))()
-        actor_output = (
-            ctypes.c_float * (self.model_count * len(actions))
-        )()
+        observation_buffer = array("f", observation)
+        action_buffer = array("f")
+        for row in actions:
+            action_buffer.extend(row)
+        hazard_buffer = array("f")
+        for row in hazards:
+            hazard_buffer.extend(row)
+        if not hazard_buffer:
+            hazard_buffer.append(0.0)
+        history_buffer = array("f", history)
+        action_index_buffer = array("i", action_indices)
+        supported_buffer = array("i", supported)
+        tie_break_buffer = array("i", tie_break_ranks)
+        if action_index_buffer.itemsize != ctypes.sizeof(ctypes.c_int32):
+            raise RuntimeError("Generation-6 native integer width differs")
+        observation_input = (
+            ctypes.c_float * len(observation_buffer)
+        ).from_buffer(observation_buffer)
+        flat_actions = (
+            ctypes.c_float * len(action_buffer)
+        ).from_buffer(action_buffer)
+        hazard_input = (
+            ctypes.c_float * len(hazard_buffer)
+        ).from_buffer(hazard_buffer)
+        history_input = (
+            ctypes.c_float * len(history_buffer)
+        ).from_buffer(history_buffer)
+        row_actions = (
+            ctypes.c_int32 * len(action_index_buffer)
+        ).from_buffer(action_index_buffer)
+        row_supported = (
+            ctypes.c_int32 * len(supported_buffer)
+        ).from_buffer(supported_buffer)
+        row_tie_break = (
+            ctypes.c_int32 * len(tie_break_buffer)
+        ).from_buffer(tie_break_buffer)
+        proposal_row = ctypes.c_int32(-1)
+        supported_count = ctypes.c_int32(-1)
         status = self.function(
             observation_input, len(observation),
             flat_actions, len(actions), len(actions[0]),
@@ -272,7 +310,7 @@ class _NativeActorPopulation:
             self.hazard_encoder.prototype_count,
             self.hazard_encoder.output_count,
             history_input, len(history),
-            row_actions,
+            row_actions, row_supported, row_tie_break, support_threshold,
             self.support_mean, self.support_scale, self.support_prototypes,
             self.support_prototype_count, self.support_offsets,
             self.support_action_count,
@@ -281,18 +319,19 @@ class _NativeActorPopulation:
             self.state_mean_array, self.state_scale_array,
             self.action_mean_array, self.action_scale_array,
             self.model_count, self.hidden, self.rank,
-            *self.arrays, support_output, actor_output,
+            *self.arrays,
+            ctypes.byref(proposal_row), ctypes.byref(supported_count),
         )
         if status != 0:
             raise RuntimeError(
                 f"native Generation-6 support/actor failed with {status}"
             )
-        scores = tuple(
-            tuple(float(actor_output[member * len(actions) + row])
-                  for row in range(len(actions)))
-            for member in range(self.model_count)
-        )
-        return tuple(float(value) for value in support_output), scores
+        if (
+            not 0 <= proposal_row.value < len(actions)
+            or not 0 <= supported_count.value < len(actions)
+        ):
+            raise RuntimeError("native Generation-6 proposal result is invalid")
+        return proposal_row.value, supported_count.value
 
 
 class AutonomousIqlActorPolicy:
@@ -524,7 +563,7 @@ class AutonomousIqlActorPolicy:
         started = time.perf_counter()
         history = self._history(context)
         observation, actions = self._adapter_arrays(context, legal)
-        distances, scores = self.scorer.evaluate_context(
+        proposal_row, supported_count = self.scorer.choose_context(
             observation,
             actions,
             tuple(context.hazard_primitives),
@@ -535,25 +574,15 @@ class AutonomousIqlActorPolicy:
                 if context.current_action in legal else -1
             ),
             action_indices=[_ACTION_INDEX[action] for action in legal],
+            supported=[
+                int(action in self.factual_supported_actions)
+                for action in legal
+            ],
+            tie_break_ranks=[_LEXICAL_RANK[action] for action in legal],
+            support_threshold=self.support_threshold,
         )
-        supported = [
-            index for index, action in enumerate(legal)
-            if action != baseline
-            and action in self.factual_supported_actions
-            and distances[index] <= self.support_threshold
-        ]
-        self.support_abstentions += len(legal) - 1 - len(supported)
-        means = [
-            sum(member[index] for member in scores) / len(scores)
-            for index in range(len(legal))
-        ]
-        baseline_index = legal.index(baseline)
-        candidates = [
-            (means[index] - means[baseline_index], legal[index])
-            for index in supported
-            if means[index] - means[baseline_index] > 0.0
-        ]
-        proposal = max(candidates, default=(0.0, baseline))[1]
+        self.support_abstentions += len(legal) - 1 - supported_count
+        proposal = legal[proposal_row]
         elapsed = (time.perf_counter() - started) * 1000.0
         self.timing_ms.append(elapsed)
         self.over_four_ms += elapsed > 4.0

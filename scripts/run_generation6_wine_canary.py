@@ -202,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--contract", type=Path,
-        default=REPOSITORY / "config/autonomous_generation6_wine_canary_v2.json",
+        default=REPOSITORY / "config/autonomous_generation6_wine_canary_v3.json",
     )
     args = parser.parse_args(argv)
     contract_path = args.contract.resolve()

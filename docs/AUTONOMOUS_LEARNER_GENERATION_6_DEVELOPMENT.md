@@ -484,3 +484,11 @@ native scoring: Win32 Python still materializes 126 member/action floats and
 computes the population mean and proposal. The next repair fuses that exact
 mean and safe-row choice into the same native policy call. The 4 ms gate and
 learner are unchanged, and any new Wine run needs a third frozen identity.
+
+The native-choice implementation passed that prerequisite. It reproduces the
+seven-member double mean, positive advantage, support mask, and lexical tie
+semantics exactly; 64 maximum-width factual contexts retained identical
+portable/Linux/Win32 proposals. Wine p95 was `1.7113 ms`, maximum `1.8918 ms`,
+with no >4 ms samples or deadline misses. Canary v3 is frozen separately at
+SHA-256
+`cf51538bd8ccbf266a9442579078fc5373411f704814133c326203f25c6622a1`.
