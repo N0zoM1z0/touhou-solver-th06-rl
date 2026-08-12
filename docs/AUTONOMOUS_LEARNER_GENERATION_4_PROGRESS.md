@@ -188,3 +188,25 @@ is permitted only from the recorded `infra_failure`, only when the sole config
 change is that preflight hash, and records that one complete v10 episode was
 preserved with no outcome or schedule-field change. The empty episode-1
 startup artifact is archived and retried; it is not evidence.
+
+## 2026-08-12: evidence budget completed
+
+The unattended runner completed all 16 declared new original-retail Wine
+Stages and all three fit boundaries. Every new run was a clean Lunatic Stage 6
+completion in HIT-continuation mode with complete factual v10 data. The
+physical HIT counts were 40, 34, 41, 38, 42, 26, 31, 38, 47, 36, 35, 34, 46,
+42, 38, and 30.
+
+No fit was eligible. Round 1 worsened aggregate cross-fitted R loss and improved
+only 4/21 episodes. Round 2 again worsened aggregate loss despite improving
+13/25 episodes. Round 3 improved aggregate loss by only 0.0116% and improved
+14/29 episodes, failing strict majority. Proposal rates were respectively
+17.0%, 61.0%, and 52.1%, which is not a stable decision surface. The runner
+therefore emitted the frozen ineffective decision after the 16-new-Stage
+budget; it did not launch a canary or natural evaluation.
+
+The finite-sample support calculation separately missed its declared 99%
+coverage by using an interpolated percentile. This is a demonstrated generic
+infra bug, but it is not causal to the verdict because the independent
+episode-majority gate also failed. The result and next-generation reasoning are
+recorded in `AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md`.

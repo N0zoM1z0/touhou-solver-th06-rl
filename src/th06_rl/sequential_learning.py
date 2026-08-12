@@ -41,6 +41,15 @@ TRANSITION_SCHEMA = "th06-rl-transition-v10"
 BEHAVIOR_POLICY = "propensity-aware-option-exploration-v1"
 
 
+def _empirical_upper_quantile(values, quantile: float) -> float:
+    """Return an observed threshold with at least the requested coverage."""
+    import numpy as np
+
+    if not values or not 0.0 <= quantile <= 1.0:
+        raise ValueError("empirical quantile needs values and a valid probability")
+    return float(np.quantile(values, quantile, method="higher"))
+
+
 @dataclass(frozen=True)
 class OrthogonalOption:
     step: OptionStep
@@ -643,7 +652,10 @@ def _support(
         distances.append(float((
             (prototypes[action_index] - normalized) ** 2
         ).mean(axis=1).min()))
-    threshold = float(np.quantile(distances, SUPPORT_QUANTILE))
+    # Linear interpolation can place the threshold strictly below the next
+    # observed distance, yielding less than the declared finite-sample
+    # coverage.  The upper order statistic makes the coverage contract exact.
+    threshold = _empirical_upper_quantile(distances, SUPPORT_QUANTILE)
     artifact = {
         "schema": SUPPORT_SCHEMA,
         "mean": mean.tolist(),

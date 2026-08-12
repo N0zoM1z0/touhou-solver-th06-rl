@@ -1,0 +1,62 @@
+{
+  "schema": "th06-rl-offline-reference-cache-v1",
+  "root": "reference/offline-rl",
+  "papers": [
+    {
+      "path": "papers/iql-2110.06169.pdf",
+      "title": "Offline Reinforcement Learning with Implicit Q-Learning",
+      "url": "https://arxiv.org/pdf/2110.06169v1",
+      "sha256": "b135fecfc6685b5ac88c5d41d2f78db8da03ce3e47c8e1152cb1f77a1ffa59ee"
+    },
+    {
+      "path": "papers/cql-kumar20.pdf",
+      "title": "Conservative Q-Learning for Offline Reinforcement Learning",
+      "url": "https://proceedings.neurips.cc/paper_files/paper/2020/file/0d2b2061826a5df3221116a5085a6052-Paper.pdf",
+      "sha256": "98f9e70d85fca8fc095f7327990f29f65decee5a0f671997a831a212bc653d8e"
+    },
+    {
+      "path": "papers/spibb-laroche19a.pdf",
+      "title": "Safe Policy Improvement with Baseline Bootstrapping",
+      "url": "https://proceedings.mlr.press/v97/laroche19a/laroche19a.pdf",
+      "sha256": "30a4ff331b38103ef43ddcdcf4ec119dcec8e5cce9c4608e98718fe5fc83c215"
+    },
+    {
+      "path": "papers/fqe-le19a.pdf",
+      "title": "Batch Policy Learning under Constraints",
+      "url": "https://proceedings.mlr.press/v97/le19a/le19a.pdf",
+      "sha256": "35bbe3f8140b614fda3585c8ac4a4054808c6d71600da6d9c42dfe2fe46bb970"
+    },
+    {
+      "path": "papers/doubly-robust-jiang16.pdf",
+      "title": "Doubly Robust Off-policy Value Evaluation for Reinforcement Learning",
+      "url": "https://proceedings.mlr.press/v48/jiang16.pdf",
+      "sha256": "8798c38e5fa642c646d074ffeac7c3ebe309b92ec7619d33eab687b758084278"
+    }
+  ],
+  "repositories": [
+    {
+      "path": "repos/implicit_q_learning",
+      "url": "https://github.com/ikostrikov/implicit_q_learning.git",
+      "commit": "09d700248117881a75cb21f0adb95c6c8a694cb2",
+      "license": "MIT"
+    },
+    {
+      "path": "repos/CQL",
+      "url": "https://github.com/aviralkumar2907/CQL.git",
+      "commit": "d67dbe9cf5d2b96e3b462b6146f249b3d6569796",
+      "license": "NO-LICENSE-FILE-read-only-reference"
+    },
+    {
+      "path": "repos/SPIBB",
+      "url": "https://github.com/RomainLaroche/SPIBB.git",
+      "commit": "833f32b642759111907d2c4d086d1ae1ce9d84cb",
+      "license": "MIT"
+    },
+    {
+      "path": "repos/constrained_batch_policy_learning",
+      "url": "https://github.com/clvoloshin/constrained_batch_policy_learning.git",
+      "commit": "37ea126556f021046e6db6ea4b7ca994294d14bf",
+      "license": "NO-LICENSE-FILE-read-only-reference"
+    }
+  ]
+}

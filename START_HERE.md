@@ -17,17 +17,21 @@ Read in this order:
 5. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md`, its progress record, and
    `docs/AUTONOMOUS_LEARNER_GENERATION_3_RESULT.md` for the frozen superseded
    complete-return learner;
-6. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the active sequential
+6. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the frozen sequential
    semi-Markov learner, action-centered critic, exploration, and evidence
    contract;
 7. `docs/AUTONOMOUS_LEARNER_GENERATION_4_PROGRESS.md` for its append-only
-   implementation and execution record;
-8. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+   implementation and execution record, followed by
+   `docs/AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md` for its ineffective verdict;
+8. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
+   and upstream-repository cache;
+9. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-9. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+10. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
-Generation 3 is frozen. No Generation-4 Wine evidence may launch until its
-committed preflight and unattended entry point pass the declared smoke gates.
+Generations 3 and 4 are frozen. Generation 4 exhausted its evidence budget
+without canary authorization. A later learner must be a newly declared
+generation with smoke gates fixed before any new Wine outcome.
 
 ## Non-negotiable separation
 

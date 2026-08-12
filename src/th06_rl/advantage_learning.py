@@ -656,27 +656,30 @@ def rich_candidate_vector_from_encoding(
 def _augment_steps(
     samples: list[OptionStep], artifact: dict[str, object]
 ) -> list[OptionStep]:
-    return [
-        replace(
+    result = []
+    for sample in samples:
+        # The hazard set and observation history are state properties shared by
+        # every candidate action.  Encoding the same (potentially 256-object)
+        # set once per candidate made a full Wine fit repeat identical work up
+        # to 18 times per option.
+        hazard_encoding = encode_hazard_set(sample.hazard_primitives, artifact)
+        result.append(replace(
             sample,
-            vector=rich_candidate_vector(
+            vector=rich_candidate_vector_from_encoding(
                 sample.vector,
-                sample.hazard_primitives,
+                hazard_encoding,
                 sample.history_features,
-                artifact,
             ),
             candidate_vectors=tuple(
-                rich_candidate_vector(
+                rich_candidate_vector_from_encoding(
                     vector,
-                    sample.hazard_primitives,
+                    hazard_encoding,
                     sample.history_features,
-                    artifact,
                 )
                 for vector in sample.candidate_vectors
             ),
-        )
-        for sample in samples
-    ]
+        ))
+    return result
 
 
 def _folds(groups: list[str], *, count: int, seed: int) -> list[tuple[str, ...]]:

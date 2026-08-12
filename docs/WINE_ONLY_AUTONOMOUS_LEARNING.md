@@ -80,7 +80,12 @@ atomically:
    rules between these states.
 
 The process may be interrupted and resumed without replaying completed work.
-It never starts concurrent Wine instances. Offline fitting may parallelize.
+Training collection may use concurrent original-Wine workers only after a
+normal-speed differential compatibility gate. Each worker must have an
+isolated game directory, Wine prefix, display, artifact directory, and corpus
+root; each remains paced by the original 60 Hz executable and passes the same
+per-run audit before merge. Canary and final evaluation remain single-instance,
+alternating, normal-speed jobs. Offline fitting may parallelize.
 
 The implemented entrypoint is `scripts/run_autonomous_learning.py`. Its first
 generation defaults are locked before Wine starts: two five-episode collection
@@ -138,7 +143,8 @@ may neither discard a HIT nor assign one to an action Wine did not execute.
 - No movement depends on game RNG, frame, run identity, or handwritten phase.
 - Fixed RNG, acceleration, snapshots, and first-failure runs are training tools
   only; they cannot promote a candidate.
-- Wine jobs are sequential and exact cleanup is verified after every episode.
+- Every Wine worker is resource-isolated and exact cleanup is verified after
+  every episode; canary and final-evaluation Wine jobs are sequential.
 
 Final promotion uses original retail Wine at normal timing, without fixed RNG,
 from a natural complete Practice Stage start through termination, with HIT
@@ -180,3 +186,8 @@ new outcomes in `AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md`. It retains the
 same Wine/native/HIT boundaries while replacing the estimator with sequential
 semi-Markov offline RL, generalized action centering, autonomous propensity-
 aware exploration, policy-level cross-fitting, and a full native population.
+It completed 16 new Wine Stages but produced no stable held-out advantage and
+never earned canary authorization, so it is frozen as ineffective; see
+`AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md`. Generation 5 must be declared as a
+new algorithm generation; it may reuse the factual corpus but cannot reinterpret
+Generation-4 outcomes as candidate evidence.

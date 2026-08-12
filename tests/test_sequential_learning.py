@@ -7,10 +7,20 @@ from th06_rl.sequential_learning import (
     _centered_layout,
     _critic_regressor,
     _episodes,
+    _empirical_upper_quantile,
     _n_step_targets,
     _probabilities,
     OrthogonalOption,
 )
+
+
+def test_empirical_upper_quantile_meets_finite_sample_coverage() -> None:
+    values = list(map(float, range(102)))
+
+    threshold = _empirical_upper_quantile(values, 0.99)
+
+    assert threshold == 100.0
+    assert sum(value <= threshold for value in values) / len(values) >= 0.99
 
 
 def test_semi_markov_return_is_recursive_sum_of_interval_hits() -> None:
