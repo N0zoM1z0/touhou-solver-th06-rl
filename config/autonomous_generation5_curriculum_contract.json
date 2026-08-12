@@ -5,7 +5,7 @@
   "wine_version": "wine-11.0",
   "files": [
     {"path": "config/autonomous_generation5_curriculum_seeds.json", "sha256": "0a7e0b74d5f6dac029fea8499ae67370d5ea53f8408c6f8c6f2623d0cf8cddfc"},
-    {"path": "config/autonomous_generation5_infra_migrations.json", "sha256": "c7f1ec185503703c8d9556909c97d46a9bdb4a8e0dd6a491bc839060fe8653f0"},
+    {"path": "config/autonomous_generation5_infra_migrations.json", "sha256": "e7c1a120a7927816be387c4aa9b7229c4a4981be75796691a27db3cb8c2a1197"},
     {"path": "src/th06_rl/curriculum_contract.py", "sha256": "0c4fd188b142ca4319479280c793b6d060066fed63f8d42c64ab66340fe1cf4d"},
     {"path": "src/th06_rl/wine_workers.py", "sha256": "43074b440cf17499b81638fd41d1f624dc5818c7dbbd3f829db9c8c6d22d3fc1"},
     {"path": "src/th06_rl/audited_option_loader.py", "sha256": "538bd0a181f45a19fc661c85c5af77a9d658313d56b8711313982391c40ba9be"},

@@ -210,3 +210,11 @@ bound in the infra migration record.
 This is an infrastructure repair, not manual dataset curation: failure status,
 not HIT count or action/location, determines retry; the limit was fixed before
 the replacement outcome exists; and no rejected trajectory is admitted.
+
+The first post-repair resume stopped before Wine because the older display
+migration referenced the reusable active episode path. That path now correctly
+held the later 22-HIT attempt, while the original zero-gameplay X99 failure had
+already been preserved as `episode-002.incomplete-001`. Its recorded SHA-256
+still matched. The migration now names that immutable archive directly, so
+future episode retries cannot make historical provenance appear to drift. No
+new gameplay occurred and no outcome-facing field changed.

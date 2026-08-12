@@ -222,6 +222,13 @@ may it silently enter offline RL or cause outcome-conditioned resampling. Every
 failed report and corpus remains on disk and its triggering hashes are recorded
 in the migration manifest.
 
+One control-plane provenance detail was repaired before the retry started: the
+earlier X99 display failure was originally referenced through the reusable
+active episode path. Once a later attempt occupied that path, startup correctly
+rejected the mismatch. The display migration now binds the already preserved
+`episode-002.incomplete-001/report.json` archive with the same original hash.
+This prevents normal retries from aliasing immutable failure evidence.
+
 The run also sharpened the Wine concurrency diagnosis. Evidence runs begin
 controller observation at frames 85--91 despite fixed RNG and the same menu
 route. That makes stage-entry/controller handoff the leading generic source of
