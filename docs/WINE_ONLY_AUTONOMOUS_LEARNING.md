@@ -188,9 +188,15 @@ semi-Markov offline RL, generalized action centering, autonomous propensity-
 aware exploration, policy-level cross-fitting, and a full native population.
 It completed 16 new Wine Stages but produced no stable held-out advantage and
 never earned canary authorization, so it is frozen as ineffective; see
-`AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md`. Generation 5 must be declared as a
-new algorithm generation; it may reuse the factual corpus but cannot reinterpret
-Generation-4 outcomes as candidate evidence.
-Its committed design is `AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md`: factual
-in-sample implicit Bellman iteration, lower cost expectile value fitting,
-supported pessimistic population selection, and new-cohort authorization.
+`AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md`. Generation 5 used factual in-sample
+implicit Bellman iteration, lower cost expectile value fitting, and supported
+pessimistic population selection. Its Stage-4 boundary-15 smoke learned
+held-out Bellman structure but failed to identify a stable action, so
+collection stopped without a candidate. See
+`AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md`.
+
+The successor learner must first qualify on frozen factual Wine corpora split
+by complete episode. These offline checks exist to reject broken algorithms
+quickly and cannot reinterpret historical gameplay as authorization or
+promotion evidence. Only after the learner architecture and its gates are
+frozen may it collect new Wine evidence.

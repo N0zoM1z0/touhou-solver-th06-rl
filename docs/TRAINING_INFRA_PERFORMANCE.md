@@ -239,6 +239,25 @@ normal-speed serial and uses about one CPU core.
 
 ## Native implementation priority
 
+## 2026-08-12: logical thread budgets do not enforce host sharing
+
+The Stage-4 boundary-10 smoke exposed a resource-contract defect. Although
+five fold processes each received six learner threads from the declared
+32-thread budget, aggregate sampled CPU briefly reached approximately 51
+cores. Independent OpenMP runtimes can create and schedule extra teams, so
+library `n_jobs` and `threadpoolctl` settings are not a sufficient host-level
+limit.
+
+The live process group was immediately restricted to CPUs 0--31; the
+boundary-15 smoke and subsequent Wine child inherited that affinity and stayed
+inside the requested host-sharing set. Generation 6 makes this an executable
+contract rather than an operator action: the launcher selects at most the first
+32 CPUs from its inherited affinity, applies `sched_setaffinity` before any
+worker is created, and records the effective set. Library thread counts remain
+an inner performance control, while OS affinity is the authoritative hard cap.
+
+## Native implementation priority
+
 The repository should use native C/C++ for fixed, hot numerical kernels and
 Python for orchestration and audit readability. Current priority is:
 

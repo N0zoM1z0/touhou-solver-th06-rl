@@ -25,10 +25,11 @@ Read in this order:
    `docs/AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md` for its ineffective verdict;
 8. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
    and upstream-repository cache;
-9. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the active in-sample
+9. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the frozen in-sample
    implicit-Q learner and its predeclared smoke/evidence gates, followed by
-   `docs/AUTONOMOUS_LEARNER_GENERATION_5_PROGRESS.md` for append-only execution
-   and estimator findings;
+   `docs/AUTONOMOUS_LEARNER_GENERATION_5_PROGRESS.md` and
+   `docs/AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md` for its Stage-4 fail-fast
+   result and ineffective-for-continuation verdict;
 10. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 11. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
@@ -37,10 +38,11 @@ Read in this order:
    and conservative-to-source-exact fallback;
 13. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
-Generations 3 and 4 are frozen. Generation 4 exhausted its evidence budget
-without canary authorization. Generation 5 is declared, but no new Wine
-outcome may launch before its smoke, native, seed, and worker-isolation
-contracts are implemented and committed.
+Generations 3, 4, and 5 are frozen. Generation 5 stopped at its second
+predeclared Stage-4 fail-fast smoke: Bellman prediction improved, but independent
+populations did not identify a stable action. No new Wine outcome may launch
+until a successor learner passes a frozen-corpus qualification contract that
+is committed before its untouched partition is evaluated.
 
 ## Non-negotiable separation
 

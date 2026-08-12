@@ -218,3 +218,32 @@ already been preserved as `episode-002.incomplete-001`. Its recorded SHA-256
 still matched. The migration now names that immutable archive directly, so
 future episode retries cannot make historical provenance appear to drift. No
 new gameplay occurred and no outcome-facing field changed.
+
+## 2026-08-12: Stage-4 boundary 15 stops the learner generation
+
+Fifteen strictly admitted original-Wine Stage-4 episodes reached the second
+predeclared low-cost smoke. Held-out factual-Q loss improved from 0.976178 of
+the common-state comparator at boundary 10 to 0.970393 at boundary 15, and all
+15 held-out episode groups beat that comparator. This confirms outcome/value
+learning, but not a usable treatment decision.
+
+The independent 3/4-member panels agreed on a non-incumbent action on only
+8.94% of observations where either proposed, up from 7.00% at boundary 10 and
+far below the frozen 80% criterion. Exact agreement including mutual
+abstention fell to 66.17%. A direction-only decomposition found that just
+13.9% of unequal choices were the same direction with different focus, while
+29.4% differed by 135 or 180 degrees. The failure is genuine action-effect
+instability rather than mostly an overly exact equivalence rule.
+
+The user-requested review therefore exercised the purpose of the predeclared
+fail-fast smokes and stopped before spending five more Wine episodes on the
+same estimator. No candidate was fitted, canaried, or evaluated. The complete
+verdict and immutable report hashes are in
+`AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md`.
+
+The successor process first turns existing factual Wine episodes into a frozen
+learner-qualification corpus. Synthetic causal/null tests, complete-episode
+development splits, one untouched complete-episode qualification split, and
+native latency form an offline rejection funnel. Old data cannot authorize a
+candidate; it only shortens the time needed to discover a bad learner before
+new original-Wine collection.
