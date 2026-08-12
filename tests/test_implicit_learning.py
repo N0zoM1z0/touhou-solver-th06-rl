@@ -6,6 +6,7 @@ from th06_rl.implicit_learning import (
     _episodes,
     _n_step_targets,
     delayed_effect_episodes,
+    crossfit_implicit_q_report,
     fit_implicit_q_population,
     pessimistic_action,
 )
@@ -81,3 +82,29 @@ def test_implicit_q_abstains_when_randomized_action_has_no_effect() -> None:
     decisions = [pessimistic_action(population, sample)[0] for sample in samples]
 
     assert set(decisions) == {"stay"}
+
+
+def test_crossfit_keeps_complete_episodes_out_of_their_models() -> None:
+    samples = delayed_effect_episodes(count=20, options=36, delay=5)
+    new_ids = frozenset(f"fixture-{index:03d}" for index in range(12, 20))
+
+    report = crossfit_implicit_q_report(
+        samples,
+        new_episode_ids=new_ids,
+        iterations=2,
+        n_step_options=4,
+        q_trees=8,
+        value_trees=8,
+        total_threads=4,
+    )
+
+    assert report["overall"]["episode_groups"] == 20
+    assert report["new_cohort"]["episode_groups"] == 8
+    assert report["options"] == len(samples)
+    assert set(report["episodes"]) == {
+        f"fixture-{index:03d}" for index in range(20)
+    }
+    assert all(
+        set(fold["fit_episodes"]).isdisjoint(fold["heldout_episodes"])
+        for fold in report["folds"]
+    )

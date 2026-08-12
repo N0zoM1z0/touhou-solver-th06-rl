@@ -47,6 +47,13 @@ def _p95(values) -> float | None:
 class AutonomousSequentialRCriticPolicy:
     api_version = POLICY_API_VERSION
     name = "autonomous-sequential-r-critic-uninitialized"
+    state_schema = STATE_SCHEMA
+    feature_schema = RICH_FEATURE_SCHEMA
+    population_members = POPULATION_MEMBERS
+    selection_rule = "all-members-negative-relative-to-incumbent"
+    population_kind = "whole-episode-bootstrap-action-centered-r-critic"
+    policy_slug = "autonomous-sequential-r-critic"
+    generation_label = "Generation-4"
 
     def __init__(self) -> None:
         self.mode = "shadow"
@@ -71,8 +78,10 @@ class AutonomousSequentialRCriticPolicy:
         self.trees_per_member = 0
 
     def import_state(self, state: dict[str, object]) -> None:
-        if state.get("schema") != STATE_SCHEMA:
-            raise ValueError("unsupported Generation-4 sequential critic state")
+        if state.get("schema") != self.state_schema:
+            raise ValueError(
+                f"unsupported {self.generation_label} population state"
+            )
         mode = state.get("mode")
         authorization = state.get("authorization")
         if (
@@ -87,17 +96,22 @@ class AutonomousSequentialRCriticPolicy:
             raise ValueError("Generation-4 authorization is absent")
         names = rich_feature_names()
         if (
-            state.get("feature_schema") != RICH_FEATURE_SCHEMA
+            state.get("feature_schema") != self.feature_schema
             or tuple(state.get("feature_names", ())) != names
         ):
             raise ValueError("Generation-4 rich feature schema mismatch")
         raw_models = state.get("models")
-        if not isinstance(raw_models, list) or len(raw_models) != POPULATION_MEMBERS:
-            raise ValueError("Generation-4 population must contain seven members")
+        if (
+            not isinstance(raw_models, list)
+            or len(raw_models) != self.population_members
+        ):
+            raise ValueError(
+                f"{self.generation_label} population member count differs"
+            )
         portable_models = [
             PortableXGBoostRegressor(
                 _decode_model(row),
-                expected_feature_schema=RICH_FEATURE_SCHEMA,
+                expected_feature_schema=self.feature_schema,
                 expected_feature_names=names,
             )
             for row in raw_models
@@ -135,13 +149,12 @@ class AutonomousSequentialRCriticPolicy:
         population = state.get("population")
         if (
             not isinstance(selection, dict)
-            or selection.get("rule")
-            != "all-members-negative-relative-to-incumbent"
+            or selection.get("rule") != self.selection_rule
             or float(selection.get("baseline_advantage", math.nan)) != 0.0
             or not isinstance(population, dict)
-            or population.get("kind")
-            != "whole-episode-bootstrap-action-centered-r-critic"
-            or int(population.get("members", -1)) != POPULATION_MEMBERS
+            or population.get("kind") != self.population_kind
+            or int(population.get("members", -1)) != self.population_members
+            or not self._selection_contract(selection)
         ):
             raise ValueError("Generation-4 population selection contract mismatch")
 
@@ -237,7 +250,13 @@ class AutonomousSequentialRCriticPolicy:
         self.hazard_encoder = encoder
         self.scorer_backend = backend
         self.trees_per_member = int(population.get("trees_per_member", 0))
-        self.name = f"autonomous-sequential-r-critic-{mode}"
+        self.name = f"{self.policy_slug}-{mode}"
+
+    def _selection_contract(self, selection: dict[str, object]) -> bool:
+        return True
+
+    def _advantage_bound(self, member_advantages: list[float]) -> float:
+        return max(member_advantages)
 
     def _history(self, context) -> tuple[float, ...]:
         names = tuple(str(name) for name, _value in context.history_features)
@@ -312,7 +331,7 @@ class AutonomousSequentialRCriticPolicy:
             member_advantages = [
                 member[index] - member[baseline_index] for member in predictions
             ]
-            upper = max(member_advantages)
+            upper = self._advantage_bound(member_advantages)
             if upper < 0.0:
                 candidates.append((upper, legal[index]))
         proposed = baseline

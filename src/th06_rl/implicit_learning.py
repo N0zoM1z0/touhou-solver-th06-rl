@@ -21,6 +21,12 @@ N_STEP_OPTIONS = 8
 COST_EXPECTILE = 0.10
 Q_TREES = 128
 VALUE_TREES = 96
+CALIBRATION_Q_TREES = 48
+CALIBRATION_VALUE_TREES = 32
+CALIBRATION_MEMBERS = 4
+MINIMUM_CALIBRATION_EPISODES = 20
+MAXIMUM_PROPOSAL_RATE = 0.10
+MINIMUM_CONDITIONAL_AGREEMENT = 0.80
 
 
 @dataclass(frozen=True)
@@ -457,6 +463,458 @@ def pessimistic_action(
         if action != sample.baseline_action and bound < 0.0
     ]
     return min(candidates, default=(0.0, sample.baseline_action))[1], bounds
+
+
+def _support_artifacts(samples: list[OptionStep], *, seed: int):
+    # Reuse the source- and native-audited prototype implementation while
+    # keeping Generation-4 outcomes and authorization completely separate.
+    from .sequential_learning import OrthogonalOption, _support
+
+    placeholders = [
+        OrthogonalOption(
+            step=sample,
+            n_step_target=0.0,
+            outcome_residual=0.0,
+            fold=0,
+        )
+        for sample in samples
+    ]
+    return _support(placeholders, seed=seed)
+
+
+def _supported(sample: OptionStep, support: dict[str, object]) -> list[bool]:
+    from .sequential_learning import _support_mask
+
+    return _support_mask(support, sample)
+
+
+def _population_choice(
+    predictions,
+    sample: OptionStep,
+    supported: list[bool],
+    member_indices: tuple[int, ...],
+) -> str:
+    import numpy as np
+
+    baseline = sample.legal_actions.index(sample.baseline_action)
+    advantages = predictions[np.asarray(member_indices), :] - predictions[
+        np.asarray(member_indices), [baseline]
+    ][:, None]
+    candidates = []
+    for index, action in enumerate(sample.legal_actions):
+        if action == sample.baseline_action or not supported[index]:
+            continue
+        values = advantages[:, index]
+        bound = float(2.0 * values.max() - values.min())
+        if bound < 0.0:
+            candidates.append((bound, action))
+    return min(candidates, default=(0.0, sample.baseline_action))[1]
+
+
+def _evaluate_crossfit_fold(
+    train: list[OptionStep],
+    heldout: list[OptionStep],
+    *,
+    fold: int,
+    iterations: int,
+    n_step_options: int,
+    q_trees: int,
+    value_trees: int,
+    seed: int,
+    total_threads: int,
+):
+    import numpy as np
+
+    population = fit_implicit_q_population(
+        train,
+        members=CALIBRATION_MEMBERS,
+        iterations=iterations,
+        n_step_options=n_step_options,
+        q_trees=q_trees,
+        value_trees=value_trees,
+        seed=seed + fold * 100_000,
+        total_threads=total_threads,
+    )
+    support, support_report = _support_artifacts(
+        train, seed=seed + 50_000 + fold * 100_000
+    )
+    episodes = _episodes(heldout)
+    _factual, states, row_episodes, _weights = _arrays(episodes)
+    layout_rows, coefficients, starts, layout_episodes, samples = (
+        _centered_layout(episodes)
+    )
+    if layout_episodes != row_episodes:
+        raise RuntimeError("held-out implicit layouts differ")
+    effect_predictions = np.asarray([
+        member.q_model.predict(layout_rows) for member in population
+    ], dtype=np.float64)
+    centered = np.asarray([
+        np.add.reduceat(coefficients * values, starts)
+        for values in effect_predictions
+    ])
+    common = np.asarray([
+        member.outcome_model.predict(states) for member in population
+    ], dtype=np.float64)
+    targets = []
+    for member in population:
+        by_option = _n_step_targets(
+            episodes,
+            member.value_model,
+            n_step_options=n_step_options,
+        )
+        targets.append([
+            by_option[(episode, sample.option_id)]
+            for episode, rows in episodes.items() for sample in rows
+        ])
+    targets = np.asarray(targets, dtype=np.float64)
+    zero_errors = np.mean((targets - common) ** 2, axis=0)
+    q_errors = np.mean((targets - common - centered) ** 2, axis=0)
+    stop_indices = [*starts[1:], len(layout_rows)]
+    episode_reports: dict[str, dict[str, object]] = {}
+    full_proposals = 0
+    union_proposals = 0
+    conditional_agreements = 0
+    exact_agreements = 0
+    unsupported_candidates = 0
+    for index, (start, stop) in enumerate(zip(
+        starts, stop_indices, strict=True
+    )):
+        sample = samples[index]
+        episode = sample.episode_id
+        report = episode_reports.setdefault(episode, {
+            "zero_squared_error": 0.0,
+            "q_squared_error": 0.0,
+            "options": 0,
+            "proposals": 0,
+        })
+        report["zero_squared_error"] += float(zero_errors[index])
+        report["q_squared_error"] += float(q_errors[index])
+        report["options"] += 1
+        mask = _supported(sample, support)
+        unsupported_candidates += sum(
+            action != sample.baseline_action and not mask[action_index]
+            for action_index, action in enumerate(sample.legal_actions)
+        )
+        predictions = effect_predictions[:, start:stop]
+        left = _population_choice(predictions, sample, mask, (0, 1))
+        right = _population_choice(predictions, sample, mask, (2, 3))
+        full = _population_choice(predictions, sample, mask, (0, 1, 2, 3))
+        either = left != sample.baseline_action or right != sample.baseline_action
+        union_proposals += int(either)
+        exact_agreements += int(left == right)
+        conditional_agreements += int(either and left == right)
+        if full != sample.baseline_action:
+            full_proposals += 1
+            report["proposals"] += 1
+    for report in episode_reports.values():
+        report["q_beats_zero"] = (
+            report["q_squared_error"] < report["zero_squared_error"]
+        )
+    zero = sum(row["zero_squared_error"] for row in episode_reports.values())
+    q_loss = sum(row["q_squared_error"] for row in episode_reports.values())
+    return {
+        "fold": fold,
+        "fit_episodes": sorted({sample.episode_id for sample in train}),
+        "heldout_episodes": sorted(episode_reports),
+        "support": support_report,
+        "bootstrap": [member.bootstrap for member in population],
+        "episodes": episode_reports,
+        "zero_squared_error": zero,
+        "q_squared_error": q_loss,
+        "options": len(samples),
+        "proposals": full_proposals,
+        "union_half_proposals": union_proposals,
+        "conditional_half_agreements": conditional_agreements,
+        "exact_half_agreements": exact_agreements,
+        "unsupported_candidates": unsupported_candidates,
+    }
+
+
+def crossfit_implicit_q_report(
+    samples: list[OptionStep],
+    *,
+    new_episode_ids: frozenset[str] = frozenset(),
+    iterations: int = BELLMAN_ITERATIONS,
+    n_step_options: int = N_STEP_OPTIONS,
+    q_trees: int = CALIBRATION_Q_TREES,
+    value_trees: int = CALIBRATION_VALUE_TREES,
+    seed: int = 260_813,
+    total_threads: int = 12,
+) -> dict[str, object]:
+    from .advantage_learning import _folds
+
+    episodes = _episodes(samples)
+    groups = list(episodes)
+    folds = _folds(groups, count=CROSSFIT_FOLDS, seed=seed)
+    reports = []
+    for fold, heldout_groups in enumerate(folds):
+        heldout_set = set(heldout_groups)
+        train = [
+            sample for sample in samples if sample.episode_id not in heldout_set
+        ]
+        heldout = [
+            sample for sample in samples if sample.episode_id in heldout_set
+        ]
+        reports.append(_evaluate_crossfit_fold(
+            train,
+            heldout,
+            fold=fold,
+            iterations=iterations,
+            n_step_options=n_step_options,
+            q_trees=q_trees,
+            value_trees=value_trees,
+            seed=seed,
+            total_threads=total_threads,
+        ))
+    episode_reports = {
+        episode: report
+        for fold in reports
+        for episode, report in fold["episodes"].items()
+    }
+
+    def cohort(selected: set[str]) -> dict[str, object]:
+        rows = [episode_reports[episode] for episode in sorted(selected)]
+        zero = sum(row["zero_squared_error"] for row in rows)
+        q_loss = sum(row["q_squared_error"] for row in rows)
+        return {
+            "episode_groups": len(rows),
+            "zero_squared_error": zero,
+            "q_squared_error": q_loss,
+            "relative_q_loss": q_loss / zero if zero > 0.0 else math.inf,
+            "episodes_beating_zero": sum(row["q_beats_zero"] for row in rows),
+            "options": sum(row["options"] for row in rows),
+            "proposals": sum(row["proposals"] for row in rows),
+        }
+
+    overall = cohort(set(episode_reports))
+    new = cohort(set(new_episode_ids) & set(episode_reports))
+    options = sum(report["options"] for report in reports)
+    proposals = sum(report["proposals"] for report in reports)
+    union = sum(report["union_half_proposals"] for report in reports)
+    conditional = sum(
+        report["conditional_half_agreements"] for report in reports
+    )
+    return {
+        "folds": reports,
+        "episodes": episode_reports,
+        "overall": overall,
+        "new_cohort": new,
+        "options": options,
+        "proposals": proposals,
+        "proposal_rate": proposals / options,
+        "union_half_proposals": union,
+        "conditional_half_agreement": conditional / union if union else 0.0,
+        "exact_half_agreement": sum(
+            report["exact_half_agreements"] for report in reports
+        ) / options,
+        "unsupported_candidates": sum(
+            report["unsupported_candidates"] for report in reports
+        ),
+    }
+
+
+def fit_supported_implicit_q(
+    samples: list[OptionStep],
+    *,
+    new_episode_ids: frozenset[str] = frozenset(),
+    iterations: int = BELLMAN_ITERATIONS,
+    n_step_options: int = N_STEP_OPTIONS,
+    q_trees: int = Q_TREES,
+    value_trees: int = VALUE_TREES,
+    calibration_q_trees: int = CALIBRATION_Q_TREES,
+    calibration_value_trees: int = CALIBRATION_VALUE_TREES,
+    seed: int = 260_813,
+    total_threads: int = 12,
+    native_scorer_sha256: str,
+    compatible_native_scorer_sha256: tuple[str, ...] = (),
+) -> dict[str, object]:
+    from .advantage_learning import (
+        _augment_steps,
+        encode_hazard_set,
+        fit_hazard_codebook,
+        rich_feature_names,
+    )
+    from .conservative_learning import _encoded_model, _export_model
+    from .hazard_representation import HISTORY_FEATURE_NAMES
+    from .sequential_learning import RICH_FEATURE_SCHEMA
+    from .th06.learning_adapter import (
+        ACTION_FEATURE_NAMES,
+        OBSERVATION_FEATURE_NAMES,
+    )
+
+    groups = sorted({sample.episode_id for sample in samples})
+    if len(groups) < CROSSFIT_FOLDS * 2:
+        raise ValueError("Generation 5 fit needs at least ten episode groups")
+    if not new_episode_ids <= set(groups):
+        raise ValueError("new cohort is not a subset of fitted factual episodes")
+    representation = fit_hazard_codebook(samples, seed=seed + 30_000)
+    representation["conformance"] = []
+    for sample in samples[: min(4, len(samples))]:
+        representation["conformance"].append({
+            "primitives": [list(row) for row in sample.hazard_primitives],
+            "encoding": list(encode_hazard_set(
+                sample.hazard_primitives, representation
+            )),
+        })
+    augmented = _augment_steps(samples, representation)
+    calibration = crossfit_implicit_q_report(
+        augmented,
+        new_episode_ids=new_episode_ids,
+        iterations=iterations,
+        n_step_options=n_step_options,
+        q_trees=calibration_q_trees,
+        value_trees=calibration_value_trees,
+        seed=seed,
+        total_threads=total_threads,
+    )
+    population = fit_implicit_q_population(
+        augmented,
+        members=POPULATION_MEMBERS,
+        iterations=iterations,
+        n_step_options=n_step_options,
+        q_trees=q_trees,
+        value_trees=value_trees,
+        seed=seed + 700_000,
+        total_threads=total_threads,
+    )
+    support, support_report = _support_artifacts(
+        augmented, seed=seed + 800_000
+    )
+    conformance = [sample.vector for sample in augmented[: min(8, len(augmented))]]
+    names = rich_feature_names()
+    models = [
+        _encoded_model(_export_model(
+            member.q_model,
+            conformance,
+            feature_schema=RICH_FEATURE_SCHEMA,
+            feature_names=names,
+        ))
+        for member in population
+    ]
+    compatible = tuple(dict.fromkeys((
+        native_scorer_sha256,
+        *compatible_native_scorer_sha256,
+    )))
+    native_bound = all(
+        len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+        for value in compatible
+    )
+    overall = calibration["overall"]
+    new = calibration["new_cohort"]
+    production_contract = (
+        iterations == BELLMAN_ITERATIONS
+        and n_step_options == N_STEP_OPTIONS
+        and q_trees == Q_TREES
+        and value_trees == VALUE_TREES
+        and calibration_q_trees == CALIBRATION_Q_TREES
+        and calibration_value_trees == CALIBRATION_VALUE_TREES
+        and seed == 260_813
+    )
+    gates = {
+        "production_contract": production_contract,
+        "minimum_crossfit_episode_groups": (
+            overall["episode_groups"] >= MINIMUM_CALIBRATION_EPISODES
+        ),
+        "overall_q_beats_zero": (
+            overall["q_squared_error"] < overall["zero_squared_error"]
+        ),
+        "overall_strict_episode_majority": (
+            overall["episodes_beating_zero"] > overall["episode_groups"] / 2
+        ),
+        "new_cohort_declared": new["episode_groups"] >= 8,
+        "new_cohort_q_beats_zero": (
+            new["q_squared_error"] < new["zero_squared_error"]
+        ),
+        "new_cohort_strict_episode_majority": (
+            new["episodes_beating_zero"] > new["episode_groups"] / 2
+        ),
+        "heldout_policy_exercised": calibration["proposals"] > 0,
+        "heldout_proposal_rate_bounded": (
+            calibration["proposal_rate"] <= MAXIMUM_PROPOSAL_RATE
+        ),
+        "independent_half_policy_agreement": (
+            calibration["conditional_half_agreement"]
+            >= MINIMUM_CONDITIONAL_AGREEMENT
+        ),
+        "population_complete": len(models) == POPULATION_MEMBERS,
+        "support_calibrated": support_report["coverage"] >= 0.99,
+        "finite_diagnostics": all(math.isfinite(float(value)) for value in (
+            overall["zero_squared_error"],
+            overall["q_squared_error"],
+            overall["relative_q_loss"],
+            calibration["proposal_rate"],
+            calibration["conditional_half_agreement"],
+        )),
+        "native_scorer_bound": native_bound,
+    }
+    return {
+        "schema": STATE_SCHEMA,
+        "mode": "shadow",
+        "feature_schema": RICH_FEATURE_SCHEMA,
+        "observation_feature_names": list(OBSERVATION_FEATURE_NAMES),
+        "action_feature_names": list(ACTION_FEATURE_NAMES),
+        "feature_names": list(names),
+        "representation": {
+            "kind": (
+                "learned-permutation-invariant-hazard-codebook-plus-factual-history"
+            ),
+            "hazard_codebook": representation,
+            "history_feature_names": list(HISTORY_FEATURE_NAMES),
+        },
+        "models": models,
+        "support": support,
+        "selection": {
+            "rule": "population-range-upper-bound-relative-to-incumbent",
+            "baseline_advantage": 0.0,
+            "uncertainty_range_multiplier": 1.0,
+            "active_override_budget": None,
+        },
+        "native_scorer": {
+            "schema": "th06-rl-native-xgboost-scorer-v1",
+            "sha256": native_scorer_sha256,
+            "compatible_sha256": list(compatible),
+        },
+        "population": {
+            "kind": "whole-episode-bootstrap-action-centered-implicit-q",
+            "members": POPULATION_MEMBERS,
+            "trees_per_member": q_trees,
+            "bellman_iterations": iterations,
+            "bootstrap": [member.bootstrap for member in population],
+            "iterations": [list(member.iterations) for member in population],
+        },
+        "authorization": {
+            "fit_gates": gates,
+            "fit_eligible": all(gates.values()),
+            "policy_calibration": calibration,
+            "active_canary": None,
+        },
+        "fit_report": {
+            "schema": FIT_REPORT_SCHEMA,
+            "algorithm": "action-centered-in-sample-implicit-fitted-q",
+            "reward": "physical-HIT-only",
+            "gamma": 1.0,
+            "cost_expectile": COST_EXPECTILE,
+            "bellman_iterations": iterations,
+            "n_step_options": n_step_options,
+            "episode_groups": groups,
+            "new_episode_groups": sorted(new_episode_ids),
+            "options": len(augmented),
+            "q_trees": q_trees,
+            "value_trees": value_trees,
+            "calibration_q_trees": calibration_q_trees,
+            "calibration_value_trees": calibration_value_trees,
+            "centered_objective_uses_inverse_propensity": False,
+            "maximum_centered_coefficient": max(
+                abs(float(index == sample.legal_actions.index(sample.action)) - probability)
+                for sample in augmented
+                for index, probability in enumerate(sample.behavior_probabilities)
+            ),
+            "policy_calibration": calibration,
+            "support": support_report,
+            "population_bootstrap": [member.bootstrap for member in population],
+        },
+    }
 
 
 def delayed_effect_episodes(
