@@ -135,6 +135,15 @@ not an episode maximum. These offline checks may reject a model but cannot
 promote it. Only disjoint paired Wine canary outcomes can authorize natural
 full-Stage evaluation.
 
+Before canary authorization, the fit-eligible immutable population also
+replays every factual boundary in the last three newly collected episodes
+through the host native scorer. This is a wiring/latency shadow, not another
+outcome estimate: it must publish the incumbent only, witness at least one
+proposal, replay the exact option count, remain below 4 ms p95, and incur zero
+deadline misses. A passing shadow population may influence only the generic
+disagreement term of later exploration; it never publishes an exploration
+action or changes the fixed mixture.
+
 ## 6. Full native population
 
 The default deployment artifact is the complete seven-member 128-tree critic;

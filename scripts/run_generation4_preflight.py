@@ -68,6 +68,10 @@ CONTRACT_FILES = (
     REPOSITORY / "src/th06_rl/policies/autonomous_sequential_r_critic.py",
     REPOSITORY / "src/th06_rl/th06/controller.py",
     REPOSITORY / "src/th06_rl/th06/learning_adapter.py",
+    REPOSITORY / "scripts/fit_sequential_r_critic.py",
+    REPOSITORY / "scripts/shadow_sequential_r_critic.py",
+    REPOSITORY / "scripts/authorize_sequential_r_canary.py",
+    REPOSITORY / "scripts/run_autonomous_learning_v4.py",
 )
 NATIVE_DECISIONS = 1_200
 MAXIMUM_P95_MS = 4.0

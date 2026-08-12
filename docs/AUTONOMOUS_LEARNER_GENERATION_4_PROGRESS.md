@@ -105,3 +105,21 @@ contracts, repeats the production causal recovery, benchmarks all seven full
 short retail-Wine transition-v10 run for complete propensities, ESS,
 information weights, native-safe execution, and option lifecycle. The short
 Wine run is explicitly ineligible as training or evaluation evidence.
+
+## 2026-08-12: unattended state machine completed
+
+The Generation-4 runner now owns the complete fixed process: validate the
+frozen historical corpus, run preflight, collect new retail-Wine v10 episodes,
+fit at 8/12/16 new-episode boundaries, replay the last three new episodes as a
+baseline-only native shadow, hash-authorize a candidate, run the three-pair
+fixed-RNG canary, and—only after it passes—run the alternating 12-natural-Stage
+per-arm evaluation. It checkpoints every completed Wine episode and can resume
+without repeating or replacing evidence.
+
+If a fit-authorized native shadow exists after an unsuccessful canary, later
+collection may use its seven-member disagreement only to allocate the fixed
+0.25 information mass. The 0.50 incumbent and 0.25 uniform components remain
+unchanged, the native-safe set remains authoritative, and the shadow critic
+cannot publish an action. After 16 new complete Stages the runner emits the
+predeclared ineffective verdict if no candidate has earned canary
+authorization; there is no manual fallback or winner selection.

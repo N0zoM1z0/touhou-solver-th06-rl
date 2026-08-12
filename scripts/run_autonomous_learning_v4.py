@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-"""Run the fixed, resumable Generation-3 Wine-only learning experiment."""
+"""Run the fixed, resumable Generation-4 Wine-only learning experiment."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
-import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 from typing import Any
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -19,258 +16,93 @@ for path in (REPOSITORY, REPOSITORY / "src"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from scripts.authorize_option_advantage_canary import authorize  # noqa: E402
-from scripts.run_autonomous_learning import _validate_retail_report  # noqa: E402
-from scripts.run_generation3_preflight import (  # noqa: E402
+from scripts.authorize_sequential_r_canary import authorize  # noqa: E402
+from scripts.run_autonomous_learning_v3 import (  # noqa: E402
+    _archive_incomplete,
+    _atomic_json,
+    _baseline_state,
+    _candidate_metrics,
+    _candidate_runtime_clean,
+    _complete_run,
+    _sha256,
+)
+from scripts.run_generation4_preflight import (  # noqa: E402
+    HISTORICAL,
     SEEDS,
     _contract_sha256,
+    _validate_historical_contract,
     _validate_seed_contract,
     run as run_preflight,
 )
-from scripts.shadow_option_advantage import shadow  # noqa: E402
-from th06_rl.advantage_learning import (  # noqa: E402
-    TRANSITION_SCHEMA as GENERATION3_TRANSITION_SCHEMA,
-    STATE_SCHEMA as CANDIDATE_STATE_SCHEMA,
-    _object,
-    _validate_run,
-)
-from th06_rl.policies.safe_option_exploration import (  # noqa: E402
+from scripts.shadow_sequential_r_critic import shadow  # noqa: E402
+from th06_rl.advantage_learning import _object, _validate_run  # noqa: E402
+from th06_rl.policies.propensity_aware_option_exploration import (  # noqa: E402
+    INCUMBENT_MASS,
+    INFORMATION_MASS,
     OPTION_HORIZON_FRAMES,
-    STATE_SCHEMA as OPTION_STATE_SCHEMA,
+    STATE_SCHEMA as EXPLORATION_STATE_SCHEMA,
+    UNIFORM_MASS,
 )
-from th06_rl.policies.uniform_safe_exploration import (  # noqa: E402
-    STATE_SCHEMA as BASELINE_STATE_SCHEMA,
+from th06_rl.sequential_learning import (  # noqa: E402
+    STATE_SCHEMA as CANDIDATE_STATE_SCHEMA,
+    TRANSITION_SCHEMA,
 )
 
 
-SCHEMA = "autonomous-wine-learning-generation-v3"
+SCHEMA = "autonomous-wine-learning-generation-v4"
 DIFFICULTY = "lunatic"
 STAGE = 6
 GENERATION_SEED = 260812
-COLLECTION_EPISODES = 24
-FIT_BOUNDARIES = (12, 16, 20, 24)
-VALIDATION_EPISODES = 3
-EXPLORATION_PROBABILITY = 0.10
+NEW_COLLECTION_EPISODES = 16
+FIT_BOUNDARIES = (8, 12, 16)
 CANARY_PAIRS = 3
 FINAL_PAIRS = 12
+SHADOW_EPISODES = 3
 MAXIMUM_P95_MS = 4.0
-OPTION_PLUGIN = REPOSITORY / "src/th06_rl/policies/safe_option_exploration.py"
+EXPLORATION_PLUGIN = (
+    REPOSITORY / "src/th06_rl/policies/propensity_aware_option_exploration.py"
+)
 BASELINE_PLUGIN = REPOSITORY / "src/th06_rl/policies/uniform_safe_exploration.py"
 CANDIDATE_PLUGIN = (
-    REPOSITORY / "src/th06_rl/policies/autonomous_dr_option_advantage.py"
+    REPOSITORY / "src/th06_rl/policies/autonomous_sequential_r_critic.py"
 )
-INFRA_EVENTS = frozenset({
-    "background-reactivated",
-    "capture-gap-fail-close",
-    "capture-incoherent",
-    "continuous-fail-close",
-    "system-memory-stop",
-    "system-memory-unavailable",
-})
-ALLOWED_PREFLIGHT_CONTRACT_MIGRATIONS = {
-    (
-        "a3ee86163d1e0f80546d6a48a20410852ac9a5df58e032947adf7f6094341c49",
-        "c0daeb55e892a854b7be1bf4694535b8dfb404405db27cc31da839a8c9e9aa10",
-    ): {
-        "id": "generation-3-option-interval-hit-accounting-v1",
-        "reason": (
-            "preserve complete-Stage physical HITs across non-treatment "
-            "lifecycle gaps without treating rejected options as factual"
-        ),
-    },
-}
 
 
-def _atomic_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
-            json.dump(value, output, indent=2, sort_keys=True, allow_nan=False)
-            output.write("\n")
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _archive_incomplete(path: Path) -> None:
-    if not path.exists():
-        return
-    for index in range(1, 1000):
-        archived = path.with_name(f"{path.name}.incomplete-{index:03d}")
-        if not archived.exists():
-            path.rename(archived)
-            return
-    raise RuntimeError(f"too many incomplete artifacts beside {path}")
-
-
-def _corpus_runs(root: Path) -> set[str]:
-    if not root.exists():
-        return set()
-    return {
-        path.name for path in root.iterdir()
-        if path.is_dir() and (path / "run.json").is_file()
-    }
-
-
-def _option_state(path: Path, *, policy_seed: int) -> None:
+def _option_state(
+    path: Path,
+    *,
+    policy_seed: int,
+    information_policy: Path | None,
+) -> None:
+    information = None
+    information_sha = None
+    if information_policy is not None:
+        information = _object(information_policy)
+        authorization = information.get("authorization")
+        if (
+            information.get("schema") != CANDIDATE_STATE_SCHEMA
+            or information.get("mode") != "shadow"
+            or not isinstance(authorization, dict)
+            or authorization.get("fit_eligible") is not True
+        ):
+            raise ValueError("exploration information critic is not fit-authorized")
+        information_sha = _sha256(information_policy)
     value = {
-        "schema": OPTION_STATE_SCHEMA,
+        "schema": EXPLORATION_STATE_SCHEMA,
         "policy_seed": policy_seed,
-        "exploration_probability": EXPLORATION_PROBABILITY,
         "option_horizon_frames": OPTION_HORIZON_FRAMES,
+        "mixture": {
+            "incumbent": INCUMBENT_MASS,
+            "uniform": UNIFORM_MASS,
+            "information": INFORMATION_MASS,
+        },
+        "information_policy": information,
+        "information_policy_sha256": information_sha,
     }
     if path.is_file() and _object(path) != value:
-        raise ValueError("existing behavior state violates Generation-3 contract")
+        raise ValueError("existing Generation-4 behavior state differs")
     if not path.exists():
         _atomic_json(path, value)
-
-
-def _baseline_state(path: Path) -> None:
-    value = {
-        "schema": BASELINE_STATE_SCHEMA,
-        "policy_seed": GENERATION_SEED,
-        "exploration_probability": 0.0,
-    }
-    if path.is_file() and _object(path) != value:
-        raise ValueError("existing incumbent state violates Generation-3 contract")
-    if not path.exists():
-        _atomic_json(path, value)
-
-
-def _trace_is_clean(report: dict[str, object]) -> bool:
-    trace = report.get("trace")
-    events = trace.get("event_counts") if isinstance(trace, dict) else None
-    return isinstance(events, dict) and not any(
-        int(events.get(name, 0)) for name in INFRA_EVENTS
-    )
-
-
-def _candidate_metrics(report: dict[str, object]) -> dict[str, object]:
-    trace = report.get("trace")
-    metrics = trace.get("last_policy_metrics") if isinstance(trace, dict) else None
-    if not isinstance(metrics, dict):
-        raise RuntimeError("candidate Wine report has no runtime policy metrics")
-    return metrics
-
-
-def _candidate_runtime_clean(metrics: dict[str, object]) -> bool:
-    p95 = metrics.get("decision_latency_p95_ms")
-    return (
-        metrics.get("mode") == "active"
-        and metrics.get("scorer_backend") == "native-batch"
-        and isinstance(p95, (int, float))
-        and float(p95) <= MAXIMUM_P95_MS
-        and int(metrics.get("controller_deadline_misses", -1)) == 0
-    )
-
-
-def _validate_complete_run(
-    *,
-    artifact_dir: Path,
-    rng_seed: int | None,
-    corpus_root: Path | None,
-    transition_schema: str = GENERATION3_TRANSITION_SCHEMA,
-) -> tuple[dict[str, object], Path | None]:
-    report = _object(artifact_dir / "report.json")
-    _validate_retail_report(
-        report,
-        mode=(
-            "fixed-rng-complete-stage-training"
-            if corpus_root is not None else "hit-continuation-benchmark"
-        ),
-        diagnostic_rng_seed=rng_seed,
-        full_stage=STAGE,
-    )
-    if (
-        report.get("difficulty") != DIFFICULTY
-        or report.get("practice_stage") != STAGE
-        or not _trace_is_clean(report)
-    ):
-        raise RuntimeError("Wine complete Stage provenance/infrastructure failed")
-    run_dir = None
-    if corpus_root is not None:
-        trace = report.get("trace")
-        run_ids = trace.get("corpus_run_ids") if isinstance(trace, dict) else None
-        if not isinstance(run_ids, list) or len(run_ids) != 1:
-            raise RuntimeError("complete Stage report must bind one corpus run")
-        run_dir = corpus_root / str(run_ids[0])
-        _run, manifest = _validate_run(
-            run_dir, transition_schema=transition_schema
-        )
-        outcome = manifest["run_outcome"]
-        completion = report["controller_completion"]
-        if int(outcome["physical_hits"]) != int(completion["physical_hits"]):
-            raise RuntimeError("Wine report/corpus physical HIT count differs")
-    return report, run_dir
-
-
-def _complete_run(
-    *,
-    artifact_dir: Path,
-    policy_plugin: Path,
-    policy_state: Path,
-    scorer: Path | None,
-    rng_seed: int | None,
-    corpus_root: Path | None,
-    transition_schema: str = GENERATION3_TRANSITION_SCHEMA,
-) -> tuple[dict[str, object], Path | None]:
-    if (artifact_dir / "report.json").is_file():
-        try:
-            return _validate_complete_run(
-                artifact_dir=artifact_dir,
-                rng_seed=rng_seed,
-                corpus_root=corpus_root,
-                transition_schema=transition_schema,
-            )
-        except (FileNotFoundError, TypeError, ValueError, RuntimeError):
-            _archive_incomplete(artifact_dir)
-    elif artifact_dir.exists():
-        _archive_incomplete(artifact_dir)
-    before = _corpus_runs(corpus_root) if corpus_root is not None else set()
-    command = [
-        sys.executable,
-        str(REPOSITORY / "scripts/run_wine_retail.py"),
-        "--practice-stage", str(STAGE),
-        "--difficulty", DIFFICULTY,
-        "--artifact-dir", str(artifact_dir),
-        "--policy-plugin", str(policy_plugin),
-        "--policy-state", str(policy_state),
-        "--immutable-policy",
-        "--exploration-rate", "0",
-    ]
-    if scorer is not None:
-        command.extend(("--policy-scorer-library", str(scorer)))
-    if corpus_root is not None:
-        if rng_seed is None:
-            raise ValueError("fixed-RNG corpus run has no RNG seed")
-        command.extend((
-            "--complete-stage-training-corpus-root", str(corpus_root),
-            "--diagnostic-rng-seed", hex(rng_seed),
-        ))
-    completed = subprocess.run(command, cwd=REPOSITORY, check=False)
-    report, run_dir = _validate_complete_run(
-        artifact_dir=artifact_dir,
-        rng_seed=rng_seed,
-        corpus_root=corpus_root,
-        transition_schema=transition_schema,
-    )
-    if completed.returncode != int(report["controller_returncode"]):
-        raise RuntimeError("outer and recorded Wine return codes differ")
-    if corpus_root is not None:
-        created = sorted(_corpus_runs(corpus_root) - before)
-        if len(created) != 1 or run_dir != corpus_root / created[0]:
-            raise RuntimeError("complete Stage created/bound the wrong corpus run")
-    return report, run_dir
 
 
 def _config(args: argparse.Namespace) -> dict[str, object]:
@@ -278,67 +110,19 @@ def _config(args: argparse.Namespace) -> dict[str, object]:
         "difficulty": DIFFICULTY,
         "stage": STAGE,
         "generation_seed": GENERATION_SEED,
-        "collection_episodes": COLLECTION_EPISODES,
+        "frozen_historical_episodes": 13,
+        "new_collection_episodes": NEW_COLLECTION_EPISODES,
         "fit_boundaries": list(FIT_BOUNDARIES),
-        "validation_episodes": VALIDATION_EPISODES,
-        "exploration_probability": EXPLORATION_PROBABILITY,
-        "option_horizon_frames": OPTION_HORIZON_FRAMES,
+        "shadow_episodes": SHADOW_EPISODES,
         "canary_pairs": CANARY_PAIRS,
         "final_pairs": FINAL_PAIRS,
         "maximum_p95_ms": MAXIMUM_P95_MS,
         "seed_schedule_sha256": _sha256(SEEDS),
+        "historical_contract_sha256": _sha256(HISTORICAL),
         "preflight_contract_sha256": _contract_sha256(),
         "wine_native_scorer_sha256": _sha256(args.wine_native_scorer),
         "host_native_scorer_sha256": _sha256(args.host_native_scorer),
     }
-
-
-def _reconcile_resume_contract(
-    state: dict[str, Any],
-    config: dict[str, object],
-) -> bool:
-    """Permit only an explicitly audited, corpus-preserving infra repair."""
-    if state.get("schema") != SCHEMA:
-        raise RuntimeError("refusing Generation-3 resume with changed contract")
-    previous = state.get("config")
-    if previous == config:
-        return False
-    if not isinstance(previous, dict):
-        raise RuntimeError("refusing Generation-3 resume with changed contract")
-    changed = {
-        key for key in set(previous) | set(config)
-        if previous.get(key) != config.get(key)
-    }
-    migration = ALLOWED_PREFLIGHT_CONTRACT_MIGRATIONS.get((
-        str(previous.get("preflight_contract_sha256", "")),
-        str(config.get("preflight_contract_sha256", "")),
-    ))
-    if (
-        changed != {"preflight_contract_sha256"}
-        or migration is None
-        or state.get("status") != "infra_failure"
-    ):
-        raise RuntimeError("refusing Generation-3 resume with changed contract")
-    migrations = state.setdefault("infra_migrations", [])
-    if not isinstance(migrations, list):
-        raise TypeError("Generation-3 infrastructure migration log is invalid")
-    migrations.append({
-        "schema": "autonomous-generation-3-infra-migration-v1",
-        "id": migration["id"],
-        "reason": migration["reason"],
-        "from_preflight_contract_sha256": previous[
-            "preflight_contract_sha256"
-        ],
-        "to_preflight_contract_sha256": config[
-            "preflight_contract_sha256"
-        ],
-        "preserved_collection_episodes": len(state.get("episodes", ())),
-        "preserved_transition_schema": "th06-rl-transition-v9",
-        "outcome_or_schedule_fields_changed": False,
-        "triggering_failure": state.get("infra_failure"),
-    })
-    state["config"] = config
-    return True
 
 
 def _fit(
@@ -355,25 +139,23 @@ def _fit(
             state.get("schema") != CANDIDATE_STATE_SCHEMA
             or report.get("authorization") != state.get("authorization")
         ):
-            raise ValueError("cached Generation-3 fit is inconsistent")
+            raise ValueError("cached Generation-4 fit is inconsistent")
         return state_path, report
     if round_dir.exists():
         _archive_incomplete(round_dir)
     command = [
         sys.executable,
-        str(REPOSITORY / "scripts/fit_option_advantage.py"),
+        str(REPOSITORY / "scripts/fit_sequential_r_critic.py"),
         *(str(path) for path in run_dirs),
         "--output-dir", str(round_dir),
         "--native-scorer", str(args.wine_native_scorer),
-        "--shadow-native-scorer", str(args.host_native_scorer),
-        "--validation-episodes", str(VALIDATION_EPISODES),
-        "--exploration-probability", str(EXPLORATION_PROBABILITY),
+        "--compatible-native-scorer", str(args.host_native_scorer),
         "--seed", str(GENERATION_SEED),
         "--threads", str(args.threads),
     ]
     completed = subprocess.run(command, cwd=REPOSITORY, check=False)
     if completed.returncode:
-        raise RuntimeError(f"Generation-3 fit failed with {completed.returncode}")
+        raise RuntimeError(f"Generation-4 fit failed with {completed.returncode}")
     return state_path, _object(report_path)
 
 
@@ -384,7 +166,7 @@ def _round_seeds(schedule: dict[str, object], round_index: int) -> list[int]:
     ]
     rows.sort(key=lambda row: int(row["pair"]))
     if len(rows) != CANARY_PAIRS:
-        raise ValueError("precommitted canary round is incomplete")
+        raise ValueError("Generation-4 canary seed round is incomplete")
     return [int(row["game_rng_seed"]) for row in rows]
 
 
@@ -404,7 +186,7 @@ def _paired_canary(
     if audit_path.is_file():
         audit = _object(audit_path)
         if audit.get("candidate_state_sha256") != _sha256(candidate_state):
-            raise ValueError("cached canary audit is stale")
+            raise ValueError("cached Generation-4 canary audit is stale")
         if audit.get("canary_eligible") is True:
             if not evaluation_path.is_file():
                 raise FileNotFoundError(evaluation_path)
@@ -423,21 +205,16 @@ def _paired_canary(
             artifact = root / f"pair-{pair:02d}-{arm}"
             report, run_dir = _complete_run(
                 artifact_dir=artifact,
-                policy_plugin=(
-                    BASELINE_PLUGIN if arm == "baseline" else CANDIDATE_PLUGIN
-                ),
-                policy_state=(
-                    baseline_state if arm == "baseline" else candidate_state
-                ),
+                policy_plugin=(BASELINE_PLUGIN if arm == "baseline" else CANDIDATE_PLUGIN),
+                policy_state=(baseline_state if arm == "baseline" else candidate_state),
                 scorer=(None if arm == "baseline" else args.wine_native_scorer),
                 rng_seed=seed,
                 corpus_root=corpus,
+                transition_schema=TRANSITION_SCHEMA,
             )
             assert run_dir is not None
             completion = report["controller_completion"]
-            metrics = (
-                _candidate_metrics(report) if arm == "candidate" else {}
-            )
+            metrics = _candidate_metrics(report) if arm == "candidate" else {}
             runs.append({
                 "pair": pair,
                 "arm": arm,
@@ -447,12 +224,9 @@ def _paired_canary(
                 "physical_hits": int(completion["physical_hits"]),
                 "active_overrides": int(metrics.get("active_overrides", 0)),
                 "runtime_clean": (
-                    _candidate_runtime_clean(metrics)
-                    if arm == "candidate" else True
+                    _candidate_runtime_clean(metrics) if arm == "candidate" else True
                 ),
-                "decision_latency_p95_ms": metrics.get(
-                    "decision_latency_p95_ms"
-                ),
+                "decision_latency_p95_ms": metrics.get("decision_latency_p95_ms"),
             })
             row["canary_runs"] = runs
             _atomic_json(state_path, state)
@@ -464,41 +238,36 @@ def _paired_canary(
         int(item["pair"]): int(item["physical_hits"])
         for item in runs if item["arm"] == "candidate"
     }
-    exercised_pairs = sum(
+    exercised = sum(
         int(item["active_overrides"]) > 0
         for item in runs if item["arm"] == "candidate"
     )
-    no_worse_pairs = sum(candidate[pair] <= baseline[pair] for pair in baseline)
+    no_worse = sum(candidate[pair] <= baseline[pair] for pair in baseline)
     gates = {
         "six_clean_complete_stages": len(runs) == CANARY_PAIRS * 2,
-        "candidate_exercised_in_two_pairs": exercised_pairs >= 2,
-        "strictly_fewer_aggregate_hits": (
-            sum(candidate.values()) < sum(baseline.values())
-        ),
-        "candidate_no_worse_in_two_pairs": no_worse_pairs >= 2,
+        "candidate_exercised_in_two_pairs": exercised >= 2,
+        "strictly_fewer_aggregate_hits": sum(candidate.values()) < sum(baseline.values()),
+        "candidate_no_worse_in_two_pairs": no_worse >= 2,
         "candidate_runtime_clean": all(
-            bool(item["runtime_clean"])
-            for item in runs if item["arm"] == "candidate"
+            bool(item["runtime_clean"]) for item in runs if item["arm"] == "candidate"
         ),
     }
     audit = {
-        "schema": "autonomous-generation-3-paired-canary-v1",
+        "schema": "autonomous-generation-4-paired-canary-v1",
         "candidate_state_sha256": _sha256(candidate_state),
         "seed_schedule_sha256": _sha256(SEEDS),
         "runs": runs,
         "baseline_total_hits": sum(baseline.values()),
         "candidate_total_hits": sum(candidate.values()),
         "effect": sum(baseline.values()) - sum(candidate.values()),
-        "exercised_pairs": exercised_pairs,
-        "no_worse_pairs": no_worse_pairs,
+        "exercised_pairs": exercised,
+        "no_worse_pairs": no_worse,
         "gates": gates,
         "canary_eligible": all(gates.values()),
     }
     _atomic_json(audit_path, audit)
     row.update({
-        "status": (
-            "canary-passed" if audit["canary_eligible"] else "canary-rejected"
-        ),
+        "status": "canary-passed" if audit["canary_eligible"] else "canary-rejected",
         "canary_audit": str(audit_path),
         "canary_eligible": audit["canary_eligible"],
     })
@@ -507,7 +276,7 @@ def _paired_canary(
         return None
     evaluation = _object(candidate_state)
     evaluation["authorization"]["full_evaluation"] = {
-        "schema": "autonomous-generation-3-full-evaluation-authorization-v1",
+        "schema": "autonomous-generation-4-full-evaluation-authorization-v1",
         "canary_audit_sha256": _sha256(audit_path),
         "candidate_canary_state_sha256": _sha256(candidate_state),
         "fixed_rng_effect": audit["effect"],
@@ -521,33 +290,41 @@ def _process_round(
     state: dict[str, Any],
     state_path: Path,
     output_root: Path,
-    run_dirs: list[Path],
+    all_run_dirs: list[Path],
+    new_run_dirs: list[Path],
     round_index: int,
     schedule: dict[str, object],
 ) -> Path | None:
     round_dir = output_root / "rounds" / f"round-{round_index:02d}"
-    shadow_state, fit_report = _fit(args, run_dirs, round_dir)
+    shadow_state, fit_report = _fit(args, all_run_dirs, round_dir)
     while len(state["rounds"]) < round_index:
         state["rounds"].append({"round": len(state["rounds"]) + 1})
     row = state["rounds"][round_index - 1]
+    authorization = fit_report.get("authorization")
+    fit_eligible = (
+        isinstance(authorization, dict)
+        and authorization.get("fit_eligible") is True
+    )
     row.update({
         "round": round_index,
-        "episodes": len(run_dirs),
+        "historical_episodes": len(all_run_dirs) - len(new_run_dirs),
+        "new_episodes": len(new_run_dirs),
+        "total_episodes": len(all_run_dirs),
         "fit_dir": str(round_dir),
-        "fit_eligible": bool(fit_report["authorization"]["fit_eligible"]),
+        "fit_eligible": fit_eligible,
         "status": "fit-ineligible",
     })
     _atomic_json(state_path, state)
-    if not row["fit_eligible"]:
+    if not fit_eligible:
         return None
-    validation = run_dirs[-VALIDATION_EPISODES:]
+    audit_runs = new_run_dirs[-SHADOW_EPISODES:]
     shadow_path = round_dir / "shadow-audit.json"
     if shadow_path.is_file():
         shadow_report = _object(shadow_path)
     else:
         shadow_report = shadow(
             shadow_state,
-            validation,
+            audit_runs,
             native_scorer=args.host_native_scorer,
             maximum_p95_ms=MAXIMUM_P95_MS,
         )
@@ -560,6 +337,10 @@ def _process_round(
     _atomic_json(state_path, state)
     if not row["shadow_eligible"]:
         return None
+    # This fit-authorized shadow may guide only information allocation in later
+    # collection; it never publishes an action through the exploration policy.
+    state["latest_information_policy"] = str(shadow_state)
+    _atomic_json(state_path, state)
     active_path = round_dir / "policy-canary.json"
     if not active_path.is_file():
         _atomic_json(active_path, authorize(shadow_state, shadow_path))
@@ -601,12 +382,8 @@ def _full_stage_ab(
         artifact = root / f"trial-{trial:02d}-{arm}"
         report, run_dir = _complete_run(
             artifact_dir=artifact,
-            policy_plugin=(
-                BASELINE_PLUGIN if arm == "baseline" else CANDIDATE_PLUGIN
-            ),
-            policy_state=(
-                baseline_state if arm == "baseline" else candidate_state
-            ),
+            policy_plugin=(BASELINE_PLUGIN if arm == "baseline" else CANDIDATE_PLUGIN),
+            policy_state=(baseline_state if arm == "baseline" else candidate_state),
             scorer=(None if arm == "baseline" else args.wine_native_scorer),
             rng_seed=None,
             corpus_root=None,
@@ -628,33 +405,26 @@ def _full_stage_ab(
         state["full_stage"] = {"status": "running", "runs": runs}
         _atomic_json(state_path, state)
     baseline_total = sum(
-        int(item["physical_hits"]) for item in runs if item["arm"] == "baseline"
+        int(row["physical_hits"]) for row in runs if row["arm"] == "baseline"
     )
     candidate_total = sum(
-        int(item["physical_hits"]) for item in runs if item["arm"] == "candidate"
+        int(row["physical_hits"]) for row in runs if row["arm"] == "candidate"
     )
     exercised_stages = sum(
-        int(item["active_overrides"]) > 0
-        for item in runs if item["arm"] == "candidate"
-    )
-    total_overrides = sum(
-        int(item["active_overrides"])
-        for item in runs if item["arm"] == "candidate"
+        int(row["active_overrides"]) > 0
+        for row in runs if row["arm"] == "candidate"
     )
     gates = {
         "all_24_stages_complete": len(runs) == FINAL_PAIRS * 2,
         "strictly_fewer_candidate_hits": candidate_total < baseline_total,
         "candidate_exercised_in_six_stages": exercised_stages >= 6,
         "candidate_runtime_clean": all(
-            bool(item["runtime_clean"])
-            for item in runs if item["arm"] == "candidate"
+            bool(row["runtime_clean"]) for row in runs if row["arm"] == "candidate"
         ),
     }
     result = {
-        "schema": "autonomous-generation-3-natural-full-stage-ab-v1",
-        "evaluation_mode": (
-            "normal-speed-natural-complete-stage-hit-continuation"
-        ),
+        "schema": "autonomous-generation-4-natural-full-stage-ab-v1",
+        "evaluation_mode": "normal-speed-natural-complete-stage-hit-continuation",
         "fixed_rng": False,
         "trial_order": list(arms),
         "runs": runs,
@@ -662,21 +432,20 @@ def _full_stage_ab(
         "candidate_total_hits": candidate_total,
         "effect": baseline_total - candidate_total,
         "candidate_exercised_stages": exercised_stages,
-        "candidate_total_overrides": total_overrides,
+        "candidate_total_overrides": sum(
+            int(row["active_overrides"])
+            for row in runs if row["arm"] == "candidate"
+        ),
         "hit_rate_ratio": _rate_ratio(candidate_total, baseline_total),
         "gates": gates,
         "verdict": "effective" if all(gates.values()) else "ineffective",
         "rule": (
             "strict aggregate HIT reduction, >=6 exercised candidate Stages, "
-            "and clean runtime across all predeclared trials"
+            "and clean runtime across all predeclared natural-RNG trials"
         ),
     }
     _atomic_json(report_path, result)
-    state["full_stage"] = {
-        "status": "complete",
-        "report": str(report_path),
-        "runs": runs,
-    }
+    state["full_stage"] = {"status": "complete", "report": str(report_path), "runs": runs}
     _atomic_json(state_path, state)
     return result
 
@@ -687,16 +456,19 @@ def run(args: argparse.Namespace) -> int:
         output_root / "preflight",
         threads=args.threads,
         seconds=45.0,
+        wine_scorer=args.wine_native_scorer,
+        host_scorer=args.host_native_scorer,
     )
     if preflight.get("passed") is not True:
-        raise RuntimeError("Generation-3 preflight did not pass")
+        raise RuntimeError("Generation-4 preflight did not pass")
     schedule = _validate_seed_contract()
+    historical = _validate_historical_contract()
     state_path = output_root / "generation.json"
     config = _config(args)
     if state_path.is_file():
         state = _object(state_path)
-        if _reconcile_resume_contract(state, config):
-            _atomic_json(state_path, state)
+        if state.get("schema") != SCHEMA or state.get("config") != config:
+            raise RuntimeError("refusing Generation-4 resume with changed contract")
         if state.get("status") == "complete":
             print(json.dumps(state["decision"], sort_keys=True))
             return 0
@@ -706,39 +478,42 @@ def run(args: argparse.Namespace) -> int:
             "status": "collecting",
             "config": config,
             "preflight": str(output_root / "preflight/preflight.json"),
+            "historical_runs": [str(path) for path in historical],
             "episodes": [],
             "rounds": [],
+            "latest_information_policy": None,
             "full_stage": None,
             "decision": None,
         }
         _atomic_json(state_path, state)
     try:
         state.pop("infra_failure", None)
+        new_runs = [Path(row["corpus_run_dir"]) for row in state["episodes"]]
+        for run_dir in new_runs:
+            _validate_run(run_dir, transition_schema=TRANSITION_SCHEMA)
         collection = schedule["collection"]
-        corpus_root = output_root / "collection-corpus"
-        run_dirs = [Path(row["corpus_run_dir"]) for row in state["episodes"]]
-        for run_dir in run_dirs:
-            _validate_run(run_dir)
         candidate = None
         for round_index, boundary in enumerate(FIT_BOUNDARIES, start=1):
             while len(state["episodes"]) < boundary:
                 index = len(state["episodes"])
                 seed_row = collection[index]
-                behavior_state = (
-                    output_root / "behavior-states" / f"episode-{index:03d}.json"
-                )
+                information_raw = state.get("latest_information_policy")
+                information = Path(information_raw) if isinstance(information_raw, str) else None
+                behavior_state = output_root / "behavior-states" / f"episode-{index:03d}.json"
                 _option_state(
                     behavior_state,
                     policy_seed=int(seed_row["policy_seed"]),
+                    information_policy=information,
                 )
                 artifact = output_root / "collection" / f"episode-{index:03d}"
                 report, run_dir = _complete_run(
                     artifact_dir=artifact,
-                    policy_plugin=OPTION_PLUGIN,
+                    policy_plugin=EXPLORATION_PLUGIN,
                     policy_state=behavior_state,
-                    scorer=None,
+                    scorer=(args.wine_native_scorer if information is not None else None),
                     rng_seed=int(seed_row["game_rng_seed"]),
-                    corpus_root=corpus_root,
+                    corpus_root=output_root / "collection-corpus",
+                    transition_schema=TRANSITION_SCHEMA,
                 )
                 assert run_dir is not None
                 completion = report["controller_completion"]
@@ -748,17 +523,21 @@ def run(args: argparse.Namespace) -> int:
                     "corpus_run_dir": str(run_dir),
                     "game_rng_seed": int(seed_row["game_rng_seed"]),
                     "policy_seed": int(seed_row["policy_seed"]),
+                    "information_policy_sha256": (
+                        _sha256(information) if information is not None else None
+                    ),
                     "physical_hits": int(completion["physical_hits"]),
                 })
                 state["status"] = "collecting"
                 _atomic_json(state_path, state)
-                run_dirs.append(run_dir)
+                new_runs.append(run_dir)
             candidate = _process_round(
                 args,
                 state,
                 state_path,
                 output_root,
-                run_dirs,
+                [*historical, *new_runs],
+                new_runs,
                 round_index,
                 schedule,
             )
@@ -767,16 +546,15 @@ def run(args: argparse.Namespace) -> int:
         if candidate is None:
             decision = {
                 "verdict": "ineffective",
-                "reason": "24-Stage evidence budget ended without canary authorization",
-                "collection_episodes": len(state["episodes"]),
+                "reason": "16-new-Stage evidence budget ended without canary authorization",
+                "historical_episodes": len(historical),
+                "new_collection_episodes": len(state["episodes"]),
                 "rounds": len(state["rounds"]),
             }
         else:
             state["status"] = "full-stage-evaluation"
             _atomic_json(state_path, state)
-            final = _full_stage_ab(
-                args, state, state_path, output_root, candidate
-            )
+            final = _full_stage_ab(args, state, state_path, output_root, candidate)
             decision = {
                 "verdict": final["verdict"],
                 "reason": "predeclared natural complete-Stage physical HIT gates",
@@ -802,16 +580,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=REPOSITORY / "artifacts/autonomous-wine-generation-3",
+        default=REPOSITORY / "artifacts/autonomous-wine-generation-4",
     )
     parser.add_argument("--threads", type=int, default=12)
     parser.add_argument(
         "--wine-native-scorer",
         type=Path,
-        default=(
-            REPOSITORY
-            / "build/native-win32-fully-static/libth06_rl_ranker.dll"
-        ),
+        default=REPOSITORY / "build/native-win32-fully-static/libth06_rl_ranker.dll",
     )
     parser.add_argument(
         "--host-native-scorer",
@@ -821,10 +596,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.threads <= 0:
         parser.error("thread count must be positive")
-    if not args.wine_native_scorer.is_file():
-        parser.error("Win32 native scorer is absent")
-    if not args.host_native_scorer.is_file():
-        parser.error("host native scorer is absent")
+    if not args.wine_native_scorer.is_file() or not args.host_native_scorer.is_file():
+        parser.error("native scorer library is absent")
+    args.wine_native_scorer = args.wine_native_scorer.resolve()
+    args.host_native_scorer = args.host_native_scorer.resolve()
     return args
 
 
