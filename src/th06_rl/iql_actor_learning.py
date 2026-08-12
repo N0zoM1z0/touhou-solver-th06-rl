@@ -840,6 +840,7 @@ def evaluate_iql_actor_fold(
     fit_representation_on_train: bool = False,
     frozen_actors: list[IqlActorMember] | None = None,
     frozen_support: dict[str, object] | None = None,
+    intervention_minimum_uniform_mass: float | None = None,
 ) -> dict[str, object]:
     from collections import Counter
     import numpy as np
@@ -1098,11 +1099,24 @@ def evaluate_iql_actor_fold(
                     effects.append((0.0, 0.0, 0.0, 0.0))
                     continue
                 candidate = sample.legal_actions.index(choice)
-                exposure = min(
-                    intervention_probability_cap,
-                    intervention_density_ratio_cap * propensity[candidate],
-                    intervention_density_ratio_cap * propensity[baseline],
-                )
+                if intervention_minimum_uniform_mass is None:
+                    exposure = min(
+                        intervention_probability_cap,
+                        intervention_density_ratio_cap * propensity[candidate],
+                        intervention_density_ratio_cap * propensity[baseline],
+                    )
+                else:
+                    minimum = intervention_minimum_uniform_mass / len(
+                        sample.legal_actions
+                    )
+                    if propensity.min() + 1e-12 < minimum:
+                        raise ValueError(
+                            "recorded behavior violates deployable propensity floor"
+                        )
+                    exposure = min(
+                        intervention_probability_cap,
+                        intervention_density_ratio_cap * minimum,
+                    )
                 model_effect = exposure * (
                     q_effect[candidate] - q_effect[baseline]
                 )

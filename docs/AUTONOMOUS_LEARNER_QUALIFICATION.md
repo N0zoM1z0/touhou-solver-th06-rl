@@ -131,6 +131,17 @@ implementable propensity-lower-bound target is evaluated. Because the set is
 already disclosed, that follow-up is explicitly development, never a second
 qualification.
 
+The implementable audit passed without changing the actor. It defines
+`rho = min(0.10, 2 * 0.10 / native_safe_set_size)`, using the common minimum
+uniform mass guaranteed by both admitted v9 and v10 behavior contracts. Overall
+effect was `-1.6025`, bootstrap upper `-1.1998`, and worst-LOO upper `-1.0373`.
+Stage 4 was `-2.0218` / `-1.5161` / `-1.3036`; Stage 6 was `-1.3405` /
+`-0.8285` / `-0.7076`. Twelve of 13 episodes were beneficial, every model term
+remained negative, and the largest correction fell to `0.4335`. The
+post-disclosure development report SHA-256 is
+`f683abf05b0fc1165181c1b922882e8950eae48cb67060e54792e3bc6a86ba8f`.
+This target is the only variant eligible for canary design.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity
