@@ -311,7 +311,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         baseline_action="stay",
         locally_admissible_actions=("stay",),
         proposed_action="stay",
-        published_action="stay",
+        published_action=None,
         behavior_probability=1.0,
         policy_id="safe-option-exploration-v1",
         policy_generation=1,
@@ -325,7 +325,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         continuation_action_count=1,
         capture_ms=2.0,
         solve_ms=0.1,
-        reason="ok",
+        reason="stale-retry",
         snapshot_tier="control-v2",
         option=PolicyOptionTrace(
             option_id="option-1",
@@ -417,6 +417,8 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     with gzip.open(transition_path, "rt", encoding="utf-8") as source:
         transition = json.loads(next(source))
     assert transition["learning_eligible"] is False
+    assert transition["published_action"] is None
+    assert "action-not-published" in transition["learning_exclusion_reasons"]
     assert "observation-gap" in transition["learning_exclusion_reasons"]
     assert transition["episode"] == {
         "id": recorder.run_id,
@@ -447,6 +449,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "hard_action_count": 1,
     }
     assert transition["policy_id"] == "safe-option-exploration-v1"
+    assert transition["executed_action"] == "stay"
     assert transition["option"] == {
         "option_id": "option-1",
         "boundary": True,

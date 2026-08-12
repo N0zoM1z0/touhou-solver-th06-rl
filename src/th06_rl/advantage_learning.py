@@ -28,7 +28,7 @@ from .offline import ACTION_NAMES
 from .th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAMES
 
 
-TRANSITION_SCHEMA = "th06-rl-transition-v8"
+TRANSITION_SCHEMA = "th06-rl-transition-v9"
 BEHAVIOR_POLICY = "safe-option-exploration-v1"
 STATE_SCHEMA = "autonomous-dr-option-advantage-policy-v1"
 FIT_REPORT_SCHEMA = "autonomous-dr-option-advantage-fit-v1"
@@ -116,7 +116,7 @@ def _rows(run_dir: Path, manifest: dict[str, object]):
             for line in source:
                 row = json.loads(line)
                 if not isinstance(row, dict) or row.get("schema_version") != TRANSITION_SCHEMA:
-                    raise ValueError("generation 3 requires transition v8")
+                    raise ValueError("generation 3 requires transition v9")
                 if int(row.get("sequence", -1)) != expected_sequence:
                     raise ValueError("transition sequence is not contiguous")
                 expected_sequence += 1
@@ -222,7 +222,7 @@ def load_option_episode(
     *,
     exploration_probability: float,
 ) -> tuple[list[OptionStep], dict[str, object]]:
-    """Aggregate factual v7 frame rows into randomized option treatments."""
+    """Aggregate factual transition-v9 rows into randomized option treatments."""
     run_dir = run_dir.resolve()
     run, manifest = _validate_run(run_dir)
     rows = list(_rows(run_dir, manifest))
@@ -241,6 +241,34 @@ def load_option_episode(
         boundary = option is not None and option.get("boundary") is True
         if option is not None and not option_id:
             raise ValueError("option trace has no identity")
+        action = str(option.get("intent", "")) if option is not None else ""
+        executed = row.get("executed_action")
+        if option is not None and executed != action:
+            outcome = row.get("outcome_terms")
+            if (
+                option.get("termination_reason") != "publication-rejected"
+                or row.get("learning_eligible") is not False
+                or not isinstance(outcome, dict)
+            ):
+                raise ValueError("unpublished option is not explicitly rejected")
+            if current is not None and option_id == current["option_id"]:
+                if outcome.get("life_lost") is True:
+                    raise ValueError("HIT occurred during an unfactual option gap")
+                current["termination"] = "publication-rejected"
+                grouped.append(current)
+                current = None
+            elif current is not None and boundary:
+                if current["termination"] is None:
+                    current["termination"] = str(
+                        option.get("preceding_termination_reason")
+                        or "next-option-boundary"
+                    )
+                grouped.append(current)
+                current = None
+            elif not boundary:
+                raise ValueError("unpublished continuation has no factual boundary")
+            unassigned_hits += int(outcome.get("life_lost") is True)
+            continue
         if boundary:
             if current is not None:
                 if current["termination"] is None:
@@ -250,7 +278,6 @@ def load_option_episode(
                     )
                 grouped.append(current)
             legal_raw = row.get("legal_actions")
-            action = str(option.get("intent", ""))
             baseline = str(row.get("baseline_action", ""))
             if not isinstance(legal_raw, list):
                 raise TypeError("option boundary has no native-safe set")
@@ -264,7 +291,6 @@ def load_option_episode(
             )
             if (
                 row.get("policy_id") != BEHAVIOR_POLICY
-                or row.get("learning_eligible") is not True
                 or action not in legal
                 or baseline not in legal
                 or not math.isclose(probability, expected, rel_tol=1e-9, abs_tol=1e-12)
@@ -1259,7 +1285,7 @@ def audit_wine_option_smoke(
         or schemas.get("transition") != TRANSITION_SCHEMA
         or not isinstance(outcome, dict)
     ):
-        raise ValueError("Wine smoke corpus is incomplete or not transition v8")
+        raise ValueError("Wine smoke corpus is incomplete or not transition v9")
     infrastructure_fields = (
         "background_reactivations",
         "capture_failures",
@@ -1277,6 +1303,7 @@ def audit_wine_option_smoke(
     horizon_terminations = 0
     representation_boundaries = 0
     option_rows = 0
+    rejected_option_rows = 0
     option_ids: set[str] = set()
     active_option_id: str | None = None
     for row in _rows(run_dir, manifest):
@@ -1293,42 +1320,29 @@ def audit_wine_option_smoke(
             raise ValueError("Wine smoke used the wrong behavior policy")
         if not isinstance(legal_raw, list) or action not in legal_raw:
             raise ValueError("Wine smoke option escaped the native-safe set")
-        if row.get("published_action") != action:
-            raise ValueError("Wine smoke did not publish its recorded intent")
-        safe_membership += 1
         elapsed = int(option.get("elapsed_frames_at_decision", 0))
         if not 1 <= elapsed <= 8:
             raise ValueError("Wine smoke option exceeded its fixed horizon")
-        if option.get("boundary") is True:
-            boundaries += 1
-            if option_id in option_ids or elapsed != 1:
-                raise ValueError("Wine smoke option boundary identity is invalid")
-            option_ids.add(option_id)
-            active_option_id = option_id
-            _representation_inputs(row)
-            representation_boundaries += 1
-            legal = tuple(str(value) for value in legal_raw)
-            baseline = str(row.get("baseline_action", ""))
-            expected = _expected_probability(
+        boundary = option.get("boundary") is True
+        executed = row.get("executed_action")
+        legal = tuple(str(value) for value in legal_raw)
+        baseline = str(row.get("baseline_action", ""))
+        conditional_expected = (
+            _expected_probability(
                 action=action,
                 baseline=baseline,
                 legal=legal,
                 exploration_probability=exploration_probability,
             )
-            if not math.isclose(
-                float(option.get("boundary_probability", 0.0)),
-                expected,
-                rel_tol=1e-9,
-                abs_tol=1e-12,
-            ):
-                raise ValueError("Wine smoke boundary propensity is invalid")
-            conditional_expected = expected
-            non_incumbent += int(action != baseline)
-        else:
-            continuations += 1
-            if option_id != active_option_id:
-                raise ValueError("Wine smoke continuation escaped its boundary")
-            conditional_expected = 1.0
+            if boundary else 1.0
+        )
+        if boundary and not math.isclose(
+            float(option.get("boundary_probability", 0.0)),
+            conditional_expected,
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("Wine smoke boundary propensity is invalid")
         conditional = float(option.get("conditional_probability", 0.0))
         if not math.isclose(
             conditional,
@@ -1342,9 +1356,37 @@ def audit_wine_option_smoke(
             abs_tol=1e-12,
         ):
             raise ValueError("Wine smoke conditional propensity is invalid")
+        if executed != action:
+            if (
+                option.get("termination_reason") != "publication-rejected"
+                or row.get("learning_eligible") is not False
+            ):
+                raise ValueError("Wine smoke has an ambiguous unpublished option")
+            rejected_option_rows += 1
+            if not boundary:
+                if option_id != active_option_id:
+                    raise ValueError("rejected continuation escaped its factual option")
+                active_option_id = None
+            continue
+        safe_membership += 1
+        if boundary:
+            boundaries += 1
+            if option_id in option_ids or elapsed != 1:
+                raise ValueError("Wine smoke option boundary identity is invalid")
+            option_ids.add(option_id)
+            active_option_id = option_id
+            _representation_inputs(row)
+            representation_boundaries += 1
+            non_incumbent += int(action != baseline)
+        else:
+            continuations += 1
+            if option_id != active_option_id:
+                raise ValueError("Wine smoke continuation escaped its boundary")
         if option.get("termination_reason") == "horizon" and elapsed != 8:
             raise ValueError("Wine smoke horizon termination occurred off boundary")
         horizon_terminations += option.get("termination_reason") == "horizon"
+        if option.get("termination_reason") is not None:
+            active_option_id = None
     summary = manifest.get("summary")
     input_lease_rows = (
         int(summary.get("reason_counts", {}).get("input-lease", 0))
@@ -1358,7 +1400,9 @@ def audit_wine_option_smoke(
         "randomized_non_incumbent_witnessed": non_incumbent >= 1,
         "conditional_continuation_witnessed": continuations >= 1,
         "horizon_termination_witnessed": horizon_terminations >= 1,
-        "all_option_intents_native_safe": safe_membership == option_rows,
+        "all_executed_option_intents_native_safe": (
+            safe_membership == option_rows - rejected_option_rows
+        ),
         "input_lease_witnessed": input_lease_rows >= 1,
         "representation_present_at_every_boundary": (
             representation_boundaries == boundaries
@@ -1369,6 +1413,8 @@ def audit_wine_option_smoke(
         "run_dir": str(run_dir),
         "evidence_eligible": False,
         "option_rows": option_rows,
+        "rejected_option_rows": rejected_option_rows,
+        "executed_option_rows": option_rows - rejected_option_rows,
         "option_boundaries": boundaries,
         "option_continuations": continuations,
         "non_incumbent_boundaries": non_incumbent,

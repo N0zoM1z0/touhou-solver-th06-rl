@@ -192,6 +192,19 @@ class HotReloadPolicy:
             )
             return None
 
+    def reject_publication(self, decision: PolicyDecision) -> None:
+        """Abort tentative operational policy state after no input was issued.
+
+        This callback remains available for immutable policies because it is
+        action-delivery bookkeeping, not learner feedback or a checkpoint
+        mutation.
+        """
+        if self.policy is None:
+            return
+        callback = getattr(self.policy, "reject_publication", None)
+        if callable(callback):
+            callback(decision)
+
     def checkpoint(self) -> bool:
         if self.immutable:
             return False

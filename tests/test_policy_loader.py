@@ -20,6 +20,23 @@ def create_policy():
     return Policy()
 """
 
+OPTION_POLICY = b"""
+from th06_rl.policy_api import POLICY_API_VERSION, PolicyDecision
+
+class Policy:
+    api_version = POLICY_API_VERSION
+    name = 'test-option'
+    def __init__(self):
+        self.rejected = 0
+    def decide(self, context):
+        return PolicyDecision(context.baseline_action, self.name)
+    def reject_publication(self, decision):
+        self.rejected += 1
+
+def create_policy():
+    return Policy()
+"""
+
 
 def test_unchanged_policy_does_not_cross_unc_read_boundary(
     tmp_path,
@@ -123,3 +140,19 @@ def test_immutable_policy_disables_reload_feedback_and_checkpoint(
     loader.observe(object())
     loader.observe_failure(object())
     assert loader.status()["immutable"] is True
+
+
+def test_immutable_policy_still_receives_operational_publication_rejection(
+    tmp_path,
+) -> None:
+    path = tmp_path / "option-policy.py"
+    path.write_bytes(OPTION_POLICY)
+    loader = HotReloadPolicy(path, immutable=True)
+    decision = loader.decide(SimpleNamespace(
+        baseline_action="stay",
+        locally_admissible_actions=("stay",),
+    ))
+
+    loader.reject_publication(decision)
+
+    assert loader.policy.rejected == 1

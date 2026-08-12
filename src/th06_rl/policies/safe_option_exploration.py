@@ -119,6 +119,15 @@ class SafeOptionExplorationPolicy:
             raise RuntimeError("active option survived an invalid continuation")
         return self.decide(context)
 
+    def reject_publication(self, decision: PolicyDecision) -> None:
+        """Roll back an option that never passed the final issue check."""
+        trace = decision.option
+        if trace is None or self.active_id is None:
+            return
+        if trace.option_id != self.active_id:
+            raise RuntimeError("publication rejection named a stale option")
+        self._end_active("publication-rejected")
+
     def decide(self, context) -> PolicyDecision:
         if not self.loaded:
             raise RuntimeError("safe option exploration requires a state file")

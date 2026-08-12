@@ -98,6 +98,20 @@ def test_input_lease_cannot_invent_a_boundary_after_option_horizon() -> None:
     assert policy.metrics()["option_boundaries"] == 1
 
 
+def test_rejected_publication_ends_tentative_option() -> None:
+    policy = _policy(exploration=0.0)
+    first = policy.decide(_context(10))
+
+    policy.reject_publication(first)
+    second = policy.decide(_context(11))
+
+    assert first.option is not None
+    assert second.option is not None
+    assert second.option.boundary is True
+    assert second.option.option_id != first.option.option_id
+    assert policy.metrics()["terminations"]["publication-rejected"] == 1
+
+
 def test_option_trace_binds_conditional_propensity() -> None:
     trace = PolicyOptionTrace("option-1", "left", False, 0.05, 2)
     with pytest.raises(ValueError, match="probability disagrees"):

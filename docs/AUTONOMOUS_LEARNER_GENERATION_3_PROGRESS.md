@@ -12,7 +12,7 @@ options, thresholds, evidence seeds, or evaluation rules after outcomes.
   declared uncertainty scale.
 - Added eight-physical-frame safe options with fresh native certification on
   every publication, including Windows input-lease frames.
-- Added transition v8 option identity, boundary/conditional propensity,
+- Added transition v9 option identity, boundary/conditional propensity,
   physical elapsed time, and termination accounting.
 
 ## 2026-08-12: learner population and causal smoke
@@ -43,7 +43,7 @@ Repository tests after this checkpoint: 371 passed.
 
 ## 2026-08-12: learned hazard set and history representation
 
-The controller, transition-v8 corpus, and learner now share a game-neutral
+The controller, transition-v9 corpus, and learner now share a game-neutral
 bounded representation: up to 256 player-relative observed hazard primitives,
 four factual observation/action records, and a 24-prototype codebook learned
 only from training episodes. Set pooling is permutation invariant. The adapter
@@ -93,3 +93,12 @@ Long collection is gated by a causal learner smoke and a 45-second retail-Wine
 option wiring smoke. The latter has a dedicated time-bounded corpus mode,
 patched HIT continuation, fixed diagnostic RNG, and an explicit non-evidence
 label. Its rows cannot enter fitting or effect evaluation.
+
+The first real smoke correctly rejected the pipeline before long collection:
+the corpus had conflated `published_action` (a new key-delivery event) with the
+physical action that remained held during a stale retry. Generation 3 now uses
+transition v9 with an explicit factual `executed_action`. A tentative option
+whose intent was not physically executed is marked `publication-rejected` and
+cannot become a learner sample; a held, observed matching action remains
+factual. This is a label/delivery infrastructure repair backed by the smoke,
+not an outcome-driven change to collection or reward.

@@ -29,7 +29,7 @@ RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
 FRAME_SCHEMA = "th06-rl-authoritative-frame-v7"
-TRANSITION_SCHEMA = "th06-rl-transition-v8"
+TRANSITION_SCHEMA = "th06-rl-transition-v9"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
@@ -666,22 +666,27 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         learning_exclusions.append("bomb")
     if authority:
         learning_exclusions.append("authority-loss")
+    executed_action = before.evidence.published_action
+    if executed_action is None and before.evidence.reason == "stale-retry":
+        # No new key was sent, so the already-observed physical input remains
+        # active over this transition. Keep execution distinct from delivery.
+        executed_action = before.evidence.current_action
     option = None
     trace = before.evidence.option
     if trace is not None:
         termination = trace.termination_reason
         after_trace = after.evidence.option
-        if termination is None and hit:
+        if hit:
             termination = "physical-hit"
-        elif termination is None and bomb:
+        elif bomb:
             termination = "bomb"
-        elif termination is None and control_dead_end:
+        elif control_dead_end:
             termination = "hard-empty"
-        elif termination is None and authority:
+        elif authority:
             termination = "authority-loss"
-        elif termination is None and before.snapshot.stage != after.snapshot.stage:
+        elif before.snapshot.stage != after.snapshot.stage:
             termination = "stage-transition"
-        elif termination is None and before.evidence.published_action is None:
+        elif executed_action != trace.intent:
             termination = "publication-rejected"
         elif termination is None and (
             after_trace is None or after_trace.option_id != trace.option_id
@@ -713,6 +718,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "baseline_action": before.evidence.baseline_action,
         "proposed_action": before.evidence.proposed_action,
         "published_action": before.evidence.published_action,
+        "executed_action": executed_action,
         "behavior_probability": before.evidence.behavior_probability,
         "policy_id": before.evidence.policy_id,
         "option": option,

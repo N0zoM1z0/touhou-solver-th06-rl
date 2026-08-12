@@ -1184,6 +1184,12 @@ def run(args: argparse.Namespace) -> int:
                     next_player_y=snapshot.y,
                     learning_eligible=False,
                 ))
+                # Assignment is tentative until the final frame/fresh-Hard
+                # check actually publishes input. Abort it even for immutable
+                # behavior policies so a continuation cannot masquerade as a
+                # factual option start.
+                if current_action_name != policy.action:
+                    plugin.reject_publication(policy)
             if policy is not None and published is not None:
                 pending_learning = {
                     "frame": snapshot.frame,
