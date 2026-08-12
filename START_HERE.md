@@ -14,16 +14,20 @@ Read in this order:
    generation-2 learner, observation, Hard-empty audit, and evidence contract;
 4. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
    evidence and ineffective verdict;
-5. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md` for the active option,
-   residual-advantage, representation, calibration, and evidence contract;
-6. `docs/AUTONOMOUS_LEARNER_GENERATION_3_PROGRESS.md` for its append-only
-   implementation and smoke execution record;
-7. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+5. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md`, its progress record, and
+   `docs/AUTONOMOUS_LEARNER_GENERATION_3_RESULT.md` for the frozen superseded
+   complete-return learner;
+6. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the active sequential
+   semi-Markov learner, action-centered critic, exploration, and evidence
+   contract;
+7. `docs/AUTONOMOUS_LEARNER_GENERATION_4_PROGRESS.md` for its append-only
+   implementation and execution record;
+8. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-8. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+9. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
-The unattended fixed Generation-3 entry point is
-`scripts/run_autonomous_learning_v3.py`.
+Generation 3 is frozen. No Generation-4 Wine evidence may launch until its
+committed preflight and unattended entry point pass the declared smoke gates.
 
 ## Non-negotiable separation
 

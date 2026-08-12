@@ -172,8 +172,11 @@ fixed-RNG canary, but normal-speed natural-RNG evaluation ended at baseline 17
 HITs versus candidate 18, so it is frozen as ineffective. See
 `AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` and
 `AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md`. A later attempt is a new declared
-algorithm generation, not a failure-region adjustment. Generation 3 is
-declared in `AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md` before new outcomes;
-it changes the general treatment unit, residual learner, representation,
-uncertainty calibration, and evidence strength without adding a TH06 gameplay
-case.
+algorithm generation, not a failure-region adjustment. Generation 3 is frozen
+as superseded without canary authorization after its complete-return AIPW
+estimator produced structurally high variance; see
+`AUTONOMOUS_LEARNER_GENERATION_3_RESULT.md`. Generation 4 is declared before
+new outcomes in `AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md`. It retains the
+same Wine/native/HIT boundaries while replacing the estimator with sequential
+semi-Markov offline RL, generalized action centering, autonomous propensity-
+aware exploration, policy-level cross-fitting, and a full native population.
