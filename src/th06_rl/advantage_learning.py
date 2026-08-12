@@ -23,7 +23,7 @@ from .hazard_representation import (
     HISTORY_FEATURE_NAMES,
     MAX_HAZARD_PRIMITIVES,
 )
-from .learning_features import TREE_FEATURE_SCHEMA, tree_candidate_vector, tree_feature_names
+from .learning_features import tree_candidate_vector, tree_feature_names
 from .offline import ACTION_NAMES
 from .th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAMES
 
@@ -888,6 +888,7 @@ def fit_dr_option_advantage(
     seed: int = 260812,
     threads: int = 12,
     native_scorer_sha256: str,
+    compatible_native_scorer_sha256: tuple[str, ...] = (),
 ) -> dict[str, object]:
     import numpy as np
 
@@ -1044,6 +1045,15 @@ def fit_dr_option_advantage(
         ))
         for model in models
     ]
+    compatible_hashes = tuple(dict.fromkeys((
+        native_scorer_sha256,
+        *compatible_native_scorer_sha256,
+    )))
+    valid_native_hashes = all(
+        len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+        for value in compatible_hashes
+    )
     finite = all(math.isfinite(value) for value in (rmse, constant))
     gates = {
         "train_episode_groups": len(train_groups) >= 9,
@@ -1061,7 +1071,7 @@ def fit_dr_option_advantage(
         "distillation_max": distillation_max <= DISTILLATION_MAX_ERROR,
         "support_calibrated": support_report["validation_coverage"] >= 0.90,
         "conformal_upper_coverage": calibration_report["row_coverage"] >= 0.90,
-        "native_scorer_bound": len(native_scorer_sha256) == 64,
+        "native_scorer_bound": valid_native_hashes,
     }
     return {
         "schema": STATE_SCHEMA,
@@ -1086,7 +1096,7 @@ def fit_dr_option_advantage(
         "native_scorer": {
             "schema": "th06-rl-native-xgboost-scorer-v1",
             "sha256": native_scorer_sha256,
-            "compatible_sha256": [native_scorer_sha256],
+            "compatible_sha256": list(compatible_hashes),
         },
         "population": {
             "kind": "whole-episode-bootstrap-cross-fitted-dr",

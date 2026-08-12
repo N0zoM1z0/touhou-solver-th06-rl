@@ -102,3 +102,11 @@ whose intent was not physically executed is marked `publication-rejected` and
 cannot become a learner sample; a held, observed matching action remains
 factual. This is a label/delivery infrastructure repair backed by the smoke,
 not an outcome-driven change to collection or reward.
+
+Every fit is now followed by an exact held-out native shadow replay. It loads
+the complete seven-member population and learned hazard encoder through the
+host native library, replays every factual held-out option boundary, asserts
+baseline-only publication in shadow mode, and gates p95 latency plus deadline
+misses. Active canary state is hash-bound to that exact clean audit. The host
+and Win32 scorer hashes are both bound at fit time; this is binary portability,
+not a second policy.

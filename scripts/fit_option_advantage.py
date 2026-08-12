@@ -39,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("runs", nargs="+", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--native-scorer", required=True, type=Path)
+    parser.add_argument("--shadow-native-scorer", required=True, type=Path)
     parser.add_argument("--validation-episodes", type=int, default=3)
     parser.add_argument("--exploration-probability", type=float, default=0.10)
     parser.add_argument("--seed", type=int, default=260812)
@@ -56,6 +57,8 @@ def main(argv: list[str] | None = None) -> int:
         raise FileExistsError(f"refusing to replace output: {args.output_dir}")
     if not args.native_scorer.is_file():
         parser.error("native scorer library is absent")
+    if not args.shadow_native_scorer.is_file():
+        parser.error("shadow native scorer library is absent")
     runs = []
     seen = set()
     for path in args.runs:
@@ -86,6 +89,9 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         threads=args.threads,
         native_scorer_sha256=_sha256(args.native_scorer),
+        compatible_native_scorer_sha256=(
+            _sha256(args.shadow_native_scorer),
+        ),
     )
     args.output_dir.mkdir(parents=True)
     _write(args.output_dir / "policy-shadow.json", state)
@@ -106,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
             "nuisance_trees": NUISANCE_TREES,
             "population_trees": POPULATION_TREES,
             "seed": args.seed,
+            "wine_native_scorer_sha256": _sha256(args.native_scorer),
+            "shadow_native_scorer_sha256": _sha256(args.shadow_native_scorer),
         },
         "fit": state["fit_report"],
         "authorization": state["authorization"],
