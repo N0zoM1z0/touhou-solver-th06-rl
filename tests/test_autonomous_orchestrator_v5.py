@@ -6,7 +6,11 @@ import json
 import pytest
 
 from scripts.authorize_supported_implicit_q_canary import authorize
-from scripts.run_autonomous_learning_v5 import _behavior_state, _collect_wave
+from scripts.run_autonomous_learning_v5 import (
+    _behavior_state,
+    _collect_wave,
+    _reconcile_resume_contract,
+)
 from scripts.shadow_supported_implicit_q import SCHEMA as SHADOW_SCHEMA
 from tests.test_autonomous_supported_implicit_q_policy import _implicit_state
 from th06_rl.policies.propensity_aware_option_exploration import STATE_SCHEMA
@@ -110,3 +114,35 @@ def test_failed_parallel_gate_runs_frozen_wave_serially(monkeypatch, tmp_path) -
 
     assert observed == [0, 1]
     assert [row["episode"] for row in completed] == [0, 1]
+
+
+def test_display_conflict_migration_preserves_outcome_contract(monkeypatch) -> None:
+    previous = {
+        "contract_sha256": "old",
+        "source_contract": {"version": 1},
+        "workers": [{"worker": 2, "display": ":99"}],
+        "threads": 32,
+    }
+    current = {
+        "contract_sha256": "new",
+        "source_contract": {"version": 2},
+        "workers": [{"worker": 2, "display": ":105"}],
+        "threads": 32,
+    }
+    state = {
+        "status": "infra_failure",
+        "config": previous,
+        "infra_failure": "display",
+    }
+    monkeypatch.setattr(
+        "scripts.run_autonomous_learning_v5._object",
+        lambda _path: {"migrations": [{
+            "id": "avoid-preexisting-x99-x100-sockets-v1",
+            "from_contract_sha256": "old",
+            "triggering_failed_report_sha256": "report",
+        }]},
+    )
+
+    assert _reconcile_resume_contract(state, current) is True
+    assert state["config"] == current
+    assert state["infra_migrations"][0]["outcome_contract_changed"] is False

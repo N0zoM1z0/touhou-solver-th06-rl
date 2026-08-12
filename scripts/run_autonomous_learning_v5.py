@@ -144,6 +144,91 @@ def _validate_serial_fallback(audit_path: Path, audit: dict[str, object]) -> Non
         raise ValueError("serial Wine fallback is not bound to the failed audit")
 
 
+def _worker_specifications(schedule: dict[str, object]) -> list[dict[str, object]]:
+    specifications = [dict(row) for row in schedule["resource_contract"]["workers"]]
+    migrations = _object(MIGRATIONS).get("migrations")
+    migration = next((
+        row for row in migrations
+        if isinstance(row, dict)
+        and row.get("id") == "avoid-preexisting-x99-x100-sockets-v1"
+    ), None) if isinstance(migrations, list) else None
+    if not isinstance(migration, dict):
+        return specifications
+    report = REPOSITORY / str(migration["triggering_failed_report"])
+    if (
+        migration.get("triggering_failed_report_sha256")
+        != "7b23bdb76503392644bc74a645097bdf9e1ff65bb1ecdd5a450219c7dc153e7d"
+        or migration.get("triggering_error")
+        != "RuntimeError: X display socket already exists: /tmp/.X11-unix/X99"
+        or migration.get("preserved_complete_evidence_episodes") != [0, 1]
+        or migration.get("failed_episode_rows") != 0
+        or migration.get("failed_episode_physical_hits") != 0
+        or migration.get(
+            "schedule_reward_feature_behavior_model_gate_seed_or_worker_id_changed"
+        ) is not False
+    ):
+        raise ValueError("Wine display migration is not bound to its infra failure")
+    if report.is_file():
+        failed = _object(report)
+        completion = failed.get("controller_completion")
+        trace = failed.get("trace")
+        if (
+            _sha256(report) != migration["triggering_failed_report_sha256"]
+            or failed.get("error") != migration["triggering_error"]
+            or not isinstance(completion, dict)
+            or completion.get("physical_hits") is not None
+            or not isinstance(trace, dict)
+            or trace.get("rows") != 0
+        ):
+            raise ValueError("recorded Wine display failure differs")
+    for override in migration.get("worker_overrides", ()):
+        worker = int(override["worker"])
+        row = next(item for item in specifications if int(item["worker"]) == worker)
+        source = override["from"]
+        target = override["to"]
+        if row["display"] != source["display"] or row["directory"] != source["directory"]:
+            raise ValueError("Wine display migration source differs")
+        row.update({"display": target["display"], "directory": target["directory"]})
+    return specifications
+
+
+def _reconcile_resume_contract(
+    state: dict[str, Any], config: dict[str, object]
+) -> bool:
+    previous = state.get("config")
+    if previous == config:
+        return False
+    if not isinstance(previous, dict) or state.get("status") != "infra_failure":
+        raise RuntimeError("refusing Generation-5 resume with contract drift")
+    changed = {
+        key for key in set(previous) | set(config)
+        if previous.get(key) != config.get(key)
+    }
+    migrations = _object(MIGRATIONS).get("migrations")
+    migration = next((
+        row for row in migrations
+        if isinstance(row, dict)
+        and row.get("id") == "avoid-preexisting-x99-x100-sockets-v1"
+        and row.get("from_contract_sha256") == previous.get("contract_sha256")
+    ), None) if isinstance(migrations, list) else None
+    if changed != {"contract_sha256", "source_contract", "workers"} or migration is None:
+        raise RuntimeError("Generation-5 resume change is not an infra migration")
+    log = state.setdefault("infra_migrations", [])
+    if not isinstance(log, list):
+        raise TypeError("Generation-5 infra migration log is invalid")
+    log.append({
+        "id": migration["id"],
+        "from_contract_sha256": previous["contract_sha256"],
+        "to_contract_sha256": config["contract_sha256"],
+        "triggering_failed_report_sha256": migration["triggering_failed_report_sha256"],
+        "preserved_complete_evidence_episodes": [0, 1],
+        "failed_episode_rows": 0,
+        "outcome_contract_changed": False,
+    })
+    state["config"] = config
+    return True
+
+
 def _baseline_state(path: Path) -> None:
     value = {
         "schema": BASELINE_SCHEMA,
@@ -529,7 +614,7 @@ def run(args: argparse.Namespace) -> int:
     workers = prepare_wine_workers(
         root=root / "workers",
         source_game_dir=args.source_game_dir,
-        specifications=schedule["resource_contract"]["workers"],
+        specifications=_worker_specifications(schedule),
     )
     if any(
         row["source_inventory_sha256"]
@@ -549,8 +634,10 @@ def run(args: argparse.Namespace) -> int:
     state_path = root / "generation.json"
     if state_path.is_file():
         state = _object(state_path)
-        if state.get("schema") != SCHEMA or state.get("config") != config:
-            raise RuntimeError("refusing Generation-5 resume with contract drift")
+        if state.get("schema") != SCHEMA:
+            raise RuntimeError("refusing Generation-5 resume with changed schema")
+        if _reconcile_resume_contract(state, config):
+            _atomic_json(state_path, state)
         if state.get("status") == "complete":
             print(json.dumps(state["decision"], sort_keys=True))
             return 0

@@ -11,6 +11,29 @@
       "allowed_change": "disable concurrent Wine collection and execute the frozen worker assignments sequentially",
       "schedule_reward_feature_behavior_model_gate_or_seed_changed": false,
       "curriculum_evidence_episodes_preserved": 0
+    },
+    {
+      "id": "avoid-preexisting-x99-x100-sockets-v1",
+      "from_contract_sha256": "6f4c7aa4d26bf79a079b8d1570ee386abaaa9870a4c36bb09702f2ce760a173c",
+      "triggering_failed_report": "artifacts/autonomous-wine-generation-5-curriculum/stage-4/collection/episode-002/report.json",
+      "triggering_failed_report_sha256": "7b23bdb76503392644bc74a645097bdf9e1ff65bb1ecdd5a450219c7dc153e7d",
+      "triggering_error": "RuntimeError: X display socket already exists: /tmp/.X11-unix/X99",
+      "worker_overrides": [
+        {
+          "worker": 2,
+          "from": {"display": ":99", "directory": "wine-2"},
+          "to": {"display": ":105", "directory": "wine-2-display105"}
+        },
+        {
+          "worker": 3,
+          "from": {"display": ":100", "directory": "wine-3"},
+          "to": {"display": ":106", "directory": "wine-3-display106"}
+        }
+      ],
+      "preserved_complete_evidence_episodes": [0, 1],
+      "failed_episode_rows": 0,
+      "failed_episode_physical_hits": 0,
+      "schedule_reward_feature_behavior_model_gate_seed_or_worker_id_changed": false
     }
   ]
 }

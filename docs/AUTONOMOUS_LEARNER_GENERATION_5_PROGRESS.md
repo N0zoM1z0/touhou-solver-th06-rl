@@ -170,3 +170,12 @@ behavior mixture, reward, features, support, decision gates, canaries, and final
 evaluation remain frozen; assigned collection episodes now execute serially.
 The failed differential corpus remains ineligible for training. Its audit and
 the exact serial-fallback-only migration are hash-recorded for replay.
+
+The first serial Stage-4 wave subsequently stopped on a pre-existing host X11
+socket before episode two entered gameplay. Episodes zero and one had already
+completed with 23 and 36 HITs; the failed episode-two artifact had zero trace
+rows and no outcome. This is an evidenced isolation-resource collision, so an
+infra-only migration moves worker IDs two and three from displays `:99`/`:100`
+to unused `:105`/`:106` with fresh directories and prefixes. It preserves the
+two factual episodes and every frozen seed, order, behavior, learner, and gate.
+No stale socket belonging to another task is removed.

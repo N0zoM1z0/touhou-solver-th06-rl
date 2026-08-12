@@ -190,6 +190,16 @@ failure behavior, not a relaxed equivalence metric. Offline parse/cache and
 cross-fit parallelism remain enabled under the 32-core cap because they operate
 on already recorded immutable facts and passed deterministic differentials.
 
+The first serial evidence wave then exposed a separate host-display collision.
+Episodes zero and one completed and were preserved with 23 and 36 HITs. Episode
+two stopped before gameplay because pre-existing socket `X99` already existed;
+its report had zero trace rows and no physical outcome. Sockets `X99` through
+`X104` dated from an unrelated July session and had no discoverable owning
+process, but they were not deleted. A hash-bound infra migration retains worker
+IDs and assigns workers two/three fresh directories, prefixes, and displays
+`:105`/`:106`. RNG, policy seed, episode order, corpus, learner, and all gates
+remain unchanged; resume reuses the two completed factual episodes.
+
 ## Native implementation priority
 
 The repository should use native C/C++ for fixed, hot numerical kernels and
