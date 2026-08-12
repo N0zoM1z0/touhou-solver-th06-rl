@@ -1,0 +1,95 @@
+{
+  "schema": "autonomous-generation-6-wine-canary-v4",
+  "authorization_eligible": false,
+  "purpose": "successor wiring and safety evidence for the model-invariant Win32 SSE2 scorer",
+  "implementation_commit": "0ecaf55f16e21d9188bce301d20ce68e54f40c28",
+  "predecessor_failure": {
+    "contract_sha256": "cf51538bd8ccbf266a9442579078fc5373411f704814133c326203f25c6622a1",
+    "report_sha256": "28ccb56205839fc3cb567483bd053359ad7417dff7882dc25eb8d7b23a204f9c",
+    "result_sha256": "f747ae9d8d5237631f24575dec66bfd51823c259bc328ff1bf74cdfc91d781cd",
+    "failed_gate": "resident policy latency p95 below 4 ms",
+    "observed_p95_ms": 4.067800007760525
+  },
+  "candidate_sha256": "aea789ed9fe63aa4a2c0799092675fd287c9b66787ed968d82e82098fbb4ea64",
+  "qualification_result_sha256": "1da0212281902daf18c124d3e246a244ae19d4a92fa3177efd34711c460b3e34",
+  "deployable_target_audit_sha256": "f683abf05b0fc1165181c1b922882e8950eae48cb67060e54792e3bc6a86ba8f",
+  "sse2_preflight": {
+    "kernel_report_sha256": "73e24bd2a9840d483c982bd0edb4c0c420948f8daee29bcf27d9fedc9912a13e",
+    "full_path_report_sha256": "45267dd8dc0c434702482ec71503c58b8a38d97500fd1b7fa67f65c806fa0071",
+    "contexts": 64,
+    "selection": "largest hazard and native-safe-set input widths from one registered sequential Wine episode; no outcome fields",
+    "minimum_hazard_primitives": 181,
+    "maximum_hazard_primitives": 256,
+    "portable_linux_windows_exact_actions": true,
+    "maximum_actor_error": 0.0000743865966796875,
+    "actor_error_tolerance": 0.0001,
+    "linux_p95_ms": 0.5298173055052757,
+    "wine_p95_ms": 1.2392997741699219,
+    "wine_max_ms": 1.35709997266531,
+    "wine_over_four_ms": 0,
+    "deadline_misses": 0
+  },
+  "normal_speed": true,
+  "natural_rng": true,
+  "complete_stage_hit_continuation": true,
+  "bomb": "forbidden",
+  "single_wine_instance": true,
+  "maximum_interventions": 64,
+  "environment": {
+    "wine": "/usr/bin/wine",
+    "wine_version": "wine-11.0",
+    "wine_sha256": "0fa5abe77c0d27991801983bd878fedd360b61fc26cca4777fd705a8a54ae6b9",
+    "source_game_dir": "reference/th06-game-original/th06",
+    "retail_executable_sha256": "9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb852245",
+    "full_unlock_score_sha256": "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e94d26b749c71",
+    "windows_python_sha256": "e60592888c3128132df3489a2462716bb268063bfe3564bfe1f2f3dbe9ceafd1",
+    "native_controller_sha256": "71b27bef942928dfc04b6a489ef261cb6485cd5bab2cd4d4ebf4081991a22b5b",
+    "native_policy_scorer_sha256": "471013f1daa40c57829722a61f1729726a803bcccd4d0a898738ecd096f8c01a",
+    "worker_root": "artifacts/autonomous-generation-6-wine-canary-v4/workers",
+    "worker_directory": "wine-0",
+    "display": ":110",
+    "game_cpu_list": "0-7",
+    "controller_cpu_list": "8-31"
+  },
+  "intervention": {
+    "option_horizon_frames": 8,
+    "probability_cap": 0.1,
+    "minimum_historical_uniform_mass": 0.1,
+    "density_ratio_cap": 2.0,
+    "formula": "min(0.10, 2 * 0.10 / native_safe_set_size)"
+  },
+  "resource_contract": {
+    "hard_cpu_affinity": "0-31",
+    "maximum_logical_cpus": 32,
+    "offline_training_must_not_overlap": true,
+    "game_and_controller_partitions_disjoint": true
+  },
+  "schedule": [
+    {
+      "id": "stage4-active-wiring-04",
+      "role": "candidate",
+      "stage": 4,
+      "policy_seed": 600817,
+      "evidence_use": "fourth-successor-wiring-and-safety-only"
+    }
+  ],
+  "required_gates": {
+    "strict_original_wine_report": true,
+    "immutable_policy_state": true,
+    "complete_stage": true,
+    "zero_bomb": true,
+    "zero_authority_capture_delivery_or_trace_failure": true,
+    "native_safe_actions_only": true,
+    "proposal_count_positive": true,
+    "intervention_count_positive": true,
+    "interventions_at_most_64": true,
+    "budget_abstentions_zero": true,
+    "online_policy_latency_p95_below_ms": 4.0,
+    "online_policy_deadline_misses": 0
+  },
+  "interpretation": {
+    "pass": "permits freezing a separate alternating Stage-6 efficacy pilot; it does not promote the policy",
+    "failure": "stops gameplay and requires an infrastructure or policy-handoff audit",
+    "no_intervention": "inconclusive deployability evidence; do not inspect frames or tune the distribution"
+  }
+}

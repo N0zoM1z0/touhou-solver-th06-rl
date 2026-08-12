@@ -525,3 +525,10 @@ the full-path preflight is
 `45267dd8dc0c434702482ec71503c58b8a38d97500fd1b7fa67f65c806fa0071`.
 This permits freezing one new Stage-4 wiring identity, not replaying v3 and
 not yet measuring efficacy.
+
+That identity is Generation-6 canary v4, SHA-256
+`1008e4b7236fc21bbd7a7fc7053dfd137021adfa70fd710c00e669e31263f510`.
+It is a single normal-speed, natural-RNG, original-Wine complete-Stage-4
+HIT-continuation run with seed `600817`; all scientific and safety contracts
+are unchanged. Its result may only decide whether to freeze a separate
+Stage-6 efficacy pilot.

@@ -210,6 +210,16 @@ result SHA-256 is
 The observed HIT count remains wiring-only. Stage-6 efficacy is not
 authorized, and v3 is permanently closed rather than rounded into a pass.
 
+After the model-invariant Win32 SSE2 repair passed exact-action and latency
+preflight, one new successor was frozen at
+`config/autonomous_generation6_wine_canary_v4.json`, SHA-256
+`1008e4b7236fc21bbd7a7fc7053dfd137021adfa70fd710c00e669e31263f510`.
+It names a new seed, display, artifact root, and scorer hash while retaining
+the candidate, reward, support, propensity, option horizon, intervention
+budget, natural-RNG complete-Stage mode, CPU allocation, and every gate. It
+authorizes one Stage-4 wiring run only; neither the SSE2 preflight nor a wiring
+pass is Stage-6 efficacy evidence.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity
