@@ -83,4 +83,28 @@ TH06_RL_RANKER_API int th06_rl_encode_hazard_codebook_v1(
     float* outputs,
     std::int32_t output_count);
 
+// Score a complete population of low-rank listwise actors. All arrays are
+// model-major row-major float matrices. State/action inputs are already
+// normalized by the immutable portable artifact. Outputs are model-major.
+TH06_RL_RANKER_API int th06_rl_score_iql_actor_population_v1(
+    const float* states,
+    const float* actions,
+    std::int32_t row_count,
+    std::int32_t state_count,
+    std::int32_t action_count,
+    std::int32_t model_count,
+    std::int32_t hidden_count,
+    std::int32_t rank_count,
+    const float* state_hidden_weight,
+    const float* state_hidden_bias,
+    const float* state_latent_weight,
+    const float* state_latent_bias,
+    const float* action_hidden_weight,
+    const float* action_hidden_bias,
+    const float* action_latent_weight,
+    const float* action_latent_bias,
+    const float* action_score_weight,
+    const float* action_score_bias,
+    float* outputs);
+
 }

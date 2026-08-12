@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ctypes
+import hashlib
 import math
+from pathlib import Path
 
 from .advantage_learning import OptionStep
 from .low_rank_learning import FeatureRoleLayout
@@ -78,6 +81,203 @@ class IqlActorMember:
     bootstrap: dict[str, int]
     advantage_scale: float
     diagnostics: dict[str, float]
+
+
+def iql_actor_model_artifact(model: IqlActorModel) -> dict[str, object]:
+    """Serialize one immutable portable actor without framework state."""
+    import numpy as np
+
+    def values(array):
+        return np.asarray(array, dtype=np.float32).tolist()
+
+    return {
+        "schema": "autonomous-iql-actor-model-v1",
+        "feature_names": list(model.layout.names),
+        "state_indices": list(model.layout.state_indices),
+        "action_indices": list(model.layout.action_indices),
+        "state_mean": values(model.state_mean),
+        "state_scale": values(model.state_scale),
+        "action_mean": values(model.action_mean),
+        "action_scale": values(model.action_scale),
+        "state_hidden_weight": values(model.state_hidden_weight),
+        "state_hidden_bias": values(model.state_hidden_bias),
+        "state_latent_weight": values(model.state_latent_weight),
+        "state_latent_bias": values(model.state_latent_bias),
+        "action_hidden_weight": values(model.action_hidden_weight),
+        "action_hidden_bias": values(model.action_hidden_bias),
+        "action_latent_weight": values(model.action_latent_weight),
+        "action_latent_bias": values(model.action_latent_bias),
+        "action_score_weight": values(model.action_score_weight),
+        "action_score_bias": float(model.action_score_bias),
+    }
+
+
+def iql_actor_model_from_artifact(artifact: dict[str, object]) -> IqlActorModel:
+    import numpy as np
+
+    if artifact.get("schema") != "autonomous-iql-actor-model-v1":
+        raise ValueError("unsupported IQL actor artifact")
+    names = tuple(map(str, artifact.get("feature_names", ())))
+    state_indices = tuple(map(int, artifact.get("state_indices", ())))
+    action_indices = tuple(map(int, artifact.get("action_indices", ())))
+    if (
+        not names or not state_indices or not action_indices
+        or set(state_indices) & set(action_indices)
+        or sorted((*state_indices, *action_indices)) != list(range(len(names)))
+    ):
+        raise ValueError("IQL actor feature layout is invalid")
+    layout = FeatureRoleLayout(
+        names=names,
+        state_indices=state_indices,
+        action_indices=action_indices,
+    )
+
+    def array(name: str, shape: tuple[int, ...]):
+        value = np.asarray(artifact.get(name), dtype=np.float32)
+        if value.shape != shape or not np.all(np.isfinite(value)):
+            raise ValueError(f"IQL actor {name} shape is invalid")
+        return value
+
+    state_count, action_count = len(state_indices), len(action_indices)
+    state_hidden_bias = np.asarray(
+        artifact.get("state_hidden_bias"), dtype=np.float32
+    )
+    state_latent_bias = np.asarray(
+        artifact.get("state_latent_bias"), dtype=np.float32
+    )
+    if state_hidden_bias.ndim != 1 or state_latent_bias.ndim != 1:
+        raise ValueError("IQL actor hidden dimensions are invalid")
+    hidden, rank = len(state_hidden_bias), len(state_latent_bias)
+    model = IqlActorModel(
+        layout=layout,
+        state_mean=array("state_mean", (state_count,)),
+        state_scale=array("state_scale", (state_count,)),
+        action_mean=array("action_mean", (action_count,)),
+        action_scale=array("action_scale", (action_count,)),
+        state_hidden_weight=array(
+            "state_hidden_weight", (state_count, hidden)
+        ),
+        state_hidden_bias=array("state_hidden_bias", (hidden,)),
+        state_latent_weight=array("state_latent_weight", (hidden, rank)),
+        state_latent_bias=array("state_latent_bias", (rank,)),
+        action_hidden_weight=array(
+            "action_hidden_weight", (action_count, hidden)
+        ),
+        action_hidden_bias=array("action_hidden_bias", (hidden,)),
+        action_latent_weight=array("action_latent_weight", (hidden, rank)),
+        action_latent_bias=array("action_latent_bias", (rank,)),
+        action_score_weight=array("action_score_weight", (hidden,)),
+        action_score_bias=float(artifact.get("action_score_bias", math.nan)),
+    )
+    if (
+        not math.isfinite(model.action_score_bias)
+        or (model.state_scale <= 0.0).any()
+        or (model.action_scale <= 0.0).any()
+    ):
+        raise ValueError("IQL actor normalization or bias is invalid")
+    return model
+
+
+class NativeIqlActorPopulation:
+    """One-call native dense scorer for the complete seven-actor teacher."""
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        expected_sha256: str,
+        models: list[IqlActorModel],
+    ) -> None:
+        import numpy as np
+
+        if not models:
+            raise ValueError("native IQL actor population is empty")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected_sha256:
+            raise ValueError("native IQL actor scorer SHA-256 mismatch")
+        reference = models[0]
+        for model in models[1:]:
+            if model.layout != reference.layout or any(
+                not np.array_equal(getattr(model, name), getattr(reference, name))
+                for name in (
+                    "state_mean", "state_scale", "action_mean", "action_scale"
+                )
+            ):
+                raise ValueError("native IQL actor population layout drifted")
+        hidden = len(reference.state_hidden_bias)
+        rank = len(reference.state_latent_bias)
+        if hidden > 256 or rank > 128:
+            raise ValueError("native IQL actor dimensions exceed fixed kernel")
+        library = ctypes.CDLL(str(path))
+        function = library.th06_rl_score_iql_actor_population_v1
+        pointer = ctypes.POINTER(ctypes.c_float)
+        function.argtypes = [
+            pointer, pointer,
+            ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+            ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+            *(pointer for _index in range(10)),
+            pointer,
+        ]
+        function.restype = ctypes.c_int
+
+        def packed(name: str):
+            values = np.concatenate([
+                np.asarray(getattr(model, name), dtype=np.float32).reshape(-1)
+                for model in models
+            ])
+            return (ctypes.c_float * len(values))(*values)
+
+        self.library = library
+        self.function = function
+        self.models = tuple(models)
+        self.layout = reference.layout
+        self.state_mean = np.asarray(reference.state_mean, dtype=np.float32)
+        self.state_scale = np.asarray(reference.state_scale, dtype=np.float32)
+        self.action_mean = np.asarray(reference.action_mean, dtype=np.float32)
+        self.action_scale = np.asarray(reference.action_scale, dtype=np.float32)
+        self.model_count = len(models)
+        self.hidden = hidden
+        self.rank = rank
+        self.arrays = tuple(packed(name) for name in (
+            "state_hidden_weight", "state_hidden_bias",
+            "state_latent_weight", "state_latent_bias",
+            "action_hidden_weight", "action_hidden_bias",
+            "action_latent_weight", "action_latent_bias",
+            "action_score_weight", "action_score_bias",
+        ))
+
+    def predict(self, rows) -> tuple[tuple[float, ...], ...]:
+        import numpy as np
+
+        matrix = np.asarray(rows, dtype=np.float32)
+        states = matrix[:, self.layout.state_indices]
+        if not np.allclose(states, states[0], atol=1e-7):
+            raise ValueError("native actor candidates changed factual state")
+        state = (states[0] - self.state_mean) / self.state_scale
+        actions = (
+            matrix[:, self.layout.action_indices] - self.action_mean
+        ) / self.action_scale
+        state_input = (ctypes.c_float * len(state))(*state)
+        flat_actions = actions.reshape(-1)
+        action_input = (ctypes.c_float * len(flat_actions))(*flat_actions)
+        output = (ctypes.c_float * (self.model_count * len(matrix)))()
+        status = self.function(
+            state_input,
+            action_input,
+            len(matrix),
+            len(state),
+            actions.shape[1],
+            self.model_count,
+            self.hidden,
+            self.rank,
+            *self.arrays,
+            output,
+        )
+        if status != 0:
+            raise RuntimeError(f"native IQL actor scorer failed with status {status}")
+        return tuple(
+            tuple(float(output[model * len(matrix) + row]) for row in range(len(matrix)))
+            for model in range(self.model_count)
+        )
 
 
 def actor_arrays(

@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
+from pathlib import Path
 
 import numpy as np
 
 from th06_rl.implicit_learning import delayed_effect_episodes
 from th06_rl.iql_actor_learning import (
+    IqlActorModel,
+    NativeIqlActorPopulation,
     action_centered_actor_losses,
     actor_arrays,
     cross_fitted_factual_advantages,
+    iql_actor_model_artifact,
+    iql_actor_model_from_artifact,
 )
 from th06_rl.low_rank_learning import FeatureRoleLayout
 
@@ -86,3 +92,54 @@ def test_actor_advantage_labels_are_cross_fitted_by_complete_episode() -> None:
         set(row["fit_episodes"]).isdisjoint(row["heldout_episodes"])
         for row in report["folds"]
     )
+
+
+def test_native_iql_actor_population_matches_portable_models() -> None:
+    library = (
+        Path(__file__).resolve().parents[1]
+        / "build/native/libth06_rl_ranker.so"
+    )
+    if not library.is_file():
+        import pytest
+        pytest.skip("native ranker build is absent")
+    generator = np.random.default_rng(4813)
+    layout = FeatureRoleLayout(
+        names=("observation:x", "action:dx", "observation:y"),
+        state_indices=(0, 2),
+        action_indices=(1,),
+    )
+
+    def model() -> IqlActorModel:
+        return IqlActorModel(
+            layout=layout,
+            state_mean=np.asarray([0.2, -0.1], dtype=np.float32),
+            state_scale=np.asarray([1.3, 0.7], dtype=np.float32),
+            action_mean=np.asarray([0.1], dtype=np.float32),
+            action_scale=np.asarray([0.8], dtype=np.float32),
+            state_hidden_weight=generator.normal(size=(2, 5)).astype(np.float32),
+            state_hidden_bias=generator.normal(size=5).astype(np.float32),
+            state_latent_weight=generator.normal(size=(5, 3)).astype(np.float32),
+            state_latent_bias=generator.normal(size=3).astype(np.float32),
+            action_hidden_weight=generator.normal(size=(1, 5)).astype(np.float32),
+            action_hidden_bias=generator.normal(size=5).astype(np.float32),
+            action_latent_weight=generator.normal(size=(5, 3)).astype(np.float32),
+            action_latent_bias=generator.normal(size=3).astype(np.float32),
+            action_score_weight=generator.normal(size=5).astype(np.float32),
+            action_score_bias=float(generator.normal()),
+        )
+
+    portable = [model(), model(), model()]
+    roundtrip = iql_actor_model_from_artifact(
+        iql_actor_model_artifact(portable[0])
+    )
+    rows = [(0.7, value, -0.4) for value in (-1.0, -0.5, 0.0, 0.5, 1.0)]
+    assert np.allclose(roundtrip.predict(rows), portable[0].predict(rows))
+
+    native = NativeIqlActorPopulation(
+        library,
+        expected_sha256=hashlib.sha256(library.read_bytes()).hexdigest(),
+        models=portable,
+    )
+    expected = np.asarray([item.predict(rows) for item in portable])
+    actual = np.asarray(native.predict(rows))
+    assert np.allclose(actual, expected, rtol=2e-5, atol=2e-5)

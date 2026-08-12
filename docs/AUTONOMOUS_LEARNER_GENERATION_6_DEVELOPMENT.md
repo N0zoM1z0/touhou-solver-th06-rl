@@ -356,6 +356,22 @@ SHA-256
 Warm load plus the full five-fold nested replay took 266.58 seconds on hard CPU
 set 0--31. Qualification and Wine were not loaded.
 
+The otherwise unchanged population-value replay passed the missing gate. The
+worst leave-one-actor-out 95% upper bound was `-1.6564` overall, `-2.7747` on
+Stage 4, and `-0.8435` on Stage 6. The complete policy estimates and all other
+diagnostics reproduced exactly; total time was 263.00 seconds. Candidate action
+counts covered all 18 movement/focus combinations rather than collapsing onto
+one manually favored direction. This establishes development-level policy
+value robustness across the complete population despite low framewise exact
+agreement.
+
+The ignored report is
+`artifacts/autonomous-generation-6-development/crossfit-actor-wine-development-v2.json`,
+SHA-256
+`a68954b0df5d285abf0feaf4f89651910d40528eb0aa820709a989e7c49436d5`.
+It is the development reference for freezing qualification gates, not efficacy
+evidence and not permission to inspect qualification data.
+
 ## Performance contract
 
 All development launchers apply the Linux process-tree CPU affinity contract
