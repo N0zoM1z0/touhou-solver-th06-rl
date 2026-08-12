@@ -441,3 +441,11 @@ The successor live canary additionally reserves CPUs 0--7 for the original
 game and 8--31 for the controller. Both remain inside the user-requested
 32-CPU set; the split prevents the game and scorer from evicting each other
 without changing original 60 Hz pacing or running concurrent Wine trials.
+
+The v2 live canary confirmed the improvement but missed the hard gate narrowly:
+resident p95 fell from `8.1554 ms` to `4.1027 ms`, 438 of 5,051 boundaries were
+above 4 ms, and none exceeded 16.67 ms. CPU partitions and every non-latency
+gate passed. Because the policy still returns all 126 actor outputs across the
+FFI and recomputes seven-member means in Win32 Python, the next model-invariant
+optimization returns the final mean-supported row directly. Exact portable
+action equality remains mandatory; the 4 ms gate is not rounded or relaxed.

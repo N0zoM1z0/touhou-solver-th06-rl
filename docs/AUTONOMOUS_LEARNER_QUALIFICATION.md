@@ -183,6 +183,13 @@ It names a new policy seed, artifact root, display, scorer hash, and disjoint
 game/controller CPU allocation inside CPUs 0--31. It authorizes exactly one
 new Stage-4 wiring canary; it neither erases nor retries the failed contract.
 
+The v2 successor completed but was also rejected: resident p95 was `4.1027 ms`
+with zero deadline misses, just above the unchanged 4 ms gate. All other frozen
+gates passed and two interventions were exercised. Its five HITs are not an
+efficacy comparison. Stage-6 play remains unauthorized. A third contract may
+be created only after exact portable equivalence of a generic native population
+mean/proposal fusion; v2 is permanently closed.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

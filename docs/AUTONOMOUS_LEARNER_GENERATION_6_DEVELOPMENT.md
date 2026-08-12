@@ -466,3 +466,21 @@ Its report SHA-256 is
 Generation-6 canary v2 is a new frozen experiment identity and separates the
 game/controller CPU sets within the same 32-core host budget to test the
 demonstrated live-contention defect.
+
+Canary v2 again completed the original-Wine Stage 4 cleanly, with five physical
+HITs, 118 proposals, and two sampled interventions over 5,051 boundaries. All
+non-latency gates passed, including frozen CPU partitions, zero Bomb, immutable
+state, native-safe action vocabulary, complete HIT accounting, zero infra
+events/deadline misses, and cleanup. Resident p95 improved from `8.1554 ms` to
+`4.1027 ms`, but still failed the unchanged 4 ms limit; 438 boundaries exceeded
+4 ms. Report SHA-256 is
+`df38fa5e14c57d8766ce39ef3e5b796ca7abd0ff4843a6ac8c94d3bc6f3bec2a`;
+result SHA-256 is
+`9c01abc412a33668fd97e73a666248e7c5af4479a8219d865c9036b142f41f5c`.
+Five HITs remain wiring-only and are not compared with v1 or a baseline.
+
+This second rejection narrows the generic performance defect to the tail after
+native scoring: Win32 Python still materializes 126 member/action floats and
+computes the population mean and proposal. The next repair fuses that exact
+mean and safe-row choice into the same native policy call. The 4 ms gate and
+learner are unchanged, and any new Wine run needs a third frozen identity.
