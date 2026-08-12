@@ -17,6 +17,26 @@ UNIFORM_MASS = 0.25
 INFORMATION_MASS = 0.25
 
 
+def _information_policy(state: dict[str, object]):
+    schema = state.get("schema")
+    from ..implicit_learning import STATE_SCHEMA as IMPLICIT_Q_STATE_SCHEMA
+    from ..sequential_learning import STATE_SCHEMA as SEQUENTIAL_R_STATE_SCHEMA
+
+    if schema == IMPLICIT_Q_STATE_SCHEMA:
+        from .autonomous_supported_implicit_q import (
+            AutonomousSupportedImplicitQPolicy,
+        )
+
+        return AutonomousSupportedImplicitQPolicy()
+    if schema == SEQUENTIAL_R_STATE_SCHEMA:
+        from .autonomous_sequential_r_critic import (
+            AutonomousSequentialRCriticPolicy,
+        )
+
+        return AutonomousSequentialRCriticPolicy()
+    raise ValueError("exploration information policy schema is unsupported")
+
+
 class PropensityAwareOptionExplorationPolicy:
     api_version = POLICY_API_VERSION
     name = POLICY_NAME
@@ -71,10 +91,7 @@ class PropensityAwareOptionExplorationPolicy:
         if information_state is not None:
             if not isinstance(information_state, dict):
                 raise TypeError("Generation-4 information policy is invalid")
-            from .autonomous_sequential_r_critic import (
-                AutonomousSequentialRCriticPolicy,
-            )
-            critic = AutonomousSequentialRCriticPolicy()
+            critic = _information_policy(information_state)
             critic.import_state(information_state)
             if critic.mode != "shadow":
                 raise ValueError("exploration information policy must be shadow-only")

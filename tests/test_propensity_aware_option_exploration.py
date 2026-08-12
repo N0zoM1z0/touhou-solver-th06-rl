@@ -9,7 +9,16 @@ from th06_rl.policies.propensity_aware_option_exploration import (
     STATE_SCHEMA,
     UNIFORM_MASS,
     PropensityAwareOptionExplorationPolicy,
+    _information_policy,
 )
+from th06_rl.policies.autonomous_sequential_r_critic import (
+    AutonomousSequentialRCriticPolicy,
+)
+from th06_rl.policies.autonomous_supported_implicit_q import (
+    AutonomousSupportedImplicitQPolicy,
+)
+from th06_rl.implicit_learning import STATE_SCHEMA as IMPLICIT_Q_STATE_SCHEMA
+from th06_rl.sequential_learning import STATE_SCHEMA as SEQUENTIAL_R_STATE_SCHEMA
 from th06_rl.policy_api import PolicyContext
 
 
@@ -101,3 +110,14 @@ def test_bounded_population_disagreement_multiplies_ess_information() -> None:
     assert information["right"] > information["stay"] > information["left"]
     assert probabilities["right"] > probabilities["left"]
     assert min(probabilities.values()) >= UNIFORM_MASS / 3
+
+
+def test_information_policy_dispatch_is_generation_neutral() -> None:
+    assert isinstance(
+        _information_policy({"schema": SEQUENTIAL_R_STATE_SCHEMA}),
+        AutonomousSequentialRCriticPolicy,
+    )
+    assert isinstance(
+        _information_policy({"schema": IMPLICIT_Q_STATE_SCHEMA}),
+        AutonomousSupportedImplicitQPolicy,
+    )
