@@ -36,6 +36,18 @@ This is a permanent repository invariant, not a Generation-6 convenience:
    appended as facts and are not back-edited into the algorithm that produced
    them.
 
+The intended reuse relation is many-to-many, not generational ownership:
+
+`one immutable corpus -> many learner/framework experiments -> many immutable fits`
+
+and a learner may consume many compatible corpus inventories through one
+capability query. Episode IDs, factual transitions, propensities, native-safe
+sets, and physical outcomes remain byte-identical across those experiments.
+Only learner preprocessing, targets, parameters, seeds, fit checkpoints, and
+reports differ. A fit directory must not contain a relabelled private corpus,
+and a learner failure must not cause the same game evidence to be collected
+again under a new generation name.
+
 Consequently, algorithm search is cheap by construction: a corrected or more
 advanced learner must first replay all compatible recorded Wine facts. New
 gameplay collection is reserved for a real capability/coverage gap or the

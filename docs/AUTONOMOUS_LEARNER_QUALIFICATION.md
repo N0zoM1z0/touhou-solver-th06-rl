@@ -199,6 +199,17 @@ It retains the same reward, candidate, support, propensity, option, gate, Wine
 speed, natural-RNG, and CPU-partition contracts. It is not Stage-6 efficacy
 authorization unless this final Stage-4 resident preflight passes.
 
+The v3 Stage completed with four physical HITs, 174 proposals, three sampled
+interventions, and every safety, integrity, natural-RNG, complete-Stage,
+resource-partition, deadline, and cleanup gate passing. It nevertheless
+failed the unchanged deployment gate at `4.0678 ms` resident p95, with 405
+samples above 4 ms and zero 60 Hz deadline misses. Report SHA-256 is
+`28ccb56205839fc3cb567483bd053359ad7417dff7882dc25eb8d7b23a204f9c`;
+result SHA-256 is
+`f747ae9d8d5237631f24575dec66bfd51823c259bc328ff1bf74cdfc91d781cd`.
+The observed HIT count remains wiring-only. Stage-6 efficacy is not
+authorized, and v3 is permanently closed rather than rounded into a pass.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

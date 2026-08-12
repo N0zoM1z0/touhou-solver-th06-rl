@@ -492,3 +492,23 @@ portable/Linux/Win32 proposals. Wine p95 was `1.7113 ms`, maximum `1.8918 ms`,
 with no >4 ms samples or deadline misses. Canary v3 is frozen separately at
 SHA-256
 `cf51538bd8ccbf266a9442579078fc5373411f704814133c326203f25c6622a1`.
+
+Canary v3 also completed the original-Wine Stage 4 cleanly. It recorded four
+physical HITs, 174 proposals, and three sampled interventions across 4,087
+option boundaries. Every non-latency gate passed: the Stage completed, the
+retail executable, policy state, scorer, CPU partitions, natural RNG, and
+evaluation mode matched; Bomb and corpus creation remained zero; all selected
+actions came from the native-safe set; there were no infrastructure events or
+60 Hz deadline misses; and the private prefix cleaned completely.
+
+The unchanged strict latency gate still rejected it. Resident p95 was
+`4.0678 ms` with 405 samples above 4 ms, despite isolated Wine p95 of
+`1.7113 ms`. The four-HIT outcome is therefore wiring evidence only and is
+not an efficacy estimate. Report SHA-256 is
+`28ccb56205839fc3cb567483bd053359ad7417dff7882dc25eb8d7b23a204f9c`;
+result SHA-256 is
+`f747ae9d8d5237631f24575dec66bfd51823c259bc328ff1bf74cdfc91d781cd`.
+Generation 6 remains unauthorized for Stage-6 efficacy play. Any successor
+must be a new frozen identity justified by a model-invariant, game-neutral
+serving optimization; neither the learner, reward, corpus distribution, nor
+the failed gate may be changed in response to this result.

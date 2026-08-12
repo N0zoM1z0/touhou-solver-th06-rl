@@ -464,3 +464,14 @@ was `0.5227 ms`. Report SHA-256 is
 `b8ffb838bbf72adde6e68c20719bff4225dd5b28f581f80de911e8ffd21c3c47`.
 The third successor canary keeps the same 32-CPU partition and changes only
 experiment identity, policy RNG seed, display, and the preflighted DLL hash.
+
+The v3 live run completed without an infrastructure or deadline event, but its
+resident p95 was `4.0678 ms`; 405 of 4,087 boundary scores exceeded 4 ms. All
+other frozen gates passed. This is a strict rejection, not a rounding case,
+and it leaves the learner and data untouched. Comparing isolated and live
+timings (`1.7113 ms` versus `4.0678 ms`) shows that the remaining work is
+generic tail-latency robustness under co-resident game/capture load. The next
+profile target is Python boundary-time allocation and copying of observation,
+action, hazard, and index arrays. Any repair must preserve exact portable /
+Linux / Win32 choices on factual maximum-width contexts before a new Wine
+identity can be frozen.
