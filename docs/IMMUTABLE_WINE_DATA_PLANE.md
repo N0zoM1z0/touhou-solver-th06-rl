@@ -18,6 +18,30 @@ This separation is also the portability boundary. TH06/TH08 adapters emit the
 same generic facts and capability declarations; offline RL consumes them
 without game-specific routes or phase logic.
 
+This is a permanent repository invariant, not a Generation-6 convenience:
+
+1. **Data identity is factual.** An episode is identified by immutable source
+   hashes and declared semantics, never by the learner, fit, or result that
+   happened to consume it.
+2. **Algorithm identity is executable.** A learner version declares the
+   capabilities it requires and its frozen split/target/model contract. It
+   receives a read-only ordered corpus view; it cannot rewrite admission,
+   duplicate favourable rows, or hide unfavourable rows.
+3. **Fit identity is derived.** Every checkpoint/report binds the exact
+   learner source, corpus query result, episode partition, parameters, and
+   random seeds. It never becomes a new factual corpus.
+4. **Evaluation identity is new evidence.** Offline replay can reject or
+   qualify an algorithm, but only newly scheduled original-Wine canaries and
+   complete-Stage trials measure the deployed policy. Evaluation outcomes are
+   appended as facts and are not back-edited into the algorithm that produced
+   them.
+
+Consequently, algorithm search is cheap by construction: a corrected or more
+advanced learner must first replay all compatible recorded Wine facts. New
+gameplay collection is reserved for a real capability/coverage gap or the
+next predeclared autonomous round, never for manually repairing an observed
+action, HIT location, Stage, RNG, or model result.
+
 ## Machine registry
 
 `config/wine_corpus_registry.json` and

@@ -19,6 +19,14 @@ learning and defaults to the frozen incumbent outside independently supported
 regions. Policy quality is improved by unattended data rounds, never by
 hand-tuning a failure location.
 
+Corpus, learner/framework, and fitted result have independent identities and
+lifecycles. A corpus is immutable reusable Wine evidence, not property of the
+algorithm that first used it. Replacing or repairing a learner must replay all
+compatible registered episodes before collecting more gameplay, so different
+offline RL methods can be compared on the same facts without changing their
+distribution. The normative contract is
+[docs/IMMUTABLE_WINE_DATA_PLANE.md](docs/IMMUTABLE_WINE_DATA_PLANE.md).
+
 The reconstructed Linux/headless simulator is retired from the learning and
 evaluation path. Historical scripts remain only as unreferenced quarantine
 until a separate cleanup removes code proven unused by the Wine-only path.
