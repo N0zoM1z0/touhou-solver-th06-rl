@@ -148,6 +148,30 @@ the objective or portable/native artifact format. A new handwritten C++ GBDT
 is therefore not justified at this checkpoint; native work remains conditional
 on a new profile after cross-fitting and cache costs are amortized.
 
+## 2026-08-12: isolated normal-speed Wine collection workers
+
+Collection throughput scales horizontally without changing game time. Four
+preassigned workers each own a copied original game directory, fresh Wine
+prefix, X display, artifact subtree, and corpus subtree. A worker never runs two
+episodes concurrently. The canonical canary and final natural Stage-6 A/B use
+worker zero sequentially; learner fitting and Wine collection never overlap.
+
+Before evidence collection, one fixed Stage-4 input runs once serially and then
+simultaneously on workers zero and one. The gate requires identical physical
+HIT count and an identical normalized factual-option digest. That digest covers
+sequence, frame, action, incumbent, complete propensity vector, all candidate
+features, interval HIT, duration, return-to-go, termination, hazards, and
+history; only per-run episode/option identifiers are removed. This differential
+is explicitly non-evidence. Failure disables parallel collection rather than
+relaxing equality or changing training data.
+
+The seed schedule, 32-thread learner cap, worker assignment, displays,
+collection boundaries, canary order, normal-speed final order, original game
+inventory hash, Wine binary, native libraries, and all execution/learner source
+files are bound by a committed SHA-256 contract before the differential starts.
+This makes concurrency a replayable infrastructure choice, not an outcome-
+dependent data-distribution adjustment.
+
 ## Native implementation priority
 
 The repository should use native C/C++ for fixed, hot numerical kernels and

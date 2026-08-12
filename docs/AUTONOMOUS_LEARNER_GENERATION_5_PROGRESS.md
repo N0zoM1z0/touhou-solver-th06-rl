@@ -129,3 +129,26 @@ fixed Stage 4 -> 5 -> 6 curriculum diagnostic. The next Wine outcome therefore
 must occur only after its seeds, isolated worker assignments, canaries, and
 configuration hashes are committed. No threshold, reward, feature, behavior
 mixture, or action preference changes in response to this result.
+
+## 2026-08-12: curriculum execution frozen before its first outcome
+
+The Stage-6 decision-stability failure activated the previously declared
+Stage-4 -> 5 -> 6 diagnostic. Before any curriculum Wine outcome, the repository
+froze 116 unique bounded game/policy seeds, every collection worker assignment,
+all fit and canary boundaries, the alternating natural Stage-6 final order, and
+one non-evidence parallelism differential. Four normal-speed collection workers
+share no game directory, Wine prefix, display, artifact root, or corpus root.
+Canaries and final evaluation remain sequential.
+
+The learner uses a single 32-thread host-sharing cap. Stage-4 boundaries 10 and
+15 run fixed low-cost non-authorizing smokes; boundary 20 and every Stage-5/6
+boundary use the complete production contract. A fit-eligible shadow population
+may automatically weight later exploration through population disagreement and
+ESS, but it never publishes actions during collection. No result can select an
+RNG, worker, action, stage location, model size, or retry budget.
+
+A committed execution lock binds the schedule, original game inventory, retail
+executable, score template, Wine 11 binary, controller/native/scorer binaries,
+learner and policy sources, worker orchestration, corpus loader, shadow audit,
+and authorization code. The resumable orchestrator refuses any drift. No
+curriculum outcome existed when this contract was written.

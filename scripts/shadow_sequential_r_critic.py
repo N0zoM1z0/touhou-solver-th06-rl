@@ -18,9 +18,9 @@ for path in (REPOSITORY, REPOSITORY / "src"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from scripts.fit_sequential_r_critic import _load  # noqa: E402
 from scripts.shadow_option_advantage import _context  # noqa: E402
 from th06_rl.advantage_learning import _object, _rows  # noqa: E402
+from th06_rl.audited_option_loader import load_audited_option_episode  # noqa: E402
 from th06_rl.policies.autonomous_sequential_r_critic import (  # noqa: E402
     AutonomousSequentialRCriticPolicy,
 )
@@ -52,22 +52,30 @@ def shadow(
     *,
     native_scorer: Path,
     maximum_p95_ms: float = 4.0,
+    policy_type=AutonomousSequentialRCriticPolicy,
+    state_schema: str = STATE_SCHEMA,
+    population_members: int = POPULATION_MEMBERS,
+    full_trees: int = CRITIC_TREES,
+    report_schema: str = SCHEMA,
+    generation_label: str = "Generation-4",
 ) -> dict[str, object]:
     state_path = state_path.resolve()
     native_scorer = native_scorer.resolve()
     state = _object(state_path)
     authorization = state.get("authorization")
     if (
-        state.get("schema") != STATE_SCHEMA
+        state.get("schema") != state_schema
         or state.get("mode") != "shadow"
         or not isinstance(authorization, dict)
         or authorization.get("fit_eligible") is not True
     ):
-        raise ValueError("Generation-4 shadow requires a fit-eligible shadow state")
+        raise ValueError(
+            f"{generation_label} shadow requires a fit-eligible shadow state"
+        )
     prior = os.environ.get(NATIVE_SCORER_ENV)
     try:
         os.environ[NATIVE_SCORER_ENV] = str(native_scorer)
-        policy = AutonomousSequentialRCriticPolicy()
+        policy = policy_type()
         policy.import_state(state)
     finally:
         if prior is None:
@@ -84,10 +92,10 @@ def shadow(
         run = _object(run_dir / "run.json")
         schemas = run.get("schemas")
         transition = schemas.get("transition") if isinstance(schemas, dict) else None
-        loaded, report = _load(run_dir)
+        loaded, report = load_audited_option_episode(run_dir)
         episode_id = str(report["episode_id"])
         if episode_id in observed_groups:
-            raise ValueError("Generation-4 shadow received a duplicate episode")
+            raise ValueError(f"{generation_label} shadow received a duplicate episode")
         observed_groups.add(episode_id)
         before = policy.metrics()
         replayed = 0
@@ -111,7 +119,7 @@ def shadow(
                 or decision.action not in context.locally_admissible_actions
             )
         if replayed != len(loaded):
-            raise ValueError("Generation-4 shadow missed factual option boundaries")
+            raise ValueError(f"{generation_label} shadow missed factual option boundaries")
         after = policy.metrics()
         runs.append({
             "episode_id": episode_id,
@@ -131,13 +139,13 @@ def shadow(
         "baseline_only_publication": invalid_publications == 0,
         "proposal_witnessed": int(metrics["shadow_proposals"]) > 0,
         "native_batch_scorer": metrics["scorer_backend"] == "native-batch",
-        "complete_population": metrics["population_members"] == POPULATION_MEMBERS,
-        "full_tree_population": metrics["trees_per_member"] == CRITIC_TREES,
+        "complete_population": metrics["population_members"] == population_members,
+        "full_tree_population": metrics["trees_per_member"] == full_trees,
         "maximum_p95_latency": p95 <= maximum_p95_ms,
         "zero_controller_deadline_misses": metrics["controller_deadline_misses"] == 0,
     }
     return {
-        "schema": SCHEMA,
+        "schema": report_schema,
         "policy_state": str(state_path),
         "policy_state_sha256": _sha256(state_path),
         "native_scorer": str(native_scorer),
