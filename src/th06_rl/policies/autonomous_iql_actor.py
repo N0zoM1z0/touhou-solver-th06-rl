@@ -78,6 +78,8 @@ ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     # Fused seven-member mean and supported-row proposal selection.
     "377283b508e31a310fdfab32d2087a8da9d8d3fb70dd58433f3977caf4dc5cc4",
     "87be7d7c3f5711e3f744214031696257ee045be00a8f62c229e3519155ea8c92",
+    # Same fused math compiled for the Win32 baseline SSE2 scalar ABI.
+    "471013f1daa40c57829722a61f1729726a803bcccd4d0a898738ecd096f8c01a",
 ))
 _ACTION_INDEX = {action: index for index, action in enumerate(ACTION_NAMES)}
 _LEXICAL_RANK = {

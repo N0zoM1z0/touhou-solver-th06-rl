@@ -512,3 +512,16 @@ Generation 6 remains unauthorized for Stage-6 efficacy play. Any successor
 must be a new frozen identity justified by a model-invariant, game-neutral
 serving optimization; neither the learner, reward, corpus distribution, nor
 the failed gate may be changed in response to this result.
+
+A generic Win32 arithmetic repair has since passed preflight. Compiling the
+unchanged ranker with the i686 baseline SSE2 scalar ABI removed legacy x87
+execution while preserving all 64 portable/Linux/Win32 proposals on the
+181--256-hazard fixture. The 126-output actor error was `7.4387e-5` under the
+unchanged `1e-4` limit. Isolated Wine p95 improved to `1.2393 ms` with
+`1.3571 ms` maximum and zero >4 ms/deadline samples. The canonical DLL is
+SHA-256
+`471013f1daa40c57829722a61f1729726a803bcccd4d0a898738ecd096f8c01a`;
+the full-path preflight is
+`45267dd8dc0c434702482ec71503c58b8a38d97500fd1b7fa67f65c806fa0071`.
+This permits freezing one new Stage-4 wiring identity, not replaying v3 and
+not yet measuring efficacy.

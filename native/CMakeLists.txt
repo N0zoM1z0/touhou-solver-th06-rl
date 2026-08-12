@@ -30,4 +30,14 @@ if(MINGW)
   target_link_options(
     th06_rl_ranker PRIVATE -static -static-libgcc -static-libstdc++
   )
+
+  # The retail game remains a 32-bit executable, and the embeddable Wine
+  # controller currently loads a 32-bit scorer.  GCC otherwise emits legacy
+  # x87 arithmetic for this target.  Keep the fitted float32 model unchanged
+  # while using the baseline SSE2 scalar ABI available on every supported
+  # host; exact portable action conformance is still required before a DLL is
+  # admitted by the policy.
+  if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    target_compile_options(th06_rl_ranker PRIVATE -msse2 -mfpmath=sse)
+  endif()
 endif()

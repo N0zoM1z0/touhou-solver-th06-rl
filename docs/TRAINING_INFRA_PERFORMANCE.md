@@ -475,3 +475,23 @@ profile target is Python boundary-time allocation and copying of observation,
 action, hazard, and index arrays. Any repair must preserve exact portable /
 Linux / Win32 choices on factual maximum-width contexts before a new Wine
 identity can be frozen.
+
+The component profile then identified a platform-specific deployment cost:
+the 32-bit MinGW target used legacy x87 scalar arithmetic even though the
+fitted network is float32. The reproducible build now selects the baseline
+SSE2 scalar ABI for the Win32 ranker only (`-msse2 -mfpmath=sse`). It does not
+change the actor graph, activation, weights, support, mean, or choice code; the
+original 32-bit retail game and native safety kernel remain unchanged.
+
+The canonical DLL is SHA-256
+`471013f1daa40c57829722a61f1729726a803bcccd4d0a898738ecd096f8c01a`.
+Its independent 126-output differential was `7.4387e-5`, below the unchanged
+`1e-4` tolerance. On the same 64 maximum-width factual contexts, all portable,
+Linux, and Win32 proposals remained exact. Isolated Wine p95 fell from
+`1.7113 ms` to `1.2393 ms`, maximum was `1.3571 ms`, and no sample crossed 4
+ms or the frame deadline. Kernel report SHA-256 is
+`73e24bd2a9840d483c982bd0edb4c0c420948f8daee29bcf27d9fedc9912a13e`;
+full-path report SHA-256 is
+`45267dd8dc0c434702482ec71503c58b8a38d97500fd1b7fa67f65c806fa0071`.
+This creates enough measured margin to freeze a new wiring identity; it does
+not retroactively pass v3 or authorize Stage-6 efficacy by itself.
