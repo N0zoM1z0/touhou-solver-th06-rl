@@ -232,6 +232,14 @@ result SHA-256 is
 The HIT count remains wiring-only. This authorizes design and precommitment of
 a separate alternating Stage-6 efficacy pilot, not policy promotion.
 
+That pilot is now frozen at
+`config/autonomous_generation6_stage6_pilot.json`, SHA-256
+`b3ecb0720fa1ac0fb0f4ab8dbb90b8f286812b6468f3028d00a9f0672e6301cd`.
+It contains three incumbent and three candidate natural-RNG complete Stage-6
+trials in balanced temporal order. Its small-panel verdict is directional and
+cannot promote the policy; the full design and stopping rule are recorded in
+`docs/AUTONOMOUS_LEARNER_GENERATION_6_STAGE6_PILOT.md`.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

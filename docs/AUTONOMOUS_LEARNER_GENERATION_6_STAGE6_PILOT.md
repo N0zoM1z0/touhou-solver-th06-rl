@@ -62,3 +62,19 @@ Conditional on those validity and exposure gates:
 No spell, frame, RNG, failure location, action, or interim HIT result may alter
 the schedule or rule. The resumable ledger appends each complete trial before
 the next starts; an audited failed row stops the panel.
+
+## Frozen identity
+
+The executable schedule is
+`config/autonomous_generation6_stage6_pilot.json`, SHA-256
+`b3ecb0720fa1ac0fb0f4ab8dbb90b8f286812b6468f3028d00a9f0672e6301cd`.
+It binds implementation commit `909e201f8b7a84725970fa751b6564fea5def332`,
+the successful v4 wiring evidence, all candidate/qualification/scorer hashes,
+six policy seeds, arm order, Wine inputs, CPU partitions, run gates, and the
+decision rule before any pilot game starts.
+
+The exact trial-1 candidate state passed the 64-context portable/Linux/Win32
+preflight before schedule commit: all proposals matched, Wine p95 was
+`1.2417 ms`, maximum `1.3555 ms`, and >4 ms/deadline counts were zero. The
+ignored report SHA-256 is
+`a15bcf6e2de717dea978e2fcbf1338c0c43abe9dc411362453a2d9d9e2b16622`.

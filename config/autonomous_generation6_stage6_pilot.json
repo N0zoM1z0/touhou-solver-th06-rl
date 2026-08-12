@@ -1,0 +1,85 @@
+{
+  "schema": "autonomous-generation-6-wine-canary-v5",
+  "authorization_eligible": false,
+  "purpose": "alternating directional efficacy pilot against the exact current incumbent",
+  "implementation_commit": "909e201f8b7a84725970fa751b6564fea5def332",
+  "wiring_authorization": {
+    "contract_sha256": "1008e4b7236fc21bbd7a7fc7053dfd137021adfa70fd710c00e669e31263f510",
+    "report_sha256": "ba794378d0e08ae754b3af7677e8eb73484a14c84e69385940a6eea33ab1ba37",
+    "result_sha256": "bc56644aa96a0d7c0319dbab58bd3e05e51cfaa9b78aa29588e26a1a10b071e9",
+    "passed": true,
+    "live_p95_ms": 2.875099889934063
+  },
+  "candidate_sha256": "aea789ed9fe63aa4a2c0799092675fd287c9b66787ed968d82e82098fbb4ea64",
+  "qualification_result_sha256": "1da0212281902daf18c124d3e246a244ae19d4a92fa3177efd34711c460b3e34",
+  "deployable_target_audit_sha256": "f683abf05b0fc1165181c1b922882e8950eae48cb67060e54792e3bc6a86ba8f",
+  "normal_speed": true,
+  "natural_rng": true,
+  "complete_stage_hit_continuation": true,
+  "bomb": "forbidden",
+  "single_wine_instance": true,
+  "maximum_interventions": 64,
+  "training_corpus_created": false,
+  "environment": {
+    "wine": "/usr/bin/wine",
+    "wine_version": "wine-11.0",
+    "wine_sha256": "0fa5abe77c0d27991801983bd878fedd360b61fc26cca4777fd705a8a54ae6b9",
+    "source_game_dir": "reference/th06-game-original/th06",
+    "retail_executable_sha256": "9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb852245",
+    "full_unlock_score_sha256": "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e94d26b749c71",
+    "windows_python_sha256": "e60592888c3128132df3489a2462716bb268063bfe3564bfe1f2f3dbe9ceafd1",
+    "native_controller_sha256": "71b27bef942928dfc04b6a489ef261cb6485cd5bab2cd4d4ebf4081991a22b5b",
+    "native_policy_scorer_sha256": "471013f1daa40c57829722a61f1729726a803bcccd4d0a898738ecd096f8c01a",
+    "worker_root": "artifacts/autonomous-generation-6-stage6-pilot/workers",
+    "worker_directory": "wine-0",
+    "display": ":111",
+    "game_cpu_list": "0-7",
+    "controller_cpu_list": "8-31"
+  },
+  "intervention": {
+    "option_horizon_frames": 8,
+    "probability_cap": 0.1,
+    "minimum_historical_uniform_mass": 0.1,
+    "density_ratio_cap": 2.0,
+    "formula": "min(0.10, 2 * 0.10 / native_safe_set_size)"
+  },
+  "resource_contract": {
+    "hard_cpu_affinity": "0-31",
+    "maximum_logical_cpus": 32,
+    "offline_training_must_not_overlap": true,
+    "game_and_controller_partitions_disjoint": true
+  },
+  "schedule": [
+    {"trial": 0, "block": 0, "role": "incumbent", "stage": 6, "policy_seed": 600901},
+    {"trial": 1, "block": 0, "role": "candidate", "stage": 6, "policy_seed": 600902},
+    {"trial": 2, "block": 1, "role": "candidate", "stage": 6, "policy_seed": 600903},
+    {"trial": 3, "block": 1, "role": "incumbent", "stage": 6, "policy_seed": 600904},
+    {"trial": 4, "block": 2, "role": "incumbent", "stage": 6, "policy_seed": 600905},
+    {"trial": 5, "block": 2, "role": "candidate", "stage": 6, "policy_seed": 600906}
+  ],
+  "required_run_gates": {
+    "strict_original_wine_report": true,
+    "immutable_policy_state": true,
+    "complete_stage": true,
+    "zero_bomb": true,
+    "zero_authority_capture_delivery_or_trace_failure": true,
+    "native_safe_actions_only": true,
+    "shadow_interventions_zero": true,
+    "candidate_interventions_at_most_64": true,
+    "candidate_budget_abstentions_zero": true,
+    "online_policy_latency_p95_below_ms": 4.0,
+    "online_policy_deadline_misses": 0,
+    "zero_training_corpus": true
+  },
+  "decision_rule": {
+    "expected_complete_runs": 6,
+    "candidate_stages": 3,
+    "incumbent_stages": 3,
+    "required_exercised_candidate_stages": 2,
+    "effective_pilot_signal": "candidate aggregate physical HITs strictly below incumbent aggregate physical HITs after all validity and exposure gates pass",
+    "no_effective_pilot_signal": "candidate aggregate physical HITs equal to or above incumbent after all validity and exposure gates pass",
+    "insufficient_exposure": "inconclusive",
+    "runtime_or_integrity_failure": "invalid",
+    "promotion": "forbidden; a positive pilot requires a separately frozen larger confirmation"
+  }
+}
