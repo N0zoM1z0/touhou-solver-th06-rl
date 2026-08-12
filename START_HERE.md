@@ -25,13 +25,18 @@ Read in this order:
    `docs/AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md` for its ineffective verdict;
 8. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
    and upstream-repository cache;
-9. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+9. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the active in-sample
+   implicit-Q learner and its predeclared smoke/evidence gates;
+10. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
+   parallelism and the compatibility gate;
+11. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-10. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+12. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 Generations 3 and 4 are frozen. Generation 4 exhausted its evidence budget
-without canary authorization. A later learner must be a newly declared
-generation with smoke gates fixed before any new Wine outcome.
+without canary authorization. Generation 5 is declared, but no new Wine
+outcome may launch before its smoke, native, seed, and worker-isolation
+contracts are implemented and committed.
 
 ## Non-negotiable separation
 

@@ -191,3 +191,6 @@ never earned canary authorization, so it is frozen as ineffective; see
 `AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md`. Generation 5 must be declared as a
 new algorithm generation; it may reuse the factual corpus but cannot reinterpret
 Generation-4 outcomes as candidate evidence.
+Its committed design is `AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md`: factual
+in-sample implicit Bellman iteration, lower cost expectile value fitting,
+supported pessimistic population selection, and new-cohort authorization.
