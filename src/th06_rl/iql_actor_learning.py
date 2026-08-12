@@ -357,7 +357,9 @@ def fit_iql_actor_member(
         bootstrap=critic_member.bootstrap,
         advantage_scale=temperature,
         diagnostics={
-            "weighted_cross_entropy": float(final_loss),
+            # A finite-sample control-variate estimate may be negative even
+            # though the underlying cross entropy is nonnegative.
+            "action_centered_risk_estimate": float(final_loss),
             "advantage_rms": temperature,
             "minimum_log_weight": float(log_weights.min()),
             "maximum_log_weight": float(log_weights.max()),

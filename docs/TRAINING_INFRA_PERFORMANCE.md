@@ -305,3 +305,10 @@ This makes an algorithm correction test a minutes-scale offline replay and
 requires no new Wine episode. It also shows unused room below the 32-core hard
 cap. Actor minibatch work may be rebalanced only after estimator correctness;
 the current scientific replay keeps five folds and their seed schedule fixed.
+
+The one-line estimator repair plus expanded diagnostics replayed the exact same
+workload in 374.46 seconds: 11.39 seconds warm loading, 52.96 seconds
+representation, and 310.11 seconds five-fold fitting/scoring. The 2.1% total
+difference is normal competing-host variation, not an algorithmic speed claim.
+This confirms that immutable-corpus learner changes can be falsified in about
+six minutes without starting original Wine.
