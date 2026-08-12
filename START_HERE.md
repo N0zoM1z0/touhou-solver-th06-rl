@@ -26,7 +26,9 @@ Read in this order:
 8. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
    and upstream-repository cache;
 9. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the active in-sample
-   implicit-Q learner and its predeclared smoke/evidence gates;
+   implicit-Q learner and its predeclared smoke/evidence gates, followed by
+   `docs/AUTONOMOUS_LEARNER_GENERATION_5_PROGRESS.md` for append-only execution
+   and estimator findings;
 10. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 11. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict

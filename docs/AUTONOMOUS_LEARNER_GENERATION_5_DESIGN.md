@@ -37,7 +37,16 @@ terminal/successor value, each frozen iteration fits factual action value to:
 `Q_k(s_t, A_t) = sum(i=0..h-1) HIT_(t+i) + V_(k-1)(s_(t+h))`
 
 where `h` is at most eight factual option intervals and no bootstrap is used
-past terminal. It then fits `V_k(s)` to the lower cost expectile of the factual
+past terminal. The implementation smoke further requires a decomposition of
+that target. A state-only offline outcome model absorbs common risk. A
+residual-Q model uses the complete known behavior distribution and bounded
+coefficients `1[A=a] - propensity(a|s)` to learn the randomized action
+contribution. Their sum supplies factual Q; residual-Q candidate differences
+are the only deployed score. This action centering uses no inverse propensity
+and is repeated inside every frozen Bellman iteration rather than applied once
+to a complete-Stage return.
+
+It then fits `V_k(s)` to the lower cost expectile of the factual
 `Q_k(s,A)` distribution. A 0.10 cost expectile is the reward-maximization IQL
 expectile mirrored for cost minimization: low-cost factual actions receive the
 larger asymmetric squared-error weight. Backups never maximize or minimize
