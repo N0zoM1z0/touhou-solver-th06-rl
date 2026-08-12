@@ -258,6 +258,26 @@ class AutonomousSequentialRCriticPolicy:
     def _advantage_bound(self, member_advantages: list[float]) -> float:
         return max(member_advantages)
 
+    def _select_candidate(
+        self,
+        *,
+        legal: tuple[str, ...],
+        baseline: str,
+        supported: list[int],
+        predictions,
+    ) -> str:
+        baseline_index = legal.index(baseline)
+        candidates = []
+        for index in supported:
+            member_advantages = [
+                member[index] - member[baseline_index]
+                for member in predictions
+            ]
+            upper = self._advantage_bound(member_advantages)
+            if upper < 0.0:
+                candidates.append((upper, legal[index]))
+        return min(candidates, default=(0.0, baseline))[1]
+
     def _history(self, context) -> tuple[float, ...]:
         names = tuple(str(name) for name, _value in context.history_features)
         values = tuple(float(value) for _name, value in context.history_features)
@@ -325,19 +345,13 @@ class AutonomousSequentialRCriticPolicy:
     def decide(self, context) -> PolicyDecision:
         started = time.perf_counter()
         legal, baseline, supported, predictions = self._score_context(context)
-        baseline_index = legal.index(baseline)
-        candidates = []
-        for index in supported:
-            member_advantages = [
-                member[index] - member[baseline_index] for member in predictions
-            ]
-            upper = self._advantage_bound(member_advantages)
-            if upper < 0.0:
-                candidates.append((upper, legal[index]))
-        proposed = baseline
-        if candidates:
-            proposed = min(candidates)[1]
-        elif supported:
+        proposed = self._select_candidate(
+            legal=legal,
+            baseline=baseline,
+            supported=supported,
+            predictions=predictions,
+        )
+        if proposed == baseline and supported:
             self.population_abstentions += 1
         self.decisions += 1
         if proposed != baseline:

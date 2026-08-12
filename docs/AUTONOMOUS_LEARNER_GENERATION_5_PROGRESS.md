@@ -72,3 +72,32 @@ The model section created many native threads but averaged only about two CPU
 cores because the Python custom-objective callback remained limiting. This is
 recorded as the next offline optimization target; it cannot be addressed by
 reducing population size or changing the learning objective.
+
+## 2026-08-12: frozen-Wine residual signal passed, policy stability failed
+
+The repaired 29-episode, 102,409-option frozen Stage-6 smoke completed in
+617.26 seconds and remained explicitly ineligible for evidence or
+authorization. Its cross-fitted factual-Q loss was 7,530.09 versus 7,619.49 for
+the common-state zero-effect comparator, a ratio of 0.988267. It improved 28 of
+29 complete episodes. The chronologically later 16-episode development cohort
+independently improved 16/16 episodes with ratio 0.983166. Every fold improved
+and every fold's upper-order-statistic support coverage exceeded 0.99.
+
+This is materially stronger and more stable treatment-signal evidence than
+Generation 4, whose final aggregate ratio was 0.999884 and improved 14/29
+episodes. It is still not deployable. The four-member calibration population's
+full pessimistic rule proposed 24,819 actions, or 24.24% of held-out options,
+above the frozen 10% exposure cap. Its two independent two-member panels
+proposed on a union of 53,423 options and selected the same non-incumbent action
+on only 11,193, giving 20.95% conditional agreement versus the fixed 80% gate.
+
+Observation: sequential action-centered implicit Q now learns a real held-out
+Wine signal, including on newer episodes, but bootstrap populations do not
+agree which action realizes it. Inference: replacing the estimator again would
+discard verified progress; the immediate defect is decision-level uncertainty
+and action selection. Decision, before any Generation-5 Wine outcome: make
+calibration match the seven-member production artifact, split members into
+fixed independent 3/4 panels, require each panel's pessimistic range rule and
+exact agreement on the selected action, while retaining the 10% proposal and
+80% conditional-agreement gates. If that smoke still fails, use the already
+declared Stage 4 -> 5 -> 6 curriculum diagnostic rather than changing a gate.

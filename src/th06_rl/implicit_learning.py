@@ -23,7 +23,9 @@ Q_TREES = 128
 VALUE_TREES = 96
 CALIBRATION_Q_TREES = 48
 CALIBRATION_VALUE_TREES = 32
-CALIBRATION_MEMBERS = 4
+CALIBRATION_MEMBERS = 7
+LEFT_PANEL = (0, 1, 2)
+RIGHT_PANEL = (3, 4, 5, 6)
 MINIMUM_CALIBRATION_EPISODES = 20
 MAXIMUM_PROPOSAL_RATE = 0.10
 MINIMUM_CONDITIONAL_AGREEMENT = 0.80
@@ -576,6 +578,8 @@ def _evaluate_crossfit_fold(
     conditional_agreements = 0
     exact_agreements = 0
     unsupported_candidates = 0
+    panel_choice_pairs: Counter[str] = Counter()
+    proposal_actions: Counter[str] = Counter()
     for index, (start, stop) in enumerate(zip(
         starts, stop_indices, strict=True
     )):
@@ -596,9 +600,14 @@ def _evaluate_crossfit_fold(
             for action_index, action in enumerate(sample.legal_actions)
         )
         predictions = effect_predictions[:, start:stop]
-        left = _population_choice(predictions, sample, mask, (0, 1))
-        right = _population_choice(predictions, sample, mask, (2, 3))
-        full = _population_choice(predictions, sample, mask, (0, 1, 2, 3))
+        left = _population_choice(predictions, sample, mask, LEFT_PANEL)
+        right = _population_choice(predictions, sample, mask, RIGHT_PANEL)
+        full = (
+            left
+            if left == right and left != sample.baseline_action
+            else sample.baseline_action
+        )
+        panel_choice_pairs[f"{left}|{right}"] += 1
         either = left != sample.baseline_action or right != sample.baseline_action
         union_proposals += int(either)
         exact_agreements += int(left == right)
@@ -606,6 +615,7 @@ def _evaluate_crossfit_fold(
         if full != sample.baseline_action:
             full_proposals += 1
             report["proposals"] += 1
+            proposal_actions[full] += 1
     for report in episode_reports.values():
         report["q_beats_zero"] = (
             report["q_squared_error"] < report["zero_squared_error"]
@@ -627,6 +637,8 @@ def _evaluate_crossfit_fold(
         "conditional_half_agreements": conditional_agreements,
         "exact_half_agreements": exact_agreements,
         "unsupported_candidates": unsupported_candidates,
+        "panel_choice_pairs": dict(sorted(panel_choice_pairs.items())),
+        "proposal_actions": dict(sorted(proposal_actions.items())),
     }
 
 
@@ -710,6 +722,10 @@ def crossfit_implicit_q_report(
         "unsupported_candidates": sum(
             report["unsupported_candidates"] for report in reports
         ),
+        "proposal_actions": dict(sorted(sum(
+            (Counter(report["proposal_actions"]) for report in reports),
+            Counter(),
+        ).items())),
     }
 
 

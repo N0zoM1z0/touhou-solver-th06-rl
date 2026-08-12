@@ -60,6 +60,14 @@ process, writes only a small atomic cache entry, then loads all verified entries
 in the parent. Large OptionStep objects are never copied through process IPC.
 First-build and warm-hit timings are pending the repeated 29-episode smoke.
 
+The process-parallel repeated smoke completed all 29 first-build cache entries
+and parent loading in 119.17 seconds, versus approximately 17 minutes for the
+single-process baseline: at least an 8.6x wall-time improvement for the audited
+load stage. The complete run then spent 50.72 seconds on representation and
+augmentation and 447.38 seconds on five-fold low-tree cross-fitting, for 617.26
+seconds total. All 29 entries were misses as expected. A later warm-cache run
+will measure steady-state load without changing the smoke workload.
+
 ## 2026-08-12: population fit parallelism
 
 Whole-episode bootstrap members are causally independent after the dataset and

@@ -92,8 +92,11 @@ row is scored by models that saw none of its episode. The zero-effect comparator
 uses the learned state value `V(s)`; the Q learner must improve factual Bellman
 target squared error globally and in a strict majority of episode groups.
 
-Four whole-episode-bootstrap calibration members are divided into two
-independent halves. On held-out observations the report records exact policy
+Seven whole-episode-bootstrap calibration members match the production
+population and are divided into fixed independent panels of three and four.
+Each panel applies the same population-range upper bound, and an action is
+proposed only when both panels independently select that exact action. On
+held-out observations the report records exact policy
 agreement, agreement conditional on either half proposing, proposal rate,
 actions, support abstentions, and member range. A fit must satisfy all of:
 
@@ -101,9 +104,9 @@ actions, support abstentions, and member range. A fit must satisfy all of:
 - Q Bellman loss below the state-only V loss globally and in a strict episode
   majority;
 - the same two conditions on the new Generation-5 cohort alone;
-- at least one held-out proposal, no more than 10% of held-out decisions
-  proposed, and at least 80% exact action agreement where either independent
-  half proposes;
+- at least one held-out panel-consensus proposal, no more than 10% of held-out
+  decisions proposed, and at least 80% exact action agreement where either
+  independent panel proposes;
 - complete seven-member artifact, at least 99% factual support calibration,
   finite diagnostics, native equivalence, p95 below 4 ms, and zero 60 Hz
   deadline misses.
