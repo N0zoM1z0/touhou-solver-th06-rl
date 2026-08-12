@@ -78,3 +78,26 @@ preflight before schedule commit: all proposals matched, Wine p95 was
 `1.2417 ms`, maximum `1.3555 ms`, and >4 ms/deadline counts were zero. The
 ignored report SHA-256 is
 `a15bcf6e2de717dea978e2fcbf1338c0c43abe9dc411362453a2d9d9e2b16622`.
+
+## Completed result
+
+All six trials completed and passed every frozen gate. Incumbent HITs were
+`[3, 11, 14]` for 28 total; candidate HITs were `[10, 8, 7]` for 25 total.
+Candidate intervention counts were `[3, 2, 3]`, so all three candidate Stages
+were exercised. The predeclared verdict is `effective-pilot-signal`, with an
+aggregate reduction of three HITs and `authorization_eligible: false`.
+
+Per-run live policy p95 stayed between `2.9619` and `3.0019 ms`; all six runs
+had zero deadline misses. Native-safe-only publication, zero Bomb/corpus/infra
+events, immutable hashes, complete Stage accounting, natural RNG, resource
+partitions, and prefix cleanup all passed. The result SHA-256 is
+`d4eba15f9db2881a39f6809072267eb22a0602bcdc6519a30b8a451a20a97b43`;
+the complete ledger SHA-256 is
+`2864f3a1f55d911d52ba1e0fff2a679dcce40220ff9bd33bfa56795affb9cf44`.
+
+This is the positive directional evidence the small panel was designed to
+detect, not a promotion result. The one-HIT-per-Stage mean is aligned with the
+offline Stage-6 deployable estimate, while the 3--14 incumbent range shows why
+a separately frozen larger confirmation is still required. The interpretation
+and continuation boundary are recorded in
+`docs/AUTONOMOUS_LEARNER_GENERATION_6_RESULT.md`.

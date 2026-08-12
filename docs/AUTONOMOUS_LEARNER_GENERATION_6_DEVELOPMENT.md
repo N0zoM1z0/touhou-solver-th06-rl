@@ -4,10 +4,12 @@
 
 Generation 5 stopped because its action-centered scalar-tree critic improved
 held-out Bellman prediction but independent populations frequently selected
-widely different directions. Generation 6 is currently an offline development
-program, not an authorized Wine learning generation. No new Wine gameplay may
-start until one candidate passes the frozen qualification funnel and a complete
-outcome-facing design is committed.
+widely different directions. Generation 6 subsequently passed its frozen
+offline qualification, exact native handoff, and Stage-4 wiring gate. Its
+predeclared six-Stage original-Wine Stage-6 pilot has now produced an
+`effective-pilot-signal`, but the small panel does not authorize promotion.
+The completed interpretation is in
+`docs/AUTONOMOUS_LEARNER_GENERATION_6_RESULT.md`.
 
 ## Estimator hypothesis
 
@@ -558,3 +560,19 @@ The three-HIT observation remains wiring-only and is not compared with prior
 canaries or an incumbent. This pass closes the deployment-infrastructure
 blocker and permits freezing a separate alternating complete-Stage-6 efficacy
 pilot; it does not promote Generation 6 by itself.
+
+## Complete-Stage-6 directional result
+
+The separately frozen three-block pilot completed all six natural-RNG original-
+Wine Stages. Incumbent HITs were `[3, 11, 14]`; candidate HITs were `[10, 8,
+7]`. The candidate therefore reduced aggregate HIT from 28 to 25 and met the
+predeclared `effective-pilot-signal` rule. It exercised 3/2/3 actual
+interventions and passed all runtime, safety, latency, integrity, and cleanup
+gates. Report and ledger identities are recorded in the dedicated Generation-6
+result document.
+
+This is the first fresh deployment evidence aligned with the offline IQL actor
+estimate. It keeps this general learner family alive, but natural-RNG variance
+is visibly large and the pilot explicitly cannot promote. No gameplay outcome
+was fed back into training, no corpus was created, and no model or data
+distribution was changed after observing the result.

@@ -240,6 +240,14 @@ trials in balanced temporal order. Its small-panel verdict is directional and
 cannot promote the policy; the full design and stopping rule are recorded in
 `docs/AUTONOMOUS_LEARNER_GENERATION_6_STAGE6_PILOT.md`.
 
+All six trials subsequently completed cleanly. Incumbent HITs were `[3, 11,
+14]` and candidate HITs `[10, 8, 7]`, producing the frozen
+`effective-pilot-signal` verdict (28 versus 25 aggregate HIT). All three
+candidate Stages exercised intervention and every safety, integrity, complete-
+Stage, latency, deadline, and cleanup gate passed. The result is evidence-
+eligible but explicitly not authorization-eligible. Its interpretation and
+artifact hashes are in `docs/AUTONOMOUS_LEARNER_GENERATION_6_RESULT.md`.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

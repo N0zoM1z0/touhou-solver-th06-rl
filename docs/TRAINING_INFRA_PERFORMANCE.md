@@ -503,3 +503,13 @@ frame deadline. Every non-performance gate and cleanup also passed. The SSE2
 change therefore resolves the Generation-6 serving blocker without
 distillation or a learner/data change. It does not accelerate original game
 time and does not turn the canary's three HITs into efficacy evidence.
+
+The succeeding six-run complete-Stage-6 panel confirmed that result over a
+substantially longer live workload. The unchanged full seven-member scorer
+processed 25,963 option boundaries and 182,048 controller decisions. Per-run
+p95 ranged from `2.9619` to `3.0019 ms`; only 12 individual boundary scores
+exceeded 4 ms and none missed the 16.67 ms deadline. All runs used the frozen
+0--7 game / 8--31 controller allocation and cleaned their private prefix.
+Thus the optimized native path is not merely a short Stage-4 canary result: it
+is stable across six normal-speed complete Stage-6 executions without
+distillation or changing the learner.

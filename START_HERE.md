@@ -34,8 +34,10 @@ Read in this order:
    result and ineffective-for-continuation verdict;
 11. `docs/AUTONOMOUS_LEARNER_QUALIFICATION.md` for the frozen-corpus rejection
    funnel that must pass before another Wine collection wave;
-12. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the active
-   offline-only estimator hypothesis and experiment boundary;
+12. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the IQL actor
+   development record, followed by its Stage-6 pilot design and
+   `docs/AUTONOMOUS_LEARNER_GENERATION_6_RESULT.md` for the completed positive
+   directional result and non-promotion boundary;
 13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
@@ -44,11 +46,11 @@ Read in this order:
    and conservative-to-source-exact fallback;
 16. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
-Generations 3, 4, and 5 are frozen. Generation 5 stopped at its second
-predeclared Stage-4 fail-fast smoke: Bellman prediction improved, but independent
-populations did not identify a stable action. No new Wine outcome may launch
-until a successor learner passes a frozen-corpus qualification contract that
-is committed before its untouched partition is evaluated.
+Generations 3, 4, and 5 are frozen. Generation 6 passed frozen-corpus
+qualification, native serving, and a six-run original-Wine Stage-6 directional
+pilot: candidate aggregate HIT was 25 versus incumbent 28. The small panel is
+promising but not promotion evidence; a larger confirmation or autonomous
+learning round must be separately frozen before more outcome-facing play.
 
 ## Non-negotiable separation
 
