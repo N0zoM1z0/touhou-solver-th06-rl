@@ -164,4 +164,8 @@ fixed-RNG canary, but normal-speed natural-RNG evaluation ended at baseline 17
 HITs versus candidate 18, so it is frozen as ineffective. See
 `AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` and
 `AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md`. A later attempt is a new declared
-algorithm generation, not a failure-region adjustment.
+algorithm generation, not a failure-region adjustment. Generation 3 is
+declared in `AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md` before new outcomes;
+it changes the general treatment unit, residual learner, representation,
+uncertainty calibration, and evidence strength without adding a TH06 gameplay
+case.

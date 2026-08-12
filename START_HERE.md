@@ -14,9 +14,11 @@ Read in this order:
    generation-2 learner, observation, Hard-empty audit, and evidence contract;
 4. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
    evidence and ineffective verdict;
-5. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+5. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md` for the active option,
+   residual-advantage, representation, calibration, and evidence contract;
+6. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-6. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+7. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 ## Non-negotiable separation
 
