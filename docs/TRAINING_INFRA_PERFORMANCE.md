@@ -322,3 +322,32 @@ the in-sample-weight actor. The hard CPU set remained 0--31 and sampled use was
 about 14 cores during native/actor fitting. This is a 1.40x end-to-end speedup
 from replacing seven bootstrap critics with four purpose-separated critics,
 while producing a statistically stricter result.
+
+## 2026-08-12: native dense actor population preflight
+
+The first formal-width conformance run correctly failed its provisional
+`2e-5` actor tolerance. Across 64 immutable development options, NumPy/BLAS
+versus fixed-order C++ float32 dense accumulation differed by at most
+`6.1035e-5`; native support distance differed by only `2.27e-6`. The earlier
+random small-matrix test was not wide enough to characterize accumulation over
+the production 234-feature representation.
+
+The native actor numerical tolerance is therefore `1e-4`, while support keeps
+`2e-5` and final selected action must match in every conformance case. This is
+about four decimal digits below the unit-scale score and remains guarded by
+exact action equality. The fitted population was checkpointed before native
+scoring, so the follow-up changes neither training data nor model parameters
+and does not refit merely to obtain a favorable native result.
+
+The checkpoint-resumed full path then passed all 64 conformance cases with
+exact action equality. Across 1,200 decisions including native hazard encoding,
+native prototype support, the complete seven-actor forward pass, population
+mean, and action choice, latency measured 2.12 ms median, 2.19 ms p95, and
+3.34 ms maximum with zero 60 Hz deadline misses. This is below the frozen 4 ms
+p95 online budget without distillation.
+
+The rebuilt fully-static 32-bit Windows DLL was independently exercised by the
+embeddable Python under Wine. On seven production actors and 18 deterministic
+candidate rows, all 126 outputs completed and maximum portable-to-Windows error
+was `6.2943e-5`, below the same `1e-4` contract. DLL SHA-256 is
+`0aa7c5a95b90b2df0d032ec02f21fcd3a39be3ba440819d00c0cb025bc641ef0`.

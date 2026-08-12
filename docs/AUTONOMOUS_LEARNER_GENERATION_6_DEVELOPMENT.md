@@ -372,6 +372,24 @@ SHA-256
 It is the development reference for freezing qualification gates, not efficacy
 evidence and not permission to inspect qualification data.
 
+## Frozen full-development candidate preflight
+
+All 31 development episodes were fitted once into a separate immutable
+candidate artifact: one game-neutral hazard codebook, action-conditional local
+support, and seven nested-cross-fit IQL actors. The fit checkpoint is distinct
+from deployment validation so a native scorer defect cannot trigger outcome-
+conditioned retraining. Neither artifact loaded qualification samples.
+
+The final candidate is
+`artifacts/autonomous-generation-6-candidate/candidate-v1.json`, SHA-256
+`aea789ed9fe63aa4a2c0799092675fd287c9b66787ed968d82e82098fbb4ea64`.
+Its pre-native fit checkpoint SHA-256 is
+`4ee6a8e7a7bfeeb7f471a6b0cd0c7b5db1e46aff8c9db8073d4a62bfb1651d5a`.
+It passed 64 portable/native end-to-end conformance cases, 1,200-decision p95
+of 2.19 ms, zero 60 Hz misses, and the 32-bit Wine DLL kernel differential.
+This permits hash-freezing one qualification attempt; it still cannot
+authorize gameplay.
+
 ## Performance contract
 
 All development launchers apply the Linux process-tree CPU affinity contract
