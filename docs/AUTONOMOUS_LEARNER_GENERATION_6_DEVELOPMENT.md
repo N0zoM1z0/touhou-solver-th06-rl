@@ -532,3 +532,13 @@ It is a single normal-speed, natural-RNG, original-Wine complete-Stage-4
 HIT-continuation run with seed `600817`; all scientific and safety contracts
 are unchanged. Its result may only decide whether to freeze a separate
 Stage-6 efficacy pilot.
+
+The first v4 launcher invocation stopped before state creation or game start:
+the exporter still enumerated canary schema versions through v3 despite the
+new contract already being hash-allowlisted. No Wine process, RNG, policy
+decision, HIT, or gameplay report was produced, so the singular frozen run was
+not consumed. The exporter now accepts a versioned Generation-6 schema only
+after its exact contract hash is in the policy allowlist; regression tests
+cover successor versions and malformed/foreign names. The exact v4 state then
+passed the full 64-context portable/Linux/Win32 smoke at `1.2423 ms` Wine p95,
+zero >4 ms samples, and exact actions before any retry.

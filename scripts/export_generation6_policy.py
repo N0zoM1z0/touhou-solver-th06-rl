@@ -47,6 +47,15 @@ def _object(path: Path) -> dict[str, object]:
     return value
 
 
+def valid_canary_schema(value: object) -> bool:
+    prefix = "autonomous-generation-6-wine-canary-v"
+    return (
+        isinstance(value, str)
+        and value.startswith(prefix)
+        and value.removeprefix(prefix).isdigit()
+    )
+
+
 def export_state(
     *,
     candidate_path: Path,
@@ -101,14 +110,10 @@ def export_state(
 
     canary = _object(canary_contract_path)
     canary_sha256 = _sha256(canary_contract_path)
+    canary_schema = canary.get("schema")
     if (
         canary_sha256 not in ALLOWED_CANARY_CONTRACT_SHA256
-        or
-        canary.get("schema") not in (
-            "autonomous-generation-6-wine-canary-v1",
-            "autonomous-generation-6-wine-canary-v2",
-            "autonomous-generation-6-wine-canary-v3",
-        )
+        or not valid_canary_schema(canary_schema)
         or canary.get("candidate_sha256") != EXPECTED_CANDIDATE_SHA256
         or canary.get("qualification_result_sha256")
         != EXPECTED_QUALIFICATION_SHA256
@@ -133,7 +138,7 @@ def export_state(
         authorization["frozen_wine_canary"] = {
             "schema": "autonomous-generation-6-wine-canary-authorization-v1",
             "contract_sha256": canary_sha256,
-            "contract_schema": canary["schema"],
+            "contract_schema": canary_schema,
             "normal_speed": True,
             "natural_rng": True,
             "complete_stage_hit_continuation": True,
