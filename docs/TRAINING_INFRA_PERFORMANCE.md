@@ -359,3 +359,40 @@ Python per-option calls for seven actors, seven leave-one-out policies, and the
 evaluation tree. Native batched scoring already exists and should replace this
 offline loop after the qualification result is frozen; this performance issue
 does not affect the separately measured online path.
+
+## 2026-08-12: complete Wine online-policy preflight
+
+Kernel-only timing understated the resident cost, so Generation 6 added a
+full-path fixture over 64 factual registered Wine option contexts. It executes
+adapter feature validation, native hazard encoding, candidate construction,
+action-conditional support, all seven actors, population mean, and final
+action selection under both Linux and the 32-bit embeddable Python in Wine.
+It requires exact portable/Linux/Windows action equality, p95 below 4 ms, and
+zero 60 Hz misses over 1,200 repeated boundary decisions.
+
+The first honest run failed: actions were exact and Wine had zero frame misses,
+but Wine p95 was `5.1593 ms`. The report is retained at SHA-256
+`969280c18ae2775a1a27b39193a481d13b11dd0dd19b6465bc23873b8a77f27e`.
+Profiling showed repeated Python reconstruction of the same observation,
+baseline action, and schema once per legal candidate. Parsing these once per
+option boundary changed no feature, model, support rule, or action and reduced
+Wine p95 to `3.8651 ms`; report SHA-256 is
+`54602019fb6ee92ad4e4ff3e22879679ef789f82ea0891ac2201e1aa1d343cb6`.
+
+That margin was still unnecessarily small. The dense C++ actor multiplied
+feature-major matrices through a cache-strided loop. Reordering the loop nests
+keeps each output's exact accumulation order while traversing contiguous
+weights. The optimized Linux/Win32 libraries are
+`f0e34ad5b0929b3333e850028f814036786078193176cf08968d6975b3e220fa`
+and
+`e794045cb89e9f6439e4bdfc354325f89a0771a57aa75a4aa654aac9197f2b87`.
+The independent Win32 126-output differential remained below `1e-4`
+(`6.8665e-5` maximum), and the full factual path retained exact choices.
+
+The final frozen-state preflight measured Linux p95 `1.3523 ms` and Wine p95
+`3.2986 ms`, with Wine maximum `3.4282 ms`, zero samples above 4 ms, and zero
+60 Hz misses.
+Its ignored report SHA-256 is
+`0ca3821252b2c8d02591aafbce3534539a19cce9e981b9be697ff1f39899dc0c`.
+This is a pure deployment-infrastructure optimization; the frozen candidate
+and all offline qualification values remain unchanged.

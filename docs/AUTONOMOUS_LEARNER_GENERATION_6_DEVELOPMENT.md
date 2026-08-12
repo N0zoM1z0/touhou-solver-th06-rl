@@ -411,3 +411,20 @@ before model imports or worker creation and use at most 32 inherited CPUs.
 The low-rank teacher may be complex offline. A candidate cannot unlock Wine
 until an equivalent immutable native population is below 4 ms p95 with zero
 60 Hz deadline misses.
+
+## Deployable online handoff
+
+The offline target is now implemented without changing the fitted actor. The
+immutable plug-in loads the complete seven-member population and chooses its
+mean-score positive supported alternative inside the native safe set. It uses
+eight-frame semi-Markov options and the history-independent bounded
+intervention probability audited after qualification. Learner output has no
+collision authority and Bomb remains forbidden.
+
+The first complete Win32 resident-path measurement failed at `5.1593 ms` p95,
+despite the earlier kernel-only pass. That failure was preserved rather than
+relaxing the 4 ms gate. Shared-state feature construction and cache-contiguous
+dense actor loops then reduced Win32 p95 to `3.2986 ms`, with exact portable,
+Linux, and Windows actions on 64 factual Wine contexts and zero deadline
+misses. No corpus, fit parameter, score rule, proposal, or qualification value
+changed. The frozen Stage-4 active wiring canary is the next evidence boundary.

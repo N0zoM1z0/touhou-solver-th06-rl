@@ -142,6 +142,28 @@ post-disclosure development report SHA-256 is
 `f683abf05b0fc1165181c1b922882e8950eae48cb67060e54792e3bc6a86ba8f`.
 This target is the only variant eligible for canary design.
 
+## Generation-6 online authorization boundary
+
+The tracked canary contract is
+`config/autonomous_generation6_wine_canary.json`, SHA-256
+`161d6c0461dcd180777c020f97f701492061beda9610e0fe58bcf31269572f3c`.
+The runtime plug-in hard-binds that contract, the frozen candidate, the
+single-disclosure qualification result, and the deployable-target audit. It
+can rank only the controller-provided native-safe set, never emits Bomb, uses
+the complete seven-actor mean, and applies exactly
+`min(0.10, 2 * 0.10 / native_safe_set_size)` at eight-frame option boundaries.
+Shadow is a deterministic incumbent with probability one. Active canary is
+bounded to 64 interventions and any budget abstention invalidates its evidence.
+
+The complete factual-context Linux/Wine online preflight passed exact action,
+latency, and deadline gates after two model-invariant infrastructure
+optimizations. Wine p95 was `3.2986 ms` across 1,200 boundary scores with zero
+samples above 4 ms and zero 60 Hz misses. Report SHA-256 is
+`0ca3821252b2c8d02591aafbce3534539a19cce9e981b9be697ff1f39899dc0c`.
+This authorizes only the single predeclared normal-speed, natural-RNG,
+complete-Stage-4 wiring canary. A clean pass may freeze a separate alternating
+Stage-6 efficacy pilot; it still does not promote the policy.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

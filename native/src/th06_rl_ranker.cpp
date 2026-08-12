@@ -237,43 +237,66 @@ extern "C" TH06_RL_RANKER_API int th06_rl_score_iql_actor_population_v1(
         float state_latent[128];
         if (hidden_count > 256 || rank_count > 128) return 2;
         for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
-            float value = state_hidden_bias[shb + hidden];
-            for (std::int32_t feature = 0; feature < state_count; ++feature) {
-                value += states[feature] * state_hidden_weight[
-                    shw + feature * hidden_count + hidden];
+            state_hidden[hidden] = state_hidden_bias[shb + hidden];
+        }
+        // Weights are feature-major. Traverse each contiguous hidden row once
+        // while retaining every output's original feature accumulation order.
+        for (std::int32_t feature = 0; feature < state_count; ++feature) {
+            const float input = states[feature];
+            const float* weights = state_hidden_weight + shw +
+                static_cast<std::int64_t>(feature) * hidden_count;
+            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                state_hidden[hidden] += input * weights[hidden];
             }
-            state_hidden[hidden] = std::tanh(value);
+        }
+        for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+            state_hidden[hidden] = std::tanh(state_hidden[hidden]);
         }
         for (std::int32_t rank = 0; rank < rank_count; ++rank) {
-            float value = state_latent_bias[slb + rank];
-            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
-                value += state_hidden[hidden] * state_latent_weight[
-                    slw + hidden * rank_count + rank];
+            state_latent[rank] = state_latent_bias[slb + rank];
+        }
+        for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+            const float input = state_hidden[hidden];
+            const float* weights = state_latent_weight + slw +
+                static_cast<std::int64_t>(hidden) * rank_count;
+            for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+                state_latent[rank] += input * weights[rank];
             }
-            state_latent[rank] = value;
         }
         for (std::int32_t row = 0; row < row_count; ++row) {
             float action_hidden[256];
             float score = action_score_bias[model];
             for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
-                float value = action_hidden_bias[ahb + hidden];
-                for (std::int32_t feature = 0; feature < action_count; ++feature) {
-                    value += actions[row * action_count + feature] *
-                        action_hidden_weight[
-                            ahw + feature * hidden_count + hidden];
+                action_hidden[hidden] = action_hidden_bias[ahb + hidden];
+            }
+            for (std::int32_t feature = 0; feature < action_count; ++feature) {
+                const float input = actions[row * action_count + feature];
+                const float* weights = action_hidden_weight + ahw +
+                    static_cast<std::int64_t>(feature) * hidden_count;
+                for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                    action_hidden[hidden] += input * weights[hidden];
                 }
-                action_hidden[hidden] = std::tanh(value);
+            }
+            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                action_hidden[hidden] = std::tanh(action_hidden[hidden]);
                 score += action_hidden[hidden] * action_score_weight[
                     ahb + hidden];
             }
+            float action_latent[128];
+            for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+                action_latent[rank] = action_latent_bias[alb + rank];
+            }
+            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                const float input = action_hidden[hidden];
+                const float* weights = action_latent_weight + alw +
+                    static_cast<std::int64_t>(hidden) * rank_count;
+                for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+                    action_latent[rank] += input * weights[rank];
+                }
+            }
             float dot = 0.0f;
             for (std::int32_t rank = 0; rank < rank_count; ++rank) {
-                float value = action_latent_bias[alb + rank];
-                for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
-                    value += action_hidden[hidden] * action_latent_weight[
-                        alw + hidden * rank_count + rank];
-                }
-                dot += value * state_latent[rank];
+                dot += action_latent[rank] * state_latent[rank];
             }
             outputs[model * row_count + row] = score + dot * rank_scale;
         }
