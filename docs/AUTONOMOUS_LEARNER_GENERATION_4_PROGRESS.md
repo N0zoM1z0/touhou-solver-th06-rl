@@ -123,3 +123,20 @@ unchanged, the native-safe set remains authoritative, and the shadow critic
 cannot publish an action. After 16 new complete Stages the runner emits the
 predeclared ineffective verdict if no candidate has earned canary
 authorization; there is no manual fallback or winner selection.
+
+## 2026-08-12: full population native path accelerated
+
+The first maximum-load native smoke correctly rejected the unmodified online
+path: seven 128-tree members over 18 safe actions and 256 hazard primitives
+measured 6.93 ms p95, above the fixed 4 ms gate, although it had zero 60 Hz
+deadline misses. The model was not reduced. Inspection showed that the same
+feature matrix was flattened and copied through `ctypes` seven times, once per
+member.
+
+The isolated native scorer now accepts the complete immutable population and
+one shared candidate matrix in a single batch call. It still traverses every
+tree of every member and returns model-major predictions; import checks every
+member against its portable conformance values. Under the identical
+1,200-decision maximum-load smoke, p95 fell to 3.16 ms, maximum latency to 3.26
+ms, and deadline misses remained zero. Thus Generation 4 retains all seven
+128-tree members without distillation or winner selection.

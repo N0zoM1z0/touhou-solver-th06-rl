@@ -28,7 +28,7 @@ from .autonomous_conservative_q import _decode_model
 from .offline_ranker import (
     NATIVE_SCORER_ENV,
     NativePrototypeSupport,
-    NativeXGBoostRegressor,
+    NativeXGBoostPopulation,
     PortablePrototypeSupport,
     PortableXGBoostRegressor,
 )
@@ -53,6 +53,7 @@ class AutonomousSequentialRCriticPolicy:
         self.observation_names: tuple[str, ...] = ()
         self.action_names: tuple[str, ...] = ()
         self.scorers = []
+        self.population_scorer = None
         self.support = None
         self.support_threshold = 0.0
         self.factual_supported_actions: frozenset[str] = frozenset()
@@ -161,10 +162,11 @@ class AutonomousSequentialRCriticPolicy:
             allowed = {str(native_contract.get("sha256", "")), *map(str, compatible)}
             if actual not in allowed:
                 raise ValueError("native Generation-4 scorer is incompatible")
-            scorers = [
-                NativeXGBoostRegressor(path, expected_sha256=actual, portable=model)
-                for model in portable_models
-            ]
+            population_scorer = NativeXGBoostPopulation(
+                path,
+                expected_sha256=actual,
+                portable=portable_models,
+            )
             support_scorer = NativePrototypeSupport(
                 path, expected_sha256=actual, portable=portable_support
             )
@@ -187,22 +189,29 @@ class AutonomousSequentialRCriticPolicy:
                 ):
                     raise ValueError("native Generation-4 hazard encoding differs")
             encoder = native_encoder.encode
-            for scorer, artifact in zip(
-                scorers, map(_decode_model, raw_models), strict=True
+            artifacts = list(map(_decode_model, raw_models))
+            rows = [
+                [float(value) for value in row["features"]]
+                for row in artifacts[0].get("conformance", ())
+            ]
+            if not rows or any(
+                [list(map(float, row["features"])) for row in artifact.get(
+                    "conformance", ()
+                )] != rows
+                for artifact in artifacts
             ):
-                rows = [
-                    [float(value) for value in row["features"]]
-                    for row in artifact.get("conformance", ())
-                ]
+                raise ValueError("population conformance inputs differ")
+            actual_predictions = population_scorer.predict_many(rows)
+            for observed, artifact in zip(
+                actual_predictions, artifacts, strict=True
+            ):
                 expected = [
                     float(row["prediction"])
                     for row in artifact.get("conformance", ())
                 ]
-                if not rows or any(
+                if any(
                     not math.isclose(left, right, rel_tol=2e-5, abs_tol=2e-5)
-                    for left, right in zip(
-                        scorer.predict_many(rows), expected, strict=True
-                    )
+                    for left, right in zip(observed, expected, strict=True)
                 ):
                     raise ValueError("native Generation-4 population differs")
             backend = "native-batch"
@@ -219,6 +228,9 @@ class AutonomousSequentialRCriticPolicy:
             str, state.get("action_feature_names", ())
         ))
         self.scorers = scorers
+        self.population_scorer = (
+            population_scorer if path_value else None
+        )
         self.support = support_scorer
         self.support_threshold = threshold
         self.factual_supported_actions = supported
@@ -272,7 +284,11 @@ class AutonomousSequentialRCriticPolicy:
             and distances[index] <= self.support_threshold
         ]
         self.support_abstentions += len(legal) - 1 - len(supported)
-        predictions = [scorer.predict_many(rows) for scorer in self.scorers]
+        predictions = (
+            self.population_scorer.predict_many(rows)
+            if self.population_scorer is not None
+            else tuple(scorer.predict_many(rows) for scorer in self.scorers)
+        )
         return legal, baseline, supported, predictions
 
     def information_disagreement(self, context) -> dict[str, float]:

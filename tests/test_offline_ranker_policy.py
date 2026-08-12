@@ -20,6 +20,7 @@ from th06_rl.policies.offline_ranker import (
     MODEL_SCHEMA,
     STATE_SCHEMA,
     OfflineRankerPolicy,
+    NativeXGBoostPopulation,
     NativeXGBoostRegressor,
     NativePrototypeSupport,
     PortablePrototypeSupport,
@@ -190,6 +191,16 @@ def test_isolated_native_batch_scorer_matches_portable_model(tmp_path: Path) -> 
         portable.predict_many(rows),
         abs=1e-6,
     )
+    population = NativeXGBoostPopulation(
+        library,
+        expected_sha256=hashlib.sha256(library.read_bytes()).hexdigest(),
+        portable=[portable, portable, portable],
+    )
+    assert population.predict_many(rows) == pytest.approx([
+        portable.predict_many(rows),
+        portable.predict_many(rows),
+        portable.predict_many(rows),
+    ], abs=1e-6)
 
     support_artifact = {
         "mean": [0.5, 1.0],

@@ -36,6 +36,23 @@ TH06_RL_RANKER_API int th06_rl_score_xgboost_v1(
     float base_score,
     float* outputs);
 
+// Score a complete immutable model population over one shared candidate
+// matrix. Tree offsets address the concatenated node array; model-tree
+// offsets partition that tree array. Outputs are model-major. This preserves
+// every tree/member while avoiding repeated feature marshaling across the FFI.
+TH06_RL_RANKER_API int th06_rl_score_xgboost_population_v1(
+    const Th06RlTreeNode* nodes,
+    std::int32_t node_count,
+    const std::int32_t* tree_offsets,
+    std::int32_t tree_count,
+    const std::int32_t* model_tree_offsets,
+    std::int32_t model_count,
+    const float* features,
+    std::int32_t row_count,
+    std::int32_t feature_count,
+    const float* base_scores,
+    float* outputs);
+
 // Compute one locally calibrated support distance for each already-encoded
 // candidate row. Prototype offsets partition a common standardized prototype
 // matrix by stable action index. This function has no game or safety access.

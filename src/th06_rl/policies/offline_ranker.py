@@ -209,6 +209,96 @@ class NativeXGBoostRegressor:
         return tuple(float(value) for value in output)
 
 
+class NativeXGBoostPopulation:
+    """One-copy/one-call native facade for a complete model population."""
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        expected_sha256: str,
+        portable: list[PortableXGBoostRegressor],
+    ) -> None:
+        if not portable:
+            raise ValueError("native scorer population cannot be empty")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != expected_sha256:
+            raise ValueError("native population scorer SHA-256 mismatch")
+        feature_count = portable[0].feature_count
+        if any(model.feature_count != feature_count for model in portable):
+            raise ValueError("native population feature schemas differ")
+        library = ctypes.CDLL(str(path))
+        function = library.th06_rl_score_xgboost_population_v1
+        function.argtypes = [
+            ctypes.POINTER(_TreeNode),
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_int32),
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_int32),
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.c_int32,
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.POINTER(ctypes.c_float),
+        ]
+        function.restype = ctypes.c_int
+        raw_nodes = []
+        tree_offsets = [0]
+        model_tree_offsets = [0]
+        for model in portable:
+            for tree in model.trees:
+                raw_nodes.extend(_TreeNode(*node) for node in tree)
+                tree_offsets.append(len(raw_nodes))
+            model_tree_offsets.append(len(tree_offsets) - 1)
+        self.library = library
+        self.function = function
+        self.nodes = (_TreeNode * len(raw_nodes))(*raw_nodes)
+        self.tree_offsets = (ctypes.c_int32 * len(tree_offsets))(*tree_offsets)
+        self.model_tree_offsets = (
+            ctypes.c_int32 * len(model_tree_offsets)
+        )(*model_tree_offsets)
+        self.base_scores = (ctypes.c_float * len(portable))(*(
+            model.base_score for model in portable
+        ))
+        self.tree_count = len(tree_offsets) - 1
+        self.model_count = len(portable)
+        self.feature_count = feature_count
+
+    def predict_many(
+        self, rows: list[list[float]]
+    ) -> tuple[tuple[float, ...], ...]:
+        if not rows:
+            return tuple(() for _index in range(self.model_count))
+        if any(len(row) != self.feature_count for row in rows):
+            raise ValueError("native population feature vector length mismatch")
+        flat = (ctypes.c_float * (len(rows) * self.feature_count))(
+            *(value for row in rows for value in row)
+        )
+        output = (ctypes.c_float * (self.model_count * len(rows)))()
+        status = self.function(
+            self.nodes,
+            len(self.nodes),
+            self.tree_offsets,
+            self.tree_count,
+            self.model_tree_offsets,
+            self.model_count,
+            flat,
+            len(rows),
+            self.feature_count,
+            self.base_scores,
+            output,
+        )
+        if status != 0:
+            raise RuntimeError(
+                f"native population scorer failed with status {status}"
+            )
+        return tuple(
+            tuple(float(output[model * len(rows) + row]) for row in range(len(rows)))
+            for model in range(self.model_count)
+        )
+
+
 class PortablePrototypeSupport:
     """Reference evaluator for per-action standardized local support."""
 

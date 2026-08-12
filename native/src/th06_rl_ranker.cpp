@@ -59,6 +59,74 @@ extern "C" TH06_RL_RANKER_API int th06_rl_score_xgboost_v1(
     return 0;
 }
 
+extern "C" TH06_RL_RANKER_API int th06_rl_score_xgboost_population_v1(
+    const Th06RlTreeNode* nodes,
+    const std::int32_t node_count,
+    const std::int32_t* tree_offsets,
+    const std::int32_t tree_count,
+    const std::int32_t* model_tree_offsets,
+    const std::int32_t model_count,
+    const float* features,
+    const std::int32_t row_count,
+    const std::int32_t feature_count,
+    const float* base_scores,
+    float* outputs) {
+    if (nodes == nullptr || tree_offsets == nullptr ||
+        model_tree_offsets == nullptr || features == nullptr ||
+        base_scores == nullptr || outputs == nullptr || node_count <= 0 ||
+        tree_count <= 0 || model_count <= 0 || row_count <= 0 ||
+        feature_count <= 0 || tree_offsets[0] != 0 ||
+        tree_offsets[tree_count] != node_count ||
+        model_tree_offsets[0] != 0 ||
+        model_tree_offsets[model_count] != tree_count) {
+        return 1;
+    }
+    for (std::int32_t tree = 0; tree < tree_count; ++tree) {
+        if (tree_offsets[tree] < 0 ||
+            tree_offsets[tree] >= tree_offsets[tree + 1] ||
+            tree_offsets[tree + 1] > node_count) {
+            return 2;
+        }
+    }
+    for (std::int32_t model = 0; model < model_count; ++model) {
+        if (model_tree_offsets[model] < 0 ||
+            model_tree_offsets[model] >= model_tree_offsets[model + 1] ||
+            model_tree_offsets[model + 1] > tree_count ||
+            !std::isfinite(base_scores[model])) {
+            return 3;
+        }
+    }
+    for (std::int32_t model = 0; model < model_count; ++model) {
+        const std::int32_t first_tree = model_tree_offsets[model];
+        const std::int32_t last_tree = model_tree_offsets[model + 1];
+        for (std::int32_t row = 0; row < row_count; ++row) {
+            float score = base_scores[model];
+            const float* row_features = features + row * feature_count;
+            for (std::int32_t tree = first_tree; tree < last_tree; ++tree) {
+                const std::int32_t start = tree_offsets[tree];
+                const std::int32_t size = tree_offsets[tree + 1] - start;
+                std::int32_t node_index = 0;
+                for (std::int32_t steps = 0; steps <= size; ++steps) {
+                    if (node_index < 0 || node_index >= size) return 4;
+                    const Th06RlTreeNode& node = nodes[start + node_index];
+                    if (node.feature < 0) {
+                        score += node.leaf;
+                        break;
+                    }
+                    if (node.feature >= feature_count) return 5;
+                    const float value = row_features[node.feature];
+                    node_index = std::isnan(value)
+                        ? node.missing
+                        : value < node.threshold ? node.left : node.right;
+                    if (steps == size) return 6;
+                }
+            }
+            outputs[model * row_count + row] = score;
+        }
+    }
+    return 0;
+}
+
 extern "C" TH06_RL_RANKER_API int th06_rl_min_support_distance_v1(
     const float* features,
     const std::int32_t row_count,
