@@ -11,6 +11,7 @@ from scripts.run_autonomous_learning_v3 import (
     FINAL_PAIRS,
     FIT_BOUNDARIES,
     GENERATION_SEED,
+    _reconcile_resume_contract,
     _rate_ratio,
     _round_seeds,
     parse_args,
@@ -76,3 +77,37 @@ def test_changed_preflight_contract_archives_cache_before_rerun(
 
     assert archived == [root]
     assert (tmp_path / "old/preflight.json").is_file()
+
+
+def test_generation3_resume_allows_only_declared_infra_contract_migration() -> None:
+    old_hash = (
+        "a3ee86163d1e0f80546d6a48a20410852ac9a5df58e032947adf7f6094341c49"
+    )
+    new_hash = (
+        "c0daeb55e892a854b7be1bf4694535b8dfb404405db27cc31da839a8c9e9aa10"
+    )
+    state = {
+        "schema": "autonomous-wine-learning-generation-v3",
+        "status": "infra_failure",
+        "infra_failure": "RuntimeError: Generation-3 fit failed with 1",
+        "config": {"preflight_contract_sha256": old_hash, "stage": 6},
+        "episodes": [{"episode": index} for index in range(12)],
+    }
+    config = {"preflight_contract_sha256": new_hash, "stage": 6}
+
+    assert _reconcile_resume_contract(state, config) is True
+    assert state["config"] == config
+    migration = state["infra_migrations"][0]
+    assert migration["preserved_collection_episodes"] == 12
+    assert migration["outcome_or_schedule_fields_changed"] is False
+
+    changed_schedule = {
+        "schema": "autonomous-wine-learning-generation-v3",
+        "status": "infra_failure",
+        "config": {"preflight_contract_sha256": old_hash, "stage": 6},
+    }
+    with pytest.raises(RuntimeError, match="changed contract"):
+        _reconcile_resume_contract(
+            changed_schedule,
+            {"preflight_contract_sha256": new_hash, "stage": 8},
+        )

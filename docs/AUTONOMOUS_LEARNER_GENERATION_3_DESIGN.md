@@ -95,6 +95,13 @@ Bellman returns operate on option boundaries as an undiscounted semi-Markov
 process and retain physical elapsed frames. Undiscounted return is deliberate:
 it is the recursive sum of remaining physical HITs and therefore matches the
 final complete-Stage hit-count objective without a hand-chosen time preference.
+Only a factually executed randomized assignment creates a new decision
+boundary. A tentative assignment rejected before execution cannot truncate the
+preceding factual interval. Physical HITs observed during the ordinary
+death/invulnerability lifecycle gap remain in that interval and therefore in
+all earlier complete-Stage returns; they are never relabeled as outcomes of the
+rejected action. HITs before the first factual option are recorded separately,
+and transition, interval, prefix, and manifest counts must conserve exactly.
 HIT remains the sole gameplay cost. No Hard-empty,
 clearance, survival bonus, stage progress, source phase, or teacher score is
 added to reward. Native geometry and self-supervised representation targets

@@ -121,6 +121,14 @@ clipped by a predeclared bound. The initial model is a small regularized
 action-relative residual with grouped out-of-fold uncertainty; richer model
 families require general held-out evidence and a new generation.
 
+For option-boundary complete-Stage returns, a rejected tentative option is not
+a treatment or a new decision boundary. Physical HITs that appear while
+learning is paused for the normal death/invulnerability lifecycle remain part
+of the preceding factual interval and all earlier returns. Prefix HITs before
+the first factual boundary are reported separately. Transition HITs, factual
+interval HITs, prefix HITs, and manifest HITs must conserve exactly; accounting
+may neither discard a HIT nor assign one to an action Wine did not execute.
+
 ## Runtime and promotion invariants
 
 - Capture is coherent and publication is preceded by a fresh issue check.

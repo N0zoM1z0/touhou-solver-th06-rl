@@ -8,6 +8,7 @@ from th06_rl.advantage_learning import (
     audit_wine_option_smoke,
     doubly_robust_advantages,
     fit_dr_option_advantage,
+    load_option_episode,
     run_causal_recovery_smoke,
 )
 from th06_rl.learning_features import tree_feature_names
@@ -242,3 +243,93 @@ def test_short_wine_smoke_audits_options_without_becoming_evidence(
     assert report["passed"] is True
     assert report["evidence_eligible"] is False
     assert report["rejected_option_rows"] == 2
+
+
+def test_option_loader_conserves_prefix_and_unexecuted_gap_hits(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    import th06_rl.advantage_learning as module
+
+    run = {"run_id": "wine-stage"}
+    manifest = {"run_outcome": {"physical_hits": 2}}
+    monkeypatch.setattr(module, "_validate_run", lambda _path: (run, manifest))
+    monkeypatch.setattr(module, "_frame", lambda value: int(value))
+    monkeypatch.setattr(module, "_vector", lambda _row, _action: (0.0,))
+    monkeypatch.setattr(module, "_representation_inputs", lambda _row: (
+        ((0.0,) * len(HAZARD_PRIMITIVE_FEATURE_NAMES),),
+        (0.0,) * len(HISTORY_FEATURE_NAMES),
+    ))
+
+    def row(
+        sequence: int,
+        *,
+        option=None,
+        executed=None,
+        hit: bool = False,
+        eligible: bool = False,
+    ) -> dict[str, object]:
+        return {
+            "sequence": sequence,
+            "snapshot_ref": str(sequence),
+            "policy_id": "safe-option-exploration-v1",
+            "legal_actions": ["stay", "left"],
+            "baseline_action": "stay",
+            "executed_action": executed,
+            "behavior_probability": (
+                float(option["boundary_probability"])
+                if isinstance(option, dict) else 1.0
+            ),
+            "learning_eligible": eligible,
+            "outcome_terms": {
+                "life_lost": hit,
+                "bomb_used": False,
+                "authority_lost": False,
+                "elapsed_frames": 1,
+            },
+            "option": option,
+        }
+
+    first = {
+        "option_id": "first",
+        "boundary": True,
+        "intent": "left",
+        "boundary_probability": 0.05,
+        "termination_reason": None,
+    }
+    rejected = {
+        "option_id": "rejected",
+        "boundary": True,
+        "intent": "left",
+        "boundary_probability": 0.05,
+        "termination_reason": "hard-empty",
+        "preceding_termination_reason": "hard-empty",
+    }
+    second = {
+        "option_id": "second",
+        "boundary": True,
+        "intent": "stay",
+        "boundary_probability": 0.95,
+        "termination_reason": "complete-stage-tail",
+    }
+    rows = [
+        row(0, hit=True),
+        row(1, option=first, executed="left", eligible=True),
+        row(2, option=rejected, executed="stay"),
+        row(3, hit=True),
+        row(4, option=second, executed="stay", eligible=True),
+    ]
+    monkeypatch.setattr(module, "_rows", lambda *_args: iter(rows))
+
+    samples, report = load_option_episode(
+        tmp_path,
+        exploration_probability=0.10,
+    )
+
+    assert [sample.option_id for sample in samples] == ["first", "second"]
+    assert [sample.option_hit_cost for sample in samples] == [1.0, 0.0]
+    assert [sample.return_to_go for sample in samples] == [1.0, 0.0]
+    assert report["physical_hits"] == 2
+    assert report["option_interval_hits"] == 1
+    assert report["pre_option_hits"] == 1
+    assert report["excluded"] == {"hard-empty": 1}

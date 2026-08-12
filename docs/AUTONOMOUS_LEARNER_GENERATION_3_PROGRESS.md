@@ -139,3 +139,33 @@ episode 0 recorded 38 physical HITs and episode 1 recorded 32. These are
 training outcomes only, not an interim efficacy comparison and not authority
 to alter the committed schedule. Collection continues toward the first
 12-episode grouped fit.
+
+## 2026-08-12: first fit smoke exposed HIT-accounting infra defect
+
+The unattended collector reached its first predeclared boundary with 12 clean,
+complete Wine Stages: 422 physical HITs total, 35.17 per Stage, range 22--44,
+zero dropped records, and zero recorded infrastructure failures. The first fit
+stopped before model training because the option loader required every HIT row
+to coincide with a currently factual option.
+
+Transition replay proved that this assumption was false in all 12 episodes.
+The controller correctly suspends learnable options around physical HIT and
+the death/invulnerability lifecycle, so the HIT transition commonly has no
+option. Rejected tentative boundaries had also prematurely closed the prior
+factual semi-Markov interval. This was factual label/HIT accounting, not weak
+gameplay and not authority to change reward, seeds, actions, option duration,
+data distribution, model family, or gates.
+
+The general repair makes only factually executed randomized assignments new
+decision boundaries. A rejected assignment remains excluded, while elapsed
+time and physical outcomes continue in the preceding factual interval until
+the next factual boundary. Prefix HITs are explicit, and two independent
+conservation checks require transition HITs to equal the manifest and factual
+interval plus prefix HITs to equal the same manifest. Replaying all 12 frozen
+corpora after the repair accounted for all 422 HITs exactly with zero prefix
+HITs and without converting any rejected option into a learner sample.
+
+The existing evidence corpus is preserved. Resume permits exactly the audited
+old/new preflight hash pair, records the migration in `generation.json`, and
+rejects every schedule/outcome/config change. A new causal plus short Wine
+preflight must pass under the repaired hash before fitting resumes.

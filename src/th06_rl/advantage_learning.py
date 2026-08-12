@@ -238,11 +238,19 @@ def load_option_episode(
     grouped: list[dict[str, object]] = []
     current: dict[str, object] | None = None
     excluded: Counter[str] = Counter()
-    unassigned_hits = 0
+    pre_option_hits = 0
+    physical_hit_rows = 0
     for row in rows:
         option = row.get("option")
         if option is not None and not isinstance(option, dict):
             raise TypeError("option trace is not an object")
+        outcome = row.get("outcome_terms")
+        if not isinstance(outcome, dict):
+            raise TypeError("transition row has no physical outcome")
+        if outcome.get("bomb_used") is True or outcome.get("authority_lost") is True:
+            raise ValueError("invalid physical outcome inside training option")
+        hit_cost = float(outcome.get("life_lost") is True)
+        physical_hit_rows += int(hit_cost)
         option_id = (
             str(option.get("option_id", "")) if option is not None else ""
         )
@@ -252,31 +260,38 @@ def load_option_episode(
         action = str(option.get("intent", "")) if option is not None else ""
         executed = row.get("executed_action")
         if option is not None and executed != action:
-            outcome = row.get("outcome_terms")
             if (
                 option.get("termination_reason")
                 not in NONEXECUTED_OPTION_TERMINATIONS
                 or row.get("learning_eligible") is not False
-                or not isinstance(outcome, dict)
             ):
                 raise ValueError("unpublished option is not explicitly rejected")
-            if current is not None and option_id == current["option_id"]:
-                if outcome.get("life_lost") is True:
-                    raise ValueError("HIT occurred during an unfactual option gap")
-                current["termination"] = "publication-rejected"
-                grouped.append(current)
-                current = None
-            elif current is not None and boundary:
+            excluded[str(option.get("termination_reason"))] += 1
+            if (
+                current is not None
+                and not boundary
+                and option_id != current["option_id"]
+            ):
+                raise ValueError("unpublished continuation has no factual boundary")
+            if current is not None:
+                # A rejected tentative assignment is not a treatment boundary.
+                # Keep physical time and outcomes in the interval that began at
+                # the preceding factual boundary until another factual boundary
+                # actually occurs.  Otherwise normal death/lifecycle gaps erase
+                # HITs from the complete-Stage return.
+                current["hit_cost"] = float(current["hit_cost"]) + hit_cost
+                current["physical_elapsed"] = int(
+                    current["physical_elapsed"]
+                ) + int(outcome.get("elapsed_frames", 0))
                 if current["termination"] is None:
                     current["termination"] = str(
-                        option.get("preceding_termination_reason")
-                        or "next-option-boundary"
+                        "publication-rejected"
+                        if option_id == current["option_id"]
+                        else option.get("preceding_termination_reason")
+                        or "unexecuted-option-boundary"
                     )
-                grouped.append(current)
-                current = None
-            elif not boundary:
-                raise ValueError("unpublished continuation has no factual boundary")
-            unassigned_hits += int(outcome.get("life_lost") is True)
+            else:
+                pre_option_hits += int(hit_cost)
             continue
         if boundary:
             if current is not None:
@@ -331,17 +346,10 @@ def load_option_episode(
                 raise ValueError("continuation row escaped its option boundary")
             if str(option.get("intent", "")) != current["action"]:
                 raise ValueError("option intent changed inside a treatment")
-        outcome = row.get("outcome_terms")
-        if not isinstance(outcome, dict):
-            raise TypeError("transition row has no physical outcome")
-        if outcome.get("bomb_used") is True or outcome.get("authority_lost") is True:
-            raise ValueError("invalid physical outcome inside training option")
         if current is None:
-            unassigned_hits += int(outcome.get("life_lost") is True)
+            pre_option_hits += int(hit_cost)
             continue
-        current["hit_cost"] = float(current["hit_cost"]) + float(
-            outcome.get("life_lost") is True
-        )
+        current["hit_cost"] = float(current["hit_cost"]) + hit_cost
         current["physical_elapsed"] = int(current["physical_elapsed"]) + int(
             outcome.get("elapsed_frames", 0)
         )
@@ -354,8 +362,6 @@ def load_option_episode(
         if current["termination"] is None:
             current["termination"] = "complete-stage-tail"
         grouped.append(current)
-    if unassigned_hits:
-        raise ValueError("physical HIT occurred before the first option boundary")
     if not grouped:
         raise ValueError("complete Stage has no randomized option boundaries")
 
@@ -396,15 +402,20 @@ def load_option_episode(
         labeled.append(replace(step, return_to_go=return_value))
     labeled.reverse()
     outcome = manifest["run_outcome"]
-    observed_hits = int(sum(step.option_hit_cost for step in labeled))
-    if observed_hits != int(outcome["physical_hits"]):
+    interval_hits = int(sum(step.option_hit_cost for step in labeled))
+    manifest_hits = int(outcome["physical_hits"])
+    if physical_hit_rows != manifest_hits:
+        raise ValueError("transition rows and manifest disagree on physical HITs")
+    if interval_hits + pre_option_hits != manifest_hits:
         raise ValueError("option aggregation did not account for every physical HIT")
     return labeled, {
         "episode_id": episode_id,
         "run_dir": str(run_dir),
         "transitions": len(rows),
         "options": len(labeled),
-        "physical_hits": observed_hits,
+        "physical_hits": manifest_hits,
+        "option_interval_hits": interval_hits,
+        "pre_option_hits": pre_option_hits,
         "option_terminations": dict(Counter(
             step.termination_reason for step in labeled
         )),

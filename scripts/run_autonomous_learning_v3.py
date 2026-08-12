@@ -66,6 +66,18 @@ INFRA_EVENTS = frozenset({
     "system-memory-stop",
     "system-memory-unavailable",
 })
+ALLOWED_PREFLIGHT_CONTRACT_MIGRATIONS = {
+    (
+        "a3ee86163d1e0f80546d6a48a20410852ac9a5df58e032947adf7f6094341c49",
+        "c0daeb55e892a854b7be1bf4694535b8dfb404405db27cc31da839a8c9e9aa10",
+    ): {
+        "id": "generation-3-option-interval-hit-accounting-v1",
+        "reason": (
+            "preserve complete-Stage physical HITs across non-treatment "
+            "lifecycle gaps without treating rejected options as factual"
+        ),
+    },
+}
 
 
 def _atomic_json(path: Path, value: object) -> None:
@@ -272,6 +284,54 @@ def _config(args: argparse.Namespace) -> dict[str, object]:
         "wine_native_scorer_sha256": _sha256(args.wine_native_scorer),
         "host_native_scorer_sha256": _sha256(args.host_native_scorer),
     }
+
+
+def _reconcile_resume_contract(
+    state: dict[str, Any],
+    config: dict[str, object],
+) -> bool:
+    """Permit only an explicitly audited, corpus-preserving infra repair."""
+    if state.get("schema") != SCHEMA:
+        raise RuntimeError("refusing Generation-3 resume with changed contract")
+    previous = state.get("config")
+    if previous == config:
+        return False
+    if not isinstance(previous, dict):
+        raise RuntimeError("refusing Generation-3 resume with changed contract")
+    changed = {
+        key for key in set(previous) | set(config)
+        if previous.get(key) != config.get(key)
+    }
+    migration = ALLOWED_PREFLIGHT_CONTRACT_MIGRATIONS.get((
+        str(previous.get("preflight_contract_sha256", "")),
+        str(config.get("preflight_contract_sha256", "")),
+    ))
+    if (
+        changed != {"preflight_contract_sha256"}
+        or migration is None
+        or state.get("status") != "infra_failure"
+    ):
+        raise RuntimeError("refusing Generation-3 resume with changed contract")
+    migrations = state.setdefault("infra_migrations", [])
+    if not isinstance(migrations, list):
+        raise TypeError("Generation-3 infrastructure migration log is invalid")
+    migrations.append({
+        "schema": "autonomous-generation-3-infra-migration-v1",
+        "id": migration["id"],
+        "reason": migration["reason"],
+        "from_preflight_contract_sha256": previous[
+            "preflight_contract_sha256"
+        ],
+        "to_preflight_contract_sha256": config[
+            "preflight_contract_sha256"
+        ],
+        "preserved_collection_episodes": len(state.get("episodes", ())),
+        "preserved_transition_schema": "th06-rl-transition-v9",
+        "outcome_or_schedule_fields_changed": False,
+        "triggering_failure": state.get("infra_failure"),
+    })
+    state["config"] = config
+    return True
 
 
 def _fit(
@@ -628,8 +688,8 @@ def run(args: argparse.Namespace) -> int:
     config = _config(args)
     if state_path.is_file():
         state = _object(state_path)
-        if state.get("schema") != SCHEMA or state.get("config") != config:
-            raise RuntimeError("refusing Generation-3 resume with changed contract")
+        if _reconcile_resume_contract(state, config):
+            _atomic_json(state_path, state)
         if state.get("status") == "complete":
             print(json.dumps(state["decision"], sort_keys=True))
             return 0
