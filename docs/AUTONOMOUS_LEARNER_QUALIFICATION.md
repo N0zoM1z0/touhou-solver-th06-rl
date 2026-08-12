@@ -220,6 +220,18 @@ budget, natural-RNG complete-Stage mode, CPU allocation, and every gate. It
 authorizes one Stage-4 wiring run only; neither the SSE2 preflight nor a wiring
 pass is Stage-6 efficacy evidence.
 
+Canary v4 passed all gates. It completed Stage 4 with three physical HITs,
+155 proposals, two interventions, `2.8751 ms` live p95, one >4 ms sample, and
+zero deadline misses. Immutable state, original executable/scorer hashes,
+native-safe publication, Bomb prohibition, natural RNG, complete accounting,
+CPU partitions, zero infrastructure events, and cleanup all passed. Report
+SHA-256 is
+`ba794378d0e08ae754b3af7677e8eb73484a14c84e69385940a6eea33ab1ba37`;
+result SHA-256 is
+`bc56644aa96a0d7c0319dbab58bd3e05e51cfaa9b78aa29588e26a1a10b071e9`.
+The HIT count remains wiring-only. This authorizes design and precommitment of
+a separate alternating Stage-6 efficacy pilot, not policy promotion.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

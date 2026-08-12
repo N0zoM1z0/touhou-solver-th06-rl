@@ -542,3 +542,19 @@ after its exact contract hash is in the policy allowlist; regression tests
 cover successor versions and malformed/foreign names. The exact v4 state then
 passed the full 64-context portable/Linux/Win32 smoke at `1.2423 ms` Wine p95,
 zero >4 ms samples, and exact actions before any retry.
+
+The frozen v4 original-Wine run then passed every wiring gate. The normal-
+speed, natural-RNG Stage 4 completed with three physical HITs, 155 proposals,
+and two sampled interventions across 3,885 option boundaries. Resident p95 was
+`2.8751 ms`; only one sample exceeded 4 ms and none crossed the 60 Hz deadline.
+The policy state and all input hashes were immutable, every selected action was
+native-safe, Bomb/corpus/infra/budget abstention remained zero, and the private
+prefix cleaned completely. Report SHA-256 is
+`ba794378d0e08ae754b3af7677e8eb73484a14c84e69385940a6eea33ab1ba37`;
+result SHA-256 is
+`bc56644aa96a0d7c0319dbab58bd3e05e51cfaa9b78aa29588e26a1a10b071e9`.
+
+The three-HIT observation remains wiring-only and is not compared with prior
+canaries or an incumbent. This pass closes the deployment-infrastructure
+blocker and permits freezing a separate alternating complete-Stage-6 efficacy
+pilot; it does not promote Generation 6 by itself.

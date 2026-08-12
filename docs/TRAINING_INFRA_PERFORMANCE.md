@@ -495,3 +495,11 @@ full-path report SHA-256 is
 `45267dd8dc0c434702482ec71503c58b8a38d97500fd1b7fa67f65c806fa0071`.
 This creates enough measured margin to freeze a new wiring identity; it does
 not retroactively pass v3 or authorize Stage-6 efficacy by itself.
+
+The frozen v4 live canary confirmed the margin under the complete co-resident
+game/capture workload. Resident p95 was `2.8751 ms`, down from v3's
+`4.0678 ms`; one of 3,885 boundary scores exceeded 4 ms and none exceeded the
+frame deadline. Every non-performance gate and cleanup also passed. The SSE2
+change therefore resolves the Generation-6 serving blocker without
+distillation or a learner/data change. It does not accelerate original game
+time and does not turn the canary's three HITs into efficacy evidence.
