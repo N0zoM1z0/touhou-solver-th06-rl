@@ -150,3 +150,16 @@ reduced p95 to 2.19 ms and maximum latency to 2.36 ms. Passed causal/native
 offline preflight artifacts are now contract- and scorer-hash cached so an
 unrelated Wine startup failure can be retried without refitting or weakening a
 gate.
+
+The first retail-Wine v10 smoke then exposed an audit distinction rather than
+a safety failure. Twelve input-lease/observation-gap continuation rows carried
+no boundary baseline, but every executed intent equalled their singleton
+native-safe action. The audit had incorrectly required a baseline on
+continuations. It also compared 998 fully recorded tentative assignments
+against only 270 factually executed boundaries; 728 tentative boundaries had
+been explicitly rejected and their ESS updates rolled back. The repaired
+audit requires baseline membership only at treatment boundaries, requires
+executed intent membership on every option row, verifies propensity/
+information/ESS vectors for all 998 assignments, and admits only the 270
+executed boundaries as factual treatments. The captured non-evidence corpus
+then passed every wiring and safety gate without changing policy behavior.

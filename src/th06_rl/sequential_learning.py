@@ -712,7 +712,8 @@ def audit_propensity_wine_smoke(
             "trace_failures",
         )
     ) and outcome.get("corpus_failure") is None
-    boundaries = continuations = non_incumbent = horizon_terminations = 0
+    boundaries = tentative_boundaries = 0
+    continuations = non_incumbent = horizon_terminations = 0
     executed_rows = rejected_rows = representation_boundaries = 0
     probability_vectors = diagnostic_vectors = minimum_probability_witnesses = 0
     active_option_id: str | None = None
@@ -731,15 +732,15 @@ def audit_propensity_wine_smoke(
         legal = tuple(map(str, legal_raw))
         baseline = str(row.get("baseline_action", ""))
         action = str(option.get("intent", ""))
+        boundary = option.get("boundary") is True
         if (
             not legal
             or len(set(legal)) != len(legal)
-            or baseline not in legal
             or action not in legal
+            or (boundary and baseline not in legal)
         ):
             raise ValueError("Generation-4 Wine option escaped native safety")
         option_id = str(option.get("option_id", ""))
-        boundary = option.get("boundary") is True
         elapsed = int(option.get("elapsed_frames_at_decision", 0))
         if not option_id or not 1 <= elapsed <= OPTION_HORIZON_FRAMES:
             raise ValueError("Generation-4 Wine option identity/horizon failed")
@@ -755,6 +756,7 @@ def audit_propensity_wine_smoke(
         ):
             raise ValueError("Generation-4 conditional propensity is invalid")
         if boundary:
+            tentative_boundaries += 1
             vectors = {}
             for field in ("behavior_probabilities", "information_weights", "propensity_ess"):
                 raw = option.get(field)
@@ -833,9 +835,15 @@ def audit_propensity_wine_smoke(
         "non_incumbent_witnessed": non_incumbent >= 1,
         "continuation_witnessed": continuations >= 1,
         "horizon_termination_witnessed": horizon_terminations >= 1,
-        "complete_propensity_vectors": probability_vectors == boundaries,
-        "complete_information_and_ess_vectors": diagnostic_vectors == boundaries,
-        "bounded_minimum_propensity": minimum_probability_witnesses == boundaries,
+        "complete_propensity_vectors": (
+            probability_vectors == tentative_boundaries
+        ),
+        "complete_information_and_ess_vectors": (
+            diagnostic_vectors == tentative_boundaries
+        ),
+        "bounded_minimum_propensity": (
+            minimum_probability_witnesses == tentative_boundaries
+        ),
         "representation_at_every_boundary": representation_boundaries == boundaries,
         "input_lease_witnessed": input_lease_rows >= 1,
         "executed_rows_native_safe": executed_rows > 0,
@@ -844,6 +852,7 @@ def audit_propensity_wine_smoke(
         "schema": "autonomous-generation-4-wine-propensity-smoke-v1",
         "run_dir": str(run_dir),
         "evidence_eligible": False,
+        "tentative_option_boundaries": tentative_boundaries,
         "option_boundaries": boundaries,
         "option_continuations": continuations,
         "non_incumbent_boundaries": non_incumbent,
