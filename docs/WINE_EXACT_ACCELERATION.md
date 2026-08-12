@@ -61,3 +61,10 @@ Offline work is semantically exact and can exploit the host aggressively:
 Acceleration never changes reward, successor state, RNG eligibility, action
 authority, model population, or promotion criteria. Final measurement remains
 the original Wine process at normal speed over complete natural-RNG Stages.
+
+The implemented factual-option cache lives under ignored
+`artifacts/cache/audited-option-episodes/`. Its key contains the complete
+manifest SHA-256 and loader-source contract SHA-256; its metadata also binds the
+absolute run identity and payload SHA-256. It never accepts a partial pair or
+mismatched digest. Cache creation calls the ordinary full loader first, so the
+first use still verifies every transition shard and factual/HIT invariant.

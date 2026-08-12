@@ -21,6 +21,15 @@ from th06_rl.advantage_learning import (  # noqa: E402
     fit_hazard_codebook,
 )
 from th06_rl.implicit_learning import crossfit_implicit_q_report  # noqa: E402
+from th06_rl.option_cache import load_cached_option_episode  # noqa: E402
+
+
+OPTION_CACHE_CONTRACT = (
+    REPOSITORY / "src/th06_rl/advantage_learning.py",
+    REPOSITORY / "src/th06_rl/autonomous_learning.py",
+    REPOSITORY / "src/th06_rl/corpus.py",
+    REPOSITORY / "scripts/fit_supported_implicit_q.py",
+)
 
 
 def _sha256(path: Path) -> str:
@@ -36,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--q-trees", type=int, default=8)
     parser.add_argument("--value-trees", type=int, default=8)
     parser.add_argument("--threads", type=int, default=48)
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=REPOSITORY / "artifacts/cache/audited-option-episodes",
+    )
     args = parser.parse_args(argv)
     if args.output.exists():
         raise FileExistsError(f"refusing to replace smoke report: {args.output}")
@@ -43,14 +57,24 @@ def main(argv: list[str] | None = None) -> int:
     if len(runs) < 10:
         parser.error("Wine smoke needs at least ten complete episodes")
     started = time.perf_counter()
-    loaded = [_load(run) for run in runs]
+    cached = [load_cached_option_episode(
+        run,
+        loader=_load,
+        cache_root=args.cache_dir,
+        contract_files=OPTION_CACHE_CONTRACT,
+    ) for run in runs]
+    loaded = [(rows, report) for rows, report, _hit in cached]
     loaded_at = time.perf_counter()
     samples = [sample for rows, _report in loaded for sample in rows]
+    new_episode_ids = frozenset(
+        rows[0].episode_id for rows, _report in loaded[-16:]
+    )
     representation = fit_hazard_codebook(samples, seed=290_813)
     augmented = _augment_steps(samples, representation)
     augmented_at = time.perf_counter()
     report = crossfit_implicit_q_report(
         augmented,
+        new_episode_ids=new_episode_ids,
         iterations=args.iterations,
         n_step_options=args.n_step_options,
         q_trees=args.q_trees,
@@ -68,7 +92,13 @@ def main(argv: list[str] | None = None) -> int:
             "manifest_sha256": _sha256(run / "manifest.json"),
         } for run in runs],
         "episode_groups": len(runs),
+        "new_development_episode_groups": len(new_episode_ids),
         "options": len(samples),
+        "option_cache": {
+            "hits": sum(hit for _rows, _report, hit in cached),
+            "misses": sum(not hit for _rows, _report, hit in cached),
+            "root": str(args.cache_dir.resolve()),
+        },
         "parameters": {
             "iterations": args.iterations,
             "n_step_options": args.n_step_options,

@@ -159,3 +159,31 @@ reproducer, contract test, and audit note: capture/action timing, memory
 semantics, factual alignment, process isolation, artifact integrity, native
 geometry, or HIT accounting. Changing data quotas, reward, action preferences,
 or activation around a gameplay failure is forbidden.
+
+## 6. Conditional Stage 4 -> 5 -> 6 curriculum diagnostic
+
+If the non-authorizing frozen Stage-6 development smoke cannot show both
+held-out residual-Q improvement and stable pessimistic decisions, do not spend
+the 16-new-Stage Generation-5 Stage-6 budget blindly. Instead, before any such
+outcome, a separate curriculum-probe seed manifest must freeze the following
+ascending schedule:
+
+1. collect 20 complete Stage-4 episodes with the unchanged behavior, feature,
+   reward, native-safe, learner, and validation contracts; fit only at the
+   predeclared 10/15/20 boundaries, and permit a Stage-4 canary only after the
+   ordinary minimum-20 overall/new-cohort gates pass;
+2. only after a successful Stage-4 canary, add 12 complete Stage-5 episodes at
+   fixed 8/12 boundaries and require both overall and Stage-5-new-cohort gates
+   before a Stage-5 canary;
+3. only after a successful Stage-5 canary, return to the declared Stage-6
+   schedule. Stage-4/5 data may initialize the generic factual learner, but all
+   Stage-6 authorization gates are recomputed on new Stage-6 episodes.
+
+A failed 20-episode Stage-4 probe falsifies practical learnability of this
+generation and stops it. Passing Stage 4 but failing Stage 5 identifies a
+complexity/transfer limit; it does not authorize manual gameplay tuning.
+Stage-4 or Stage-5 HIT improvement is diagnostic only and can never promote the
+Stage-6 product policy. The stages are selected by fixed ordinal curriculum,
+not by an observed spell, frame, RNG, action, or failure location. Exact seeds,
+worker assignments, canaries, and hashes must be committed before the first
+curriculum Wine outcome.

@@ -44,3 +44,31 @@ removed, the complete population published zero overrides. The largest
 centered coefficient was exactly 0.5 under the fixture's `(0.5, 0.5)` behavior
 distribution; no reciprocal propensity appears. This is algorithm smoke only,
 not Wine efficacy or candidate authorization.
+
+## 2026-08-12: first frozen-Wine smoke report failed closed
+
+The first 29-episode frozen-Wine smoke completed its loader and model work but
+refused to write the final JSON. The smoke had intentionally supplied no
+Generation-5 episode IDs, so the empty new-cohort comparator had zero loss and
+an infinite ratio; strict JSON serialization rejected that non-finite value.
+No report or partial policy was published, and no Generation-5 Wine outcome
+exists.
+
+The repaired non-authorizing smoke explicitly treats the chronologically later
+16 Generation-4 episodes as a disjoint development cohort relative to the 13
+older episodes. This does not make them Generation-5 authorization evidence;
+it makes the development diagnostic well-defined and tests temporal cohort
+generalization rather than hiding it in the aggregate.
+
+Profiling the failed report also isolated a generic throughput cost: validating,
+decompressing, parsing, and assembling all 29 corpora used one Python thread for
+about 17 minutes before any model fit. A local immutable option cache now binds
+each fully audited result to the corpus manifest SHA-256 and the complete loader
+source contract hash. A source or manifest change creates a miss; a partial or
+tampered entry fails closed. Cache miss and tamper tests prove these contracts.
+The ignored cache is acceleration only and cannot change or admit a row.
+
+The model section created many native threads but averaged only about two CPU
+cores because the Python custom-objective callback remained limiting. This is
+recorded as the next offline optimization target; it cannot be addressed by
+reducing population size or changing the learning objective.

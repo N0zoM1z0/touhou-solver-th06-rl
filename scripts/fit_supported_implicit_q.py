@@ -28,9 +28,18 @@ from th06_rl.implicit_learning import (  # noqa: E402
     VALUE_TREES,
     fit_supported_implicit_q,
 )
+from th06_rl.option_cache import load_cached_option_episode  # noqa: E402
 from th06_rl.sequential_learning import (  # noqa: E402
     BEHAVIOR_POLICY as GENERATION4_POLICY,
     TRANSITION_SCHEMA as GENERATION4_TRANSITION,
+)
+
+
+OPTION_CACHE_CONTRACT = (
+    REPOSITORY / "src/th06_rl/advantage_learning.py",
+    REPOSITORY / "src/th06_rl/autonomous_learning.py",
+    REPOSITORY / "src/th06_rl/corpus.py",
+    Path(__file__).resolve(),
 )
 
 
@@ -75,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--compatible-native-scorer", action="append", type=Path)
     parser.add_argument("--seed", type=int, default=260_813)
     parser.add_argument("--threads", type=int, default=48)
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=REPOSITORY / "artifacts/cache/audited-option-episodes",
+    )
     args = parser.parse_args(argv)
     if args.seed != 260_813:
         parser.error("Generation 5 learner seed is fixed at 260813")
@@ -97,7 +111,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("every --new-run must also be present in positional runs")
     if len(runs) < 10:
         parser.error("Generation 5 fit needs ten complete episodes")
-    loaded = [_load(run) for run in runs]
+    if len(new_runs) < 8:
+        parser.error("Generation 5 authorization fit needs eight --new-run episodes")
+    cached = [load_cached_option_episode(
+        run,
+        loader=_load,
+        cache_root=args.cache_dir,
+        contract_files=OPTION_CACHE_CONTRACT,
+    ) for run in runs]
+    loaded = [(rows, report) for rows, report, _hit in cached]
     samples = [sample for rows, _report in loaded for sample in rows]
     run_to_episode = {
         run: rows[0].episode_id for run, (rows, _report) in zip(
@@ -135,6 +157,9 @@ def main(argv: list[str] | None = None) -> int:
             "calibration_value_trees": CALIBRATION_VALUE_TREES,
             "seed": args.seed,
             "total_threads": args.threads,
+            "option_cache_hits": sum(
+                hit for _rows, _report, hit in cached
+            ),
             "native_scorer_sha256": _sha256(args.native_scorer),
             "compatible_native_scorer_sha256": [
                 _sha256(path) for path in args.compatible_native_scorer or ()
