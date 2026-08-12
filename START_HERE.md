@@ -16,9 +16,11 @@ Read in this order:
    evidence and ineffective verdict;
 5. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md` for the active option,
    residual-advantage, representation, calibration, and evidence contract;
-6. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+6. `docs/AUTONOMOUS_LEARNER_GENERATION_3_PROGRESS.md` for its append-only
+   implementation and smoke execution record;
+7. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-7. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+8. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 ## Non-negotiable separation
 

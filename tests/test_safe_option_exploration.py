@@ -83,6 +83,21 @@ def test_observation_gap_starts_a_new_assignment() -> None:
     assert after_gap.option.preceding_termination_reason == "observation-gap"
 
 
+def test_input_lease_cannot_invent_a_boundary_after_option_horizon() -> None:
+    policy = _policy(exploration=0.0)
+    for frame in range(1, 9):
+        policy.decide(_context(frame))
+
+    forced = policy.continue_certified(_context(
+        9,
+        legal=("left",),
+        baseline="left",
+    ))
+    assert forced.action == "left"
+    assert forced.option is None
+    assert policy.metrics()["option_boundaries"] == 1
+
+
 def test_option_trace_binds_conditional_propensity() -> None:
     trace = PolicyOptionTrace("option-1", "left", False, 0.05, 2)
     with pytest.raises(ValueError, match="probability disagrees"):

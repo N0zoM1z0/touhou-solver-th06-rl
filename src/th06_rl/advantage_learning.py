@@ -1,0 +1,881 @@
+"""Generation-3 option-level doubly robust residual advantage learning."""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass, replace
+import gzip
+import hashlib
+import json
+import math
+from pathlib import Path
+import random
+
+from .autonomous_learning import _expected_probability
+from .conservative_learning import _encoded_model, _export_model
+from .learning_features import TREE_FEATURE_SCHEMA, tree_candidate_vector, tree_feature_names
+from .offline import ACTION_NAMES
+from .th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAMES
+
+
+TRANSITION_SCHEMA = "th06-rl-transition-v7"
+BEHAVIOR_POLICY = "safe-option-exploration-v1"
+STATE_SCHEMA = "autonomous-dr-option-advantage-policy-v1"
+FIT_REPORT_SCHEMA = "autonomous-dr-option-advantage-fit-v1"
+POPULATION_MEMBERS = 7
+CROSSFIT_FOLDS = 3
+NUISANCE_MEMBERS = 3
+NUISANCE_TREES = 96
+POPULATION_TREES = 128
+
+
+@dataclass(frozen=True)
+class OptionStep:
+    episode_id: str
+    option_id: str
+    sequence: int
+    frame: int
+    action: str
+    baseline_action: str
+    behavior_probability: float
+    vector: tuple[float, ...]
+    legal_actions: tuple[str, ...]
+    candidate_vectors: tuple[tuple[float, ...], ...]
+    option_hit_cost: float
+    duration_frames: int
+    return_to_go: float = 0.0
+    termination_reason: str = ""
+
+
+@dataclass(frozen=True)
+class AdvantageSample:
+    episode_id: str
+    option_id: str
+    action: str
+    baseline_action: str
+    vector: tuple[float, ...]
+    pseudo_advantage: float
+
+
+def _object(path: Path) -> dict[str, object]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise TypeError(f"JSON root is not an object: {path}")
+    return value
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _rows(run_dir: Path, manifest: dict[str, object]):
+    expected_sequence = 0
+    observed = 0
+    expected = 0
+    shards = manifest.get("shards")
+    if not isinstance(shards, list):
+        raise TypeError("corpus manifest shard list is invalid")
+    for shard in shards:
+        if not isinstance(shard, dict) or shard.get("stream") != "transitions":
+            continue
+        name = str(shard.get("path", ""))
+        if not name or Path(name).name != name:
+            raise ValueError("unsafe transition shard path")
+        path = run_dir / name
+        if not path.is_file() or path.is_symlink():
+            raise FileNotFoundError(path)
+        if path.stat().st_size != int(shard.get("compressed_bytes", -1)):
+            raise ValueError(f"transition shard size mismatch: {path}")
+        if _sha256(path) != shard.get("sha256"):
+            raise ValueError(f"transition shard digest mismatch: {path}")
+        expected += int(shard.get("records", 0))
+        with gzip.open(path, "rt", encoding="utf-8") as source:
+            for line in source:
+                row = json.loads(line)
+                if not isinstance(row, dict) or row.get("schema_version") != TRANSITION_SCHEMA:
+                    raise ValueError("generation 3 requires transition v7")
+                if int(row.get("sequence", -1)) != expected_sequence:
+                    raise ValueError("transition sequence is not contiguous")
+                expected_sequence += 1
+                observed += 1
+                yield row
+    recorded = manifest.get("records")
+    recorded_count = (
+        int(recorded.get("transitions", -1))
+        if isinstance(recorded, dict) else -1
+    )
+    if observed != expected or observed != recorded_count:
+        raise ValueError("transition record count mismatch")
+
+
+def _frame(snapshot_ref: object) -> int:
+    marker = str(snapshot_ref).rsplit(":f", 1)
+    if len(marker) != 2:
+        raise ValueError("snapshot reference has no physical frame")
+    return int(marker[1])
+
+
+def _vector(row: dict[str, object], action: str) -> tuple[float, ...]:
+    context = row.get("policy_context")
+    if not isinstance(context, dict):
+        raise TypeError("option boundary has no policy context")
+    return tree_candidate_vector(
+        observation_features=context.get("observation_features"),
+        action_features=context.get("action_features"),
+        action=action,
+        baseline_action=str(row.get("baseline_action", "")),
+        current_action=str(context.get("current_action", "")),
+        observation_names=OBSERVATION_FEATURE_NAMES,
+        action_names=ACTION_FEATURE_NAMES,
+    )
+
+
+def _validate_run(run_dir: Path) -> tuple[dict[str, object], dict[str, object]]:
+    run = _object(run_dir / "run.json")
+    manifest = _object(run_dir / "manifest.json")
+    schemas = run.get("schemas")
+    outcome = manifest.get("run_outcome")
+    if (
+        manifest.get("complete") is not True
+        or manifest.get("stage_trajectory_complete") is not True
+        or int(manifest.get("dropped_records", -1)) != 0
+        or not isinstance(schemas, dict)
+        or schemas.get("transition") != TRANSITION_SCHEMA
+        or not isinstance(outcome, dict)
+        or outcome.get("stage_completed") is not True
+        or not isinstance(outcome.get("physical_hits"), int)
+    ):
+        raise ValueError("generation-3 learner requires a complete v7 physical Stage")
+    for field in (
+        "background_reactivations",
+        "capture_failures",
+        "corpus_failures",
+        "infrastructure_failures",
+        "trace_failures",
+    ):
+        if int(outcome.get(field, -1)) != 0:
+            raise ValueError(f"physical corpus has infrastructure failure: {field}")
+    if outcome.get("corpus_failure") is not None:
+        raise ValueError("physical corpus writer failed")
+    return run, manifest
+
+
+def load_option_episode(
+    run_dir: Path,
+    *,
+    exploration_probability: float,
+) -> tuple[list[OptionStep], dict[str, object]]:
+    """Aggregate factual v7 frame rows into randomized option treatments."""
+    run_dir = run_dir.resolve()
+    run, manifest = _validate_run(run_dir)
+    rows = list(_rows(run_dir, manifest))
+    episode_id = str(run.get("run_id", run_dir.name))
+    grouped: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+    excluded: Counter[str] = Counter()
+    unassigned_hits = 0
+    for row in rows:
+        option = row.get("option")
+        if option is not None and not isinstance(option, dict):
+            raise TypeError("option trace is not an object")
+        option_id = (
+            str(option.get("option_id", "")) if option is not None else ""
+        )
+        boundary = option is not None and option.get("boundary") is True
+        if option is not None and not option_id:
+            raise ValueError("option trace has no identity")
+        if boundary:
+            if current is not None:
+                if current["termination"] is None:
+                    current["termination"] = str(
+                        option.get("preceding_termination_reason")
+                        or "next-option-boundary"
+                    )
+                grouped.append(current)
+            legal_raw = row.get("legal_actions")
+            action = str(option.get("intent", ""))
+            baseline = str(row.get("baseline_action", ""))
+            if not isinstance(legal_raw, list):
+                raise TypeError("option boundary has no native-safe set")
+            legal = tuple(str(value) for value in legal_raw)
+            probability = float(option.get("boundary_probability", 0.0))
+            expected = _expected_probability(
+                action=action,
+                baseline=baseline,
+                legal=legal,
+                exploration_probability=exploration_probability,
+            )
+            if (
+                row.get("policy_id") != BEHAVIOR_POLICY
+                or row.get("learning_eligible") is not True
+                or action not in legal
+                or baseline not in legal
+                or not math.isclose(probability, expected, rel_tol=1e-9, abs_tol=1e-12)
+                or not math.isclose(
+                    float(row.get("behavior_probability", 0.0)),
+                    probability,
+                    rel_tol=1e-9,
+                    abs_tol=1e-12,
+                )
+            ):
+                raise ValueError("invalid randomized option boundary")
+            current = {
+                "option_id": option_id,
+                "sequence": int(row["sequence"]),
+                "frame": _frame(row.get("snapshot_ref")),
+                "action": action,
+                "baseline": baseline,
+                "probability": probability,
+                "legal": legal,
+                "vector": _vector(row, action),
+                "candidate_vectors": tuple(_vector(row, candidate) for candidate in legal),
+                "hit_cost": 0.0,
+                "physical_elapsed": 0,
+                "termination": None,
+            }
+        elif option is not None:
+            if current is None or option_id != current["option_id"]:
+                raise ValueError("continuation row escaped its option boundary")
+            if str(option.get("intent", "")) != current["action"]:
+                raise ValueError("option intent changed inside a treatment")
+        outcome = row.get("outcome_terms")
+        if not isinstance(outcome, dict):
+            raise TypeError("transition row has no physical outcome")
+        if outcome.get("bomb_used") is True or outcome.get("authority_lost") is True:
+            raise ValueError("invalid physical outcome inside training option")
+        if current is None:
+            unassigned_hits += int(outcome.get("life_lost") is True)
+            continue
+        current["hit_cost"] = float(current["hit_cost"]) + float(
+            outcome.get("life_lost") is True
+        )
+        current["physical_elapsed"] = int(current["physical_elapsed"]) + int(
+            outcome.get("elapsed_frames", 0)
+        )
+        termination = (
+            option.get("termination_reason") if option is not None else None
+        )
+        if termination is not None:
+            current["termination"] = str(termination)
+    if current is not None:
+        if current["termination"] is None:
+            current["termination"] = "complete-stage-tail"
+        grouped.append(current)
+    if unassigned_hits:
+        raise ValueError("physical HIT occurred before the first option boundary")
+    if not grouped:
+        raise ValueError("complete Stage has no randomized option boundaries")
+
+    steps = []
+    for index, item in enumerate(grouped):
+        next_frame = (
+            int(grouped[index + 1]["frame"])
+            if index + 1 < len(grouped) else None
+        )
+        duration = (
+            next_frame - int(item["frame"])
+            if next_frame is not None
+            else max(1, int(item["physical_elapsed"]))
+        )
+        if duration <= 0:
+            raise ValueError("option boundary frames are not increasing")
+        steps.append(OptionStep(
+            episode_id=episode_id,
+            option_id=str(item["option_id"]),
+            sequence=int(item["sequence"]),
+            frame=int(item["frame"]),
+            action=str(item["action"]),
+            baseline_action=str(item["baseline"]),
+            behavior_probability=float(item["probability"]),
+            vector=tuple(item["vector"]),
+            legal_actions=tuple(item["legal"]),
+            candidate_vectors=tuple(item["candidate_vectors"]),
+            option_hit_cost=float(item["hit_cost"]),
+            duration_frames=duration,
+            termination_reason=str(item["termination"]),
+        ))
+    return_value = 0.0
+    labeled = []
+    for step in reversed(steps):
+        return_value += step.option_hit_cost
+        labeled.append(replace(step, return_to_go=return_value))
+    labeled.reverse()
+    outcome = manifest["run_outcome"]
+    observed_hits = int(sum(step.option_hit_cost for step in labeled))
+    if observed_hits != int(outcome["physical_hits"]):
+        raise ValueError("option aggregation did not account for every physical HIT")
+    return labeled, {
+        "episode_id": episode_id,
+        "run_dir": str(run_dir),
+        "transitions": len(rows),
+        "options": len(labeled),
+        "physical_hits": observed_hits,
+        "option_terminations": dict(Counter(
+            step.termination_reason for step in labeled
+        )),
+        "excluded": dict(excluded),
+    }
+
+
+def doubly_robust_advantages(
+    outcome: float,
+    nuisance: list[float],
+    *,
+    factual_index: int,
+    factual_probability: float,
+    baseline_index: int,
+) -> list[float]:
+    """Multi-action AIPW values, differenced against the factual incumbent."""
+    if not 0 <= factual_index < len(nuisance) or not 0 <= baseline_index < len(nuisance):
+        raise IndexError("factual or baseline action index is invalid")
+    if not 0.0 < factual_probability <= 1.0:
+        raise ValueError("factual propensity must be in (0, 1]")
+    values = list(map(float, nuisance))
+    values[factual_index] += (
+        float(outcome) - values[factual_index]
+    ) / factual_probability
+    baseline = values[baseline_index]
+    return [value - baseline for value in values]
+
+
+def _folds(groups: list[str], *, count: int, seed: int) -> list[tuple[str, ...]]:
+    if count < 2 or len(groups) < count * 2:
+        raise ValueError("cross-fitting needs at least two episodes per fold")
+    shuffled = sorted(groups)
+    random.Random(seed).shuffle(shuffled)
+    return [tuple(sorted(shuffled[index::count])) for index in range(count)]
+
+
+def _regressor(*, trees: int, seed: int, threads: int):
+    from xgboost import XGBRegressor
+
+    return XGBRegressor(
+        objective="reg:squarederror",
+        n_estimators=trees,
+        max_depth=6,
+        learning_rate=0.04,
+        min_child_weight=8.0,
+        subsample=0.85,
+        colsample_bytree=0.85,
+        reg_lambda=8.0,
+        reg_alpha=0.05,
+        tree_method="hist",
+        n_jobs=threads,
+        random_state=seed,
+    )
+
+
+def _fit_nuisance(
+    samples: list[OptionStep],
+    *,
+    members: int,
+    trees: int,
+    seed: int,
+    threads: int,
+):
+    import numpy as np
+
+    x = np.asarray([sample.vector for sample in samples], dtype=np.float32)
+    y = np.asarray([sample.return_to_go for sample in samples], dtype=np.float32)
+    weights = np.asarray([
+        1.0 / sample.behavior_probability for sample in samples
+    ], dtype=np.float32)
+    groups = sorted({sample.episode_id for sample in samples})
+    generator = random.Random(seed)
+    models = []
+    unique_groups = []
+    for member in range(members):
+        chosen = [generator.choice(groups) for _ in groups]
+        counts = Counter(chosen)
+        member_weights = weights * np.asarray([
+            counts[sample.episode_id] for sample in samples
+        ], dtype=np.float32)
+        model = _regressor(trees=trees, seed=seed + member, threads=threads)
+        model.fit(x, y, sample_weight=member_weights)
+        models.append(model)
+        unique_groups.append(len(counts))
+    return models, unique_groups
+
+
+def _pseudo_samples(samples: list[OptionStep], nuisance_models) -> list[AdvantageSample]:
+    import numpy as np
+
+    rows = np.asarray([
+        vector for sample in samples for vector in sample.candidate_vectors
+    ], dtype=np.float32)
+    predictions = [model.predict(rows) for model in nuisance_models]
+    mean = np.asarray(predictions).mean(axis=0)
+    result = []
+    offset = 0
+    for sample in samples:
+        stop = offset + len(sample.legal_actions)
+        nuisance = mean[offset:stop].tolist()
+        factual_index = sample.legal_actions.index(sample.action)
+        baseline_index = sample.legal_actions.index(sample.baseline_action)
+        advantages = doubly_robust_advantages(
+            sample.return_to_go,
+            nuisance,
+            factual_index=factual_index,
+            factual_probability=sample.behavior_probability,
+            baseline_index=baseline_index,
+        )
+        for action, vector, advantage in zip(
+            sample.legal_actions,
+            sample.candidate_vectors,
+            advantages,
+            strict=True,
+        ):
+            result.append(AdvantageSample(
+                episode_id=sample.episode_id,
+                option_id=sample.option_id,
+                action=action,
+                baseline_action=sample.baseline_action,
+                vector=vector,
+                pseudo_advantage=float(advantage),
+            ))
+        offset = stop
+    return result
+
+
+def _effective_sample_size(samples: list[OptionStep]) -> dict[str, object]:
+    report = {}
+    for action in ACTION_NAMES:
+        weights = [
+            1.0 / sample.behavior_probability
+            for sample in samples if sample.action == action
+        ]
+        report[action] = {
+            "factual_options": len(weights),
+            "inverse_propensity_ess": (
+                sum(weights) ** 2 / sum(value * value for value in weights)
+                if weights else 0.0
+            ),
+        }
+    return report
+
+
+def fit_dr_option_advantage(
+    train: list[OptionStep],
+    validation: list[OptionStep],
+    *,
+    crossfit_folds: int = CROSSFIT_FOLDS,
+    nuisance_members: int = NUISANCE_MEMBERS,
+    population_members: int = POPULATION_MEMBERS,
+    nuisance_trees: int = NUISANCE_TREES,
+    population_trees: int = POPULATION_TREES,
+    seed: int = 260812,
+    threads: int = 12,
+    native_scorer_sha256: str,
+) -> dict[str, object]:
+    import numpy as np
+
+    train_groups = sorted({sample.episode_id for sample in train})
+    validation_groups = sorted({sample.episode_id for sample in validation})
+    if len(train_groups) < 9:
+        raise ValueError("generation-3 fit needs at least nine training episodes")
+    if len(validation_groups) < 3:
+        raise ValueError("generation-3 fit needs at least three held-out episodes")
+    if set(train_groups) & set(validation_groups):
+        raise ValueError("training and validation episodes overlap")
+    if crossfit_folds != CROSSFIT_FOLDS:
+        raise ValueError("generation-3 fit requires three cross-fit folds")
+    if nuisance_members != NUISANCE_MEMBERS:
+        raise ValueError("generation-3 fit requires three nuisance members")
+    if population_members != POPULATION_MEMBERS:
+        raise ValueError("generation-3 population must contain seven members")
+    folds = _folds(train_groups, count=crossfit_folds, seed=seed)
+    pseudo_train = []
+    fold_report = []
+    for fold_index, heldout in enumerate(folds):
+        fit_rows = [sample for sample in train if sample.episode_id not in heldout]
+        heldout_rows = [sample for sample in train if sample.episode_id in heldout]
+        nuisance, unique = _fit_nuisance(
+            fit_rows,
+            members=nuisance_members,
+            trees=nuisance_trees,
+            seed=seed + fold_index * 1000,
+            threads=threads,
+        )
+        rows = _pseudo_samples(heldout_rows, nuisance)
+        pseudo_train.extend(rows)
+        fold_report.append({
+            "fold": fold_index,
+            "heldout_episodes": list(heldout),
+            "fit_episodes": sorted(set(train_groups) - set(heldout)),
+            "heldout_options": len(heldout_rows),
+            "pseudo_action_rows": len(rows),
+            "nuisance_bootstrap_unique_episodes": unique,
+        })
+    if {(sample.episode_id, sample.option_id) for sample in pseudo_train} != {
+        (sample.episode_id, sample.option_id) for sample in train
+    }:
+        raise RuntimeError("cross-fitting did not label every training option once")
+
+    full_nuisance, full_nuisance_unique = _fit_nuisance(
+        train,
+        members=nuisance_members,
+        trees=nuisance_trees,
+        seed=seed + 10_000,
+        threads=threads,
+    )
+    pseudo_validation = _pseudo_samples(validation, full_nuisance)
+    x = np.asarray([sample.vector for sample in pseudo_train], dtype=np.float32)
+    y = np.asarray([
+        sample.pseudo_advantage for sample in pseudo_train
+    ], dtype=np.float32)
+    groups = sorted({sample.episode_id for sample in pseudo_train})
+    generator = random.Random(seed + 20_000)
+    models = []
+    bootstrap_report = []
+    for member in range(population_members):
+        chosen = [generator.choice(groups) for _ in groups]
+        counts = Counter(chosen)
+        weights = np.asarray([
+            counts[sample.episode_id] for sample in pseudo_train
+        ], dtype=np.float32)
+        model = _regressor(
+            trees=population_trees,
+            seed=seed + 20_000 + member,
+            threads=threads,
+        )
+        model.fit(x, y, sample_weight=weights)
+        models.append(model)
+        bootstrap_report.append({
+            "member": member,
+            "unique_episodes": len(counts),
+            "episode_counts": dict(sorted(counts.items())),
+        })
+
+    validation_x = np.asarray([
+        sample.vector for sample in pseudo_validation
+    ], dtype=np.float32)
+    validation_y = np.asarray([
+        sample.pseudo_advantage for sample in pseudo_validation
+    ], dtype=np.float32)
+    validation_prediction = np.asarray([
+        model.predict(validation_x) for model in models
+    ])
+    mean_prediction = validation_prediction.mean(axis=0)
+    rmse = float(np.sqrt(np.mean((mean_prediction - validation_y) ** 2)))
+    constant = float(np.sqrt(np.mean(validation_y ** 2)))
+    baseline_identity_error = max(
+        (
+            abs(sample.pseudo_advantage)
+            for sample in (*pseudo_train, *pseudo_validation)
+            if sample.action == sample.baseline_action
+        ),
+        default=0.0,
+    )
+    conformance_indices = np.linspace(
+        0, len(x) - 1, min(8, len(x)), dtype=int
+    )
+    conformance = x[conformance_indices]
+    encoded_models = [
+        _encoded_model(_export_model(model, conformance)) for model in models
+    ]
+    finite = all(math.isfinite(value) for value in (rmse, constant))
+    gates = {
+        "train_episode_groups": len(train_groups) >= 9,
+        "validation_episode_groups": len(validation_groups) >= 3,
+        "disjoint_episode_groups": not bool(set(train_groups) & set(validation_groups)),
+        "crossfit_complete": len({
+            (sample.episode_id, sample.option_id) for sample in pseudo_train
+        }) == len(train),
+        "train_has_hits": sum(sample.option_hit_cost for sample in train) > 0.0,
+        "validation_has_hits": sum(sample.option_hit_cost for sample in validation) > 0.0,
+        "baseline_advantage_identity": baseline_identity_error <= 1e-9,
+        "finite_validation_diagnostics": finite,
+        "population_complete": len(models) == POPULATION_MEMBERS,
+        "native_scorer_bound": len(native_scorer_sha256) == 64,
+    }
+    names = tree_feature_names(OBSERVATION_FEATURE_NAMES, ACTION_FEATURE_NAMES)
+    return {
+        "schema": STATE_SCHEMA,
+        "mode": "shadow",
+        "feature_schema": TREE_FEATURE_SCHEMA,
+        "observation_feature_names": list(OBSERVATION_FEATURE_NAMES),
+        "action_feature_names": list(ACTION_FEATURE_NAMES),
+        "feature_names": list(names),
+        "models": encoded_models,
+        "native_scorer": {
+            "schema": "th06-rl-native-xgboost-scorer-v1",
+            "sha256": native_scorer_sha256,
+            "compatible_sha256": [native_scorer_sha256],
+        },
+        "population": {
+            "kind": "whole-episode-bootstrap-cross-fitted-dr",
+            "members": POPULATION_MEMBERS,
+            "bootstrap": bootstrap_report,
+        },
+        "authorization": {
+            "fit_gates": gates,
+            "fit_eligible": all(gates.values()),
+            "calibration": None,
+            "active_canary": None,
+        },
+        "fit_report": {
+            "schema": FIT_REPORT_SCHEMA,
+            "algorithm": "cross-fitted-multi-action-aipw-option-advantage",
+            "return": "undiscounted-complete-stage-physical-hit-count",
+            "train_groups": train_groups,
+            "validation_groups": validation_groups,
+            "train_options": len(train),
+            "validation_options": len(validation),
+            "train_pseudo_action_rows": len(pseudo_train),
+            "validation_pseudo_action_rows": len(pseudo_validation),
+            "crossfit_folds": fold_report,
+            "full_nuisance_bootstrap_unique_episodes": full_nuisance_unique,
+            "population_bootstrap": bootstrap_report,
+            "factual_effective_sample_size": _effective_sample_size(train),
+            "train_physical_hit_cost": float(sum(
+                sample.option_hit_cost for sample in train
+            )),
+            "validation_physical_hit_cost": float(sum(
+                sample.option_hit_cost for sample in validation
+            )),
+            "heldout_dr_advantage_rmse": rmse,
+            "heldout_zero_advantage_rmse": constant,
+            "baseline_identity_max_error": baseline_identity_error,
+        },
+    }
+
+
+def _causal_smoke_episodes(prefix: str, count: int) -> list[OptionStep]:
+    names = tree_feature_names(OBSERVATION_FEATURE_NAMES, ACTION_FEATURE_NAMES)
+    indices = {name: index for index, name in enumerate(names)}
+    result = []
+    for episode_index in range(count):
+        episode = f"{prefix}-{episode_index}"
+        for option_index in range(32):
+            state_risk = float(option_index % 2)
+            baseline = [0.0] * len(names)
+            baseline[indices["observation:position_x_unit"]] = state_risk
+            baseline[indices["matches_baseline"]] = 1.0
+            candidate = baseline.copy()
+            candidate[indices["action:direction_x"]] = -1.0
+            candidate[indices["delta_from_baseline:direction_x"]] = -1.0
+            candidate[indices["matches_baseline"]] = 0.0
+            assigned_candidate = (episode_index + option_index) % 2 == 0
+            outcome = 2.0 + 2.0 * state_risk - float(assigned_candidate)
+            result.append(OptionStep(
+                episode_id=episode,
+                option_id=f"{episode}:{option_index}",
+                sequence=option_index,
+                frame=option_index * 8,
+                action="left" if assigned_candidate else "stay",
+                baseline_action="stay",
+                behavior_probability=0.5,
+                vector=tuple(candidate if assigned_candidate else baseline),
+                legal_actions=("stay", "left"),
+                candidate_vectors=(tuple(baseline), tuple(candidate)),
+                option_hit_cost=outcome,
+                duration_frames=8,
+                return_to_go=outcome,
+                termination_reason="horizon",
+            ))
+    return result
+
+
+def run_causal_recovery_smoke(*, threads: int = 4) -> dict[str, object]:
+    """Fail-fast proof that DR residual fitting recovers a known effect."""
+    from .policies.autonomous_conservative_q import _decode_model
+    from .policies.offline_ranker import PortableXGBoostRegressor
+
+    state = fit_dr_option_advantage(
+        _causal_smoke_episodes("smoke-train", 9),
+        _causal_smoke_episodes("smoke-validation", 3),
+        seed=260812,
+        threads=threads,
+        native_scorer_sha256="0" * 64,
+    )
+    names = tuple(state["feature_names"])
+    indices = {name: index for index, name in enumerate(names)}
+    scorers = [
+        PortableXGBoostRegressor(
+            _decode_model(model),
+            expected_feature_schema=TREE_FEATURE_SCHEMA,
+            expected_feature_names=names,
+        )
+        for model in state["models"]
+    ]
+    predictions = []
+    for state_risk in (0.0, 1.0):
+        baseline = [0.0] * len(names)
+        baseline[indices["observation:position_x_unit"]] = state_risk
+        baseline[indices["matches_baseline"]] = 1.0
+        candidate = baseline.copy()
+        candidate[indices["action:direction_x"]] = -1.0
+        candidate[indices["delta_from_baseline:direction_x"]] = -1.0
+        candidate[indices["matches_baseline"]] = 0.0
+        predictions.append([
+            float(scorer.predict_many([candidate])[0]) for scorer in scorers
+        ])
+    flat = [value for row in predictions for value in row]
+    mean = sum(flat) / len(flat)
+    leakage = max(
+        abs(left - right)
+        for left, right in zip(predictions[0], predictions[1], strict=True)
+    )
+    population_range = max(flat) - min(flat)
+    fit = state["fit_report"]
+    gates = {
+        "fit_contract": state["authorization"]["fit_eligible"] is True,
+        "all_members_recover_negative_effect": all(value < 0.0 for value in flat),
+        "known_effect_error_at_most_half_hit": abs(mean - (-1.0)) <= 0.5,
+        "state_risk_leakage_below_0_15_hit": leakage < 0.15,
+        "residual_beats_zero_advantage": (
+            fit["heldout_dr_advantage_rmse"]
+            < fit["heldout_zero_advantage_rmse"]
+        ),
+        "population_not_collapsed": population_range > 1e-6,
+    }
+    return {
+        "schema": "autonomous-generation-3-causal-smoke-v1",
+        "known_candidate_advantage": -1.0,
+        "population_members": POPULATION_MEMBERS,
+        "candidate_predictions_by_state_risk": predictions,
+        "candidate_prediction_mean": mean,
+        "candidate_prediction_range": population_range,
+        "state_risk_leakage_max": leakage,
+        "heldout_dr_advantage_rmse": fit["heldout_dr_advantage_rmse"],
+        "heldout_zero_advantage_rmse": fit["heldout_zero_advantage_rmse"],
+        "gates": gates,
+        "passed": all(gates.values()),
+    }
+
+
+def audit_wine_option_smoke(
+    run_dir: Path,
+    *,
+    exploration_probability: float = 0.10,
+    minimum_boundaries: int = 32,
+) -> dict[str, object]:
+    """Audit a short, explicitly non-evidence Wine option pipeline run."""
+    run_dir = run_dir.resolve()
+    run = _object(run_dir / "run.json")
+    manifest = _object(run_dir / "manifest.json")
+    schemas = run.get("schemas")
+    outcome = manifest.get("run_outcome")
+    if (
+        manifest.get("complete") is not True
+        or int(manifest.get("dropped_records", -1)) != 0
+        or not isinstance(schemas, dict)
+        or schemas.get("transition") != TRANSITION_SCHEMA
+        or not isinstance(outcome, dict)
+    ):
+        raise ValueError("Wine smoke corpus is incomplete or not transition v7")
+    infrastructure_fields = (
+        "background_reactivations",
+        "capture_failures",
+        "corpus_failures",
+        "infrastructure_failures",
+        "trace_failures",
+    )
+    clean_infrastructure = all(
+        int(outcome.get(field, -1)) == 0 for field in infrastructure_fields
+    ) and outcome.get("corpus_failure") is None
+    boundaries = 0
+    continuations = 0
+    non_incumbent = 0
+    safe_membership = 0
+    horizon_terminations = 0
+    option_rows = 0
+    option_ids: set[str] = set()
+    active_option_id: str | None = None
+    for row in _rows(run_dir, manifest):
+        option = row.get("option")
+        if option is None:
+            continue
+        if not isinstance(option, dict):
+            raise TypeError("Wine smoke option trace is invalid")
+        option_rows += 1
+        option_id = str(option.get("option_id", ""))
+        action = str(option.get("intent", ""))
+        legal_raw = row.get("legal_actions")
+        if row.get("policy_id") != BEHAVIOR_POLICY:
+            raise ValueError("Wine smoke used the wrong behavior policy")
+        if not isinstance(legal_raw, list) or action not in legal_raw:
+            raise ValueError("Wine smoke option escaped the native-safe set")
+        if row.get("published_action") != action:
+            raise ValueError("Wine smoke did not publish its recorded intent")
+        safe_membership += 1
+        elapsed = int(option.get("elapsed_frames_at_decision", 0))
+        if not 1 <= elapsed <= 8:
+            raise ValueError("Wine smoke option exceeded its fixed horizon")
+        if option.get("boundary") is True:
+            boundaries += 1
+            if option_id in option_ids or elapsed != 1:
+                raise ValueError("Wine smoke option boundary identity is invalid")
+            option_ids.add(option_id)
+            active_option_id = option_id
+            legal = tuple(str(value) for value in legal_raw)
+            baseline = str(row.get("baseline_action", ""))
+            expected = _expected_probability(
+                action=action,
+                baseline=baseline,
+                legal=legal,
+                exploration_probability=exploration_probability,
+            )
+            if not math.isclose(
+                float(option.get("boundary_probability", 0.0)),
+                expected,
+                rel_tol=1e-9,
+                abs_tol=1e-12,
+            ):
+                raise ValueError("Wine smoke boundary propensity is invalid")
+            conditional_expected = expected
+            non_incumbent += int(action != baseline)
+        else:
+            continuations += 1
+            if option_id != active_option_id:
+                raise ValueError("Wine smoke continuation escaped its boundary")
+            conditional_expected = 1.0
+        conditional = float(option.get("conditional_probability", 0.0))
+        if not math.isclose(
+            conditional,
+            conditional_expected,
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ) or not math.isclose(
+            float(row.get("behavior_probability", 0.0)),
+            conditional,
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("Wine smoke conditional propensity is invalid")
+        if option.get("termination_reason") == "horizon" and elapsed != 8:
+            raise ValueError("Wine smoke horizon termination occurred off boundary")
+        horizon_terminations += option.get("termination_reason") == "horizon"
+    summary = manifest.get("summary")
+    input_lease_rows = (
+        int(summary.get("reason_counts", {}).get("input-lease", 0))
+        if isinstance(summary, dict)
+        and isinstance(summary.get("reason_counts"), dict)
+        else 0
+    )
+    gates = {
+        "clean_infrastructure": clean_infrastructure,
+        "minimum_option_boundaries": boundaries >= minimum_boundaries,
+        "randomized_non_incumbent_witnessed": non_incumbent >= 1,
+        "conditional_continuation_witnessed": continuations >= 1,
+        "horizon_termination_witnessed": horizon_terminations >= 1,
+        "all_option_intents_native_safe": safe_membership == option_rows,
+        "input_lease_witnessed": input_lease_rows >= 1,
+    }
+    return {
+        "schema": "autonomous-generation-3-wine-option-smoke-v1",
+        "run_dir": str(run_dir),
+        "evidence_eligible": False,
+        "option_rows": option_rows,
+        "option_boundaries": boundaries,
+        "option_continuations": continuations,
+        "non_incumbent_boundaries": non_incumbent,
+        "horizon_terminations": horizon_terminations,
+        "input_lease_rows": input_lease_rows,
+        "gates": gates,
+        "passed": all(gates.values()),
+    }

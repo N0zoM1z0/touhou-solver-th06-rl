@@ -83,8 +83,19 @@ learned deployment quantity is
 
 `A(s, option) = Q(s, option) - Q(s, incumbent option)`.
 
-Bellman updates operate on option boundaries as a semi-Markov process and use
-physical elapsed frames. HIT remains the sole gameplay cost. No Hard-empty,
+The declared fit uses three deterministic whole-episode cross-fit folds, three
+nuisance members per fold, and seven final population members. Members use
+whole-episode bootstrap resampling and distinct committed learner seeds. These
+counts are algorithm constants, not outcome-dependent search dimensions.
+The first-generation teacher uses learner seed 260812, 96 trees per nuisance
+member, and 128 trees per population member; changing these after outcomes is
+a new learner generation.
+
+Bellman returns operate on option boundaries as an undiscounted semi-Markov
+process and retain physical elapsed frames. Undiscounted return is deliberate:
+it is the recursive sum of remaining physical HITs and therefore matches the
+final complete-Stage hit-count objective without a hand-chosen time preference.
+HIT remains the sole gameplay cost. No Hard-empty,
 clearance, survival bonus, stage progress, source phase, or teacher score is
 added to reward. Native geometry and self-supervised representation targets
 may be inputs or auxiliary losses, never reward terms.
@@ -146,6 +157,25 @@ Support and uncertainty thresholds come from the declared grouped calibration
 procedure. Humans may not lower them after seeing a missed opportunity. The
 fit requires at least nine independent training episodes before active canary;
 frame count alone cannot satisfy this requirement.
+
+## Pre-collection smoke gates
+
+Long Stage collection cannot be the first end-to-end learner test. Before any
+generation-3 evidence episode, automation runs a deterministic causal fixture
+whose true option advantage is -1 HIT while state risk changes independently.
+All seven population members must recover a negative action advantage, the
+population mean must be within 0.5 HIT of the known effect, state-risk leakage
+must be below 0.15 HIT, the residual fit must beat the zero-advantage
+comparator, and the population may not collapse to identical predictions.
+
+Automation then runs one short, explicitly non-evidence Wine pipeline smoke.
+It requires at least 32 valid option boundaries, at least one randomized
+non-incumbent boundary, valid known propensities, conditional-probability-one
+continuations, a witnessed horizon termination, fresh native-safe membership
+for every published intent, clean infrastructure, and valid corpus accounting.
+The short trajectory cannot train, calibrate, authorize, or evaluate a policy.
+After a scorer exists, the same smoke additionally requires native/teacher
+conformance, at most 4 ms scorer p95, and zero controller deadline misses.
 
 ## 6. Multi-seed and natural-RNG evidence
 

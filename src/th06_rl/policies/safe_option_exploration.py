@@ -106,6 +106,17 @@ class SafeOptionExplorationPolicy:
 
     def continue_certified(self, context) -> PolicyDecision:
         """Advance option metadata inside a controller-certified input lease."""
+        legal = tuple(sorted(set(context.locally_admissible_actions)))
+        if not self.loaded or not legal:
+            raise RuntimeError("certified continuation has no loaded safe option")
+        preceding = self._preceding_termination(context, legal)
+        if self.active_id is None:
+            # A hardware lease may outlive the causal option horizon. The
+            # controller still recertifies its single forced action, but that
+            # is not a new randomized assignment without a choice boundary.
+            return PolicyDecision(context.baseline_action, POLICY_NAME, 1.0)
+        if preceding is not None:
+            raise RuntimeError("active option survived an invalid continuation")
         return self.decide(context)
 
     def decide(self, context) -> PolicyDecision:
