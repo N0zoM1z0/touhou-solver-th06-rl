@@ -1,0 +1,35 @@
+{
+  "evidence_eligible": false,
+  "expected": {
+    "development_episode_groups": 31,
+    "qualification_episode_groups": 13,
+    "total_episode_groups": 44
+  },
+  "partition_rule": "chronological-prefix-development-and-tail-qualification-within-each-preexisting-stage-source",
+  "qualification_use": "single-disclosure-after-candidate-source-and-gates-are-hash-frozen",
+  "resource_contract": {
+    "hard_process_tree_cpu_affinity_maximum": 32,
+    "learner_and_wine_never_overlap": true
+  },
+  "schema": "autonomous-offline-learner-qualification-v1",
+  "sources": [
+    {
+      "development_prefix": 21,
+      "name": "historical-stage6-generations-3-and-4",
+      "qualification_suffix": 8,
+      "report": "artifacts/autonomous-wine-generation-5/frozen-wine-smoke-29-v5-serial-members32.json",
+      "report_schema": "autonomous-generation-5-frozen-wine-smoke-v1",
+      "report_sha256": "67eea8e7a19c19c7b17a22d40d14f28ac7e79f1a8abbd36d3c553ee209000305",
+      "stage": 6
+    },
+    {
+      "development_prefix": 10,
+      "name": "generation5-stage4-curriculum",
+      "qualification_suffix": 5,
+      "report": "artifacts/autonomous-wine-generation-5-curriculum/stage-4/fits/boundary-15-smoke.json",
+      "report_schema": "autonomous-generation-5-frozen-wine-smoke-v1",
+      "report_sha256": "bd1fa7bf8ee82c246df9fd63f706fd774f9788483916aa6e9a43dec5c5ceb82a",
+      "stage": 4
+    }
+  ]
+}

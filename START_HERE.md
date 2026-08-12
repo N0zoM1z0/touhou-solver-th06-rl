@@ -30,13 +30,15 @@ Read in this order:
    `docs/AUTONOMOUS_LEARNER_GENERATION_5_PROGRESS.md` and
    `docs/AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md` for its Stage-4 fail-fast
    result and ineffective-for-continuation verdict;
-10. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
+10. `docs/AUTONOMOUS_LEARNER_QUALIFICATION.md` for the frozen-corpus rejection
+   funnel that must pass before another Wine collection wave;
+11. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
-11. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
+12. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
    optimizations, failed attempts, and correctness differentials;
-12. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+13. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-13. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+14. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 Generations 3, 4, and 5 are frozen. Generation 5 stopped at its second
 predeclared Stage-4 fail-fast smoke: Bellman prediction improved, but independent
