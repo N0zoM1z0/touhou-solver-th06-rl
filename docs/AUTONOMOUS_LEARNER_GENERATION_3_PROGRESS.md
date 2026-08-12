@@ -119,3 +119,23 @@ Its CLI deliberately exposes no gameplay, reward, seed, threshold, round-size,
 canary-count, or evaluation-count knobs. Natural evaluation always runs all 24
 trials unless infrastructure itself fails, and reports aggregate physical HITs,
 candidate exercise, total overrides, and an approximate HIT-rate-ratio interval.
+
+## 2026-08-12: real Wine preflight passed and collection launched
+
+The hash-bound committed preflight passed before the first evidence Stage:
+
+- causal fixture prediction mean: -0.9690 HIT for a true -1 HIT effect;
+- held-out DR RMSE: 0.0536 versus zero-advantage RMSE 0.7202;
+- all seven population members recovered the negative effect with zero measured
+  state-risk leakage;
+- 45-second Wine smoke: 2,078 option rows, 1,441 factually executed rows,
+  637 explicitly rejected rows, 405 factual boundaries, 21 non-incumbent
+  boundaries, 93 horizon terminations, and five input-lease rows;
+- every causal and Wine wiring gate passed; the smoke remains non-evidence.
+
+The unattended fixed experiment then launched. The first two complete
+fixed-RNG collection Stages passed full corpus/HIT/infrastructure validation:
+episode 0 recorded 38 physical HITs and episode 1 recorded 32. These are
+training outcomes only, not an interim efficacy comparison and not authority
+to alter the committed schedule. Collection continues toward the first
+12-episode grouped fit.
