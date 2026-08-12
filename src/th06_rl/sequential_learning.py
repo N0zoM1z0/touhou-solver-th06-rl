@@ -432,7 +432,42 @@ def _fit_critic_population(
     return models, reports
 
 
-def _evaluate_population(models, samples: list[OrthogonalOption]):
+def _support_mask(
+    support: dict[str, object],
+    sample: OptionStep,
+) -> list[bool]:
+    import numpy as np
+
+    mean = np.asarray(support["mean"], dtype=np.float64)
+    scale = np.asarray(support["scale"], dtype=np.float64)
+    prototypes = support["prototypes"]
+    factual_actions = set(support["factual_supported_actions"])
+    threshold = float(support["threshold"])
+    result = []
+    for action, vector in zip(
+        sample.legal_actions, sample.candidate_vectors, strict=True
+    ):
+        if action not in factual_actions:
+            result.append(False)
+            continue
+        action_index = ACTION_NAMES.index(action)
+        normalized = (np.asarray(vector, dtype=np.float64) - mean) / scale
+        action_prototypes = np.asarray(
+            prototypes[action_index], dtype=np.float64
+        )
+        distance = float(((action_prototypes - normalized) ** 2).mean(
+            axis=1
+        ).min())
+        result.append(distance <= threshold)
+    return result
+
+
+def _evaluate_population(
+    models,
+    samples: list[OrthogonalOption],
+    *,
+    support: dict[str, object],
+):
     import numpy as np
 
     layout = _centered_layout(samples)
@@ -449,10 +484,15 @@ def _evaluate_population(models, samples: list[OrthogonalOption]):
         baseline = sample.step.legal_actions.index(sample.step.baseline_action)
         advantages = member_scores - member_scores[:, [baseline]]
         upper = advantages.max(axis=0)
+        supported = _support_mask(support, sample.step)
         candidates = [
             (float(upper[index]), index)
             for index, action in enumerate(sample.step.legal_actions)
-            if action != sample.step.baseline_action and upper[index] < 0.0
+            if (
+                action != sample.step.baseline_action
+                and supported[index]
+                and upper[index] < 0.0
+            )
         ]
         selected = min(candidates, default=None)
         result.append({
@@ -467,6 +507,10 @@ def _evaluate_population(models, samples: list[OrthogonalOption]):
                 selected[0] if selected is not None else 0.0
             ),
             "member_advantages": advantages.astype(float).tolist(),
+            "unsupported_candidates": sum(
+                action != sample.step.baseline_action and not supported[index]
+                for index, action in enumerate(sample.step.legal_actions)
+            ),
         })
     return result
 
@@ -489,7 +533,18 @@ def _crossfit_critic_report(
             seed=seed + 100_000 + fold * 10_000,
             threads=threads,
         )
-        evaluated = _evaluate_population(models, heldout)
+        # Calibrate the decision policy with support learned from this fold's
+        # training episodes only.  Fitting support on held-out factual rows
+        # would leak the evaluation episodes into the abstention rule.
+        fold_support, fold_support_report = _support(
+            train,
+            seed=seed + 150_000 + fold * 10_000,
+        )
+        evaluated = _evaluate_population(
+            models,
+            heldout,
+            support=fold_support,
+        )
         for row in evaluated:
             sample = row["sample"]
             episode = sample.step.episode_id
@@ -499,12 +554,16 @@ def _crossfit_critic_report(
                 "options": 0,
                 "proposals": 0,
                 "proposal_actions": Counter(),
+                "unsupported_candidates": 0,
             })
             report["zero_squared_error"] += sample.outcome_residual ** 2
             report["critic_squared_error"] += (
                 sample.outcome_residual - row["centered_prediction"]
             ) ** 2
             report["options"] += 1
+            report["unsupported_candidates"] += row[
+                "unsupported_candidates"
+            ]
             proposed = row["selected_action"]
             if proposed != sample.step.baseline_action:
                 report["proposals"] += 1
@@ -514,6 +573,7 @@ def _crossfit_critic_report(
             "fit_episodes": sorted({row.step.episode_id for row in train}),
             "heldout_episodes": sorted({row.step.episode_id for row in heldout}),
             "bootstrap": bootstrap,
+            "training_only_support": fold_support_report,
         })
     episode_reports = {}
     for episode, raw in sorted(by_episode.items()):
@@ -539,6 +599,10 @@ def _crossfit_critic_report(
         "episode_groups": len(episode_reports),
         "proposals": sum(row["proposals"] for row in episode_reports.values()),
         "proposal_episodes": proposal_episodes,
+        "unsupported_candidates": sum(
+            row["unsupported_candidates"]
+            for row in episode_reports.values()
+        ),
     }
 
 
@@ -604,6 +668,192 @@ def _support(
         "factual_action_counts": counts,
     }
     return artifact, report
+
+
+def audit_propensity_wine_smoke(
+    run_dir,
+    *,
+    minimum_boundaries: int = 32,
+) -> dict[str, object]:
+    """Audit a short v10 Wine run without admitting it as RL evidence."""
+    from pathlib import Path
+
+    from .advantage_learning import (
+        NONEXECUTED_OPTION_TERMINATIONS,
+        _object,
+        _representation_inputs,
+        _rows,
+    )
+    from .policies.propensity_aware_option_exploration import (
+        OPTION_HORIZON_FRAMES,
+        UNIFORM_MASS,
+    )
+
+    run_dir = Path(run_dir).resolve()
+    run = _object(run_dir / "run.json")
+    manifest = _object(run_dir / "manifest.json")
+    schemas = run.get("schemas")
+    outcome = manifest.get("run_outcome")
+    if (
+        manifest.get("complete") is not True
+        or int(manifest.get("dropped_records", -1)) != 0
+        or not isinstance(schemas, dict)
+        or schemas.get("transition") != TRANSITION_SCHEMA
+        or not isinstance(outcome, dict)
+    ):
+        raise ValueError("Generation-4 Wine smoke is incomplete or not v10")
+    clean_infrastructure = all(
+        int(outcome.get(field, -1)) == 0
+        for field in (
+            "background_reactivations",
+            "capture_failures",
+            "corpus_failures",
+            "infrastructure_failures",
+            "trace_failures",
+        )
+    ) and outcome.get("corpus_failure") is None
+    boundaries = continuations = non_incumbent = horizon_terminations = 0
+    executed_rows = rejected_rows = representation_boundaries = 0
+    probability_vectors = diagnostic_vectors = minimum_probability_witnesses = 0
+    active_option_id: str | None = None
+    option_ids: set[str] = set()
+    for row in _rows(run_dir, manifest, transition_schema=TRANSITION_SCHEMA):
+        option = row.get("option")
+        if option is None:
+            continue
+        if not isinstance(option, dict):
+            raise TypeError("Generation-4 Wine option trace is invalid")
+        if row.get("policy_id") != BEHAVIOR_POLICY:
+            raise ValueError("Generation-4 Wine smoke used the wrong policy")
+        legal_raw = row.get("legal_actions")
+        if not isinstance(legal_raw, list):
+            raise TypeError("Generation-4 Wine option has no native-safe set")
+        legal = tuple(map(str, legal_raw))
+        baseline = str(row.get("baseline_action", ""))
+        action = str(option.get("intent", ""))
+        if (
+            not legal
+            or len(set(legal)) != len(legal)
+            or baseline not in legal
+            or action not in legal
+        ):
+            raise ValueError("Generation-4 Wine option escaped native safety")
+        option_id = str(option.get("option_id", ""))
+        boundary = option.get("boundary") is True
+        elapsed = int(option.get("elapsed_frames_at_decision", 0))
+        if not option_id or not 1 <= elapsed <= OPTION_HORIZON_FRAMES:
+            raise ValueError("Generation-4 Wine option identity/horizon failed")
+        conditional = float(option.get("conditional_probability", 0.0))
+        row_probability = float(row.get("behavior_probability", 0.0))
+        expected_conditional = (
+            float(option.get("boundary_probability", 0.0))
+            if boundary else 1.0
+        )
+        if (
+            not math.isclose(conditional, expected_conditional, rel_tol=1e-9)
+            or not math.isclose(row_probability, expected_conditional, rel_tol=1e-9)
+        ):
+            raise ValueError("Generation-4 conditional propensity is invalid")
+        if boundary:
+            vectors = {}
+            for field in ("behavior_probabilities", "information_weights", "propensity_ess"):
+                raw = option.get(field)
+                if not isinstance(raw, list) or any(
+                    not isinstance(item, list) or len(item) != 2 for item in raw
+                ):
+                    raise ValueError(f"Generation-4 {field} vector is absent")
+                vector = {str(name): float(value) for name, value in raw}
+                if len(vector) != len(raw) or set(vector) != set(legal) or any(
+                    not math.isfinite(value) or value < 0.0
+                    for value in vector.values()
+                ):
+                    raise ValueError(f"Generation-4 {field} vector is invalid")
+                vectors[field] = vector
+            probabilities = vectors["behavior_probabilities"]
+            information = vectors["information_weights"]
+            if (
+                any(value <= 0.0 for value in probabilities.values())
+                or not math.isclose(sum(probabilities.values()), 1.0, rel_tol=1e-9)
+                or not math.isclose(sum(information.values()), 1.0, rel_tol=1e-9)
+                or not math.isclose(
+                    probabilities[action], expected_conditional, rel_tol=1e-9
+                )
+                or min(probabilities.values()) + 1e-12
+                < UNIFORM_MASS / len(legal)
+            ):
+                raise ValueError("Generation-4 propensity mixture is invalid")
+            probability_vectors += 1
+            diagnostic_vectors += 1
+            minimum_probability_witnesses += 1
+        executed = row.get("executed_action")
+        if executed != action:
+            if (
+                option.get("termination_reason")
+                not in NONEXECUTED_OPTION_TERMINATIONS
+                or row.get("learning_eligible") is not False
+            ):
+                raise ValueError("Generation-4 rejected option is ambiguous")
+            rejected_rows += 1
+            if not boundary:
+                if option_id != active_option_id:
+                    raise ValueError("rejected continuation escaped its option")
+                active_option_id = None
+            continue
+        executed_rows += 1
+        if boundary:
+            if option_id in option_ids or elapsed != 1:
+                raise ValueError("Generation-4 boundary identity is invalid")
+            option_ids.add(option_id)
+            active_option_id = option_id
+            boundaries += 1
+            non_incumbent += int(action != baseline)
+            _representation_inputs(row)
+            representation_boundaries += 1
+        else:
+            continuations += 1
+            if option_id != active_option_id:
+                raise ValueError("Generation-4 continuation escaped its boundary")
+        termination = option.get("termination_reason")
+        if termination == "horizon":
+            if elapsed != OPTION_HORIZON_FRAMES:
+                raise ValueError("Generation-4 horizon terminated early")
+            horizon_terminations += 1
+        if termination is not None:
+            active_option_id = None
+    summary = manifest.get("summary")
+    input_lease_rows = (
+        int(summary.get("reason_counts", {}).get("input-lease", 0))
+        if isinstance(summary, dict)
+        and isinstance(summary.get("reason_counts"), dict)
+        else 0
+    )
+    gates = {
+        "clean_infrastructure": clean_infrastructure,
+        "minimum_option_boundaries": boundaries >= minimum_boundaries,
+        "non_incumbent_witnessed": non_incumbent >= 1,
+        "continuation_witnessed": continuations >= 1,
+        "horizon_termination_witnessed": horizon_terminations >= 1,
+        "complete_propensity_vectors": probability_vectors == boundaries,
+        "complete_information_and_ess_vectors": diagnostic_vectors == boundaries,
+        "bounded_minimum_propensity": minimum_probability_witnesses == boundaries,
+        "representation_at_every_boundary": representation_boundaries == boundaries,
+        "input_lease_witnessed": input_lease_rows >= 1,
+        "executed_rows_native_safe": executed_rows > 0,
+    }
+    return {
+        "schema": "autonomous-generation-4-wine-propensity-smoke-v1",
+        "run_dir": str(run_dir),
+        "evidence_eligible": False,
+        "option_boundaries": boundaries,
+        "option_continuations": continuations,
+        "non_incumbent_boundaries": non_incumbent,
+        "horizon_terminations": horizon_terminations,
+        "executed_option_rows": executed_rows,
+        "rejected_option_rows": rejected_rows,
+        "input_lease_rows": input_lease_rows,
+        "gates": gates,
+        "passed": all(gates.values()),
+    }
 
 
 def fit_sequential_r_critic(
@@ -821,11 +1071,13 @@ def fit_sequential_causal_fixture(
     return samples, state
 
 
-def run_sequential_causal_smoke(*, threads: int = 4) -> dict[str, object]:
+def audit_sequential_causal_fixture(
+    samples: list[OptionStep],
+    state: dict[str, object],
+) -> dict[str, object]:
     from .policies.autonomous_conservative_q import _decode_model
     from .policies.offline_ranker import PortableXGBoostRegressor
 
-    samples, state = fit_sequential_causal_fixture(threads=threads)
     scorers = [
         PortableXGBoostRegressor(
             _decode_model(model),
@@ -912,3 +1164,8 @@ def run_sequential_causal_smoke(*, threads: int = 4) -> dict[str, object]:
         "gates": gates,
         "passed": all(gates.values()),
     }
+
+
+def run_sequential_causal_smoke(*, threads: int = 4) -> dict[str, object]:
+    samples, state = fit_sequential_causal_fixture(threads=threads)
+    return audit_sequential_causal_fixture(samples, state)

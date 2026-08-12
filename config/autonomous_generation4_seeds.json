@@ -1,0 +1,34 @@
+{
+  "canary": [
+    {"game_rng_seed": 50588, "pair": 0, "round": 1},
+    {"game_rng_seed": 48171, "pair": 1, "round": 1},
+    {"game_rng_seed": 43437, "pair": 2, "round": 1},
+    {"game_rng_seed": 41402, "pair": 0, "round": 2},
+    {"game_rng_seed": 36576, "pair": 1, "round": 2},
+    {"game_rng_seed": 54310, "pair": 2, "round": 2},
+    {"game_rng_seed": 26947, "pair": 0, "round": 3},
+    {"game_rng_seed": 16583, "pair": 1, "round": 3},
+    {"game_rng_seed": 2908, "pair": 2, "round": 3}
+  ],
+  "collection": [
+    {"episode": 0, "game_rng_seed": 29173, "policy_seed": 29487},
+    {"episode": 1, "game_rng_seed": 28512, "policy_seed": 54953},
+    {"episode": 2, "game_rng_seed": 1645, "policy_seed": 34138},
+    {"episode": 3, "game_rng_seed": 34627, "policy_seed": 46214},
+    {"episode": 4, "game_rng_seed": 46522, "policy_seed": 30621},
+    {"episode": 5, "game_rng_seed": 23771, "policy_seed": 27720},
+    {"episode": 6, "game_rng_seed": 31129, "policy_seed": 57315},
+    {"episode": 7, "game_rng_seed": 2403, "policy_seed": 41440},
+    {"episode": 8, "game_rng_seed": 32860, "policy_seed": 8932},
+    {"episode": 9, "game_rng_seed": 63815, "policy_seed": 39911},
+    {"episode": 10, "game_rng_seed": 51423, "policy_seed": 37839},
+    {"episode": 11, "game_rng_seed": 17899, "policy_seed": 19116},
+    {"episode": 12, "game_rng_seed": 54670, "policy_seed": 54479},
+    {"episode": 13, "game_rng_seed": 37006, "policy_seed": 58804},
+    {"episode": 14, "game_rng_seed": 54590, "policy_seed": 61514},
+    {"episode": 15, "game_rng_seed": 39890, "policy_seed": 5947}
+  ],
+  "generation_seed": 260812,
+  "schema": "autonomous-generation-4-precommitted-seeds-v1",
+  "smoke_game_rng_seed": 64786
+}

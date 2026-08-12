@@ -76,3 +76,32 @@ nuisance and 128-tree critic contract, and writes an immutable shadow state.
 All repository tests pass after the transition, exploration, rollback,
 population-selection, and loader changes. No Generation-4 Wine outcome has
 been launched.
+
+## 2026-08-12: frozen Wine offline smoke and preflight contract
+
+All 13 complete Generation-3 episodes were frozen as one indivisible
+historical input by run identity, manifest SHA-256, and physical HIT count.
+The 16 new collection seeds, policy seeds, nine paired-canary seeds, and short
+non-evidence smoke seed were generated from the declared Generation-4 seed and
+committed before any Generation-4 Wine outcome. Selecting episodes after a fit
+or outcome is impossible under this contract.
+
+A deliberately low-cost 24-tree version of the entire sequential pipeline was
+run on the 13 frozen factual Wine episodes. It loaded 48,001 factual option
+boundaries and conserved their complete-Stage HIT totals. Cross-fitted R loss
+fell from 346,684.17 for the zero-effect critic to 337,162.73 for the learned
+critic, a relative loss of 0.9725, with improvement in all 13 episode groups.
+This is the first factual Wine indication that the new orthogonal objective
+contains learnable treatment signal. It is not efficacy evidence: 13 groups
+fail the predeclared minimum of 20 and the smoke used fewer trees than the
+production contract.
+
+Policy calibration support was additionally corrected to fit prototypes and
+the 99th-percentile threshold from each fold's training episodes only. The
+held-out episodes now influence neither the critic nor its abstention rule.
+The preflight hard gate binds this implementation and the seed/corpus
+contracts, repeats the production causal recovery, benchmarks all seven full
+128-tree members across 1,200 maximum-sized native decisions, and audits a
+short retail-Wine transition-v10 run for complete propensities, ESS,
+information weights, native-safe execution, and option lifecycle. The short
+Wine run is explicitly ineligible as training or evaluation evidence.
