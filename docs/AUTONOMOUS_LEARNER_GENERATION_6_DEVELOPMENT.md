@@ -273,6 +273,53 @@ Warm load, representation, and five-fold critic/actor work took 11.39, 52.96,
 and 310.11 seconds respectively (374.46 seconds total) on hard CPU set 0--31.
 The untouched qualification corpus and Wine were not loaded.
 
+## Next candidate: nested cross-fit policy improvement
+
+The actor-training leakage is removed with nested complete-episode
+cross-fitting. For each outer development fold, three inner critics generate
+AWR weights only for episodes they did not fit. Seven whole-episode-bootstrap
+actors then learn from that one immutable cross-fitted label vector. The outer
+held-out episodes are excluded from the hazard representation, inner labels,
+actor, support model, and evaluation nuisance. This is more than changing a
+random seed: it prevents flexible critic residuals from becoming actor targets
+on the same trajectories.
+
+The candidate policy is the complete population's mean listwise score, not a
+selected actor and not the extreme range at each frame. If it ranks a
+native-supported candidate above the incumbent, the deployed policy is a small
+stochastic intervention from incumbent to that candidate. Its probability is
+the minimum of 10%, twice the recorded propensity of the candidate, and twice
+the recorded propensity of the incumbent. Consequently the factual correction
+coefficient for either relevant action is bounded by two; rare actions can
+never create the old 180-fold pseudo-outcome spike.
+
+On an outer held-out factual option, evaluation estimates the policy contrast
+with a semi-Markov doubly robust score:
+
+`rho * (Q(candidate) - Q(incumbent))`
+
+`+ rho * (1[A=candidate] - 1[A=incumbent]) / mu(A) * (Y - Q(A))`.
+
+`Y` is the unchanged physical-HIT n-step target with terminal value zero. Scores
+are summed within each complete episode; confidence is computed across episode
+groups for the complete policy, not across thousands of counterfactual
+actions. This is a bounded, development-time policy-improvement diagnostic,
+not a substitute for the original-Wine complete-Stage canary: occupancy changes
+and approximation error remain possible, so only Wine owns promotion.
+
+The formal delayed-effect/matched-null smoke passed. The delayed-effect policy
+estimated `-0.4223` HIT per episode with complete-episode-bootstrap 95% upper
+bound `-0.0789`; its
+mean-population leave-one-member-out stability was 87.78%. The matched null
+estimated `-0.0621` with bootstrap interval `[-0.1869, 0.0630]`, correctly retaining
+zero despite its actor having finite-sample preferences. All inner labels were
+out of episode, and the maximum factual correction was 0.2 under the fixture's
+50/50 behavior. The ignored report is
+`artifacts/autonomous-generation-6-development/crossfit-actor-policy-smoke-v2.json`,
+SHA-256
+`cc5705c9c6bc453dcb7d5db66838abd0057905f7772574b476ebf3aab5f49503`.
+These gates unlock only a 31-episode Wine development replay.
+
 ## Performance contract
 
 All development launchers apply the Linux process-tree CPU affinity contract

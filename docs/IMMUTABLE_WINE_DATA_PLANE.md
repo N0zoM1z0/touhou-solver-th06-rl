@@ -75,3 +75,20 @@ leakage.
 Historical qualification can reject an algorithm but cannot authorize new
 gameplay. Final efficacy always requires new normal-speed original-Wine,
 natural-RNG, complete-Stage HIT-continuation trials.
+
+## Reusable experiment rule
+
+Algorithm iteration creates a new derived report; it never creates a private
+copy or silently relabels source data. Two learners compared on the same
+registry query must receive the same ordered factual episodes and immutable
+physical fields. Their preprocessing, representations, targets, fitted
+parameters, policy metrics, and outcomes live under separate source hashes and
+artifact identities. A failed result remains addressable and is never
+overwritten by a repaired learner.
+
+New Wine collection is justified by a declared capability gap or by a policy
+that passed offline qualification and needs causal canary evidence. Merely
+changing neural architecture, critic family, uncertainty estimator, or
+hyperparameters is not a data-collection reason: every compatible historical
+episode must be replayed first. This is the repository's operational meaning
+of keeping data, algorithms/frameworks, and learning results separate.

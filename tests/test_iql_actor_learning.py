@@ -8,6 +8,7 @@ from th06_rl.implicit_learning import delayed_effect_episodes
 from th06_rl.iql_actor_learning import (
     action_centered_actor_losses,
     actor_arrays,
+    cross_fitted_factual_advantages,
 )
 from th06_rl.low_rank_learning import FeatureRoleLayout
 
@@ -61,4 +62,27 @@ def test_action_centered_actor_loss_is_unbiased_without_local_weight_normalizati
     assert np.isclose(
         np.sum(propensity * estimates),
         np.sum(propensity * advantage_weights * action_losses),
+    )
+
+
+def test_actor_advantage_labels_are_cross_fitted_by_complete_episode() -> None:
+    samples = delayed_effect_episodes(count=6, options=16, delay=3)
+
+    advantages, report = cross_fitted_factual_advantages(
+        samples,
+        folds=3,
+        critic_iterations=1,
+        n_step_options=2,
+        q_trees=2,
+        value_trees=2,
+        threads=1,
+    )
+
+    assert advantages.shape == (len(samples),)
+    assert np.all(np.isfinite(advantages))
+    assert report["all_labels_out_of_episode"] is True
+    assert sum(row["options"] for row in report["folds"]) == len(samples)
+    assert all(
+        set(row["fit_episodes"]).isdisjoint(row["heldout_episodes"])
+        for row in report["folds"]
     )

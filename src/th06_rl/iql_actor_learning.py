@@ -212,12 +212,14 @@ def action_centered_actor_losses(
 
 def fit_iql_actor_member(
     samples: list[OptionStep],
-    critic_member,
+    critic_member=None,
     *,
     layout: FeatureRoleLayout,
     prepared: ActorArrays,
     seed: int,
     threads: int,
+    advantage=None,
+    bootstrap: dict[str, int] | None = None,
     hidden: int = 64,
     rank: int = 24,
     epochs: int = 10,
@@ -236,12 +238,23 @@ def fit_iql_actor_member(
     torch.manual_seed(seed)
     torch.use_deterministic_algorithms(True)
 
+    if advantage is None:
+        if critic_member is None:
+            raise ValueError("actor needs a critic or frozen advantages")
+        advantage = factual_cost_advantage(samples, critic_member)
+    else:
+        advantage = np.asarray(advantage, dtype=np.float32)
+        if advantage.shape != (len(prepared.episode_ids),):
+            raise ValueError("frozen actor advantages and options differ")
+    if bootstrap is None:
+        if critic_member is None:
+            raise ValueError("actor needs an explicit episode bootstrap")
+        bootstrap = critic_member.bootstrap
     bootstrap_weights = np.asarray([
-        critic_member.bootstrap.get(episode, 0)
+        bootstrap.get(episode, 0)
         for episode in prepared.episode_ids
     ], dtype=np.float32)
     group_weights = prepared.base_weights * bootstrap_weights
-    advantage = factual_cost_advantage(samples, critic_member)
     temperature = _weighted_rms(advantage, group_weights)
     log_weights = np.clip(
         -advantage / temperature, -log_weight_clip, log_weight_clip
@@ -354,7 +367,7 @@ def fit_iql_actor_member(
     )
     return IqlActorMember(
         model=artifact,
-        bootstrap=critic_member.bootstrap,
+        bootstrap=dict(sorted(bootstrap.items())),
         advantage_scale=temperature,
         diagnostics={
             # A finite-sample control-variate estimate may be negative even
@@ -411,6 +424,143 @@ def fit_iql_actor_population(
         )
         for member, critic_member in enumerate(critic_population)
     ]
+
+
+def cross_fitted_factual_advantages(
+    samples: list[OptionStep],
+    *,
+    folds: int = 3,
+    critic_iterations: int = 2,
+    n_step_options: int = 8,
+    q_trees: int = 8,
+    value_trees: int = 8,
+    seed: int = 860_813,
+    threads: int = 1,
+) -> tuple[object, dict[str, object]]:
+    """Generate every AWR label with a critic excluding its entire episode."""
+    import numpy as np
+    from .advantage_learning import _folds
+    from .implicit_learning import _episodes, fit_implicit_q_member
+
+    episodes = _episodes(samples)
+    groups = list(episodes)
+    if not 2 <= folds <= len(groups):
+        raise ValueError("actor advantage cross-fit needs complete-episode folds")
+    partitions = _folds(groups, count=folds, seed=seed)
+    by_option: dict[tuple[str, str], float] = {}
+    reports = []
+    for fold, heldout_groups in enumerate(partitions):
+        heldout_set = set(heldout_groups)
+        train = [
+            sample for sample in samples
+            if sample.episode_id not in heldout_set
+        ]
+        heldout = [
+            sample for sample in samples
+            if sample.episode_id in heldout_set
+        ]
+        train_groups = tuple(_episodes(train))
+        critic = fit_implicit_q_member(
+            train,
+            iterations=critic_iterations,
+            n_step_options=n_step_options,
+            q_trees=q_trees,
+            value_trees=value_trees,
+            seed=seed + fold * 10_000,
+            threads=threads,
+            bootstrap={episode: 1 for episode in train_groups},
+        )
+        values = factual_cost_advantage(heldout, critic)
+        ordered = [
+            sample for episode in _episodes(heldout).values()
+            for sample in episode
+        ]
+        for sample, value in zip(ordered, values, strict=True):
+            key = (sample.episode_id, sample.option_id)
+            if key in by_option:
+                raise RuntimeError("actor advantage was cross-fitted twice")
+            by_option[key] = float(value)
+        reports.append({
+            "fold": fold,
+            "fit_episodes": sorted(train_groups),
+            "heldout_episodes": sorted(heldout_set),
+            "options": len(heldout),
+            "critic_iterations": critic.iterations,
+        })
+    ordered = [
+        sample for episode in episodes.values() for sample in episode
+    ]
+    values = np.asarray([
+        by_option[(sample.episode_id, sample.option_id)] for sample in ordered
+    ], dtype=np.float32)
+    if len(by_option) != len(ordered) or not np.all(np.isfinite(values)):
+        raise RuntimeError("actor advantage cross-fit is incomplete")
+    return values, {
+        "folds": reports,
+        "episode_groups": len(groups),
+        "options": len(ordered),
+        "all_labels_out_of_episode": all(
+            not set(report["fit_episodes"]) & set(report["heldout_episodes"])
+            for report in reports
+        ),
+    }
+
+
+def fit_cross_fitted_iql_actor_population(
+    samples: list[OptionStep],
+    *,
+    layout: FeatureRoleLayout,
+    advantage_folds: int = 3,
+    critic_iterations: int = 2,
+    n_step_options: int = 8,
+    q_trees: int = 8,
+    value_trees: int = 8,
+    seed: int = 760_813,
+    threads: int = 1,
+    hidden: int = 64,
+    rank: int = 24,
+    epochs: int = 8,
+    batch_size: int = 1024,
+    learning_rate: float = 1e-3,
+    log_weight_clip: float = 4.0,
+) -> tuple[list[IqlActorMember], dict[str, object]]:
+    from .implicit_learning import _bootstrap_counts, _episodes
+
+    prepared = actor_arrays(samples, layout)
+    advantages, crossfit = cross_fitted_factual_advantages(
+        samples,
+        folds=advantage_folds,
+        critic_iterations=critic_iterations,
+        n_step_options=n_step_options,
+        q_trees=q_trees,
+        value_trees=value_trees,
+        seed=seed + 100_000,
+        threads=threads,
+    )
+    groups = tuple(_episodes(samples))
+    bootstraps = [
+        _bootstrap_counts(groups, seed=seed + member * 10_000)
+        for member in range(7)
+    ]
+    actors = [
+        fit_iql_actor_member(
+            samples,
+            layout=layout,
+            prepared=prepared,
+            seed=seed + member * 10_000 + 500_000,
+            threads=threads,
+            advantage=advantages,
+            bootstrap=bootstraps[member],
+            hidden=hidden,
+            rank=rank,
+            epochs=epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            log_weight_clip=log_weight_clip,
+        )
+        for member in range(7)
+    ]
+    return actors, crossfit
 
 
 def pessimistic_actor_action(
@@ -484,39 +634,131 @@ def evaluate_iql_actor_fold(
     actor_batch_size: int,
     actor_learning_rate: float,
     actor_log_weight_clip: float,
+    actor_advantage_folds: int = 0,
+    intervention_probability_cap: float = 0.10,
+    intervention_density_ratio_cap: float = 2.0,
+    fit_representation_on_train: bool = False,
 ) -> dict[str, object]:
     from collections import Counter
     import numpy as np
     from .implicit_learning import (
         _support_artifacts,
         _supported,
+        _arrays,
+        _episodes,
+        _n_step_targets,
+        fit_implicit_q_member,
         fit_implicit_q_population,
     )
 
-    critics = fit_implicit_q_population(
+    if fit_representation_on_train:
+        from .advantage_learning import (
+            _augment_steps,
+            fit_hazard_codebook,
+            rich_feature_names,
+        )
+        from .low_rank_learning import named_feature_roles
+
+        representation = fit_hazard_codebook(
+            train, seed=seed + fold * 100_000 + 40_000
+        )
+        train = _augment_steps(train, representation)
+        heldout = _augment_steps(heldout, representation)
+        layout = named_feature_roles(rich_feature_names())
+        representation_report = {
+            "fit_episodes": sorted({sample.episode_id for sample in train}),
+            "heldout_episodes": sorted({
+                sample.episode_id for sample in heldout
+            }),
+            "heldout_excluded": not (
+                {sample.episode_id for sample in train}
+                & {sample.episode_id for sample in heldout}
+            ),
+        }
+    else:
+        representation_report = {
+            "scope": "caller-prepared",
+            "heldout_excluded": False,
+        }
+
+    if actor_advantage_folds:
+        actors, advantage_crossfit = fit_cross_fitted_iql_actor_population(
+            train,
+            layout=layout,
+            advantage_folds=actor_advantage_folds,
+            critic_iterations=critic_iterations,
+            n_step_options=n_step_options,
+            q_trees=q_trees,
+            value_trees=value_trees,
+            seed=seed + fold * 100_000 + 50_000,
+            threads=threads,
+            hidden=actor_hidden,
+            rank=actor_rank,
+            epochs=actor_epochs,
+            batch_size=actor_batch_size,
+            learning_rate=actor_learning_rate,
+            log_weight_clip=actor_log_weight_clip,
+        )
+        critics = []
+    else:
+        critics = fit_implicit_q_population(
+            train,
+            members=7,
+            iterations=critic_iterations,
+            n_step_options=n_step_options,
+            q_trees=q_trees,
+            value_trees=value_trees,
+            seed=seed + fold * 100_000,
+            total_threads=threads,
+            parallel_members=False,
+        )
+        actors = fit_iql_actor_population(
+            train,
+            critics,
+            layout=layout,
+            seed=seed + fold * 100_000 + 50_000,
+            threads=threads,
+            hidden=actor_hidden,
+            rank=actor_rank,
+            epochs=actor_epochs,
+            batch_size=actor_batch_size,
+            learning_rate=actor_learning_rate,
+            log_weight_clip=actor_log_weight_clip,
+        )
+        advantage_crossfit = None
+
+    train_groups = tuple(_episodes(train))
+    evaluation_critic = fit_implicit_q_member(
         train,
-        members=7,
         iterations=critic_iterations,
         n_step_options=n_step_options,
         q_trees=q_trees,
         value_trees=value_trees,
-        seed=seed + fold * 100_000,
-        total_threads=threads,
-        parallel_members=False,
-    )
-    actors = fit_iql_actor_population(
-        train,
-        critics,
-        layout=layout,
-        seed=seed + fold * 100_000 + 50_000,
+        seed=seed + fold * 100_000 + 90_000,
         threads=threads,
-        hidden=actor_hidden,
-        rank=actor_rank,
-        epochs=actor_epochs,
-        batch_size=actor_batch_size,
-        learning_rate=actor_learning_rate,
-        log_weight_clip=actor_log_weight_clip,
+        bootstrap={episode: 1 for episode in train_groups},
     )
+    heldout_episodes = _episodes(heldout)
+    heldout_targets = _n_step_targets(
+        heldout_episodes,
+        evaluation_critic.value_model,
+        n_step_options=n_step_options,
+    )
+    _q_rows, heldout_states, row_episodes, _base_weights = _arrays(
+        heldout_episodes
+    )
+    common_predictions = evaluation_critic.outcome_model.predict(
+        heldout_states
+    )
+    ordered_heldout = [
+        sample for rows in heldout_episodes.values() for sample in rows
+    ]
+    heldout_common = {
+        (episode, sample.option_id): float(common)
+        for episode, sample, common in zip(
+            row_episodes, ordered_heldout, common_predictions, strict=True
+        )
+    }
     support, support_report = _support_artifacts(
         train, seed=seed + fold * 100_000 + 80_000
     )
@@ -540,6 +782,12 @@ def evaluate_iql_actor_fold(
             "individual_union": 0,
             "individual_exact": 0,
             "mean_proposals": 0,
+            "mean_loo_union": 0,
+            "mean_loo_exact": 0,
+            "policy_intervention_exposure": 0.0,
+            "policy_model_effect": 0.0,
+            "policy_dr_effect": 0.0,
+            "policy_max_abs_correction": 0.0,
             "behavior_kl_sum": 0.0,
         })
         report["options"] += 1
@@ -573,6 +821,65 @@ def evaluate_iql_actor_fold(
         report["mean_proposals"] += int(
             mean_choice != sample.baseline_action
         )
+        mean_leave_one_out = tuple(
+            actor_population_choice(
+                scores[[
+                    member for member in all_members if member != omitted
+                ]].mean(axis=0, keepdims=True),
+                sample,
+                supported=mask,
+            )
+            for omitted in all_members
+        )
+        mean_loo_union = (
+            mean_choice != sample.baseline_action
+            or any(
+                choice != sample.baseline_action
+                for choice in mean_leave_one_out
+            )
+        )
+        report["mean_loo_union"] += int(mean_loo_union)
+        report["mean_loo_exact"] += int(
+            mean_loo_union
+            and all(choice == mean_choice for choice in mean_leave_one_out)
+        )
+
+        if mean_choice != sample.baseline_action:
+            candidate = sample.legal_actions.index(mean_choice)
+            baseline = sample.legal_actions.index(sample.baseline_action)
+            factual = sample.legal_actions.index(sample.action)
+            propensity = np.asarray(
+                sample.behavior_probabilities, dtype=np.float64
+            )
+            exposure = min(
+                intervention_probability_cap,
+                intervention_density_ratio_cap * propensity[candidate],
+                intervention_density_ratio_cap * propensity[baseline],
+            )
+            q_effect = np.asarray(
+                evaluation_critic.q_model.predict(sample.candidate_vectors),
+                dtype=np.float64,
+            )
+            centered_factual = (
+                q_effect[factual] - float(propensity @ q_effect)
+            )
+            key = (sample.episode_id, sample.option_id)
+            factual_q = heldout_common[key] + centered_factual
+            residual = heldout_targets[key] - factual_q
+            model_effect = exposure * (
+                q_effect[candidate] - q_effect[baseline]
+            )
+            correction = exposure * (
+                int(factual == candidate) - int(factual == baseline)
+            ) / propensity[factual]
+            report["policy_intervention_exposure"] += exposure
+            report["policy_model_effect"] += float(model_effect)
+            report["policy_dr_effect"] += float(
+                model_effect + correction * residual
+            )
+            report["policy_max_abs_correction"] = max(
+                report["policy_max_abs_correction"], abs(float(correction))
+            )
         full = actor_population_choice(scores, sample, supported=mask)
         leave_one_out = tuple(
             actor_population_choice(
@@ -630,6 +937,9 @@ def evaluate_iql_actor_fold(
         "support": support_report,
         "critic_bootstrap": [member.bootstrap for member in critics],
         "critic_iterations": [member.iterations for member in critics],
+        "evaluation_critic_iterations": evaluation_critic.iterations,
+        "actor_advantage_crossfit": advantage_crossfit,
+        "representation": representation_report,
         "actor_diagnostics": [actor.diagnostics for actor in actors],
         "actor_advantage_scales": [actor.advantage_scale for actor in actors],
         "episodes": episode_reports,
@@ -662,10 +972,15 @@ def crossfit_iql_actor_report(
     actor_batch_size: int = 1024,
     actor_learning_rate: float = 1e-3,
     actor_log_weight_clip: float = 4.0,
+    actor_advantage_folds: int = 0,
+    intervention_probability_cap: float = 0.10,
+    intervention_density_ratio_cap: float = 2.0,
+    fit_representation_on_train: bool = False,
 ) -> dict[str, object]:
     from collections import Counter
     from concurrent.futures import ProcessPoolExecutor
     import multiprocessing
+    import numpy as np
     import sys
     from .advantage_learning import _folds
     from .implicit_learning import _episodes
@@ -705,6 +1020,10 @@ def crossfit_iql_actor_report(
             "actor_batch_size": actor_batch_size,
             "actor_learning_rate": actor_learning_rate,
             "actor_log_weight_clip": actor_log_weight_clip,
+            "actor_advantage_folds": actor_advantage_folds,
+            "intervention_probability_cap": intervention_probability_cap,
+            "intervention_density_ratio_cap": intervention_density_ratio_cap,
+            "fit_representation_on_train": fit_representation_on_train,
         })
     if folds == 1:
         reports = [evaluate_iql_actor_fold(**jobs[0])]
@@ -747,6 +1066,25 @@ def crossfit_iql_actor_report(
         individual_union = sum(row["individual_union"] for row in rows)
         individual_exact = sum(row["individual_exact"] for row in rows)
         mean_proposals = sum(row["mean_proposals"] for row in rows)
+        mean_loo_union = sum(row["mean_loo_union"] for row in rows)
+        mean_loo_exact = sum(row["mean_loo_exact"] for row in rows)
+        policy_dr_effects = np.asarray([
+            row["policy_dr_effect"] for row in rows
+        ], dtype=np.float64)
+        policy_model_effects = np.asarray([
+            row["policy_model_effect"] for row in rows
+        ], dtype=np.float64)
+        policy_mean = float(policy_dr_effects.mean())
+        policy_se = float(
+            policy_dr_effects.std(ddof=1) / math.sqrt(len(rows))
+        ) if len(rows) > 1 else math.inf
+        # Complete episodes, not options, are the resampling unit.  The seed
+        # schedule is fixed by cohort identity and does not inspect outcomes.
+        cohort_seed = 960_813 + sum(map(ord, name or "overall"))
+        generator = np.random.default_rng(cohort_seed)
+        bootstrap_means = policy_dr_effects[generator.integers(
+            0, len(policy_dr_effects), size=(4096, len(policy_dr_effects))
+        )].mean(axis=1)
         return {
             "episode_groups": len(rows),
             "options": options,
@@ -770,6 +1108,38 @@ def crossfit_iql_actor_report(
                 if individual_union else 0.0
             ),
             "mean_population_proposal_rate": mean_proposals / options,
+            "mean_population_loo_stability": (
+                mean_loo_exact / mean_loo_union if mean_loo_union else 0.0
+            ),
+            "policy_intervention_exposure_rate": (
+                sum(row["policy_intervention_exposure"] for row in rows)
+                / options
+            ),
+            "policy_dr_hit_effect_mean": policy_mean,
+            "policy_dr_hit_effect_standard_error": policy_se,
+            "policy_dr_hit_effect_normal_upper_95": (
+                policy_mean + 1.6448536269514722 * policy_se
+            ),
+            "policy_dr_hit_effect_normal_lower_95": (
+                policy_mean - 1.6448536269514722 * policy_se
+            ),
+            "policy_dr_hit_effect_bootstrap_upper_95": float(
+                np.quantile(bootstrap_means, 0.95)
+            ),
+            "policy_dr_hit_effect_bootstrap_lower_95": float(
+                np.quantile(bootstrap_means, 0.05)
+            ),
+            "policy_dr_bootstrap_episode_groups": len(policy_dr_effects),
+            "policy_dr_bootstrap_resamples": 4096,
+            "policy_dr_beneficial_episode_rate": float(
+                np.mean(policy_dr_effects < 0.0)
+            ),
+            "policy_model_hit_effect_mean": float(
+                policy_model_effects.mean()
+            ),
+            "policy_max_abs_correction": max(
+                row["policy_max_abs_correction"] for row in rows
+            ),
             "mean_behavior_kl": (
                 sum(row["behavior_kl_sum"] for row in rows) / options
             ),
@@ -908,6 +1278,96 @@ def run_iql_actor_causal_smoke(*, threads: int = 8) -> dict[str, object]:
         "null_actor_diagnostics": [
             actor.diagnostics for actor in null_actors
         ],
+        "gates": gates,
+        "passed": all(gates.values()),
+    }
+
+
+def run_cross_fitted_iql_actor_policy_smoke(
+    *, threads: int = 8
+) -> dict[str, object]:
+    """Test nested episode cross-fitting and policy-level HIT uncertainty."""
+    from .implicit_learning import delayed_effect_episodes
+
+    count, options, delay, horizon = 64, 72, 12, 4
+    layout = FeatureRoleLayout(
+        names=tuple([
+            *(f"observation:pending-{index}" for index in range(delay)),
+            "action:treatment",
+        ]),
+        state_indices=tuple(range(delay)),
+        action_indices=(delay,),
+    )
+    parameters = {
+        "folds": 4,
+        "critic_iterations": 4,
+        "n_step_options": horizon,
+        "q_trees": 40,
+        "value_trees": 32,
+        "total_threads": threads,
+        "actor_hidden": 32,
+        "actor_rank": 12,
+        "actor_epochs": 8,
+        "actor_batch_size": 512,
+        "actor_advantage_folds": 3,
+        "intervention_probability_cap": 0.10,
+        "intervention_density_ratio_cap": 2.0,
+    }
+
+    def evaluate(null_effect: bool):
+        samples = delayed_effect_episodes(
+            count=count,
+            options=options,
+            delay=delay,
+            null_effect=null_effect,
+        )
+        report = crossfit_iql_actor_report(
+            samples,
+            layout=layout,
+            episode_cohorts={
+                sample.episode_id: "synthetic" for sample in samples
+            },
+            **parameters,
+        )
+        return report
+
+    delayed = evaluate(False)
+    null = evaluate(True)
+    effect = delayed["cohorts"]["overall"]
+    null_effect = null["cohorts"]["overall"]
+    gates = {
+        "effect_delayed_beyond_backup": delay > horizon,
+        "all_actor_labels_out_of_episode": all(
+            fold["actor_advantage_crossfit"]["all_labels_out_of_episode"]
+            for report in (delayed, null) for fold in report["folds"]
+        ),
+        "beneficial_policy_exercised": (
+            effect["mean_population_proposal_rate"] > 0.0
+            and effect["policy_intervention_exposure_rate"] > 0.0
+        ),
+        "beneficial_policy_upper_bound_below_zero": (
+            effect["policy_dr_hit_effect_bootstrap_upper_95"] < 0.0
+        ),
+        "null_policy_interval_contains_zero": (
+            null_effect["policy_dr_hit_effect_bootstrap_lower_95"] <= 0.0
+            <= null_effect["policy_dr_hit_effect_bootstrap_upper_95"]
+        ),
+        "bounded_policy_correction": max(
+            effect["policy_max_abs_correction"],
+            null_effect["policy_max_abs_correction"],
+        ) <= parameters["intervention_density_ratio_cap"] + 1e-9,
+    }
+    return {
+        "schema": "autonomous-generation-6-cross-fitted-policy-smoke-v1",
+        "evidence_eligible": False,
+        "parameters": {
+            "episode_groups": count,
+            "options_per_episode": options,
+            "effect_delay": delay,
+            **parameters,
+        },
+        "delayed_effect_policy": effect,
+        "null_effect_policy": null_effect,
         "gates": gates,
         "passed": all(gates.values()),
     }
