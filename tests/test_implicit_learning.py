@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from th06_rl.implicit_learning import (
     _episodes,
@@ -108,3 +109,37 @@ def test_crossfit_keeps_complete_episodes_out_of_their_models() -> None:
         set(fold["fit_episodes"]).isdisjoint(fold["heldout_episodes"])
         for fold in report["folds"]
     )
+
+
+def test_process_parallel_crossfit_matches_one_thread_serial() -> None:
+    samples = delayed_effect_episodes(count=10, options=12, delay=3)
+
+    parallel = crossfit_implicit_q_report(
+        samples,
+        iterations=1,
+        n_step_options=2,
+        q_trees=2,
+        value_trees=2,
+        total_threads=2,
+        fold_workers=2,
+    )
+    serial = crossfit_implicit_q_report(
+        samples,
+        iterations=1,
+        n_step_options=2,
+        q_trees=2,
+        value_trees=2,
+        total_threads=1,
+        fold_workers=1,
+    )
+    parallel.pop("execution")
+    serial.pop("execution")
+
+    assert parallel == serial
+
+
+def test_training_cpu_budget_rejects_more_than_32_threads() -> None:
+    samples = delayed_effect_episodes(count=10, options=8, delay=2)
+
+    with pytest.raises(ValueError, match="may not exceed 32"):
+        crossfit_implicit_q_report(samples, total_threads=33)

@@ -24,6 +24,9 @@ from th06_rl.implicit_learning import (  # noqa: E402
     BELLMAN_ITERATIONS,
     CALIBRATION_Q_TREES,
     CALIBRATION_VALUE_TREES,
+    CROSSFIT_FOLDS,
+    DEFAULT_CROSSFIT_WORKERS,
+    MAX_TRAINING_THREADS,
     N_STEP_OPTIONS,
     Q_TREES,
     VALUE_TREES,
@@ -97,7 +100,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--native-scorer", required=True, type=Path)
     parser.add_argument("--compatible-native-scorer", action="append", type=Path)
     parser.add_argument("--seed", type=int, default=260_813)
-    parser.add_argument("--threads", type=int, default=48)
+    parser.add_argument("--threads", type=int, default=MAX_TRAINING_THREADS)
+    parser.add_argument(
+        "--fold-workers", type=int, default=DEFAULT_CROSSFIT_WORKERS
+    )
     parser.add_argument(
         "--cache-dir",
         type=Path,
@@ -107,8 +113,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.seed != 260_813:
         parser.error("Generation 5 learner seed is fixed at 260813")
-    if args.threads <= 0:
-        parser.error("thread count must be positive")
+    if not 1 <= args.threads <= MAX_TRAINING_THREADS:
+        parser.error(
+            f"thread budget must be between 1 and {MAX_TRAINING_THREADS}"
+        )
+    if not 1 <= args.fold_workers <= min(CROSSFIT_FOLDS, args.threads):
+        parser.error("fold workers must fit both the fold count and thread budget")
     if args.output_dir.exists():
         raise FileExistsError(f"refusing to replace output: {args.output_dir}")
     scorer_paths = [args.native_scorer, *(args.compatible_native_scorer or ())]
@@ -164,6 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         calibration_value_trees=CALIBRATION_VALUE_TREES,
         seed=args.seed,
         total_threads=args.threads,
+        crossfit_workers=args.fold_workers,
         native_scorer_sha256=_sha256(args.native_scorer),
         compatible_native_scorer_sha256=tuple(
             _sha256(path) for path in args.compatible_native_scorer or ()
@@ -184,6 +195,7 @@ def main(argv: list[str] | None = None) -> int:
             "calibration_value_trees": CALIBRATION_VALUE_TREES,
             "seed": args.seed,
             "total_threads": args.threads,
+            "crossfit_workers": args.fold_workers,
             "option_cache_hits": sum(
                 hit for hit, _options in prime_results
             ),

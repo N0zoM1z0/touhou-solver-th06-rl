@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 import math
+import multiprocessing
 import random
+import sys
 from typing import Iterable
 
 from .advantage_learning import OptionStep
@@ -29,6 +31,15 @@ RIGHT_PANEL = (3, 4, 5, 6)
 MINIMUM_CALIBRATION_EPISODES = 20
 MAXIMUM_PROPOSAL_RATE = 0.10
 MINIMUM_CONDITIONAL_AGREEMENT = 0.80
+MAX_TRAINING_THREADS = 32
+DEFAULT_CROSSFIT_WORKERS = 5
+
+
+# Parallel cross-fitting is Linux/Wine-only and deliberately uses fork so the
+# immutable, multi-gigabyte option representation remains copy-on-write rather
+# than being serialized once per fold. The parent sets this immediately before
+# starting fresh workers; children receive only a small integer job index.
+_FORKED_CROSSFIT_JOBS = None
 
 
 @dataclass(frozen=True)
@@ -418,6 +429,10 @@ def fit_implicit_q_population(
     groups = tuple(episodes)
     if members < 1 or total_threads < 1:
         raise ValueError("population and CPU budget must be positive")
+    if total_threads > MAX_TRAINING_THREADS:
+        raise ValueError(
+            f"training CPU budget may not exceed {MAX_TRAINING_THREADS} threads"
+        )
     bootstraps = [
         _bootstrap_counts(groups, seed=seed + member * 10_000)
         for member in range(members)
@@ -642,6 +657,12 @@ def _evaluate_crossfit_fold(
     }
 
 
+def _run_forked_crossfit_job(index: int):
+    if _FORKED_CROSSFIT_JOBS is None:
+        raise RuntimeError("forked cross-fit job context is absent")
+    return _evaluate_crossfit_fold(**_FORKED_CROSSFIT_JOBS[index])
+
+
 def crossfit_implicit_q_report(
     samples: list[OptionStep],
     *,
@@ -652,13 +673,23 @@ def crossfit_implicit_q_report(
     value_trees: int = CALIBRATION_VALUE_TREES,
     seed: int = 260_813,
     total_threads: int = 12,
+    fold_workers: int = 1,
 ) -> dict[str, object]:
     from .advantage_learning import _folds
 
     episodes = _episodes(samples)
     groups = list(episodes)
     folds = _folds(groups, count=CROSSFIT_FOLDS, seed=seed)
-    reports = []
+    if not 1 <= fold_workers <= CROSSFIT_FOLDS:
+        raise ValueError("cross-fit workers must be between one and five")
+    if total_threads > MAX_TRAINING_THREADS:
+        raise ValueError(
+            f"training CPU budget may not exceed {MAX_TRAINING_THREADS} threads"
+        )
+    if fold_workers > total_threads:
+        raise ValueError("cross-fit workers exceed the total CPU budget")
+    threads_per_fold = max(1, total_threads // fold_workers)
+    jobs = []
     for fold, heldout_groups in enumerate(folds):
         heldout_set = set(heldout_groups)
         train = [
@@ -667,17 +698,38 @@ def crossfit_implicit_q_report(
         heldout = [
             sample for sample in samples if sample.episode_id in heldout_set
         ]
-        reports.append(_evaluate_crossfit_fold(
-            train,
-            heldout,
-            fold=fold,
-            iterations=iterations,
-            n_step_options=n_step_options,
-            q_trees=q_trees,
-            value_trees=value_trees,
-            seed=seed,
-            total_threads=total_threads,
-        ))
+        jobs.append({
+            "train": train,
+            "heldout": heldout,
+            "fold": fold,
+            "iterations": iterations,
+            "n_step_options": n_step_options,
+            "q_trees": q_trees,
+            "value_trees": value_trees,
+            "seed": seed,
+            "total_threads": (
+                total_threads if fold_workers == 1 else threads_per_fold
+            ),
+        })
+    if fold_workers == 1:
+        reports = [_evaluate_crossfit_fold(**job) for job in jobs]
+    else:
+        if sys.platform != "linux" or "fork" not in multiprocessing.get_all_start_methods():
+            raise RuntimeError(
+                "copy-on-write cross-fit workers require Linux fork"
+            )
+        global _FORKED_CROSSFIT_JOBS
+        _FORKED_CROSSFIT_JOBS = tuple(jobs)
+        try:
+            with ProcessPoolExecutor(
+                max_workers=fold_workers,
+                mp_context=multiprocessing.get_context("fork"),
+            ) as executor:
+                reports = list(executor.map(
+                    _run_forked_crossfit_job, range(len(jobs))
+                ))
+        finally:
+            _FORKED_CROSSFIT_JOBS = None
     episode_reports = {
         episode: report
         for fold in reports
@@ -707,6 +759,13 @@ def crossfit_implicit_q_report(
         report["conditional_half_agreements"] for report in reports
     )
     return {
+        "execution": {
+            "total_thread_budget": total_threads,
+            "fold_workers": fold_workers,
+            "threads_per_fold": (
+                total_threads if fold_workers == 1 else threads_per_fold
+            ),
+        },
         "folds": reports,
         "episodes": episode_reports,
         "overall": overall,
@@ -741,6 +800,7 @@ def fit_supported_implicit_q(
     calibration_value_trees: int = CALIBRATION_VALUE_TREES,
     seed: int = 260_813,
     total_threads: int = 12,
+    crossfit_workers: int = DEFAULT_CROSSFIT_WORKERS,
     native_scorer_sha256: str,
     compatible_native_scorer_sha256: tuple[str, ...] = (),
 ) -> dict[str, object]:
@@ -782,6 +842,7 @@ def fit_supported_implicit_q(
         value_trees=calibration_value_trees,
         seed=seed,
         total_threads=total_threads,
+        fold_workers=crossfit_workers,
     )
     population = fit_implicit_q_population(
         augmented,
@@ -920,6 +981,8 @@ def fit_supported_implicit_q(
             "value_trees": value_trees,
             "calibration_q_trees": calibration_q_trees,
             "calibration_value_trees": calibration_value_trees,
+            "total_thread_budget": total_threads,
+            "crossfit_workers": crossfit_workers,
             "centered_objective_uses_inverse_propensity": False,
             "maximum_centered_coefficient": max(
                 abs(float(index == sample.legal_actions.index(sample.action)) - probability)

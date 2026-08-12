@@ -5,6 +5,12 @@ Every optimization must preserve factual original-Wine transitions, physical
 HIT cost, native-safe authority, behavior propensities, complete population,
 and promotion gates. A faster run is never evidence that a policy is better.
 
+The repository-wide learner CPU budget is capped at 32 logical cores because
+this host also runs unrelated CPU-heavy work. Parallel fold and population
+workers divide that single budget; it is never interpreted per worker. New
+training entrypoints must reject a request above the cap. Canonical Wine
+collection and learner fitting are not launched concurrently.
+
 ## Measurement contract
 
 For every material change record the workload, repository implementation,

@@ -21,7 +21,12 @@ from th06_rl.advantage_learning import (  # noqa: E402
     _augment_steps,
     fit_hazard_codebook,
 )
-from th06_rl.implicit_learning import crossfit_implicit_q_report  # noqa: E402
+from th06_rl.implicit_learning import (  # noqa: E402
+    CROSSFIT_FOLDS,
+    DEFAULT_CROSSFIT_WORKERS,
+    MAX_TRAINING_THREADS,
+    crossfit_implicit_q_report,
+)
 from th06_rl.option_cache import (  # noqa: E402
     load_cached_option_episode,
     prime_option_episode_cache,
@@ -58,7 +63,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--n-step-options", type=int, default=8)
     parser.add_argument("--q-trees", type=int, default=8)
     parser.add_argument("--value-trees", type=int, default=8)
-    parser.add_argument("--threads", type=int, default=48)
+    parser.add_argument("--threads", type=int, default=MAX_TRAINING_THREADS)
+    parser.add_argument(
+        "--fold-workers", type=int, default=DEFAULT_CROSSFIT_WORKERS
+    )
     parser.add_argument(
         "--cache-dir",
         type=Path,
@@ -74,6 +82,12 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     if args.load_workers < 1:
         parser.error("load worker count must be positive")
+    if not 1 <= args.threads <= MAX_TRAINING_THREADS:
+        parser.error(
+            f"thread budget must be between 1 and {MAX_TRAINING_THREADS}"
+        )
+    if not 1 <= args.fold_workers <= min(CROSSFIT_FOLDS, args.threads):
+        parser.error("fold workers must fit both the fold count and thread budget")
 
     def load(run):
         return load_cached_option_episode(
@@ -108,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         value_trees=args.value_trees,
         seed=260_813,
         total_threads=args.threads,
+        fold_workers=args.fold_workers,
     )
     completed_at = time.perf_counter()
     result = {
@@ -133,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
             "value_trees": args.value_trees,
             "seed": 260_813,
             "threads": args.threads,
+            "fold_workers": args.fold_workers,
             "load_workers": args.load_workers,
         },
         "timing_seconds": {
