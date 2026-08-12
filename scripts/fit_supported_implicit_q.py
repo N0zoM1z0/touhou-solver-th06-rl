@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
@@ -89,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=REPOSITORY / "artifacts/cache/audited-option-episodes",
     )
+    parser.add_argument("--load-workers", type=int, default=8)
     args = parser.parse_args(argv)
     if args.seed != 260_813:
         parser.error("Generation 5 learner seed is fixed at 260813")
@@ -113,12 +115,21 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Generation 5 fit needs ten complete episodes")
     if len(new_runs) < 8:
         parser.error("Generation 5 authorization fit needs eight --new-run episodes")
-    cached = [load_cached_option_episode(
-        run,
-        loader=_load,
-        cache_root=args.cache_dir,
-        contract_files=OPTION_CACHE_CONTRACT,
-    ) for run in runs]
+    if args.load_workers < 1:
+        parser.error("load worker count must be positive")
+
+    def load(run):
+        return load_cached_option_episode(
+            run,
+            loader=_load,
+            cache_root=args.cache_dir,
+            contract_files=OPTION_CACHE_CONTRACT,
+        )
+
+    with ThreadPoolExecutor(
+        max_workers=min(args.load_workers, len(runs))
+    ) as executor:
+        cached = list(executor.map(load, runs))
     loaded = [(rows, report) for rows, report, _hit in cached]
     samples = [sample for rows, _report in loaded for sample in rows]
     run_to_episode = {
@@ -160,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
             "option_cache_hits": sum(
                 hit for _rows, _report, hit in cached
             ),
+            "load_workers": args.load_workers,
             "native_scorer_sha256": _sha256(args.native_scorer),
             "compatible_native_scorer_sha256": [
                 _sha256(path) for path in args.compatible_native_scorer or ()

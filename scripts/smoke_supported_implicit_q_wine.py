@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
@@ -50,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=REPOSITORY / "artifacts/cache/audited-option-episodes",
     )
+    parser.add_argument("--load-workers", type=int, default=8)
     args = parser.parse_args(argv)
     if args.output.exists():
         raise FileExistsError(f"refusing to replace smoke report: {args.output}")
@@ -57,12 +59,21 @@ def main(argv: list[str] | None = None) -> int:
     if len(runs) < 10:
         parser.error("Wine smoke needs at least ten complete episodes")
     started = time.perf_counter()
-    cached = [load_cached_option_episode(
-        run,
-        loader=_load,
-        cache_root=args.cache_dir,
-        contract_files=OPTION_CACHE_CONTRACT,
-    ) for run in runs]
+    if args.load_workers < 1:
+        parser.error("load worker count must be positive")
+
+    def load(run):
+        return load_cached_option_episode(
+            run,
+            loader=_load,
+            cache_root=args.cache_dir,
+            contract_files=OPTION_CACHE_CONTRACT,
+        )
+
+    with ThreadPoolExecutor(
+        max_workers=min(args.load_workers, len(runs))
+    ) as executor:
+        cached = list(executor.map(load, runs))
     loaded = [(rows, report) for rows, report, _hit in cached]
     loaded_at = time.perf_counter()
     samples = [sample for rows, _report in loaded for sample in rows]
@@ -106,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
             "value_trees": args.value_trees,
             "seed": 260_813,
             "threads": args.threads,
+            "load_workers": args.load_workers,
         },
         "timing_seconds": {
             "load": loaded_at - started,
