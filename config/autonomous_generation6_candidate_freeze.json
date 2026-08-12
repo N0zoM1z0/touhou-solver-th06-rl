@@ -1,0 +1,86 @@
+{
+  "schema": "autonomous-generation-6-qualification-freeze-v1",
+  "authorization_eligible": false,
+  "qualification_disclosure_count": 1,
+  "source_commit": "6a993a2a5da3111795fe6edbd0f99ca5f4e02ecc",
+  "candidate": {
+    "path": "artifacts/autonomous-generation-6-candidate/candidate-v1.json",
+    "sha256": "aea789ed9fe63aa4a2c0799092675fd287c9b66787ed968d82e82098fbb4ea64"
+  },
+  "fit_checkpoint": {
+    "path": "artifacts/autonomous-generation-6-candidate/candidate-v1.fit.json",
+    "sha256": "4ee6a8e7a7bfeeb7f471a6b0cd0c7b5db1e46aff8c9db8073d4a62bfb1651d5a"
+  },
+  "partition": {
+    "path": "config/autonomous_generation6_qualification.json",
+    "sha256": "b711437d557f25b7363bb88a671f7a90d0a27f126b1fbe11846f14e31f57af30"
+  },
+  "qualification_output": "artifacts/autonomous-generation-6-qualification/qualification-v1.json",
+  "development_contracts": {
+    "causal_null_smoke_sha256": "d682ba5c63617073485cb7f9a2a5631c0ff720c31bd0eb98f5518d8c504b3b12",
+    "canonical_wine_summary_sha256": "497f3359542c8523e568061cb5d01f08256b6c536b6823814737f33fd4e50457",
+    "windows_native_smoke_sha256": "dd3c0219610be34d62fbd55b73e2fa4cffece2484e74d0fcd8c18a1ac040f531",
+    "windows_native_dll_sha256": "0aa7c5a95b90b2df0d032ec02f21fcd3a39be3ba440819d00c0cb025bc641ef0",
+    "linux_native_library_sha256": "8b99074e0d9eeae232d4a79286646b1688004d721ba288c605cde74743ef62ec",
+    "native_latency_p95_ms": 2.185057,
+    "native_latency_gate_ms": 4.0,
+    "native_deadline_misses": 0
+  },
+  "parameters": {
+    "actor_population": 7,
+    "actor_hidden": 64,
+    "actor_rank": 24,
+    "actor_epochs": 8,
+    "actor_batch_size": 1024,
+    "actor_learning_rate": 0.001,
+    "actor_log_weight_clip": 4.0,
+    "critic_iterations": 2,
+    "n_step_options": 8,
+    "q_trees": 8,
+    "value_trees": 8,
+    "intervention_probability_cap": 0.1,
+    "intervention_density_ratio_cap": 2.0,
+    "evaluation_seed": 460813,
+    "bootstrap_resamples": 4096,
+    "bootstrap_episode_order": "immutable-episode-id-ascending"
+  },
+  "numerical_gates": {
+    "episode_groups": 13,
+    "stage-4_episode_groups": 5,
+    "stage-6_episode_groups": 8,
+    "minimum_beneficial_episode_rate": 0.5,
+    "maximum_proposal_rate": 0.1,
+    "maximum_intervention_exposure_rate": 0.1,
+    "maximum_density_ratio": 2.0,
+    "required_cohort_gates": [
+      "policy_dr_hit_effect_bootstrap_upper_95_below_zero",
+      "policy_loo_worst_bootstrap_upper_95_below_zero",
+      "policy_model_hit_effect_mean_below_zero",
+      "majority_episode_dr_effect_below_zero",
+      "proposal_and_intervention_exercised",
+      "proposal_and_intervention_below_cap",
+      "factual_correction_bounded"
+    ]
+  },
+  "source_sha256": {
+    "src/th06_rl/iql_actor_learning.py": "d33a81493124887d025ad7f3e3f118a6a342b49cda9f92dd86b88046a52c6ab1",
+    "src/th06_rl/implicit_learning.py": "33f1b5a30a3d5b904dd015832d7cee79a5b7fecf8821dc898f8adcfe380514d7",
+    "src/th06_rl/advantage_learning.py": "53aeae188ee6af39710e991727892f6d1c697aeb6b3c1ec0f8a1ae4ed24f625b",
+    "src/th06_rl/audited_option_loader.py": "538bd0a181f45a19fc661c85c5af77a9d658313d56b8711313982391c40ba9be",
+    "src/th06_rl/qualification_corpus.py": "43c0dbc1c7e2cae8396476624c7597387ef351b4babc0453931e124eedd8f90a",
+    "src/th06_rl/option_cache.py": "4623b928e178309a573c7a94052ea78dbabbd422795bf6d5d0e8c226805dd7f8",
+    "src/th06_rl/resource_control.py": "3f52e7d0879a6918650fd433b085bbd4d7cf57302290990293842d14c836d788",
+    "src/th06_rl/low_rank_learning.py": "e6c8dcb00cc10abd26a31c006e2ad11b998f3cec4a9a59124482297427433f37",
+    "src/th06_rl/sequential_learning.py": "7f2f7372fe3de7790562de8504260feecadebcfda42ec074fe017181ee741a9d",
+    "scripts/qualify_generation6_candidate.py": "0ba92d45ba9f997cf17a471a9da7cf41854aebe3364e549d4bafcd724a6d20af"
+  },
+  "interpretation": {
+    "pass": "permits design of a new original-Wine causal canary only",
+    "failure": "rejects this candidate and permanently discloses these 13 episodes",
+    "never_authorizes": [
+      "policy promotion",
+      "Wine gameplay without a separately frozen canary",
+      "renaming qualification episodes as untouched"
+    ]
+  }
+}

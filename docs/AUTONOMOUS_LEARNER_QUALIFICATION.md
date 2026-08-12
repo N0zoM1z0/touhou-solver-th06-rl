@@ -88,6 +88,25 @@ Passing means only that another Wine learning round is worth its cost. New
 propensity-recorded Wine episodes still own causal canary and final efficacy
 evidence.
 
+## Generation-6 single-disclosure freeze
+
+`config/autonomous_generation6_candidate_freeze.json` binds the exact
+candidate/fit hashes, all learner/evaluator source hashes, source commit,
+partition, deterministic seeds, development causal/null and canonical Wine
+summaries, native Linux/Windows binaries, latency evidence, output identity,
+and numerical gates before any of the 13 qualification trajectories are
+loaded.
+
+Overall, Stage 4, and Stage 6 must each exercise a nonzero policy intervention
+without exceeding 10% proposal or exposure, keep correction magnitude at most
+two, have at least half of complete episode effects below zero, retain a
+negative independent model term, and place both the complete policy and the
+worst of seven leave-one-actor-out policies below zero at the episode-bootstrap
+95% upper bound. All conditions are conjunctive. There is no framewise action
+agreement gate: population uncertainty is calibrated on the complete policy's
+physical-HIT effect. Failure discloses the set permanently and rejects the
+candidate; no observed gate may be relaxed.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity
