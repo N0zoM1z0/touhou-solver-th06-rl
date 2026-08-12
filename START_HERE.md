@@ -10,37 +10,39 @@ Read in this order:
 1. `AGENTS.md` for safety and product boundaries;
 2. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the data, training, and
    promotion contract;
-3. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the frozen
+3. `docs/IMMUTABLE_WINE_DATA_PLANE.md` for the permanent capability-indexed
+   corpus registry and the separation of data, learner, and fitted artifact;
+4. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the frozen
    generation-2 learner, observation, Hard-empty audit, and evidence contract;
-4. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
+5. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
    evidence and ineffective verdict;
-5. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md`, its progress record, and
+6. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md`, its progress record, and
    `docs/AUTONOMOUS_LEARNER_GENERATION_3_RESULT.md` for the frozen superseded
    complete-return learner;
-6. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the frozen sequential
+7. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the frozen sequential
    semi-Markov learner, action-centered critic, exploration, and evidence
    contract;
-7. `docs/AUTONOMOUS_LEARNER_GENERATION_4_PROGRESS.md` for its append-only
+8. `docs/AUTONOMOUS_LEARNER_GENERATION_4_PROGRESS.md` for its append-only
    implementation and execution record, followed by
    `docs/AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md` for its ineffective verdict;
-8. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
+9. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
    and upstream-repository cache;
-9. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the frozen in-sample
+10. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the frozen in-sample
    implicit-Q learner and its predeclared smoke/evidence gates, followed by
    `docs/AUTONOMOUS_LEARNER_GENERATION_5_PROGRESS.md` and
    `docs/AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md` for its Stage-4 fail-fast
    result and ineffective-for-continuation verdict;
-10. `docs/AUTONOMOUS_LEARNER_QUALIFICATION.md` for the frozen-corpus rejection
+11. `docs/AUTONOMOUS_LEARNER_QUALIFICATION.md` for the frozen-corpus rejection
    funnel that must pass before another Wine collection wave;
-11. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the active
+12. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the active
    offline-only estimator hypothesis and experiment boundary;
-12. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
+13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
-13. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
+14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
    optimizations, failed attempts, and correctness differentials;
-14. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+15. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-15. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+16. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 Generations 3, 4, and 5 are frozen. Generation 5 stopped at its second
 predeclared Stage-4 fail-fast smoke: Bellman prediction improved, but independent

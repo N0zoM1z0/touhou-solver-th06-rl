@@ -30,6 +30,12 @@ A TH08 port should supply another adapter and scope configuration while reusing
 the exploration, transition schema, grouped fitting, shadow/canary gates,
 orchestration, and evaluation aggregation unchanged.
 
+Collected facts are not owned by a learner generation. The immutable Wine data
+plane, replaceable algorithm, and fitted model artifact are separate contracts.
+Learners query the capability registry for the minimum semantics they need and
+reuse every compatible episode; they may not recollect data merely because the
+model family changed. See `IMMUTABLE_WINE_DATA_PLANE.md`.
+
 ## No human gameplay tuning
 
 After a run, poor survival or a high HIT count is training data, not permission
