@@ -193,6 +193,23 @@ def _weighted_rms(values, weights) -> float:
     return max(result, 1e-3)
 
 
+def action_centered_actor_losses(
+    factual_losses, behavior_losses, advantage_weights
+):
+    """Unbiased known-behavior control variate for factual AWR losses.
+
+    For any state and any fixed action loss ``L``, the factual action is drawn
+    from the known behavior distribution ``mu``.  Therefore
+
+    ``w(A)L(A) - (L(A) - E_mu[L])``
+
+    has expectation ``E_mu[w(A)L(A)]`` without an inverse propensity.  Do not
+    center the entire ``(w - 1)L`` term: ``w`` is not conditionally normalized
+    at every state and doing so introduces bias.
+    """
+    return behavior_losses + (advantage_weights - 1.0) * factual_losses
+
+
 def fit_iql_actor_member(
     samples: list[OptionStep],
     critic_member,
@@ -297,12 +314,14 @@ def fit_iql_actor_member(
                     mask_tensor[batch], log_probabilities, 0.0
                 )
             ).sum(dim=1)
-            # Exact known-behavior expectation plus an action-centered factual
-            # residual is an unbiased, no-inverse-propensity estimate of the
-            # normalized advantage-weighted behavior-cloning objective.
-            centered_losses = behavior_losses + (
-                advantage_weight_tensor[batch] - 1.0
-            ) * (factual_losses - behavior_losses)
+            # Exact known-behavior expectation plus a zero-mean factual-action
+            # control variate.  This is unbiased for advantage-weighted
+            # behavior cloning and never divides by propensity.
+            centered_losses = action_centered_actor_losses(
+                factual_losses,
+                behavior_losses,
+                advantage_weight_tensor[batch],
+            )
             weights = base_weight_tensor[batch]
             loss = (weights * centered_losses).sum() / weights.sum()
             optimizer.zero_grad(set_to_none=True)
@@ -408,6 +427,23 @@ def pessimistic_actor_action(
         population[member].model.predict(sample.candidate_vectors)
         for member in selected
     ], dtype=np.float64)
+    return actor_population_choice(
+        scores, sample, supported=supported
+    )
+
+
+def actor_population_choice(
+    scores,
+    sample: OptionStep,
+    *,
+    supported: list[bool] | None = None,
+) -> str:
+    """Select from precomputed member scores with population-range pessimism."""
+    import numpy as np
+
+    scores = np.asarray(scores, dtype=np.float64)
+    if scores.ndim != 2 or scores.shape[1] != len(sample.legal_actions):
+        raise ValueError("actor score matrix and safe set differ")
     baseline = sample.legal_actions.index(sample.baseline_action)
     differences = scores - scores[:, [baseline]]
     mask = supported or [True] * len(sample.legal_actions)
@@ -420,6 +456,346 @@ def pessimistic_actor_action(
         if lower_bound > 0.0:
             candidates.append((lower_bound, action))
     return max(candidates, default=(0.0, sample.baseline_action))[1]
+
+
+# Linux fork jobs are integer-indexed so large immutable augmented samples stay
+# copy-on-write instead of being serialized once per complete-episode fold.
+_FORKED_ACTOR_JOBS = None
+
+
+def evaluate_iql_actor_fold(
+    train: list[OptionStep],
+    heldout: list[OptionStep],
+    *,
+    layout: FeatureRoleLayout,
+    episode_cohorts: dict[str, str],
+    fold: int,
+    critic_iterations: int,
+    n_step_options: int,
+    q_trees: int,
+    value_trees: int,
+    seed: int,
+    threads: int,
+    actor_hidden: int,
+    actor_rank: int,
+    actor_epochs: int,
+    actor_batch_size: int,
+    actor_learning_rate: float,
+    actor_log_weight_clip: float,
+) -> dict[str, object]:
+    from collections import Counter
+    import numpy as np
+    from .implicit_learning import (
+        _support_artifacts,
+        _supported,
+        fit_implicit_q_population,
+    )
+
+    critics = fit_implicit_q_population(
+        train,
+        members=7,
+        iterations=critic_iterations,
+        n_step_options=n_step_options,
+        q_trees=q_trees,
+        value_trees=value_trees,
+        seed=seed + fold * 100_000,
+        total_threads=threads,
+        parallel_members=False,
+    )
+    actors = fit_iql_actor_population(
+        train,
+        critics,
+        layout=layout,
+        seed=seed + fold * 100_000 + 50_000,
+        threads=threads,
+        hidden=actor_hidden,
+        rank=actor_rank,
+        epochs=actor_epochs,
+        batch_size=actor_batch_size,
+        learning_rate=actor_learning_rate,
+        log_weight_clip=actor_log_weight_clip,
+    )
+    support, support_report = _support_artifacts(
+        train, seed=seed + fold * 100_000 + 80_000
+    )
+    all_members = tuple(range(len(actors)))
+    left_members = (0, 1, 2)
+    right_members = (3, 4, 5, 6)
+    episode_reports: dict[str, dict[str, object]] = {}
+    action_counts: Counter[str] = Counter()
+    unsupported_candidates = 0
+    for sample in heldout:
+        report = episode_reports.setdefault(sample.episode_id, {
+            "cohort": episode_cohorts[sample.episode_id],
+            "options": 0,
+            "full_proposals": 0,
+            "full_proposal_loo_exact": 0,
+            "loo_union": 0,
+            "loo_exact": 0,
+            "split_union": 0,
+            "split_exact": 0,
+            "individual_proposals": 0,
+            "individual_union": 0,
+            "individual_exact": 0,
+            "mean_proposals": 0,
+            "behavior_kl_sum": 0.0,
+        })
+        report["options"] += 1
+        mask = _supported(sample, support)
+        unsupported_candidates += sum(
+            action != sample.baseline_action and not mask[index]
+            for index, action in enumerate(sample.legal_actions)
+        )
+        scores = np.asarray([
+            actor.model.predict(sample.candidate_vectors) for actor in actors
+        ], dtype=np.float64)
+        individual = tuple(
+            actor_population_choice(
+                scores[[member]], sample, supported=mask
+            )
+            for member in all_members
+        )
+        individual_union = any(
+            choice != sample.baseline_action for choice in individual
+        )
+        report["individual_proposals"] += sum(
+            choice != sample.baseline_action for choice in individual
+        )
+        report["individual_union"] += int(individual_union)
+        report["individual_exact"] += int(
+            individual_union and len(set(individual)) == 1
+        )
+        mean_choice = actor_population_choice(
+            scores.mean(axis=0, keepdims=True), sample, supported=mask
+        )
+        report["mean_proposals"] += int(
+            mean_choice != sample.baseline_action
+        )
+        full = actor_population_choice(scores, sample, supported=mask)
+        leave_one_out = tuple(
+            actor_population_choice(
+                scores[[
+                    member for member in all_members if member != omitted
+                ]],
+                sample,
+                supported=mask,
+            )
+            for omitted in all_members
+        )
+        stable = all(choice == full for choice in leave_one_out)
+        loo_either = (
+            full != sample.baseline_action
+            or any(
+                choice != sample.baseline_action for choice in leave_one_out
+            )
+        )
+        report["loo_union"] += int(loo_either)
+        report["loo_exact"] += int(loo_either and stable)
+        if full != sample.baseline_action:
+            report["full_proposals"] += 1
+            report["full_proposal_loo_exact"] += int(stable)
+            action_counts[full] += 1
+        left = actor_population_choice(
+            scores[list(left_members)], sample, supported=mask
+        )
+        right = actor_population_choice(
+            scores[list(right_members)], sample, supported=mask
+        )
+        split_either = (
+            left != sample.baseline_action or right != sample.baseline_action
+        )
+        report["split_union"] += int(split_either)
+        report["split_exact"] += int(split_either and left == right)
+
+        probabilities = np.asarray(
+            sample.behavior_probabilities, dtype=np.float64
+        )
+        member_kl = []
+        for member_scores in scores:
+            shifted = member_scores - member_scores.max()
+            actor_probabilities = np.exp(shifted)
+            actor_probabilities /= actor_probabilities.sum()
+            member_kl.append(float(np.sum(
+                probabilities * (
+                    np.log(probabilities) - np.log(actor_probabilities)
+                )
+            )))
+        report["behavior_kl_sum"] += sum(member_kl) / len(member_kl)
+    return {
+        "fold": fold,
+        "fit_episodes": sorted({sample.episode_id for sample in train}),
+        "heldout_episodes": sorted(episode_reports),
+        "support": support_report,
+        "critic_bootstrap": [member.bootstrap for member in critics],
+        "critic_iterations": [member.iterations for member in critics],
+        "actor_diagnostics": [actor.diagnostics for actor in actors],
+        "actor_advantage_scales": [actor.advantage_scale for actor in actors],
+        "episodes": episode_reports,
+        "unsupported_candidates": unsupported_candidates,
+        "proposal_actions": dict(sorted(action_counts.items())),
+    }
+
+
+def _run_forked_actor_job(index: int):
+    if _FORKED_ACTOR_JOBS is None:
+        raise RuntimeError("forked IQL actor job context is absent")
+    return evaluate_iql_actor_fold(**_FORKED_ACTOR_JOBS[index])
+
+
+def crossfit_iql_actor_report(
+    samples: list[OptionStep],
+    *,
+    layout: FeatureRoleLayout,
+    episode_cohorts: dict[str, str],
+    folds: int = 5,
+    critic_iterations: int = 2,
+    n_step_options: int = 8,
+    q_trees: int = 8,
+    value_trees: int = 8,
+    seed: int = 460_813,
+    total_threads: int = 32,
+    actor_hidden: int = 64,
+    actor_rank: int = 24,
+    actor_epochs: int = 8,
+    actor_batch_size: int = 1024,
+    actor_learning_rate: float = 1e-3,
+    actor_log_weight_clip: float = 4.0,
+) -> dict[str, object]:
+    from collections import Counter
+    from concurrent.futures import ProcessPoolExecutor
+    import multiprocessing
+    import sys
+    from .advantage_learning import _folds
+    from .implicit_learning import _episodes
+
+    episodes = _episodes(samples)
+    groups = list(episodes)
+    if set(episode_cohorts) != set(groups):
+        raise ValueError("every actor development episode needs one cohort")
+    if not 1 <= folds <= min(len(groups) // 2, total_threads):
+        raise ValueError("invalid actor complete-episode fold count")
+    fold_threads = max(1, total_threads // folds)
+    partitions = _folds(groups, count=folds, seed=seed)
+    jobs = []
+    for fold, heldout_groups in enumerate(partitions):
+        heldout_set = set(heldout_groups)
+        jobs.append({
+            "train": [
+                sample for sample in samples
+                if sample.episode_id not in heldout_set
+            ],
+            "heldout": [
+                sample for sample in samples
+                if sample.episode_id in heldout_set
+            ],
+            "layout": layout,
+            "episode_cohorts": episode_cohorts,
+            "fold": fold,
+            "critic_iterations": critic_iterations,
+            "n_step_options": n_step_options,
+            "q_trees": q_trees,
+            "value_trees": value_trees,
+            "seed": seed,
+            "threads": fold_threads,
+            "actor_hidden": actor_hidden,
+            "actor_rank": actor_rank,
+            "actor_epochs": actor_epochs,
+            "actor_batch_size": actor_batch_size,
+            "actor_learning_rate": actor_learning_rate,
+            "actor_log_weight_clip": actor_log_weight_clip,
+        })
+    if folds == 1:
+        reports = [evaluate_iql_actor_fold(**jobs[0])]
+    else:
+        if sys.platform != "linux" or "fork" not in multiprocessing.get_all_start_methods():
+            raise RuntimeError("IQL actor cross-fit requires Linux fork")
+        global _FORKED_ACTOR_JOBS
+        _FORKED_ACTOR_JOBS = tuple(jobs)
+        try:
+            with ProcessPoolExecutor(
+                max_workers=folds,
+                mp_context=multiprocessing.get_context("fork"),
+            ) as executor:
+                reports = list(executor.map(
+                    _run_forked_actor_job, range(folds)
+                ))
+        finally:
+            _FORKED_ACTOR_JOBS = None
+    episode_reports = {
+        episode: report
+        for fold_report in reports
+        for episode, report in fold_report["episodes"].items()
+    }
+
+    def cohort(name: str | None) -> dict[str, object]:
+        rows = [
+            row for row in episode_reports.values()
+            if name is None or row["cohort"] == name
+        ]
+        options = sum(row["options"] for row in rows)
+        proposals = sum(row["full_proposals"] for row in rows)
+        proposal_exact = sum(row["full_proposal_loo_exact"] for row in rows)
+        loo_union = sum(row["loo_union"] for row in rows)
+        loo_exact = sum(row["loo_exact"] for row in rows)
+        split_union = sum(row["split_union"] for row in rows)
+        split_exact = sum(row["split_exact"] for row in rows)
+        individual_proposals = sum(
+            row["individual_proposals"] for row in rows
+        )
+        individual_union = sum(row["individual_union"] for row in rows)
+        individual_exact = sum(row["individual_exact"] for row in rows)
+        mean_proposals = sum(row["mean_proposals"] for row in rows)
+        return {
+            "episode_groups": len(rows),
+            "options": options,
+            "full_proposals": proposals,
+            "full_proposal_rate": proposals / options,
+            "full_proposal_loo_exact_rate": (
+                proposal_exact / proposals if proposals else 0.0
+            ),
+            "loo_union_stability": (
+                loo_exact / loo_union if loo_union else 0.0
+            ),
+            "split_conditional_agreement": (
+                split_exact / split_union if split_union else 0.0
+            ),
+            "individual_member_proposal_rate": (
+                individual_proposals / (7 * options)
+            ),
+            "individual_union_rate": individual_union / options,
+            "individual_unanimous_conditional_rate": (
+                individual_exact / individual_union
+                if individual_union else 0.0
+            ),
+            "mean_population_proposal_rate": mean_proposals / options,
+            "mean_behavior_kl": (
+                sum(row["behavior_kl_sum"] for row in rows) / options
+            ),
+        }
+
+    return {
+        "execution": {
+            "total_thread_budget": total_threads,
+            "fold_workers": folds,
+            "threads_per_fold": fold_threads,
+        },
+        "folds": reports,
+        "episodes": episode_reports,
+        "cohorts": {
+            "overall": cohort(None),
+            **{
+                name: cohort(name)
+                for name in sorted(set(episode_cohorts.values()))
+            },
+        },
+        "unsupported_candidates": sum(
+            report["unsupported_candidates"] for report in reports
+        ),
+        "proposal_actions": dict(sorted(sum(
+            (Counter(report["proposal_actions"]) for report in reports),
+            Counter(),
+        ).items())),
+    }
 
 
 def run_iql_actor_causal_smoke(*, threads: int = 8) -> dict[str, object]:

@@ -289,3 +289,19 @@ Python for orchestration and audit readability. Current priority is:
 A native parser must reproduce OptionStep order, every float/int/string field,
 propensity vector, interval/return HIT totals, exclusions, and final content
 hash on recorded v9/v10 corpora. Faster but non-identical data is forbidden.
+
+## 2026-08-12: five-fold IQL actor development replay
+
+The first action-centered actor replay reused 31 cached immutable Wine episodes
+and 102,737 factual options. Warm audited loading took 11.68 seconds,
+candidate-invariant representation/augmentation took 51.49 seconds, and five
+copy-on-write episode-fold workers completed critic plus actor fitting in
+303.59 seconds, for 366.76 seconds total. Every process inherited the hard CPU
+set 0--31. Sampled use was about three cores per fold, roughly 15 cores total;
+each worker reported 14--15 GB resident while sharing most immutable pages by
+fork.
+
+This makes an algorithm correction test a minutes-scale offline replay and
+requires no new Wine episode. It also shows unused room below the 32-core hard
+cap. Actor minibatch work may be rebalanced only after estimator correctness;
+the current scientific replay keeps five folds and their seed schedule fixed.

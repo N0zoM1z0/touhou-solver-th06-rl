@@ -197,6 +197,46 @@ SHA-256
 `c69a45cc273fd421d872a53bec2a179f9e1d6803a57e7ad09f74442d2b69fb55`.
 This unlocks only frozen Wine development, not qualification or gameplay.
 
+## 2026-08-12: first Wine actor replay found an estimator bug
+
+The first five-fold replay completed all 31 development episodes and safely
+made zero complete-population overrides in 102,737 held-out options. This was
+not useful conservatism: the actors had moved substantially away from behavior
+(`mean KL = 0.404640`) but disagreed on every proposed alternative. One member
+also reported a negative `-1.048867` value for a quantity labelled weighted
+cross entropy, which is impossible for a correct positive-weight AWR loss.
+
+Audit found a generic control-variate algebra error. For factual action
+`A ~ mu`, action loss `L`, and advantage weight `w`, the no-inverse-propensity
+unbiased estimator is:
+
+`w(A)L(A) - (L(A) - E_mu[L]) = E_mu[L] + (w(A) - 1)L(A)`.
+
+The implementation had instead centered the entire `(w - 1)L` term:
+
+`E_mu[L] + (w(A) - 1)(L(A) - E_mu[L])`.
+
+Because weights are normalized over the training population, not separately
+at every state, the extra subtraction has nonzero conditional expectation and
+can make the objective negative. This is a learner implementation defect, not
+a gameplay observation or a reason to tune the data distribution. A regression
+test now enumerates a nonuniform propensity distribution and verifies that the
+estimator expectation exactly equals the target AWR risk.
+
+The ignored, invalid-for-comparison report is
+`artifacts/autonomous-generation-6-development/iql-actor-wine-development-v1.json`.
+Its SHA-256 is
+`b6cd87fb555350b11c1d95d5b98af19f66941d0c8a2012022e6f4e6b7c889226`.
+It remains preserved so the failure and diagnosis cannot be rewritten. After
+the algebra repair, the exact same delayed-effect/null contract passed: all
+seven mean beneficial-action logit effects were positive, the population made
+158/4,608 beneficial-process overrides, and it made zero null-process
+overrides. The repaired ignored report is
+`artifacts/autonomous-generation-6-development/iql-actor-causal-smoke-v2.json`.
+Its SHA-256 is
+`a4fd4da219ce57fa037ce715b975a7eba25f8f9839b6b5a8dc7c748c579cb2c0`.
+Only an otherwise unchanged Wine-development replay may now assess the repair.
+
 ## Performance contract
 
 All development launchers apply the Linux process-tree CPU affinity contract

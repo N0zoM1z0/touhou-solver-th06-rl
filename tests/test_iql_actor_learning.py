@@ -5,7 +5,10 @@ from dataclasses import replace
 import numpy as np
 
 from th06_rl.implicit_learning import delayed_effect_episodes
-from th06_rl.iql_actor_learning import actor_arrays
+from th06_rl.iql_actor_learning import (
+    action_centered_actor_losses,
+    actor_arrays,
+)
 from th06_rl.low_rank_learning import FeatureRoleLayout
 
 
@@ -39,4 +42,23 @@ def test_actor_arrays_keep_variable_safe_sets_and_factual_index() -> None:
     assert all(
         sample.legal_actions[index] == sample.action
         for sample, index in zip(samples, prepared.factual, strict=True)
+    )
+
+
+def test_action_centered_actor_loss_is_unbiased_without_local_weight_normalization(
+) -> None:
+    propensity = np.asarray([0.2, 0.3, 0.5])
+    action_losses = np.asarray([1.7, 0.4, 2.2])
+    advantage_weights = np.asarray([0.5, 2.0, 1.1])
+    behavior_loss = np.sum(propensity * action_losses)
+
+    estimates = action_centered_actor_losses(
+        action_losses,
+        np.full(3, behavior_loss),
+        advantage_weights,
+    )
+
+    assert np.isclose(
+        np.sum(propensity * estimates),
+        np.sum(propensity * advantage_weights * action_losses),
     )
