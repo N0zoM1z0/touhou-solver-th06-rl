@@ -5,7 +5,7 @@
   "wine_version": "wine-11.0",
   "files": [
     {"path": "config/autonomous_generation5_curriculum_seeds.json", "sha256": "0a7e0b74d5f6dac029fea8499ae67370d5ea53f8408c6f8c6f2623d0cf8cddfc"},
-    {"path": "config/autonomous_generation5_infra_migrations.json", "sha256": "4f69e1184f9f112c0e577cd5a4e163aa23cbe82c9de1d0c474d53d4ae52ca19f"},
+    {"path": "config/autonomous_generation5_infra_migrations.json", "sha256": "3f5d26c95fd50f122cc67186695c62798d61cc9ada762bc7c06df1f82a0b88b3"},
     {"path": "src/th06_rl/curriculum_contract.py", "sha256": "0c4fd188b142ca4319479280c793b6d060066fed63f8d42c64ab66340fe1cf4d"},
     {"path": "src/th06_rl/wine_workers.py", "sha256": "43074b440cf17499b81638fd41d1f624dc5818c7dbbd3f829db9c8c6d22d3fc1"},
     {"path": "src/th06_rl/audited_option_loader.py", "sha256": "538bd0a181f45a19fc661c85c5af77a9d658313d56b8711313982391c40ba9be"},
@@ -25,7 +25,7 @@
     {"path": "src/th06_rl/policies/offline_ranker.py", "sha256": "6a427c5bcb281d3572b6d8fd8de5571a9933c5c8ebd5ca60f0c9b2bd688e0b42"},
     {"path": "scripts/run_autonomous_learning.py", "sha256": "b16f3f1f143b7fd6841c83848b6a4df4be3076b686111a5d525ebbf3ab3bac9f"},
     {"path": "scripts/run_autonomous_learning_v3.py", "sha256": "c6fe9b5c4f6546475744cb4b6b6185e88c80ee6a4cae9da065164d5242550315"},
-    {"path": "scripts/run_autonomous_learning_v5.py", "sha256": "e64d1b7e7af55f51b9d088f82971d43bf4270874f68b921f49ce4d45d2ed1151"},
+    {"path": "scripts/run_autonomous_learning_v5.py", "sha256": "9702885681c4f0400b194f6cb30d8ef4af5ec1580ad815ebe0f2c0a06f68a1ab"},
     {"path": "scripts/run_generation5_wine.py", "sha256": "d48c7482b423d446cfdc3986c1b349d471a1c45377a3508058a1ae1690b38205"},
     {"path": "scripts/run_wine_retail.py", "sha256": "56c3eeb4038609f62d746b269d715a87fa40d556e45c6a8ea918819e866cbee2"},
     {"path": "scripts/configure_wine_retail.py", "sha256": "c2064d3df863528c0f81a6c52a17b517e7b9262fccaab42a6d75b8cd025c3141"},

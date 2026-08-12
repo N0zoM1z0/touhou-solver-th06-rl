@@ -179,3 +179,10 @@ infra-only migration moves worker IDs two and three from displays `:99`/`:100`
 to unused `:105`/`:106` with fresh directories and prefixes. It preserves the
 two factual episodes and every frozen seed, order, behavior, learner, and gate.
 No stale socket belonging to another task is removed.
+
+The first display-migration resume then stopped before Wine because the serial-
+fallback validator still assumed the migration list contained exactly one row.
+The display migration made that assumption false. A second zero-gameplay infra
+migration changes lookup to the existing stable migration ID. It preserves the
+same two complete episodes and all worker/display assignments established
+above; no outcome-facing contract changes.

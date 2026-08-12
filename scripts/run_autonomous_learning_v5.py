@@ -125,7 +125,11 @@ def _behavior_state(
 
 def _validate_serial_fallback(audit_path: Path, audit: dict[str, object]) -> None:
     migrations = _object(MIGRATIONS).get("migrations")
-    migration = migrations[0] if isinstance(migrations, list) and len(migrations) == 1 else None
+    migration = next((
+        row for row in migrations
+        if isinstance(row, dict)
+        and row.get("id") == "wine-parallel-equivalence-failed-serial-fallback-v1"
+    ), None) if isinstance(migrations, list) else None
     if (
         not isinstance(migration, dict)
         or migration.get("id")
@@ -208,11 +212,25 @@ def _reconcile_resume_contract(
     migration = next((
         row for row in migrations
         if isinstance(row, dict)
-        and row.get("id") == "avoid-preexisting-x99-x100-sockets-v1"
         and row.get("from_contract_sha256") == previous.get("contract_sha256")
+        and (
+            row.get("id") == "avoid-preexisting-x99-x100-sockets-v1"
+            and changed == {"contract_sha256", "source_contract", "workers"}
+            or row.get("id") == "select-serial-fallback-migration-by-id-v1"
+            and changed == {"contract_sha256", "source_contract"}
+        )
     ), None) if isinstance(migrations, list) else None
-    if changed != {"contract_sha256", "source_contract", "workers"} or migration is None:
+    if migration is None:
         raise RuntimeError("Generation-5 resume change is not an infra migration")
+    if migration["id"] == "select-serial-fallback-migration-by-id-v1" and (
+        state.get("infra_failure") != migration.get("triggering_error")
+        or migration.get("preserved_complete_evidence_episodes") != [0, 1]
+        or migration.get("new_gameplay_started") is not False
+        or migration.get(
+            "schedule_reward_feature_behavior_model_gate_seed_worker_or_display_changed"
+        ) is not False
+    ):
+        raise ValueError("serial-fallback validator migration differs")
     log = state.setdefault("infra_migrations", [])
     if not isinstance(log, list):
         raise TypeError("Generation-5 infra migration log is invalid")
@@ -220,7 +238,10 @@ def _reconcile_resume_contract(
         "id": migration["id"],
         "from_contract_sha256": previous["contract_sha256"],
         "to_contract_sha256": config["contract_sha256"],
-        "triggering_failed_report_sha256": migration["triggering_failed_report_sha256"],
+        "triggering_failure": state.get("infra_failure"),
+        "triggering_failed_report_sha256": migration.get(
+            "triggering_failed_report_sha256"
+        ),
         "preserved_complete_evidence_episodes": [0, 1],
         "failed_episode_rows": 0,
         "outcome_contract_changed": False,

@@ -200,6 +200,12 @@ IDs and assigns workers two/three fresh directories, prefixes, and displays
 `:105`/`:106`. RNG, policy seed, episode order, corpus, learner, and all gates
 remain unchanged; resume reuses the two completed factual episodes.
 
+The first resume exposed a control-plane-only bug before Wine started: serial-
+fallback validation indexed a formerly one-row migration list instead of
+selecting its stable ID. The repair performs ID lookup and is bound to the exact
+failure and prior contract hash. It changes no resource assignment or outcome
+contract and preserves the same two evidence episodes.
+
 ## Native implementation priority
 
 The repository should use native C/C++ for fixed, hot numerical kernels and

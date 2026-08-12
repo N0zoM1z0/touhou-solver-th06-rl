@@ -34,6 +34,15 @@
       "failed_episode_rows": 0,
       "failed_episode_physical_hits": 0,
       "schedule_reward_feature_behavior_model_gate_seed_or_worker_id_changed": false
+    },
+    {
+      "id": "select-serial-fallback-migration-by-id-v1",
+      "from_contract_sha256": "b75b04cd7de5886d6b6abb578a593b808206524148c4c6eab4555e274d522c60",
+      "triggering_error": "ValueError: serial Wine fallback is not bound to the failed audit",
+      "allowed_change": "select the existing serial-fallback migration by stable ID after additional infra migrations exist",
+      "preserved_complete_evidence_episodes": [0, 1],
+      "new_gameplay_started": false,
+      "schedule_reward_feature_behavior_model_gate_seed_worker_or_display_changed": false
     }
   ]
 }
