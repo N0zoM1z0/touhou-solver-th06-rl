@@ -72,6 +72,7 @@ class OptionStep:
     termination_reason: str = ""
     hazard_primitives: tuple[tuple[float, ...], ...] = ()
     history_features: tuple[float, ...] = ()
+    behavior_probabilities: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -394,6 +395,15 @@ def load_option_episode(
             termination_reason=str(item["termination"]),
             hazard_primitives=tuple(item["representation_inputs"][0]),
             history_features=tuple(item["representation_inputs"][1]),
+            behavior_probabilities=tuple(
+                _expected_probability(
+                    action=candidate,
+                    baseline=str(item["baseline"]),
+                    legal=tuple(item["legal"]),
+                    exploration_probability=exploration_probability,
+                )
+                for candidate in tuple(item["legal"])
+            ),
         ))
     return_value = 0.0
     labeled = []
