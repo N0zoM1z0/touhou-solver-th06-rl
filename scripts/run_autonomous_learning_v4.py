@@ -50,6 +50,7 @@ from th06_rl.sequential_learning import (  # noqa: E402
 
 
 SCHEMA = "autonomous-wine-learning-generation-v4"
+INFRA_MIGRATIONS = REPOSITORY / "config/autonomous_generation4_infra_migrations.json"
 DIFFICULTY = "lunatic"
 STAGE = 6
 GENERATION_SEED = 260812
@@ -66,6 +67,53 @@ BASELINE_PLUGIN = REPOSITORY / "src/th06_rl/policies/uniform_safe_exploration.py
 CANDIDATE_PLUGIN = (
     REPOSITORY / "src/th06_rl/policies/autonomous_sequential_r_critic.py"
 )
+
+
+def _reconcile_resume_contract(
+    state: dict[str, Any],
+    config: dict[str, object],
+) -> bool:
+    if state.get("schema") != SCHEMA:
+        raise RuntimeError("refusing Generation-4 resume with changed schema")
+    previous = state.get("config")
+    if previous == config:
+        return False
+    if not isinstance(previous, dict) or state.get("status") != "infra_failure":
+        raise RuntimeError("refusing Generation-4 resume with changed contract")
+    changed = {
+        key for key in set(previous) | set(config)
+        if previous.get(key) != config.get(key)
+    }
+    migrations = _object(INFRA_MIGRATIONS).get("migrations")
+    if changed != {"preflight_contract_sha256"} or not isinstance(migrations, list):
+        raise RuntimeError("refusing Generation-4 resume with outcome contract drift")
+    migration = next((
+        row for row in migrations
+        if isinstance(row, dict)
+        and row.get("from_preflight_contract_sha256")
+        == previous.get("preflight_contract_sha256")
+        and row.get("to_preflight_contract_sha256")
+        == config.get("preflight_contract_sha256")
+    ), None)
+    if migration is None:
+        raise RuntimeError("Generation-4 infra migration is not predeclared")
+    log = state.setdefault("infra_migrations", [])
+    if not isinstance(log, list):
+        raise TypeError("Generation-4 infra migration log is invalid")
+    log.append({
+        "schema": "autonomous-generation-4-infra-migration-v1",
+        "id": str(migration["id"]),
+        "reason": str(migration["reason"]),
+        "from_preflight_contract_sha256": previous["preflight_contract_sha256"],
+        "to_preflight_contract_sha256": config["preflight_contract_sha256"],
+        "preserved_new_collection_episodes": len(state.get("episodes", ())),
+        "preserved_transition_schema": TRANSITION_SCHEMA,
+        "outcome_or_schedule_fields_changed": False,
+        "triggering_failure": state.get("infra_failure"),
+        "migration_manifest_sha256": _sha256(INFRA_MIGRATIONS),
+    })
+    state["config"] = config
+    return True
 
 
 def _option_state(
@@ -467,8 +515,8 @@ def run(args: argparse.Namespace) -> int:
     config = _config(args)
     if state_path.is_file():
         state = _object(state_path)
-        if state.get("schema") != SCHEMA or state.get("config") != config:
-            raise RuntimeError("refusing Generation-4 resume with changed contract")
+        if _reconcile_resume_contract(state, config):
+            _atomic_json(state_path, state)
         if state.get("status") == "complete":
             print(json.dumps(state["decision"], sort_keys=True))
             return 0

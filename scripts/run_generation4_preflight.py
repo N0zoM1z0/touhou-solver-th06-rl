@@ -75,6 +75,8 @@ CONTRACT_FILES = (
     REPOSITORY / "scripts/shadow_sequential_r_critic.py",
     REPOSITORY / "scripts/authorize_sequential_r_canary.py",
     REPOSITORY / "scripts/run_autonomous_learning_v4.py",
+    REPOSITORY / "scripts/run_wine_retail.py",
+    REPOSITORY / "scripts/gdb/normalize_wine_retail_startup.py",
 )
 NATIVE_DECISIONS = 1_200
 MAXIMUM_P95_MS = 4.0

@@ -163,3 +163,28 @@ executed intent membership on every option row, verifies propensity/
 information/ESS vectors for all 998 assignments, and admits only the 270
 executed boundaries as factual treatments. The captured non-evidence corpus
 then passed every wiring and safety gate without changing policy behavior.
+
+## 2026-08-12: collection episode 0 and generic startup repair
+
+The committed preflight passed, after which the unattended runner completed
+the first new fixed-RNG retail-Wine Stage. Episode 0 contains 27,436 online
+decisions, completed Lunatic Stage 6 with HIT continuation, recorded 40
+physical HITs, produced one complete transition-v10 corpus, and left no prefix
+processes. It was atomically checkpointed before the runner attempted the next
+episode.
+
+Episode 1 produced no controller rows or corpus because startup normalization
+stopped before control. GDB had attached while Wine was legitimately handling
+`SIGUSR1`; its default signal policy returned from `continue` at the Linux
+signal trampoline (`0xf7ff4549`) instead of waiting for the unchanged TH06
+timing-loop breakpoint (`0x0042097e`). The generic GDB startup script now
+passes `SIGUSR1` through without stopping and still requires the exact timing-
+loop address, instruction bytes, and menu state before writing timing state.
+No game, learner, action, RNG, reward, or outcome rule changed.
+
+The migration from the exact old preflight contract hash to the repaired hash
+is explicitly declared in the Generation-4 infra migration manifest. Resume
+is permitted only from the recorded `infra_failure`, only when the sole config
+change is that preflight hash, and records that one complete v10 episode was
+preserved with no outcome or schedule-field change. The empty episode-1
+startup artifact is archived and retried; it is not evidence.
