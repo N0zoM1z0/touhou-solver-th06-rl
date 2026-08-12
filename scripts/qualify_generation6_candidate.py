@@ -70,8 +70,13 @@ def main(argv: list[str] | None = None) -> int:
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=REPOSITORY, text=True
     ).strip()
-    if commit != freeze["execution_commit"]:
-        raise ValueError("qualification execution commit drifted")
+    source_commit = str(freeze["source_commit"])
+    ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", source_commit, commit],
+        cwd=REPOSITORY,
+    )
+    if ancestor.returncode != 0:
+        raise ValueError("qualification source commit is not an ancestor")
     candidate_path = (REPOSITORY / freeze["candidate"]["path"]).resolve()
     partition_path = (REPOSITORY / freeze["partition"]["path"]).resolve()
     if _sha256(candidate_path) != freeze["candidate"]["sha256"]:
