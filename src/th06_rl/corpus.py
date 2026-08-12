@@ -28,8 +28,8 @@ from th06.model import BUTTON_BOMB  # noqa: E402
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v6"
-TRANSITION_SCHEMA = "th06-rl-transition-v7"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v7"
+TRANSITION_SCHEMA = "th06-rl-transition-v8"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
@@ -146,6 +146,8 @@ class FrameEvidence:
     action_features: tuple[
         tuple[str, tuple[tuple[str, float], ...]], ...
     ] = ()
+    hazard_primitives: tuple[tuple[float, ...], ...] = ()
+    history_features: tuple[tuple[str, float], ...] = ()
     option: PolicyOptionTrace | None = None
 
     def __post_init__(self) -> None:
@@ -734,6 +736,10 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
                 before.evidence.observation_features
             ),
             "action_features": _jsonable(before.evidence.action_features),
+            "hazard_primitives": _jsonable(
+                before.evidence.hazard_primitives
+            ),
+            "history_features": _jsonable(before.evidence.history_features),
         },
         "outcome_terms": outcome,
         "learning_eligible": not learning_exclusions,

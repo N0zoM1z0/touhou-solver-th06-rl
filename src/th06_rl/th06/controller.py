@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 from dataclasses import replace
 import hashlib
 import json
@@ -22,6 +23,11 @@ from ..corpus import (
     RunMetadata,
 )
 from ..native import NativeKernel
+from ..hazard_representation import (
+    make_history_observation,
+    project_hazard_primitives,
+    project_history_features,
+)
 from ..policy_api import PolicyContext, PolicyFailureEvent, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from ..policy_transaction import StagePolicyTransaction
@@ -414,6 +420,7 @@ def run(args: argparse.Namespace) -> int:
         previous_snapshot = None
         previous_player_state = None
         pending_learning = None
+        learning_history = deque(maxlen=3)
         policy_source_context = None
         policy_source_start_frame = None
         last_frame = None
@@ -786,6 +793,9 @@ def run(args: argparse.Namespace) -> int:
             effort_horizon = 0
             observation_features = ()
             action_features = ()
+            hazard_primitives = ()
+            history_features = ()
+            history_observation = None
             solve_started = time.perf_counter()
             try:
                 if hit:
@@ -844,6 +854,9 @@ def run(args: argparse.Namespace) -> int:
                 else:
                     current_core = core_action_from_input(snapshot.input_mask)
                     current_action_name = current_core.name
+                    history_observation = make_history_observation(
+                        snapshot, current_action_name
+                    )
                     kinematics = kinematics_from_snapshot(snapshot)
                     lease_status = (
                         lease.status(snapshot.input_mask, snapshot.frame)
@@ -986,6 +999,11 @@ def run(args: argparse.Namespace) -> int:
                                 action_profiles,
                             )
                         )
+                        hazard_primitives = project_hazard_primitives(snapshot)
+                        history_features = project_history_features(
+                            history_observation,
+                            tuple(learning_history),
+                        )
                         policy = plugin.decide(PolicyContext(
                             frame=snapshot.frame,
                             scope=expected_scope,
@@ -1016,6 +1034,8 @@ def run(args: argparse.Namespace) -> int:
                             effort_horizon=effort_horizon,
                             observation_features=observation_features,
                             action_features=action_features,
+                            hazard_primitives=hazard_primitives,
+                            history_features=history_features,
                         ))
                         selected = next(
                             item.action for item in legal
@@ -1224,6 +1244,8 @@ def run(args: argparse.Namespace) -> int:
                     dialogue_delivery=tuple(dialogue_delivery),
                     observation_features=observation_features,
                     action_features=action_features,
+                    hazard_primitives=hazard_primitives,
+                    history_features=history_features,
                     option=policy.option if policy is not None else None,
                 )
                 try:
@@ -1347,6 +1369,8 @@ def run(args: argparse.Namespace) -> int:
                         # The run directory and its last atomic manifest remain
                         # as explicit partial evidence. Cleanup must continue.
                         pass
+            if history_observation is not None:
+                learning_history.append(history_observation)
             record = {
                 "time": time.time(),
                 "run_id": recorder.run_id if recorder is not None else None,

@@ -12,7 +12,7 @@ options, thresholds, evidence seeds, or evaluation rules after outcomes.
   declared uncertainty scale.
 - Added eight-physical-frame safe options with fresh native certification on
   every publication, including Windows input-lease frames.
-- Added transition v7 option identity, boundary/conditional propensity,
+- Added transition v8 option identity, boundary/conditional propensity,
   physical elapsed time, and termination accounting.
 
 ## 2026-08-12: learner population and causal smoke
@@ -40,3 +40,22 @@ evidence. The short non-evidence Wine option-pipeline smoke remains pending
 until the Generation 3 runtime scorer and runner are connected.
 
 Repository tests after this checkpoint: 371 passed.
+
+## 2026-08-12: learned hazard set and history representation
+
+The controller, transition-v8 corpus, and learner now share a game-neutral
+bounded representation: up to 256 player-relative observed hazard primitives,
+four factual observation/action records, and a 24-prototype codebook learned
+only from training episodes. Set pooling is permutation invariant. The adapter
+does not expose source phase, ECL, spell, RNG, frame windows, flags, or slots.
+
+The production causal smoke was rerun after adding the learned representation:
+
+- aggregate known-effect prediction: -0.9957 HIT for a true -1 HIT effect;
+- population prediction range: 0.0409 HIT;
+- maximum state-risk leakage: 0.00295 HIT;
+- held-out DR-advantage RMSE: 0.0377;
+- held-out zero-advantage comparator RMSE: 0.7202;
+- all causal-smoke gates passed.
+
+Repository tests after this checkpoint: 374 passed.

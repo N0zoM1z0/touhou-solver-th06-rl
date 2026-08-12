@@ -167,7 +167,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
-    assert frame["schema_version"] == "th06-rl-authoritative-frame-v6"
+    assert frame["schema_version"] == "th06-rl-authoritative-frame-v7"
     assert frame["decision"]["dialogue_delivery"] == [
         {
             "game_frame": 7,
@@ -442,6 +442,8 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "bullet_count": 1,
         "laser_count": 0,
         "observation_features": [],
+        "hazard_primitives": [],
+        "history_features": [],
         "hard_action_count": 1,
     }
     assert transition["policy_id"] == "safe-option-exploration-v1"

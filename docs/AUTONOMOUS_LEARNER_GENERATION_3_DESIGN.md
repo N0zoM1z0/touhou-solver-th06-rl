@@ -127,6 +127,13 @@ available. This lets the offline teacher distinguish spatially different
 hazard fields that share the same minimum-clearance summary while keeping the
 interface reusable for TH08.
 
+The bounded adapter projection retains at most the 256 player-nearest observed
+primitives under a generic distance ordering. The offline encoder learns 24
+prototypes from a deterministic reservoir of at most 65,536 training
+primitives, then emits permutation-invariant prototype occupancy/min-distance
+and primitive moment pools. These are generation constants fixed before Wine
+outcomes; no prototype represents a TH06 phase, source address, or spell.
+
 The teacher is distilled into a bounded native batch scorer. The online call
 must reuse the state embedding across all candidates, score only the current
 native-safe set, allocate bounded memory, and satisfy the predeclared latency

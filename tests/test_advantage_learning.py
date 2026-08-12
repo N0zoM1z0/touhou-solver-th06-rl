@@ -9,6 +9,10 @@ from th06_rl.advantage_learning import (
     run_causal_recovery_smoke,
 )
 from th06_rl.learning_features import tree_feature_names
+from th06_rl.hazard_representation import (
+    HAZARD_PRIMITIVE_FEATURE_NAMES,
+    HISTORY_FEATURE_NAMES,
+)
 from th06_rl.offline import ACTION_NAMES
 from th06_rl.th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAMES
 
@@ -43,6 +47,13 @@ def _episodes(names: tuple[str, ...]) -> list[OptionStep]:
                 duration_frames=8,
                 return_to_go=float(action_index == episode_index),
                 termination_reason="horizon",
+                hazard_primitives=(tuple(
+                    float(index == (action_index % len(HAZARD_PRIMITIVE_FEATURE_NAMES)))
+                    for index in range(len(HAZARD_PRIMITIVE_FEATURE_NAMES))
+                ),),
+                history_features=tuple(
+                    float(index == 0) for index in range(len(HISTORY_FEATURE_NAMES))
+                ),
             ))
     return result
 
@@ -111,7 +122,7 @@ def test_short_wine_smoke_audits_options_without_becoming_evidence(
         "trace_failures": 0,
         "corpus_failure": None,
     }
-    run = {"schemas": {"transition": "th06-rl-transition-v7"}}
+    run = {"schemas": {"transition": "th06-rl-transition-v8"}}
     manifest = {
         "complete": True,
         "dropped_records": 0,
@@ -134,6 +145,12 @@ def test_short_wine_smoke_audits_options_without_becoming_evidence(
             "baseline_action": "stay",
             "published_action": action,
             "behavior_probability": probability,
+            "policy_context": {
+                "hazard_primitives": [[0.0] * len(HAZARD_PRIMITIVE_FEATURE_NAMES)],
+                "history_features": [
+                    [name, 0.0] for name in HISTORY_FEATURE_NAMES
+                ],
+            },
             "option": {
                 "option_id": f"option-{index}",
                 "boundary": True,
@@ -150,6 +167,12 @@ def test_short_wine_smoke_audits_options_without_becoming_evidence(
         "baseline_action": "stay",
         "published_action": "left",
         "behavior_probability": 1.0,
+        "policy_context": {
+            "hazard_primitives": [[0.0] * len(HAZARD_PRIMITIVE_FEATURE_NAMES)],
+            "history_features": [
+                [name, 0.0] for name in HISTORY_FEATURE_NAMES
+            ],
+        },
         "option": {
             "option_id": "option-0",
             "boundary": False,

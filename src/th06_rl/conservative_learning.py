@@ -318,18 +318,26 @@ def _portable_tree(raw: dict[str, object]) -> list[list[float | int]]:
     return [node for node in nodes if node is not None]
 
 
-def _export_model(model, conformance_rows) -> dict[str, object]:
+def _export_model(
+    model,
+    conformance_rows,
+    *,
+    feature_schema: str = TREE_FEATURE_SCHEMA,
+    feature_names: tuple[str, ...] | None = None,
+) -> dict[str, object]:
     import numpy as np
 
     booster = model.get_booster()
     config = json.loads(booster.save_config())
     parameters = config["learner"]["learner_model_param"]
-    names = tree_feature_names(OBSERVATION_FEATURE_NAMES, ACTION_FEATURE_NAMES)
+    names = feature_names or tree_feature_names(
+        OBSERVATION_FEATURE_NAMES, ACTION_FEATURE_NAMES
+    )
     rows = np.asarray(conformance_rows, dtype=np.float32)
     predictions = model.predict(rows)
     return {
         "schema": MODEL_SCHEMA,
-        "feature_schema": TREE_FEATURE_SCHEMA,
+        "feature_schema": feature_schema,
         "feature_names": list(names),
         "base_score": float(parameters["base_score"].strip("[]")),
         "trees": [

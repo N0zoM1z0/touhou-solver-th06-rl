@@ -12,13 +12,18 @@ from pathlib import Path
 import random
 
 from .autonomous_learning import _expected_probability
-from .conservative_learning import _encoded_model, _export_model
+from .conservative_learning import _encoded_model, _export_model, _kmeans
+from .hazard_representation import (
+    HAZARD_PRIMITIVE_FEATURE_NAMES,
+    HISTORY_FEATURE_NAMES,
+    MAX_HAZARD_PRIMITIVES,
+)
 from .learning_features import TREE_FEATURE_SCHEMA, tree_candidate_vector, tree_feature_names
 from .offline import ACTION_NAMES
 from .th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAMES
 
 
-TRANSITION_SCHEMA = "th06-rl-transition-v7"
+TRANSITION_SCHEMA = "th06-rl-transition-v8"
 BEHAVIOR_POLICY = "safe-option-exploration-v1"
 STATE_SCHEMA = "autonomous-dr-option-advantage-policy-v1"
 FIT_REPORT_SCHEMA = "autonomous-dr-option-advantage-fit-v1"
@@ -27,6 +32,10 @@ CROSSFIT_FOLDS = 3
 NUISANCE_MEMBERS = 3
 NUISANCE_TREES = 96
 POPULATION_TREES = 128
+RICH_FEATURE_SCHEMA = "learned-hazard-codebook-option-tree-v1"
+HAZARD_CODEBOOK_SCHEMA = "game-neutral-hazard-codebook-v1"
+HAZARD_PROTOTYPES = 24
+HAZARD_CODEBOOK_SAMPLE = 65_536
 
 
 @dataclass(frozen=True)
@@ -45,6 +54,8 @@ class OptionStep:
     duration_frames: int
     return_to_go: float = 0.0
     termination_reason: str = ""
+    hazard_primitives: tuple[tuple[float, ...], ...] = ()
+    history_features: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -97,7 +108,7 @@ def _rows(run_dir: Path, manifest: dict[str, object]):
             for line in source:
                 row = json.loads(line)
                 if not isinstance(row, dict) or row.get("schema_version") != TRANSITION_SCHEMA:
-                    raise ValueError("generation 3 requires transition v7")
+                    raise ValueError("generation 3 requires transition v8")
                 if int(row.get("sequence", -1)) != expected_sequence:
                     raise ValueError("transition sequence is not contiguous")
                 expected_sequence += 1
@@ -132,6 +143,40 @@ def _vector(row: dict[str, object], action: str) -> tuple[float, ...]:
         observation_names=OBSERVATION_FEATURE_NAMES,
         action_names=ACTION_FEATURE_NAMES,
     )
+
+
+def _representation_inputs(
+    row: dict[str, object],
+) -> tuple[tuple[tuple[float, ...], ...], tuple[float, ...]]:
+    context = row.get("policy_context")
+    if not isinstance(context, dict):
+        raise TypeError("option boundary has no policy context")
+    raw_hazards = context.get("hazard_primitives")
+    raw_history = context.get("history_features")
+    if not isinstance(raw_hazards, list) or not isinstance(raw_history, list):
+        raise TypeError("generation-3 representation inputs are absent")
+    if len(raw_hazards) > MAX_HAZARD_PRIMITIVES:
+        raise ValueError("hazard primitive set exceeds its online bound")
+    hazards = []
+    for raw in raw_hazards:
+        if not isinstance(raw, list) or len(raw) != len(HAZARD_PRIMITIVE_FEATURE_NAMES):
+            raise ValueError("hazard primitive schema mismatch")
+        values = tuple(float(value) for value in raw)
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("hazard primitive contains a non-finite value")
+        hazards.append(values)
+    history_names = []
+    history_values = []
+    for raw in raw_history:
+        if not isinstance(raw, list) or len(raw) != 2:
+            raise ValueError("history feature row is invalid")
+        history_names.append(str(raw[0]))
+        history_values.append(float(raw[1]))
+    if tuple(history_names) != HISTORY_FEATURE_NAMES or not all(
+        math.isfinite(value) for value in history_values
+    ):
+        raise ValueError("history feature schema mismatch")
+    return tuple(hazards), tuple(history_values)
 
 
 def _validate_run(run_dir: Path) -> tuple[dict[str, object], dict[str, object]]:
@@ -233,6 +278,7 @@ def load_option_episode(
                 "legal": legal,
                 "vector": _vector(row, action),
                 "candidate_vectors": tuple(_vector(row, candidate) for candidate in legal),
+                "representation_inputs": _representation_inputs(row),
                 "hit_cost": 0.0,
                 "physical_elapsed": 0,
                 "termination": None,
@@ -297,6 +343,8 @@ def load_option_episode(
             option_hit_cost=float(item["hit_cost"]),
             duration_frames=duration,
             termination_reason=str(item["termination"]),
+            hazard_primitives=tuple(item["representation_inputs"][0]),
+            history_features=tuple(item["representation_inputs"][1]),
         ))
     return_value = 0.0
     labeled = []
@@ -340,6 +388,172 @@ def doubly_robust_advantages(
     ) / factual_probability
     baseline = values[baseline_index]
     return [value - baseline for value in values]
+
+
+def hazard_codebook_feature_names() -> tuple[str, ...]:
+    return (
+        *(f"hazard:prototype_fraction_{index}" for index in range(HAZARD_PROTOTYPES)),
+        *(f"hazard:prototype_min_distance_{index}" for index in range(HAZARD_PROTOTYPES)),
+        *(f"hazard:mean_{name}" for name in HAZARD_PRIMITIVE_FEATURE_NAMES),
+        *(f"hazard:max_abs_{name}" for name in HAZARD_PRIMITIVE_FEATURE_NAMES),
+        "hazard:count_log",
+        "hazard:empty",
+    )
+
+
+def fit_hazard_codebook(
+    samples: list[OptionStep],
+    *,
+    seed: int,
+) -> dict[str, object]:
+    """Learn a bounded permutation-invariant primitive codebook."""
+    import numpy as np
+
+    generator = random.Random(seed)
+    reservoir: list[tuple[float, ...]] = []
+    seen = 0
+    empty_sets = 0
+    for sample in samples:
+        empty_sets += not sample.hazard_primitives
+        for primitive in sample.hazard_primitives:
+            seen += 1
+            if len(reservoir) < HAZARD_CODEBOOK_SAMPLE:
+                reservoir.append(primitive)
+            else:
+                index = generator.randrange(seen)
+                if index < HAZARD_CODEBOOK_SAMPLE:
+                    reservoir[index] = primitive
+    if len(reservoir) < HAZARD_PROTOTYPES:
+        raise ValueError("training episodes contain too few observed hazards")
+    matrix = np.asarray(reservoir, dtype=np.float64)
+    if matrix.shape[1] != len(HAZARD_PRIMITIVE_FEATURE_NAMES):
+        raise ValueError("hazard codebook primitive width mismatch")
+    mean = matrix.mean(axis=0)
+    scale = matrix.std(axis=0)
+    scale[scale < 1e-6] = 1.0
+    normalized = (matrix - mean) / scale
+    prototypes = _kmeans(
+        normalized,
+        count=HAZARD_PROTOTYPES,
+        iterations=20,
+        seed=seed,
+    )
+    if len(prototypes) != HAZARD_PROTOTYPES:
+        raise RuntimeError("hazard codebook did not produce 24 prototypes")
+    return {
+        "schema": HAZARD_CODEBOOK_SCHEMA,
+        "primitive_feature_names": list(HAZARD_PRIMITIVE_FEATURE_NAMES),
+        "maximum_primitives": MAX_HAZARD_PRIMITIVES,
+        "prototype_count": HAZARD_PROTOTYPES,
+        "sample_limit": HAZARD_CODEBOOK_SAMPLE,
+        "sampled_primitives": len(reservoir),
+        "observed_primitives": seen,
+        "empty_training_sets": empty_sets,
+        "mean": mean.tolist(),
+        "scale": scale.tolist(),
+        "prototypes": prototypes.tolist(),
+    }
+
+
+def encode_hazard_set(
+    primitives: tuple[tuple[float, ...], ...],
+    artifact: dict[str, object],
+) -> tuple[float, ...]:
+    import numpy as np
+
+    if (
+        artifact.get("schema") != HAZARD_CODEBOOK_SCHEMA
+        or tuple(artifact.get("primitive_feature_names", ()))
+        != HAZARD_PRIMITIVE_FEATURE_NAMES
+        or int(artifact.get("prototype_count", -1)) != HAZARD_PROTOTYPES
+        or len(primitives) > MAX_HAZARD_PRIMITIVES
+    ):
+        raise ValueError("hazard codebook contract mismatch")
+    mean = np.asarray(artifact["mean"], dtype=np.float64)
+    scale = np.asarray(artifact["scale"], dtype=np.float64)
+    prototypes = np.asarray(artifact["prototypes"], dtype=np.float64)
+    if primitives:
+        matrix = (np.asarray(primitives, dtype=np.float64) - mean) / scale
+        distances = ((
+            matrix[:, None, :] - prototypes[None, :, :]
+        ) ** 2).mean(axis=2)
+        assignment = distances.argmin(axis=1)
+        fractions = np.bincount(
+            assignment, minlength=HAZARD_PROTOTYPES
+        ).astype(np.float64) / len(matrix)
+        minimum = distances.min(axis=0)
+        average = matrix.mean(axis=0)
+        max_abs = np.abs(matrix).max(axis=0)
+    else:
+        fractions = np.zeros(HAZARD_PROTOTYPES)
+        minimum = np.zeros(HAZARD_PROTOTYPES)
+        average = np.zeros(len(mean))
+        max_abs = np.zeros(len(mean))
+    encoded = tuple(float(value) for value in (
+        *fractions,
+        *minimum,
+        *average,
+        *max_abs,
+        math.log1p(len(primitives)),
+        float(not primitives),
+    ))
+    if len(encoded) != len(hazard_codebook_feature_names()) or not all(
+        math.isfinite(value) for value in encoded
+    ):
+        raise RuntimeError("hazard codebook encoding failed")
+    return encoded
+
+
+def rich_feature_names() -> tuple[str, ...]:
+    return (
+        *tree_feature_names(OBSERVATION_FEATURE_NAMES, ACTION_FEATURE_NAMES),
+        *hazard_codebook_feature_names(),
+        *(f"history:{name}" for name in HISTORY_FEATURE_NAMES),
+    )
+
+
+def rich_candidate_vector(
+    base_vector: tuple[float, ...],
+    hazard_primitives: tuple[tuple[float, ...], ...],
+    history_features: tuple[float, ...],
+    artifact: dict[str, object],
+) -> tuple[float, ...]:
+    if len(history_features) != len(HISTORY_FEATURE_NAMES):
+        raise ValueError("four-observation history width mismatch")
+    result = (
+        *base_vector,
+        *encode_hazard_set(hazard_primitives, artifact),
+        *history_features,
+    )
+    if len(result) != len(rich_feature_names()):
+        raise RuntimeError("rich candidate vector width mismatch")
+    return result
+
+
+def _augment_steps(
+    samples: list[OptionStep], artifact: dict[str, object]
+) -> list[OptionStep]:
+    return [
+        replace(
+            sample,
+            vector=rich_candidate_vector(
+                sample.vector,
+                sample.hazard_primitives,
+                sample.history_features,
+                artifact,
+            ),
+            candidate_vectors=tuple(
+                rich_candidate_vector(
+                    vector,
+                    sample.hazard_primitives,
+                    sample.history_features,
+                    artifact,
+                )
+                for vector in sample.candidate_vectors
+            ),
+        )
+        for sample in samples
+    ]
 
 
 def _folds(groups: list[str], *, count: int, seed: int) -> list[tuple[str, ...]]:
@@ -487,6 +701,9 @@ def fit_dr_option_advantage(
         raise ValueError("generation-3 fit requires three nuisance members")
     if population_members != POPULATION_MEMBERS:
         raise ValueError("generation-3 population must contain seven members")
+    representation = fit_hazard_codebook(train, seed=seed + 30_000)
+    train = _augment_steps(train, representation)
+    validation = _augment_steps(validation, representation)
     folds = _folds(train_groups, count=crossfit_folds, seed=seed)
     pseudo_train = []
     fold_report = []
@@ -574,8 +791,15 @@ def fit_dr_option_advantage(
         0, len(x) - 1, min(8, len(x)), dtype=int
     )
     conformance = x[conformance_indices]
+    names = rich_feature_names()
     encoded_models = [
-        _encoded_model(_export_model(model, conformance)) for model in models
+        _encoded_model(_export_model(
+            model,
+            conformance,
+            feature_schema=RICH_FEATURE_SCHEMA,
+            feature_names=names,
+        ))
+        for model in models
     ]
     finite = all(math.isfinite(value) for value in (rmse, constant))
     gates = {
@@ -592,14 +816,18 @@ def fit_dr_option_advantage(
         "population_complete": len(models) == POPULATION_MEMBERS,
         "native_scorer_bound": len(native_scorer_sha256) == 64,
     }
-    names = tree_feature_names(OBSERVATION_FEATURE_NAMES, ACTION_FEATURE_NAMES)
     return {
         "schema": STATE_SCHEMA,
         "mode": "shadow",
-        "feature_schema": TREE_FEATURE_SCHEMA,
+        "feature_schema": RICH_FEATURE_SCHEMA,
         "observation_feature_names": list(OBSERVATION_FEATURE_NAMES),
         "action_feature_names": list(ACTION_FEATURE_NAMES),
         "feature_names": list(names),
+        "representation": {
+            "kind": "learned-permutation-invariant-hazard-codebook-plus-factual-history",
+            "hazard_codebook": representation,
+            "history_feature_names": list(HISTORY_FEATURE_NAMES),
+        },
         "models": encoded_models,
         "native_scorer": {
             "schema": "th06-rl-native-xgboost-scorer-v1",
@@ -630,6 +858,16 @@ def fit_dr_option_advantage(
             "crossfit_folds": fold_report,
             "full_nuisance_bootstrap_unique_episodes": full_nuisance_unique,
             "population_bootstrap": bootstrap_report,
+            "hazard_codebook": {
+                key: representation[key]
+                for key in (
+                    "prototype_count",
+                    "sample_limit",
+                    "sampled_primitives",
+                    "observed_primitives",
+                    "empty_training_sets",
+                )
+            },
             "factual_effective_sample_size": _effective_sample_size(train),
             "train_physical_hit_cost": float(sum(
                 sample.option_hit_cost for sample in train
@@ -661,6 +899,14 @@ def _causal_smoke_episodes(prefix: str, count: int) -> list[OptionStep]:
             candidate[indices["matches_baseline"]] = 0.0
             assigned_candidate = (episode_index + option_index) % 2 == 0
             outcome = 2.0 + 2.0 * state_risk - float(assigned_candidate)
+            primitive = [0.0] * len(HAZARD_PRIMITIVE_FEATURE_NAMES)
+            primitive[0] = state_risk
+            primitive[1] = option_index / 64.0
+            primitive[6] = math.hypot(primitive[0], primitive[1])
+            primitive[11] = 1.0
+            history = [0.0] * len(HISTORY_FEATURE_NAMES)
+            history[0] = 1.0
+            history[2] = state_risk
             result.append(OptionStep(
                 episode_id=episode,
                 option_id=f"{episode}:{option_index}",
@@ -676,6 +922,8 @@ def _causal_smoke_episodes(prefix: str, count: int) -> list[OptionStep]:
                 duration_frames=8,
                 return_to_go=outcome,
                 termination_reason="horizon",
+                hazard_primitives=(tuple(primitive),),
+                history_features=tuple(history),
             ))
     return result
 
@@ -693,24 +941,39 @@ def run_causal_recovery_smoke(*, threads: int = 4) -> dict[str, object]:
         native_scorer_sha256="0" * 64,
     )
     names = tuple(state["feature_names"])
-    indices = {name: index for index, name in enumerate(names)}
+    base_names = tree_feature_names(
+        OBSERVATION_FEATURE_NAMES, ACTION_FEATURE_NAMES
+    )
     scorers = [
         PortableXGBoostRegressor(
             _decode_model(model),
-            expected_feature_schema=TREE_FEATURE_SCHEMA,
+            expected_feature_schema=RICH_FEATURE_SCHEMA,
             expected_feature_names=names,
         )
         for model in state["models"]
     ]
     predictions = []
     for state_risk in (0.0, 1.0):
-        baseline = [0.0] * len(names)
-        baseline[indices["observation:position_x_unit"]] = state_risk
-        baseline[indices["matches_baseline"]] = 1.0
+        baseline = [0.0] * len(base_names)
+        baseline[base_names.index("observation:position_x_unit")] = state_risk
+        baseline[base_names.index("matches_baseline")] = 1.0
         candidate = baseline.copy()
-        candidate[indices["action:direction_x"]] = -1.0
-        candidate[indices["delta_from_baseline:direction_x"]] = -1.0
-        candidate[indices["matches_baseline"]] = 0.0
+        candidate[base_names.index("action:direction_x")] = -1.0
+        candidate[base_names.index("delta_from_baseline:direction_x")] = -1.0
+        candidate[base_names.index("matches_baseline")] = 0.0
+        primitive = [0.0] * len(HAZARD_PRIMITIVE_FEATURE_NAMES)
+        primitive[0] = state_risk
+        primitive[6] = abs(state_risk)
+        primitive[11] = 1.0
+        history = [0.0] * len(HISTORY_FEATURE_NAMES)
+        history[0] = 1.0
+        history[2] = state_risk
+        candidate = rich_candidate_vector(
+            tuple(candidate),
+            (tuple(primitive),),
+            tuple(history),
+            state["representation"]["hazard_codebook"],
+        )
         predictions.append([
             float(scorer.predict_many([candidate])[0]) for scorer in scorers
         ])
@@ -767,7 +1030,7 @@ def audit_wine_option_smoke(
         or schemas.get("transition") != TRANSITION_SCHEMA
         or not isinstance(outcome, dict)
     ):
-        raise ValueError("Wine smoke corpus is incomplete or not transition v7")
+        raise ValueError("Wine smoke corpus is incomplete or not transition v8")
     infrastructure_fields = (
         "background_reactivations",
         "capture_failures",
@@ -783,6 +1046,7 @@ def audit_wine_option_smoke(
     non_incumbent = 0
     safe_membership = 0
     horizon_terminations = 0
+    representation_boundaries = 0
     option_rows = 0
     option_ids: set[str] = set()
     active_option_id: str | None = None
@@ -812,6 +1076,8 @@ def audit_wine_option_smoke(
                 raise ValueError("Wine smoke option boundary identity is invalid")
             option_ids.add(option_id)
             active_option_id = option_id
+            _representation_inputs(row)
+            representation_boundaries += 1
             legal = tuple(str(value) for value in legal_raw)
             baseline = str(row.get("baseline_action", ""))
             expected = _expected_probability(
@@ -865,6 +1131,9 @@ def audit_wine_option_smoke(
         "horizon_termination_witnessed": horizon_terminations >= 1,
         "all_option_intents_native_safe": safe_membership == option_rows,
         "input_lease_witnessed": input_lease_rows >= 1,
+        "representation_present_at_every_boundary": (
+            representation_boundaries == boundaries
+        ),
     }
     return {
         "schema": "autonomous-generation-3-wine-option-smoke-v1",
@@ -875,6 +1144,7 @@ def audit_wine_option_smoke(
         "option_continuations": continuations,
         "non_incumbent_boundaries": non_incumbent,
         "horizon_terminations": horizon_terminations,
+        "representation_boundaries": representation_boundaries,
         "input_lease_rows": input_lease_rows,
         "gates": gates,
         "passed": all(gates.values()),

@@ -43,6 +43,8 @@ class PolicyContext:
     action_features: tuple[
         tuple[str, tuple[tuple[str, float], ...]], ...
     ] = ()
+    hazard_primitives: tuple[tuple[float, ...], ...] = ()
+    history_features: tuple[tuple[str, float], ...] = ()
 
 
 @dataclass(frozen=True)
