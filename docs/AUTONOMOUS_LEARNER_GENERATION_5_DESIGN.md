@@ -190,3 +190,13 @@ Stage-6 product policy. The stages are selected by fixed ordinal curriculum,
 not by an observed spell, frame, RNG, action, or failure location. Exact seeds,
 worker assignments, canaries, and hashes must be committed before the first
 curriculum Wine outcome.
+
+The committed curriculum schedule uses four isolated normal-speed collection
+workers and one global 32-thread learner budget; collection and fitting never
+overlap. Stage-4 boundaries 10 and 15 are fixed low-tree, two-iteration,
+non-authorizing learner smokes. They exist only to fail fast on broken signal
+or plumbing and cannot create a policy artifact or change the schedule. The
+ordinary production fit remains boundary 20. Every Stage-5 and Stage-6
+boundary is a production fit. This resource distinction is declared before
+the first curriculum outcome and does not change reward, features, behavior,
+support, uncertainty, or promotion gates.

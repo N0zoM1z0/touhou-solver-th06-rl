@@ -1,0 +1,147 @@
+{
+  "schema": "autonomous-generation-5-curriculum-seeds-v1",
+  "generation_seed": 260813,
+  "resource_contract": {
+    "maximum_training_threads": 32,
+    "collection_parallelism": 4,
+    "canonical_evaluation_parallelism": 1,
+    "fit_and_collection_may_overlap": false,
+    "workers": [
+      {"worker": 0, "display": ":97", "directory": "wine-0"},
+      {"worker": 1, "display": ":98", "directory": "wine-1"},
+      {"worker": 2, "display": ":99", "directory": "wine-2"},
+      {"worker": 3, "display": ":100", "directory": "wine-3"}
+    ]
+  },
+  "parallelism_differential": {
+    "evidence_eligible": false,
+    "stage": 4,
+    "game_rng_seed": 25154,
+    "policy_seed": 23413,
+    "serial_worker": 0,
+    "concurrent_workers": [0, 1]
+  },
+  "stages": [
+    {
+      "stage": 4,
+      "fit_boundaries": [10, 15, 20],
+      "fits": [
+        {"boundary": 10, "mode": "non-authorizing-smoke", "iterations": 2, "q_trees": 8, "value_trees": 8},
+        {"boundary": 15, "mode": "non-authorizing-smoke", "iterations": 2, "q_trees": 8, "value_trees": 8},
+        {"boundary": 20, "mode": "production"}
+      ],
+      "canary_boundaries": [20],
+      "collection": [
+        {"episode": 0, "worker": 0, "game_rng_seed": 31292, "policy_seed": 11621},
+        {"episode": 1, "worker": 1, "game_rng_seed": 35414, "policy_seed": 59015},
+        {"episode": 2, "worker": 2, "game_rng_seed": 27158, "policy_seed": 3537},
+        {"episode": 3, "worker": 3, "game_rng_seed": 150, "policy_seed": 43870},
+        {"episode": 4, "worker": 0, "game_rng_seed": 7119, "policy_seed": 7251},
+        {"episode": 5, "worker": 1, "game_rng_seed": 29835, "policy_seed": 30093},
+        {"episode": 6, "worker": 2, "game_rng_seed": 11482, "policy_seed": 3013},
+        {"episode": 7, "worker": 3, "game_rng_seed": 48414, "policy_seed": 7789},
+        {"episode": 8, "worker": 0, "game_rng_seed": 59798, "policy_seed": 52367},
+        {"episode": 9, "worker": 1, "game_rng_seed": 28145, "policy_seed": 46789},
+        {"episode": 10, "worker": 2, "game_rng_seed": 31901, "policy_seed": 16045},
+        {"episode": 11, "worker": 3, "game_rng_seed": 59552, "policy_seed": 35161},
+        {"episode": 12, "worker": 0, "game_rng_seed": 41878, "policy_seed": 32149},
+        {"episode": 13, "worker": 1, "game_rng_seed": 64630, "policy_seed": 36735},
+        {"episode": 14, "worker": 2, "game_rng_seed": 58708, "policy_seed": 11802},
+        {"episode": 15, "worker": 3, "game_rng_seed": 13442, "policy_seed": 10488},
+        {"episode": 16, "worker": 0, "game_rng_seed": 49741, "policy_seed": 59899},
+        {"episode": 17, "worker": 1, "game_rng_seed": 36380, "policy_seed": 10538},
+        {"episode": 18, "worker": 2, "game_rng_seed": 56718, "policy_seed": 53612},
+        {"episode": 19, "worker": 3, "game_rng_seed": 4869, "policy_seed": 36090}
+      ],
+      "canary": [
+        {"boundary": 20, "pair": 0, "game_rng_seed": 52382},
+        {"boundary": 20, "pair": 1, "game_rng_seed": 61327},
+        {"boundary": 20, "pair": 2, "game_rng_seed": 59835}
+      ]
+    },
+    {
+      "stage": 5,
+      "fit_boundaries": [8, 12],
+      "fits": [
+        {"boundary": 8, "mode": "production"},
+        {"boundary": 12, "mode": "production"}
+      ],
+      "canary_boundaries": [8, 12],
+      "collection": [
+        {"episode": 0, "worker": 0, "game_rng_seed": 11379, "policy_seed": 8705},
+        {"episode": 1, "worker": 1, "game_rng_seed": 7085, "policy_seed": 33769},
+        {"episode": 2, "worker": 2, "game_rng_seed": 17853, "policy_seed": 49761},
+        {"episode": 3, "worker": 3, "game_rng_seed": 32229, "policy_seed": 39687},
+        {"episode": 4, "worker": 0, "game_rng_seed": 58384, "policy_seed": 28426},
+        {"episode": 5, "worker": 1, "game_rng_seed": 63890, "policy_seed": 57860},
+        {"episode": 6, "worker": 2, "game_rng_seed": 37661, "policy_seed": 2874},
+        {"episode": 7, "worker": 3, "game_rng_seed": 46048, "policy_seed": 47591},
+        {"episode": 8, "worker": 0, "game_rng_seed": 344, "policy_seed": 8740},
+        {"episode": 9, "worker": 1, "game_rng_seed": 47573, "policy_seed": 24591},
+        {"episode": 10, "worker": 2, "game_rng_seed": 7205, "policy_seed": 350},
+        {"episode": 11, "worker": 3, "game_rng_seed": 25186, "policy_seed": 56877}
+      ],
+      "canary": [
+        {"boundary": 8, "pair": 0, "game_rng_seed": 64012},
+        {"boundary": 8, "pair": 1, "game_rng_seed": 5744},
+        {"boundary": 8, "pair": 2, "game_rng_seed": 22766},
+        {"boundary": 12, "pair": 0, "game_rng_seed": 64563},
+        {"boundary": 12, "pair": 1, "game_rng_seed": 35704},
+        {"boundary": 12, "pair": 2, "game_rng_seed": 12831}
+      ]
+    },
+    {
+      "stage": 6,
+      "fit_boundaries": [8, 12, 16],
+      "fits": [
+        {"boundary": 8, "mode": "production"},
+        {"boundary": 12, "mode": "production"},
+        {"boundary": 16, "mode": "production"}
+      ],
+      "canary_boundaries": [8, 12, 16],
+      "collection": [
+        {"episode": 0, "worker": 0, "game_rng_seed": 30707, "policy_seed": 48058},
+        {"episode": 1, "worker": 1, "game_rng_seed": 27356, "policy_seed": 25389},
+        {"episode": 2, "worker": 2, "game_rng_seed": 6760, "policy_seed": 41214},
+        {"episode": 3, "worker": 3, "game_rng_seed": 21714, "policy_seed": 4580},
+        {"episode": 4, "worker": 0, "game_rng_seed": 49810, "policy_seed": 35896},
+        {"episode": 5, "worker": 1, "game_rng_seed": 6163, "policy_seed": 16716},
+        {"episode": 6, "worker": 2, "game_rng_seed": 59926, "policy_seed": 63980},
+        {"episode": 7, "worker": 3, "game_rng_seed": 27168, "policy_seed": 28005},
+        {"episode": 8, "worker": 0, "game_rng_seed": 1706, "policy_seed": 28194},
+        {"episode": 9, "worker": 1, "game_rng_seed": 14318, "policy_seed": 10491},
+        {"episode": 10, "worker": 2, "game_rng_seed": 3053, "policy_seed": 33015},
+        {"episode": 11, "worker": 3, "game_rng_seed": 13239, "policy_seed": 15089},
+        {"episode": 12, "worker": 0, "game_rng_seed": 1670, "policy_seed": 5863},
+        {"episode": 13, "worker": 1, "game_rng_seed": 18373, "policy_seed": 46224},
+        {"episode": 14, "worker": 2, "game_rng_seed": 15984, "policy_seed": 51047},
+        {"episode": 15, "worker": 3, "game_rng_seed": 42469, "policy_seed": 2902}
+      ],
+      "canary": [
+        {"boundary": 8, "pair": 0, "game_rng_seed": 3848},
+        {"boundary": 8, "pair": 1, "game_rng_seed": 47227},
+        {"boundary": 8, "pair": 2, "game_rng_seed": 17513},
+        {"boundary": 12, "pair": 0, "game_rng_seed": 30124},
+        {"boundary": 12, "pair": 1, "game_rng_seed": 61610},
+        {"boundary": 12, "pair": 2, "game_rng_seed": 15458},
+        {"boundary": 16, "pair": 0, "game_rng_seed": 31547},
+        {"boundary": 16, "pair": 1, "game_rng_seed": 12532},
+        {"boundary": 16, "pair": 2, "game_rng_seed": 48703}
+      ]
+    }
+  ],
+  "final_evaluation": {
+    "stage": 6,
+    "fixed_rng": false,
+    "complete_stage_hit_continuation": true,
+    "pairs": 12,
+    "trial_order": [
+      "baseline", "candidate", "baseline", "candidate",
+      "baseline", "candidate", "baseline", "candidate",
+      "baseline", "candidate", "baseline", "candidate",
+      "baseline", "candidate", "baseline", "candidate",
+      "baseline", "candidate", "baseline", "candidate",
+      "baseline", "candidate", "baseline", "candidate"
+    ]
+  }
+}
