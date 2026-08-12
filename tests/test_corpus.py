@@ -458,6 +458,9 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "conditional_probability": 1.0,
         "elapsed_frames_at_decision": 1,
         "physical_elapsed_frames": 2,
-        "termination_reason": "observation-gap",
-        "preceding_termination_reason": None,
-    }
+            "termination_reason": "observation-gap",
+            "preceding_termination_reason": None,
+            "behavior_probabilities": [],
+            "information_weights": [],
+            "propensity_ess": [],
+        }

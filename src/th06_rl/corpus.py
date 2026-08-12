@@ -29,7 +29,7 @@ RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
 FRAME_SCHEMA = "th06-rl-authoritative-frame-v7"
-TRANSITION_SCHEMA = "th06-rl-transition-v9"
+TRANSITION_SCHEMA = "th06-rl-transition-v10"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
@@ -160,8 +160,11 @@ class FrameEvidence:
         ):
             raise ValueError("published action is outside the recorded local set")
         if self.option is not None:
-            if self.policy_id != "safe-option-exploration-v1":
-                raise ValueError("option trace requires the generation-3 behavior policy")
+            if self.policy_id not in (
+                "safe-option-exploration-v1",
+                "propensity-aware-option-exploration-v1",
+            ):
+                raise ValueError("option trace requires a declared behavior policy")
             if self.proposed_action != self.option.intent:
                 raise ValueError("option intent disagrees with the proposed action")
             expected = (
@@ -706,6 +709,15 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             "physical_elapsed_frames": outcome["elapsed_frames"],
             "termination_reason": termination,
             "preceding_termination_reason": trace.preceding_termination_reason,
+            "behavior_probabilities": [
+                [name, value] for name, value in trace.behavior_probabilities
+            ],
+            "information_weights": [
+                [name, value] for name, value in trace.information_weights
+            ],
+            "propensity_ess": [
+                [name, value] for name, value in trace.propensity_ess
+            ],
         }
     return {
         "schema_version": TRANSITION_SCHEMA,

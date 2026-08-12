@@ -237,7 +237,7 @@ def test_short_wine_smoke_audits_options_without_becoming_evidence(
             "termination_reason": "hard-empty",
         },
     })
-    monkeypatch.setattr(module, "_rows", lambda *_args: iter(rows))
+    monkeypatch.setattr(module, "_rows", lambda *_args, **_kwargs: iter(rows))
 
     report = audit_wine_option_smoke(tmp_path)
     assert report["passed"] is True
@@ -253,7 +253,11 @@ def test_option_loader_conserves_prefix_and_unexecuted_gap_hits(
 
     run = {"run_id": "wine-stage"}
     manifest = {"run_outcome": {"physical_hits": 2}}
-    monkeypatch.setattr(module, "_validate_run", lambda _path: (run, manifest))
+    monkeypatch.setattr(
+        module,
+        "_validate_run",
+        lambda _path, **_kwargs: (run, manifest),
+    )
     monkeypatch.setattr(module, "_frame", lambda value: int(value))
     monkeypatch.setattr(module, "_vector", lambda _row, _action: (0.0,))
     monkeypatch.setattr(module, "_representation_inputs", lambda _row: (
@@ -319,7 +323,7 @@ def test_option_loader_conserves_prefix_and_unexecuted_gap_hits(
         row(3, hit=True),
         row(4, option=second, executed="stay", eligible=True),
     ]
-    monkeypatch.setattr(module, "_rows", lambda *_args: iter(rows))
+    monkeypatch.setattr(module, "_rows", lambda *_args, **_kwargs: iter(rows))
 
     samples, report = load_option_episode(
         tmp_path,

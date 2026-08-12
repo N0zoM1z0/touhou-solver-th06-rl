@@ -28,6 +28,7 @@ from .th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAM
 STATE_SCHEMA = "autonomous-sequential-r-option-critic-v1"
 FIT_REPORT_SCHEMA = "autonomous-sequential-r-option-fit-v1"
 SUPPORT_SCHEMA = "autonomous-rich-local-prototype-support-v1"
+RICH_FEATURE_SCHEMA = "generation-4-rich-action-centered-v1"
 POPULATION_MEMBERS = 7
 CROSSFIT_FOLDS = 5
 NUISANCE_MEMBERS = 3
@@ -36,6 +37,8 @@ CRITIC_TREES = 128
 N_STEP_OPTIONS = 8
 MINIMUM_CALIBRATION_EPISODES = 20
 SUPPORT_QUANTILE = 0.99
+TRANSITION_SCHEMA = "th06-rl-transition-v10"
+BEHAVIOR_POLICY = "propensity-aware-option-exploration-v1"
 
 
 @dataclass(frozen=True)
@@ -652,7 +655,7 @@ def fit_sequential_r_critic(
         _encoded_model(_export_model(
             model,
             conformance,
-            feature_schema="generation-4-rich-action-centered-v1",
+            feature_schema=RICH_FEATURE_SCHEMA,
             feature_names=names,
         ))
         for model in final_models
@@ -690,7 +693,7 @@ def fit_sequential_r_critic(
     return {
         "schema": STATE_SCHEMA,
         "mode": "shadow",
-        "feature_schema": "generation-4-rich-action-centered-v1",
+        "feature_schema": RICH_FEATURE_SCHEMA,
         "observation_feature_names": list(OBSERVATION_FEATURE_NAMES),
         "action_feature_names": list(ACTION_FEATURE_NAMES),
         "feature_names": list(names),
@@ -801,21 +804,32 @@ def _causal_episodes(count: int = 160, options: int = 64) -> list[OptionStep]:
     return result
 
 
-def run_sequential_causal_smoke(*, threads: int = 4) -> dict[str, object]:
-    from .policies.autonomous_conservative_q import _decode_model
-    from .policies.offline_ranker import PortableXGBoostRegressor
-
+def fit_sequential_causal_fixture(
+    *,
+    threads: int = 4,
+    native_scorer_sha256: str = "0" * 64,
+    compatible_native_scorer_sha256: tuple[str, ...] = (),
+) -> tuple[list[OptionStep], dict[str, object]]:
     samples = _causal_episodes()
     state = fit_sequential_r_critic(
         samples,
         seed=260812,
         threads=threads,
-        native_scorer_sha256="0" * 64,
+        native_scorer_sha256=native_scorer_sha256,
+        compatible_native_scorer_sha256=compatible_native_scorer_sha256,
     )
+    return samples, state
+
+
+def run_sequential_causal_smoke(*, threads: int = 4) -> dict[str, object]:
+    from .policies.autonomous_conservative_q import _decode_model
+    from .policies.offline_ranker import PortableXGBoostRegressor
+
+    samples, state = fit_sequential_causal_fixture(threads=threads)
     scorers = [
         PortableXGBoostRegressor(
             _decode_model(model),
-            expected_feature_schema="generation-4-rich-action-centered-v1",
+            expected_feature_schema=RICH_FEATURE_SCHEMA,
             expected_feature_names=rich_feature_names(),
         )
         for model in state["models"]

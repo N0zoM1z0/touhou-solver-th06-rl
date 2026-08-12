@@ -58,6 +58,9 @@ class PolicyOptionTrace:
     elapsed_frames: int
     termination_reason: str | None = None
     preceding_termination_reason: str | None = None
+    behavior_probabilities: tuple[tuple[str, float], ...] = ()
+    information_weights: tuple[tuple[str, float], ...] = ()
+    propensity_ess: tuple[tuple[str, float], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.option_id or not self.intent:
@@ -69,6 +72,38 @@ class PolicyOptionTrace:
             raise ValueError("option boundary probability must be in (0, 1]")
         if self.elapsed_frames <= 0:
             raise ValueError("option elapsed frames must be positive")
+        if self.behavior_probabilities:
+            names = tuple(name for name, _value in self.behavior_probabilities)
+            probabilities = tuple(
+                float(value) for _name, value in self.behavior_probabilities
+            )
+            if (
+                len(set(names)) != len(names)
+                or self.intent not in names
+                or any(
+                    not math.isfinite(value) or value <= 0.0
+                    for value in probabilities
+                )
+                or not math.isclose(
+                    sum(probabilities), 1.0, rel_tol=1e-9, abs_tol=1e-9
+                )
+                or not math.isclose(
+                    dict(self.behavior_probabilities)[self.intent],
+                    self.boundary_probability,
+                    rel_tol=1e-12,
+                    abs_tol=1e-12,
+                )
+            ):
+                raise ValueError("complete option propensity vector is invalid")
+            for diagnostics in (self.information_weights, self.propensity_ess):
+                if (
+                    tuple(name for name, _value in diagnostics) != names
+                    or any(
+                        not math.isfinite(float(value)) or float(value) < 0.0
+                        for _name, value in diagnostics
+                    )
+                ):
+                    raise ValueError("option propensity diagnostics are invalid")
 
 
 @dataclass(frozen=True)

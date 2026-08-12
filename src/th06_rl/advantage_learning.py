@@ -100,7 +100,12 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _rows(run_dir: Path, manifest: dict[str, object]):
+def _rows(
+    run_dir: Path,
+    manifest: dict[str, object],
+    *,
+    transition_schema: str = TRANSITION_SCHEMA,
+):
     expected_sequence = 0
     observed = 0
     expected = 0
@@ -124,8 +129,13 @@ def _rows(run_dir: Path, manifest: dict[str, object]):
         with gzip.open(path, "rt", encoding="utf-8") as source:
             for line in source:
                 row = json.loads(line)
-                if not isinstance(row, dict) or row.get("schema_version") != TRANSITION_SCHEMA:
-                    raise ValueError("generation 3 requires transition v9")
+                if (
+                    not isinstance(row, dict)
+                    or row.get("schema_version") != transition_schema
+                ):
+                    raise ValueError(
+                        f"learner requires transition schema {transition_schema}"
+                    )
                 if int(row.get("sequence", -1)) != expected_sequence:
                     raise ValueError("transition sequence is not contiguous")
                 expected_sequence += 1
@@ -196,7 +206,11 @@ def _representation_inputs(
     return tuple(hazards), tuple(history_values)
 
 
-def _validate_run(run_dir: Path) -> tuple[dict[str, object], dict[str, object]]:
+def _validate_run(
+    run_dir: Path,
+    *,
+    transition_schema: str = TRANSITION_SCHEMA,
+) -> tuple[dict[str, object], dict[str, object]]:
     run = _object(run_dir / "run.json")
     manifest = _object(run_dir / "manifest.json")
     schemas = run.get("schemas")
@@ -206,7 +220,7 @@ def _validate_run(run_dir: Path) -> tuple[dict[str, object], dict[str, object]]:
         or manifest.get("stage_trajectory_complete") is not True
         or int(manifest.get("dropped_records", -1)) != 0
         or not isinstance(schemas, dict)
-        or schemas.get("transition") != TRANSITION_SCHEMA
+        or schemas.get("transition") != transition_schema
         or not isinstance(outcome, dict)
         or outcome.get("stage_completed") is not True
         or not isinstance(outcome.get("physical_hits"), int)
@@ -229,12 +243,18 @@ def _validate_run(run_dir: Path) -> tuple[dict[str, object], dict[str, object]]:
 def load_option_episode(
     run_dir: Path,
     *,
-    exploration_probability: float,
+    exploration_probability: float | None,
+    behavior_policy: str = BEHAVIOR_POLICY,
+    transition_schema: str = TRANSITION_SCHEMA,
 ) -> tuple[list[OptionStep], dict[str, object]]:
-    """Aggregate factual transition-v9 rows into randomized option treatments."""
+    """Aggregate factual option rows into randomized treatments and intervals."""
     run_dir = run_dir.resolve()
-    run, manifest = _validate_run(run_dir)
-    rows = list(_rows(run_dir, manifest))
+    run, manifest = _validate_run(
+        run_dir, transition_schema=transition_schema
+    )
+    rows = list(_rows(
+        run_dir, manifest, transition_schema=transition_schema
+    ))
     episode_id = str(run.get("run_id", run_dir.name))
     grouped: list[dict[str, object]] = []
     current: dict[str, object] | None = None
@@ -308,14 +328,45 @@ def load_option_episode(
                 raise TypeError("option boundary has no native-safe set")
             legal = tuple(str(value) for value in legal_raw)
             probability = float(option.get("boundary_probability", 0.0))
-            expected = _expected_probability(
-                action=action,
-                baseline=baseline,
-                legal=legal,
-                exploration_probability=exploration_probability,
-            )
+            recorded_raw = option.get("behavior_probabilities")
+            recorded = {}
+            if isinstance(recorded_raw, list) and recorded_raw:
+                for item in recorded_raw:
+                    if not isinstance(item, list) or len(item) != 2:
+                        raise ValueError("recorded propensity vector is invalid")
+                    name, value = str(item[0]), float(item[1])
+                    if name in recorded or not math.isfinite(value) or value <= 0.0:
+                        raise ValueError("recorded propensity vector is invalid")
+                    recorded[name] = value
+                if (
+                    set(recorded) != set(legal)
+                    or not math.isclose(
+                        sum(recorded.values()), 1.0, rel_tol=1e-9, abs_tol=1e-9
+                    )
+                ):
+                    raise ValueError("recorded propensity vector is incomplete")
+                expected = recorded[action]
+                probabilities = tuple(recorded[candidate] for candidate in legal)
+            else:
+                if exploration_probability is None:
+                    raise ValueError("option boundary has no propensity vector")
+                expected = _expected_probability(
+                    action=action,
+                    baseline=baseline,
+                    legal=legal,
+                    exploration_probability=exploration_probability,
+                )
+                probabilities = tuple(
+                    _expected_probability(
+                        action=candidate,
+                        baseline=baseline,
+                        legal=legal,
+                        exploration_probability=exploration_probability,
+                    )
+                    for candidate in legal
+                )
             if (
-                row.get("policy_id") != BEHAVIOR_POLICY
+                row.get("policy_id") != behavior_policy
                 or action not in legal
                 or baseline not in legal
                 or not math.isclose(probability, expected, rel_tol=1e-9, abs_tol=1e-12)
@@ -338,6 +389,7 @@ def load_option_episode(
                 "vector": _vector(row, action),
                 "candidate_vectors": tuple(_vector(row, candidate) for candidate in legal),
                 "representation_inputs": _representation_inputs(row),
+                "probabilities": probabilities,
                 "hit_cost": 0.0,
                 "physical_elapsed": 0,
                 "termination": None,
@@ -395,15 +447,7 @@ def load_option_episode(
             termination_reason=str(item["termination"]),
             hazard_primitives=tuple(item["representation_inputs"][0]),
             history_features=tuple(item["representation_inputs"][1]),
-            behavior_probabilities=tuple(
-                _expected_probability(
-                    action=candidate,
-                    baseline=str(item["baseline"]),
-                    legal=tuple(item["legal"]),
-                    exploration_probability=exploration_probability,
-                )
-                for candidate in tuple(item["legal"])
-            ),
+            behavior_probabilities=tuple(item["probabilities"]),
         ))
     return_value = 0.0
     labeled = []
