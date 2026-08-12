@@ -109,6 +109,9 @@ def test_crossfit_keeps_complete_episodes_out_of_their_models() -> None:
         set(fold["fit_episodes"]).isdisjoint(fold["heldout_episodes"])
         for fold in report["folds"]
     )
+    assert 0.0 <= report["deployed_population_proposal_rate"] <= 1.0
+    assert 0.0 <= report["deployed_proposal_loo_exact_rate"] <= 1.0
+    assert 0.0 <= report["deployed_population_loo_union_stability"] <= 1.0
 
 
 def test_process_parallel_crossfit_matches_one_thread_serial() -> None:

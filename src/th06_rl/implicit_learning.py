@@ -602,6 +602,10 @@ def _evaluate_crossfit_fold(
     stop_indices = [*starts[1:], len(layout_rows)]
     episode_reports: dict[str, dict[str, object]] = {}
     full_proposals = 0
+    deployed_population_proposals = 0
+    deployed_population_loo_union = 0
+    deployed_population_loo_exact = 0
+    deployed_proposal_loo_exact = 0
     union_proposals = 0
     conditional_agreements = 0
     exact_agreements = 0
@@ -628,6 +632,35 @@ def _evaluate_crossfit_fold(
             for action_index, action in enumerate(sample.legal_actions)
         )
         predictions = effect_predictions[:, start:stop]
+        all_members = tuple(range(CALIBRATION_MEMBERS))
+        deployed = _population_choice(
+            predictions, sample, mask, all_members
+        )
+        leave_one_out = tuple(
+            _population_choice(
+                predictions,
+                sample,
+                mask,
+                tuple(member for member in all_members if member != omitted),
+            )
+            for omitted in all_members
+        )
+        deployed_stable = all(
+            choice == deployed for choice in leave_one_out
+        )
+        deployed_either = (
+            deployed != sample.baseline_action
+            or any(
+                choice != sample.baseline_action for choice in leave_one_out
+            )
+        )
+        deployed_population_loo_union += int(deployed_either)
+        deployed_population_loo_exact += int(
+            deployed_either and deployed_stable
+        )
+        if deployed != sample.baseline_action:
+            deployed_population_proposals += 1
+            deployed_proposal_loo_exact += int(deployed_stable)
         left = _population_choice(predictions, sample, mask, LEFT_PANEL)
         right = _population_choice(predictions, sample, mask, RIGHT_PANEL)
         full = (
@@ -661,6 +694,10 @@ def _evaluate_crossfit_fold(
         "q_squared_error": q_loss,
         "options": len(samples),
         "proposals": full_proposals,
+        "deployed_population_proposals": deployed_population_proposals,
+        "deployed_population_loo_union": deployed_population_loo_union,
+        "deployed_population_loo_exact": deployed_population_loo_exact,
+        "deployed_proposal_loo_exact": deployed_proposal_loo_exact,
         "union_half_proposals": union_proposals,
         "conditional_half_agreements": conditional_agreements,
         "exact_half_agreements": exact_agreements,
@@ -772,6 +809,18 @@ def crossfit_implicit_q_report(
     new = cohort(set(new_episode_ids) & set(episode_reports))
     options = sum(report["options"] for report in reports)
     proposals = sum(report["proposals"] for report in reports)
+    deployed_proposals = sum(
+        report["deployed_population_proposals"] for report in reports
+    )
+    deployed_loo_union = sum(
+        report["deployed_population_loo_union"] for report in reports
+    )
+    deployed_loo_exact = sum(
+        report["deployed_population_loo_exact"] for report in reports
+    )
+    deployed_proposal_loo_exact = sum(
+        report["deployed_proposal_loo_exact"] for report in reports
+    )
     union = sum(report["union_half_proposals"] for report in reports)
     conditional = sum(
         report["conditional_half_agreements"] for report in reports
@@ -799,6 +848,16 @@ def crossfit_implicit_q_report(
         "options": options,
         "proposals": proposals,
         "proposal_rate": proposals / options,
+        "deployed_population_proposals": deployed_proposals,
+        "deployed_population_proposal_rate": deployed_proposals / options,
+        "deployed_proposal_loo_exact_rate": (
+            deployed_proposal_loo_exact / deployed_proposals
+            if deployed_proposals else 0.0
+        ),
+        "deployed_population_loo_union_stability": (
+            deployed_loo_exact / deployed_loo_union
+            if deployed_loo_union else 0.0
+        ),
         "union_half_proposals": union,
         "conditional_half_agreement": conditional / union if union else 0.0,
         "exact_half_agreement": sum(

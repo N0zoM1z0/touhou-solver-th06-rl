@@ -119,6 +119,55 @@ perturbations. This distinguishes an incorrectly calibrated split-panel gate
 from estimator instability before another model family or any Wine collection
 is attempted. No old gate is relaxed after observing this failure.
 
+## 2026-08-12: full tree population confirms policy-extraction failure
+
+The old nonlinear tree R-critic was refitted on the same 31 development
+episodes with five complete-episode folds, seven members, two Bellman
+iterations, and the original low-cost tree sizes. This diagnostic deliberately
+gave the representation the optimistic all-development unsupervised fit used
+by historical Generation-5 smokes; it remains non-authorizing and cannot enter
+qualification.
+
+The critic retained real factual prediction signal: held-out Q loss was
+0.986195 of the state-only comparator and improved 31/31 episodes. But the
+actual deployed seven-member pessimistic rule was not hidden by the old split
+gate. It proposed on 13.40% of decisions. Among its proposals, removing each of
+the seven members preserved the exact action in only 14.08%. Conditional on the
+full or any leave-one-out population proposing, every perturbation agreed only
+6.17%. The independent 3/4 panels measured 6.69%.
+
+Therefore Generation 5 cannot be repaired by relaxing or replacing the panel
+metric. Flexible action-centered Q predicts a small factual residual but
+directly taking its pessimistic argmin is an unstable policy-extraction method.
+The ignored report is
+`artifacts/autonomous-generation-6-development/tree-full-policy-development-v1.json`,
+SHA-256
+`77ccbe4c3414919cb53a22a5d4dddb4fced928cf3f363b07b7f2fbd48144a6ec`.
+
+## Next hypothesis: cross-fitted IQL actor
+
+Generation 5 implemented IQL-style in-sample value backup but deployed the
+critic directly. Standard IQL instead extracts a behavior-supported policy by
+advantage-weighted regression. The next offline candidate retains the flexible
+tree Q/V signal and learns a separate listwise actor over every factual
+native-safe set. For cost minimization, factual action weight is
+
+`exp((V(s) - Q(s,A)) / temperature)`.
+
+Weights are computed out of episode group, temperature is a predeclared robust
+scale of cross-fitted advantage, and the exponential range is fixed before
+Wine development output. The actor objective is factual behavior cloning
+reweighted toward lower-cost actions; it uses no counterfactual successor and
+no inverse propensity. Thus it remains anchored to actions that Wine actually
+executed while converting the critic's noisy pointwise values into a smooth
+supported policy.
+
+The actor scorer consumes only the same generic observation, history, hazard,
+candidate, and candidate-relative features. A complete bootstrap actor
+population must abstain to the incumbent under disagreement. Synthetic delayed
+effect/null tests run before Wine development, and the untouched 13-episode
+qualification remains locked.
+
 ## Performance contract
 
 All development launchers apply the Linux process-tree CPU affinity contract
