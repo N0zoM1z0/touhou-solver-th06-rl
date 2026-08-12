@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+import scripts.run_generation3_preflight as preflight
 from scripts.run_autonomous_learning_v3 import (
     CANARY_PAIRS,
     COLLECTION_EPISODES,
@@ -45,3 +46,33 @@ def test_generation3_rate_ratio_reports_finite_approximate_interval() -> None:
     assert 0.0 < report["estimate"] < 1.0
     assert report["approximate_95_percent_lower"] < report["estimate"]
     assert report["approximate_95_percent_upper"] > report["estimate"]
+
+
+def test_changed_preflight_contract_archives_cache_before_rerun(
+    tmp_path, monkeypatch,
+) -> None:
+    root = tmp_path / "preflight"
+    root.mkdir()
+    (root / "preflight.json").write_text("{}", encoding="utf-8")
+    archived = []
+    monkeypatch.setattr(
+        preflight,
+        "_archive_incomplete",
+        lambda path: archived.append(path) or path.rename(path.with_name("old")),
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_validate_seed_contract",
+        lambda: {"generation_seed": 260812, "smoke_game_rng_seed": 1},
+    )
+    monkeypatch.setattr(
+        preflight,
+        "run_causal_recovery_smoke",
+        lambda threads: {"passed": False},
+    )
+
+    with pytest.raises(RuntimeError, match="causal"):
+        preflight.run(root, threads=1, seconds=45.0)
+
+    assert archived == [root]
+    assert (tmp_path / "old/preflight.json").is_file()

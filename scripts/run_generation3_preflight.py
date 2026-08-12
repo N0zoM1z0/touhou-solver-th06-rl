@@ -129,7 +129,10 @@ def run(root: Path, *, threads: int, seconds: float) -> dict[str, object]:
     root = root.resolve()
     state_path = root / "preflight.json"
     if state_path.is_file():
-        return _validate_cached(root, seconds=seconds)
+        try:
+            return _validate_cached(root, seconds=seconds)
+        except (FileNotFoundError, TypeError, ValueError):
+            _archive_incomplete(root)
     if root.exists():
         _archive_incomplete(root)
     root.mkdir(parents=True)
