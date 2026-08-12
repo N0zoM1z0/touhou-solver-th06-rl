@@ -152,3 +152,21 @@ executable, score template, Wine 11 binary, controller/native/scorer binaries,
 learner and policy sources, worker orchestration, corpus loader, shadow audit,
 and authorization code. The resumable orchestrator refuses any drift. No
 curriculum outcome existed when this contract was written.
+
+## 2026-08-12: Wine concurrency falsified, serial collection retained
+
+The committed non-evidence differential completed three original-Wine Stage-4
+runs under identical game RNG 25,154 and policy seed 23,413. The serial worker-
+zero reference recorded 28 HITs; concurrent worker zero recorded 30; concurrent
+worker one recorded 26. Their normalized factual-option digests were all
+different. Complete-Stage provenance and isolated game/prefix/display paths
+passed, so the equality failure is real closed-loop timing variation, not an
+artifact mix-up.
+
+No curriculum evidence episode had started. Per the predeclared performance
+contract, the failed audit disables concurrent Wine collection without changing
+or repeating it. The original worker assignment, seeds, order, learner,
+behavior mixture, reward, features, support, decision gates, canaries, and final
+evaluation remain frozen; assigned collection episodes now execute serially.
+The failed differential corpus remains ineligible for training. Its audit and
+the exact serial-fallback-only migration are hash-recorded for replay.

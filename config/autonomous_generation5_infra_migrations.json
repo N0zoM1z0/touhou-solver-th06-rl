@@ -1,0 +1,16 @@
+{
+  "schema": "autonomous-generation-5-infra-migrations-v1",
+  "migrations": [
+    {
+      "id": "wine-parallel-equivalence-failed-serial-fallback-v1",
+      "from_contract_sha256": "c291a27062b00a993d09f1521849a1704b7a8c555a2160e2a84551f0c9a35674",
+      "triggering_non_evidence_audit_sha256": "ec8b307256c27098754bbc7642597faf55df475e2de86b4f70e5ef4e748dd377",
+      "triggering_physical_hits": [28, 30, 26],
+      "triggering_identical_physical_hits": false,
+      "triggering_identical_factual_option_semantics": false,
+      "allowed_change": "disable concurrent Wine collection and execute the frozen worker assignments sequentially",
+      "schedule_reward_feature_behavior_model_gate_or_seed_changed": false,
+      "curriculum_evidence_episodes_preserved": 0
+    }
+  ]
+}

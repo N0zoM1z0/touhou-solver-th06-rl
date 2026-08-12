@@ -71,4 +71,42 @@ def test_collection_wave_refuses_two_runs_on_one_worker(tmp_path) -> None:
             workers=[],
             information_policy=None,
             scorer=tmp_path / "unused.dll",
+            parallel=True,
         )
+
+
+def test_failed_parallel_gate_runs_frozen_wave_serially(monkeypatch, tmp_path) -> None:
+    observed = []
+
+    def complete_run(**arguments):
+        observed.append(int(arguments["worker"]["worker"]))
+        run_dir = tmp_path / f"run-{len(observed)}"
+        return {"controller_completion": {"physical_hits": 0}}, run_dir
+
+    monkeypatch.setattr(
+        "scripts.run_autonomous_learning_v5.complete_run", complete_run
+    )
+    monkeypatch.setattr(
+        "scripts.run_autonomous_learning_v5._behavior_state",
+        lambda *args, **kwargs: None,
+    )
+    rows = [
+        {"episode": 0, "worker": 0, "game_rng_seed": 1, "policy_seed": 3},
+        {"episode": 1, "worker": 1, "game_rng_seed": 2, "policy_seed": 4},
+    ]
+
+    completed = _collect_wave(
+        root=tmp_path,
+        stage=4,
+        rows=rows,
+        workers=[
+            {"worker": 0, "display": ":97"},
+            {"worker": 1, "display": ":98"},
+        ],
+        information_policy=None,
+        scorer=tmp_path / "unused.dll",
+        parallel=False,
+    )
+
+    assert observed == [0, 1]
+    assert [row["episode"] for row in completed] == [0, 1]

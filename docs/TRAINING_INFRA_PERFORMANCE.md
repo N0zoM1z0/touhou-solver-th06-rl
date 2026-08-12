@@ -172,6 +172,24 @@ files are bound by a committed SHA-256 contract before the differential starts.
 This makes concurrency a replayable infrastructure choice, not an outcome-
 dependent data-distribution adjustment.
 
+The frozen differential failed. The serial worker-zero reference produced 28
+HITs and normalized factual digest `69c7a198...d55`; concurrent worker zero
+produced 30 HITs and `6454c07f...bb95`; concurrent worker one produced 26 HITs
+and `751d6cb3...57e0`. All three original-Wine Stages completed cleanly, their
+isolated path gate passed, but neither physical outcome nor factual semantics
+matched. The first observed gameplay frames were 89, 88, and 91 respectively,
+and option-boundary counts were 9,011, 9,204, and 8,660. Thus a fixed retail RNG
+does not fix the complete controller/capture closed loop; startup and scheduling
+timing can alter later factual interaction.
+
+Decision: parallel Wine collection is disabled. The frozen episode-to-worker,
+RNG, policy seed, fit, canary, and final schedules remain unchanged, but each
+assigned worker runs one at a time in schedule order. The differential corpus
+is non-evidence and is never admitted to training. This is the predeclared
+failure behavior, not a relaxed equivalence metric. Offline parse/cache and
+cross-fit parallelism remain enabled under the 32-core cap because they operate
+on already recorded immutable facts and passed deterministic differentials.
+
 ## Native implementation priority
 
 The repository should use native C/C++ for fixed, hot numerical kernels and

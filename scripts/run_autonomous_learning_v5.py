@@ -49,6 +49,7 @@ from th06_rl.wine_workers import prepare_wine_workers  # noqa: E402
 SCHEMA = "autonomous-wine-learning-generation-v5-curriculum-v1"
 SCHEDULE = REPOSITORY / "config/autonomous_generation5_curriculum_seeds.json"
 CONTRACT = REPOSITORY / "config/autonomous_generation5_curriculum_contract.json"
+MIGRATIONS = REPOSITORY / "config/autonomous_generation5_infra_migrations.json"
 EXPLORATION_PLUGIN = (
     REPOSITORY / "src/th06_rl/policies/propensity_aware_option_exploration.py"
 )
@@ -122,6 +123,27 @@ def _behavior_state(
         _atomic_json(path, value)
 
 
+def _validate_serial_fallback(audit_path: Path, audit: dict[str, object]) -> None:
+    migrations = _object(MIGRATIONS).get("migrations")
+    migration = migrations[0] if isinstance(migrations, list) and len(migrations) == 1 else None
+    if (
+        not isinstance(migration, dict)
+        or migration.get("id")
+        != "wine-parallel-equivalence-failed-serial-fallback-v1"
+        or migration.get("triggering_non_evidence_audit_sha256")
+        != _sha256(audit_path)
+        or migration.get("triggering_physical_hits") != audit.get("physical_hits")
+        or migration.get("triggering_identical_physical_hits")
+        != audit.get("gates", {}).get("identical_physical_hits")
+        or migration.get("triggering_identical_factual_option_semantics")
+        != audit.get("gates", {}).get("identical_factual_option_semantics")
+        or migration.get("schedule_reward_feature_behavior_model_gate_or_seed_changed")
+        is not False
+        or migration.get("curriculum_evidence_episodes_preserved") != 0
+    ):
+        raise ValueError("serial Wine fallback is not bound to the failed audit")
+
+
 def _baseline_state(path: Path) -> None:
     value = {
         "schema": BASELINE_SCHEMA,
@@ -143,8 +165,10 @@ def _parallelism_differential(
     audit_path = root / "parallelism-differential" / "audit.json"
     if audit_path.is_file():
         audit = _object(audit_path)
-        if audit.get("passed") is not True or audit.get("evidence_eligible") is not False:
-            raise RuntimeError("cached parallelism differential did not pass")
+        if audit.get("evidence_eligible") is not False:
+            raise RuntimeError("cached parallelism differential claims evidence")
+        if audit.get("passed") is not True:
+            _validate_serial_fallback(audit_path, audit)
         return audit
     spec = schedule["parallelism_differential"]
     policy_state = root / "parallelism-differential" / "behavior-state.json"
@@ -201,7 +225,7 @@ def _parallelism_differential(
     }
     _atomic_json(audit_path, audit)
     if not audit["passed"]:
-        raise RuntimeError("isolated Wine parallelism differential failed")
+        _validate_serial_fallback(audit_path, audit)
     return audit
 
 
@@ -213,6 +237,7 @@ def _collect_wave(
     workers: list[dict[str, object]],
     information_policy: Path | None,
     scorer: Path,
+    parallel: bool,
 ) -> list[dict[str, object]]:
     if len({int(row["worker"]) for row in rows}) != len(rows):
         raise ValueError("one collection wave assigned a Wine worker twice")
@@ -253,11 +278,15 @@ def _collect_wave(
             "physical_hits": int(report["controller_completion"]["physical_hits"]),
         }
 
-    with ThreadPoolExecutor(max_workers=len(rows)) as executor:
-        return sorted(
-            (future.result() for future in [executor.submit(execute, row) for row in rows]),
-            key=lambda row: int(row["episode"]),
-        )
+    if parallel:
+        with ThreadPoolExecutor(max_workers=len(rows)) as executor:
+            completed = [
+                future.result()
+                for future in [executor.submit(execute, row) for row in rows]
+            ]
+    else:
+        completed = [execute(row) for row in rows]
+    return sorted(completed, key=lambda row: int(row["episode"]))
 
 
 def _smoke_fit(
@@ -542,6 +571,10 @@ def run(args: argparse.Namespace) -> int:
             root=root, schedule=schedule, workers=workers
         )
         state["parallelism_differential"] = differential
+        state["collection_execution"] = (
+            "parallel-isolated-workers"
+            if differential["passed"] else "serial-fallback-after-failed-differential"
+        )
         state["status"] = "curriculum"
         _atomic_json(state_path, state)
         all_runs: list[Path] = []
@@ -574,6 +607,7 @@ def run(args: argparse.Namespace) -> int:
                         workers=workers,
                         information_policy=information,
                         scorer=args.wine_native_scorer,
+                        parallel=bool(differential["passed"]),
                     )
                     stage_state["episodes"].extend(completed)
                     stage_state["episodes"].sort(key=lambda row: int(row["episode"]))
