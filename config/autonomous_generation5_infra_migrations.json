@@ -43,6 +43,25 @@
       "preserved_complete_evidence_episodes": [0, 1],
       "new_gameplay_started": false,
       "schedule_reward_feature_behavior_model_gate_seed_worker_or_display_changed": false
+    },
+    {
+      "id": "bounded-strict-wine-infra-retry-v1",
+      "from_contract_sha256": "d16ae17d588be72f78dc3d44c063a639663f1ddd99514a5ace926853b51e902f",
+      "triggering_error": "ValueError: physical corpus has infrastructure failure: infrastructure_failures",
+      "triggering_report": "artifacts/autonomous-wine-generation-5-curriculum/stage-4/collection/episode-002/report.json",
+      "triggering_report_sha256": "217e6f5bcf20377215a10fcba12b23084aec1becb83465796f26d907f840eb7c",
+      "triggering_manifest": "artifacts/autonomous-wine-generation-5-curriculum/stage-4/worker-corpora/wine-2/20260812T144048Z-785292500/manifest.json",
+      "triggering_manifest_sha256": "d3f2d2624f0c30ff3a5d738d0674a1a700020c73afbc180fcf13171de902572c",
+      "triggering_infrastructure_failures_by_kind": {"authority": 1},
+      "triggering_authority_reason": "input pickup timeout",
+      "preserved_complete_evidence_episodes": [0, 1],
+      "rejected_episode": 2,
+      "rejected_episode_physical_hits": 22,
+      "failed_episode_rows": 23428,
+      "maximum_attempts_per_frozen_row": 3,
+      "allowed_change": "archive each strictly rejected attempt and automatically rerun the identical frozen schedule row up to three total attempts",
+      "strict_report_corpus_validation_or_learner_admission_changed": false,
+      "schedule_reward_feature_behavior_model_gate_seed_worker_or_display_changed": false
     }
   ]
 }

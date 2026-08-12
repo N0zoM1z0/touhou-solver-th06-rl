@@ -206,6 +206,30 @@ selecting its stable ID. The repair performs ID lookup and is bound to the exact
 failure and prior contract hash. It changes no resource assignment or outcome
 contract and preserves the same two evidence episodes.
 
+The next fixed episode completed the original-Wine Stage with 22 physical HITs
+and 23,428 lossless transitions, but one near-terminal input pickup timed out.
+The controller failed closed, released input, and completed the Stage; the
+strict learner audit correctly rejected the entire run because it contains an
+`authority_lost` transition. Validation is not weakened and the run is not
+learner-visible. Instead, the Wine primitive now archives a rejected attempt
+and reruns the identical frozen row, with a fixed maximum of three total
+attempts. Game RNG, policy seed/state, worker, stage, scorer, reward, and data
+admission are unchanged. Repeated failure still stops as an infra failure.
+
+This retry is required for unattended execution: a recoverable one-frame host
+pickup fault must not require a human to relaunch the orchestrator, but neither
+may it silently enter offline RL or cause outcome-conditioned resampling. Every
+failed report and corpus remains on disk and its triggering hashes are recorded
+in the migration manifest.
+
+The run also sharpened the Wine concurrency diagnosis. Evidence runs begin
+controller observation at frames 85--91 despite fixed RNG and the same menu
+route. That makes stage-entry/controller handoff the leading generic source of
+the failed parallel differential. A synchronization change may restore
+parallelism only after a new serial-versus-concurrent differential proves exact
+HIT and normalized factual-option equality; until then collection remains
+normal-speed serial and uses about one CPU core.
+
 ## Native implementation priority
 
 The repository should use native C/C++ for fixed, hot numerical kernels and

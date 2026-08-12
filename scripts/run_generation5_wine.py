@@ -27,6 +27,7 @@ from th06_rl.sequential_learning import TRANSITION_SCHEMA  # noqa: E402
 
 
 DIFFICULTY = "lunatic"
+MAXIMUM_INFRA_ATTEMPTS = 3
 
 
 def _validate_complete_run(
@@ -86,7 +87,14 @@ def complete_run(
     rng_seed: int | None,
     corpus_root: Path | None,
 ) -> tuple[dict[str, object], Path | None]:
-    """Run or resume one normal-speed original-Wine complete Stage."""
+    """Run or resume one normal-speed original-Wine complete Stage.
+
+    A completed attempt whose strict report/corpus audit fails is never made
+    learner-visible.  Preserve its artifact beside the scheduled episode and
+    retry the *same* frozen row a bounded number of times.  This is an infra
+    retry, not outcome-conditioned sampling: RNG, policy state, worker, stage,
+    and scorer remain unchanged.
+    """
     if not 1 <= stage <= 6:
         raise ValueError("TH06 Practice stage must be between one and six")
     if (artifact_dir / "report.json").is_file():
@@ -102,7 +110,6 @@ def complete_run(
             _archive_incomplete(artifact_dir)
     elif artifact_dir.exists():
         _archive_incomplete(artifact_dir)
-    before = _corpus_runs(corpus_root) if corpus_root is not None else set()
     command = [
         sys.executable,
         str(REPOSITORY / "scripts/run_wine_retail.py"),
@@ -126,21 +133,40 @@ def complete_run(
             "--complete-stage-training-corpus-root", str(corpus_root),
             "--diagnostic-rng-seed", hex(rng_seed),
         ))
-    completed = subprocess.run(command, cwd=REPOSITORY, check=False)
-    report, run_dir = _validate_complete_run(
-        artifact_dir=artifact_dir,
-        worker=worker,
-        stage=stage,
-        rng_seed=rng_seed,
-        corpus_root=corpus_root,
-    )
-    if completed.returncode != int(report["controller_returncode"]):
-        raise RuntimeError("outer and recorded Wine return codes differ")
-    if corpus_root is not None:
-        created = sorted(_corpus_runs(corpus_root) - before)
-        if len(created) != 1 or run_dir != corpus_root / created[0]:
-            raise RuntimeError("complete Stage created/bound the wrong corpus run")
-    return report, run_dir
+    last_error: BaseException | None = None
+    for attempt in range(1, MAXIMUM_INFRA_ATTEMPTS + 1):
+        before = _corpus_runs(corpus_root) if corpus_root is not None else set()
+        completed = subprocess.run(command, cwd=REPOSITORY, check=False)
+        try:
+            report, run_dir = _validate_complete_run(
+                artifact_dir=artifact_dir,
+                worker=worker,
+                stage=stage,
+                rng_seed=rng_seed,
+                corpus_root=corpus_root,
+            )
+            if completed.returncode != int(report["controller_returncode"]):
+                raise RuntimeError("outer and recorded Wine return codes differ")
+            if corpus_root is not None:
+                created = sorted(_corpus_runs(corpus_root) - before)
+                if len(created) != 1 or run_dir != corpus_root / created[0]:
+                    raise RuntimeError(
+                        "complete Stage created/bound the wrong corpus run"
+                    )
+            return report, run_dir
+        except (FileNotFoundError, TypeError, ValueError, RuntimeError) as error:
+            last_error = error
+            if attempt == MAXIMUM_INFRA_ATTEMPTS:
+                raise
+            _archive_incomplete(artifact_dir)
+            print(
+                "strict Wine attempt audit failed; preserving attempt and "
+                f"retrying frozen row ({attempt}/{MAXIMUM_INFRA_ATTEMPTS}): "
+                f"{type(error).__name__}: {error}",
+                flush=True,
+            )
+    assert last_error is not None
+    raise last_error
 
 
 def normalized_option_sha256(run_dir: Path) -> str:

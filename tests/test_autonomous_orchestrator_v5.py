@@ -146,3 +146,37 @@ def test_display_conflict_migration_preserves_outcome_contract(monkeypatch) -> N
     assert _reconcile_resume_contract(state, current) is True
     assert state["config"] == current
     assert state["infra_migrations"][0]["outcome_contract_changed"] is False
+
+
+def test_strict_wine_retry_migration_preserves_admission_and_schedule(
+    monkeypatch,
+) -> None:
+    previous = {"contract_sha256": "old", "source_contract": {"version": 1}}
+    current = {"contract_sha256": "new", "source_contract": {"version": 2}}
+    failure = "ValueError: physical corpus has infrastructure failure: infrastructure_failures"
+    state = {
+        "status": "infra_failure",
+        "infra_failure": failure,
+        "config": previous,
+    }
+    monkeypatch.setattr(
+        "scripts.run_autonomous_learning_v5._object",
+        lambda _path: {"migrations": [{
+            "id": "bounded-strict-wine-infra-retry-v1",
+            "from_contract_sha256": "old",
+            "triggering_error": failure,
+            "preserved_complete_evidence_episodes": [0, 1],
+            "rejected_episode": 2,
+            "rejected_episode_physical_hits": 22,
+            "failed_episode_rows": 23428,
+            "maximum_attempts_per_frozen_row": 3,
+            "strict_report_corpus_validation_or_learner_admission_changed": False,
+            "schedule_reward_feature_behavior_model_gate_seed_worker_or_display_changed": False,
+        }]},
+    )
+
+    assert _reconcile_resume_contract(state, current) is True
+    assert state["config"] == current
+    migration = state["infra_migrations"][0]
+    assert migration["failed_episode_rows"] == 23428
+    assert migration["outcome_contract_changed"] is False

@@ -186,3 +186,27 @@ The display migration made that assumption false. A second zero-gameplay infra
 migration changes lookup to the existing stable migration ID. It preserves the
 same two complete episodes and all worker/display assignments established
 above; no outcome-facing contract changes.
+
+## 2026-08-12: strict rejection gains bounded autonomous retry
+
+The resumed frozen episode two completed Stage 4 with 22 physical HITs, 23,428
+lossless transitions, and no dropped corpus rows. At frame 27,027, one
+previously published input was not observed within the input lease deadline.
+The controller failed closed and finished the Stage, but recorded one
+`authority` infrastructure failure (`input pickup timeout`). The strict corpus
+validator rejected the whole episode before option loading; it is not evidence
+and its 22 HITs cannot influence any fit or gate.
+
+Requiring a person to restart after every such rejected attempt violates the
+autonomous-learning objective. The generic Wine primitive therefore receives a
+fixed three-attempt infra retry. Each failed attempt is archived, the exact same
+frozen row is rerun, and only a report/corpus that passes every existing strict
+gate can return to the orchestrator. The retry does not change RNG, policy seed
+or state, stage, worker, scorer, schedule, reward, features, behavior mixture,
+learner, or admission semantics. Three failures still terminate the run. The
+triggering report and manifest hashes and the rejected physical outcome are
+bound in the infra migration record.
+
+This is an infrastructure repair, not manual dataset curation: failure status,
+not HIT count or action/location, determines retry; the limit was fixed before
+the replacement outcome exists; and no rejected trajectory is admitted.

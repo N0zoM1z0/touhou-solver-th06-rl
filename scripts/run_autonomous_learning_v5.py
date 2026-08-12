@@ -218,6 +218,8 @@ def _reconcile_resume_contract(
             and changed == {"contract_sha256", "source_contract", "workers"}
             or row.get("id") == "select-serial-fallback-migration-by-id-v1"
             and changed == {"contract_sha256", "source_contract"}
+            or row.get("id") == "bounded-strict-wine-infra-retry-v1"
+            and changed == {"contract_sha256", "source_contract"}
         )
     ), None) if isinstance(migrations, list) else None
     if migration is None:
@@ -231,6 +233,20 @@ def _reconcile_resume_contract(
         ) is not False
     ):
         raise ValueError("serial-fallback validator migration differs")
+    if migration["id"] == "bounded-strict-wine-infra-retry-v1" and (
+        state.get("infra_failure") != migration.get("triggering_error")
+        or migration.get("preserved_complete_evidence_episodes") != [0, 1]
+        or migration.get("rejected_episode") != 2
+        or migration.get("rejected_episode_physical_hits") != 22
+        or migration.get("maximum_attempts_per_frozen_row") != 3
+        or migration.get(
+            "strict_report_corpus_validation_or_learner_admission_changed"
+        ) is not False
+        or migration.get(
+            "schedule_reward_feature_behavior_model_gate_seed_worker_or_display_changed"
+        ) is not False
+    ):
+        raise ValueError("bounded Wine infra-retry migration differs")
     log = state.setdefault("infra_migrations", [])
     if not isinstance(log, list):
         raise TypeError("Generation-5 infra migration log is invalid")
@@ -243,7 +259,7 @@ def _reconcile_resume_contract(
             "triggering_failed_report_sha256"
         ),
         "preserved_complete_evidence_episodes": [0, 1],
-        "failed_episode_rows": 0,
+        "failed_episode_rows": int(migration.get("failed_episode_rows", 0)),
         "outcome_contract_changed": False,
     })
     state["config"] = config
