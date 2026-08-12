@@ -22,6 +22,9 @@ Read in this order:
    and conservative-to-source-exact fallback;
 8. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
+The unattended fixed Generation-3 entry point is
+`scripts/run_autonomous_learning_v3.py`.
+
 ## Non-negotiable separation
 
 - Original retail under Wine creates all gameplay outcomes.

@@ -30,6 +30,13 @@ from th06_rl.policies.safe_option_exploration import (  # noqa: E402
 SCHEMA = "autonomous-generation-3-preflight-v1"
 SEEDS = REPOSITORY / "config/autonomous_generation3_seeds.json"
 OPTION_PLUGIN = REPOSITORY / "src/th06_rl/policies/safe_option_exploration.py"
+CONTRACT_FILES = (
+    REPOSITORY / "src/th06_rl/advantage_learning.py",
+    REPOSITORY / "src/th06_rl/corpus.py",
+    REPOSITORY / "src/th06_rl/hazard_representation.py",
+    REPOSITORY / "src/th06_rl/policies/safe_option_exploration.py",
+    REPOSITORY / "src/th06_rl/th06/controller.py",
+)
 
 
 def _object(path: Path) -> dict[str, object]:
@@ -41,6 +48,16 @@ def _object(path: Path) -> dict[str, object]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _contract_sha256() -> str:
+    digest = hashlib.sha256()
+    for path in CONTRACT_FILES:
+        digest.update(str(path.relative_to(REPOSITORY)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _atomic_json(path: Path, value: object) -> None:
@@ -98,6 +115,7 @@ def _validate_cached(root: Path, *, seconds: float) -> dict[str, object]:
         or state.get("evidence_eligible") is not False
         or state.get("wine_seconds") != seconds
         or state.get("seed_schedule_sha256") != _sha256(SEEDS)
+        or state.get("preflight_contract_sha256") != _contract_sha256()
     ):
         raise ValueError("cached Generation-3 preflight does not match the contract")
     for name in ("causal-smoke.json", "wine-smoke-audit.json"):
@@ -174,6 +192,7 @@ def run(root: Path, *, threads: int, seconds: float) -> dict[str, object]:
         "wine_seconds": seconds,
         "seed_schedule": str(SEEDS),
         "seed_schedule_sha256": _sha256(SEEDS),
+        "preflight_contract_sha256": _contract_sha256(),
         "causal_smoke": str(root / "causal-smoke.json"),
         "wine_smoke_audit": str(root / "wine-smoke-audit.json"),
         "wine_corpus_run": str(run_dir),

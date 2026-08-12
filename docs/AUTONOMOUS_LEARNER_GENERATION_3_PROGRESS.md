@@ -110,3 +110,12 @@ baseline-only publication in shadow mode, and gates p95 latency plus deadline
 misses. Active canary state is hash-bound to that exact clean audit. The host
 and Win32 scorer hashes are both bound at fit time; this is binary portability,
 not a second policy.
+
+The crash-resumable Generation-3 runner now owns the complete fixed protocol:
+preflight, up to 24 fixed-RNG collection Stages, fits at 12/16/20/24, exact
+held-out native shadow, three paired fixed-RNG canaries per fit, and—only after
+authorization—12 natural-RNG complete Stages per arm in alternating order.
+Its CLI deliberately exposes no gameplay, reward, seed, threshold, round-size,
+canary-count, or evaluation-count knobs. Natural evaluation always runs all 24
+trials unless infrastructure itself fails, and reports aggregate physical HITs,
+candidate exercise, total overrides, and an approximate HIT-rate-ratio interval.
