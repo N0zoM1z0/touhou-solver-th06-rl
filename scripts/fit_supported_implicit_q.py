@@ -14,11 +14,9 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 if str(REPOSITORY / "src") not in sys.path:
     sys.path.insert(0, str(REPOSITORY / "src"))
 
-from th06_rl.advantage_learning import (  # noqa: E402
-    BEHAVIOR_POLICY as GENERATION3_POLICY,
-    TRANSITION_SCHEMA as GENERATION3_TRANSITION,
-    _object,
-    load_option_episode,
+from th06_rl.audited_option_loader import (  # noqa: E402
+    AUDITED_OPTION_LOADER_CONTRACT,
+    load_audited_option_episode,
 )
 from th06_rl.implicit_learning import (  # noqa: E402
     BELLMAN_ITERATIONS,
@@ -36,18 +34,7 @@ from th06_rl.option_cache import (  # noqa: E402
     load_cached_option_episode,
     prime_option_episode_cache,
 )
-from th06_rl.sequential_learning import (  # noqa: E402
-    BEHAVIOR_POLICY as GENERATION4_POLICY,
-    TRANSITION_SCHEMA as GENERATION4_TRANSITION,
-)
-
-
-OPTION_CACHE_CONTRACT = (
-    REPOSITORY / "src/th06_rl/advantage_learning.py",
-    REPOSITORY / "src/th06_rl/autonomous_learning.py",
-    REPOSITORY / "src/th06_rl/corpus.py",
-    Path(__file__).resolve(),
-)
+OPTION_CACHE_CONTRACT = AUDITED_OPTION_LOADER_CONTRACT
 
 
 def _sha256(path: Path) -> str:
@@ -61,25 +48,7 @@ def _write(path: Path, value: object) -> None:
     )
 
 
-def _load(run_dir: Path):
-    run = _object(run_dir / "run.json")
-    schemas = run.get("schemas")
-    transition = schemas.get("transition") if isinstance(schemas, dict) else None
-    if transition == GENERATION3_TRANSITION:
-        return load_option_episode(
-            run_dir,
-            exploration_probability=0.10,
-            behavior_policy=GENERATION3_POLICY,
-            transition_schema=GENERATION3_TRANSITION,
-        )
-    if transition == GENERATION4_TRANSITION:
-        return load_option_episode(
-            run_dir,
-            exploration_probability=None,
-            behavior_policy=GENERATION4_POLICY,
-            transition_schema=GENERATION4_TRANSITION,
-        )
-    raise ValueError(f"unsupported implicit-Q Wine corpus schema: {transition}")
+_load = load_audited_option_episode
 
 
 def _prime_cache(arguments: tuple[Path, Path]) -> tuple[bool, int]:

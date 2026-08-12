@@ -102,6 +102,52 @@ or C++ objective path. It may become default only after synthetic and recorded
 predictions, loss, selected actions, and exported native models match the
 reference objective within a declared numerical tolerance.
 
+## 2026-08-12: process-parallel cross-fitting under a 32-core cap
+
+The first differential ran the unchanged two-iteration, eight-Q-tree,
+eight-V-tree, seven-member, five-fold frozen 29-episode workload. Five
+copy-on-write Linux processes executed independent folds; each received six
+threads from one global 32-thread budget. Members initially ran concurrently
+inside each fold with one XGBoost thread each. Cross-fit wall time fell from
+639.79 to 206.17 seconds, a 3.10x speedup. Including an expected cache rebuild
+and unchanged representation, total internal wall time was 375.79 seconds.
+`/usr/bin/time` measured 726% average CPU and 24.96 GB maximum RSS.
+
+Profiling showed that concurrent members inside one process still contended on
+the Python custom-objective GIL and transiently created about 1,217 OpenMP
+threads per fold despite low actual CPU use. The accepted scheduler therefore
+runs one member at a time inside each fold and gives that native XGBoost fit all
+six fold threads. `threadpoolctl` bounds OpenMP to six and BLAS to one during
+the fit. Five folds can use at most 30 cores. On the same workload cross-fit
+fell again to 191.87 seconds, a 3.33x speedup over the serial baseline. Total
+time with the final expected cache rebuild was 363.06 seconds; average CPU was
+1,444%, observed peak was approximately 29 cores, and maximum RSS was 14.88 GB.
+
+Correctness: deterministic synthetic parallel and serial reports match in
+full. On the recorded Wine corpus, both 32-core schedulers produced exactly
+5,432 final proposals with identical action counts and identical per-fold final
+proposal counts. Aggregate relative Q loss differed by 8.6e-8. One of 37,528
+single-panel-only boundary decisions changed under native floating-point
+reduction order, but it remained an abstention and did not change a published
+action. The original 48-thread smoke is not the reproducibility reference
+after the explicit host-sharing cap changed; every subsequent evidence fit
+uses the committed 32-thread scheduler.
+
+The cache rebuild exposed over-broad invalidation: its contract included the
+entire training CLI, so a resource-default edit invalidated factual rows even
+though the loader was unchanged. The loader and its accepted schema logic now
+live in a dedicated module. Cache identity binds that module plus its factual
+parsing dependencies, while CLI orchestration, worker counts, and model code
+are excluded. This preserves fail-closed invalidation for data-semantic changes
+without paying a five-gigabyte re-audit for unrelated scheduling edits.
+
+Native-code decision: the measured tree-building kernels already execute in
+XGBoost C++. The demonstrated bottleneck was orchestration around a Python
+custom objective, and process isolation yields a 3.33x gain without changing
+the objective or portable/native artifact format. A new handwritten C++ GBDT
+is therefore not justified at this checkpoint; native work remains conditional
+on a new profile after cross-fitting and cache costs are amortized.
+
 ## Native implementation priority
 
 The repository should use native C/C++ for fixed, hot numerical kernels and

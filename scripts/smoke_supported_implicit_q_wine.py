@@ -16,10 +16,13 @@ for path in (REPOSITORY, REPOSITORY / "src"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from scripts.fit_supported_implicit_q import _load  # noqa: E402
 from th06_rl.advantage_learning import (  # noqa: E402
     _augment_steps,
     fit_hazard_codebook,
+)
+from th06_rl.audited_option_loader import (  # noqa: E402
+    AUDITED_OPTION_LOADER_CONTRACT,
+    load_audited_option_episode,
 )
 from th06_rl.implicit_learning import (  # noqa: E402
     CROSSFIT_FOLDS,
@@ -33,12 +36,8 @@ from th06_rl.option_cache import (  # noqa: E402
 )
 
 
-OPTION_CACHE_CONTRACT = (
-    REPOSITORY / "src/th06_rl/advantage_learning.py",
-    REPOSITORY / "src/th06_rl/autonomous_learning.py",
-    REPOSITORY / "src/th06_rl/corpus.py",
-    REPOSITORY / "scripts/fit_supported_implicit_q.py",
-)
+OPTION_CACHE_CONTRACT = AUDITED_OPTION_LOADER_CONTRACT
+_load = load_audited_option_episode
 
 
 def _sha256(path: Path) -> str:

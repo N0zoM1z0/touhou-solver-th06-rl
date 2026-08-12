@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from th06_rl.implicit_learning import delayed_effect_episodes
+from th06_rl.audited_option_loader import AUDITED_OPTION_LOADER_CONTRACT
 from th06_rl.option_cache import load_cached_option_episode
 
 
@@ -63,3 +64,11 @@ def test_option_cache_rejects_tampered_payload(tmp_path) -> None:
         load_cached_option_episode(
             run, loader=loader, cache_root=cache, contract_files=(contract,)
         )
+
+
+def test_production_cache_contract_excludes_training_cli_orchestration() -> None:
+    names = {path.name for path in AUDITED_OPTION_LOADER_CONTRACT}
+
+    assert "audited_option_loader.py" in names
+    assert "fit_supported_implicit_q.py" not in names
+    assert "smoke_supported_implicit_q_wine.py" not in names

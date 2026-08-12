@@ -424,7 +424,14 @@ def fit_implicit_q_population(
     expectile: float = COST_EXPECTILE,
     seed: int = 260_813,
     total_threads: int = 12,
+    parallel_members: bool = True,
 ) -> list[ImplicitQMember]:
+    # Import before entering threadpool_limits so both XGBoost's and sklearn's
+    # OpenMP runtimes are discovered. XGBoost otherwise creates host-wide idle
+    # teams even when each estimator's n_jobs is small.
+    import xgboost  # noqa: F401
+    from threadpoolctl import threadpool_limits
+
     episodes = _episodes(samples)
     groups = tuple(episodes)
     if members < 1 or total_threads < 1:
@@ -437,7 +444,7 @@ def fit_implicit_q_population(
         _bootstrap_counts(groups, seed=seed + member * 10_000)
         for member in range(members)
     ]
-    workers = min(members, total_threads)
+    workers = min(members, total_threads) if parallel_members else 1
     member_threads = max(1, total_threads // workers)
 
     def fit(member: int) -> ImplicitQMember:
@@ -453,7 +460,11 @@ def fit_implicit_q_population(
             bootstrap=bootstraps[member],
         )
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
+    with (
+        threadpool_limits(limits=member_threads, user_api="openmp"),
+        threadpool_limits(limits=1, user_api="blas"),
+        ThreadPoolExecutor(max_workers=workers) as executor,
+    ):
         return list(executor.map(fit, range(members)))
 
 
@@ -539,6 +550,7 @@ def _evaluate_crossfit_fold(
     value_trees: int,
     seed: int,
     total_threads: int,
+    parallel_members: bool = True,
 ):
     import numpy as np
 
@@ -551,6 +563,7 @@ def _evaluate_crossfit_fold(
         value_trees=value_trees,
         seed=seed + fold * 100_000,
         total_threads=total_threads,
+        parallel_members=parallel_members,
     )
     support, support_report = _support_artifacts(
         train, seed=seed + 50_000 + fold * 100_000
@@ -710,6 +723,11 @@ def crossfit_implicit_q_report(
             "total_threads": (
                 total_threads if fold_workers == 1 else threads_per_fold
             ),
+            # Independent fold processes provide the Python-level
+            # parallelism. Serializing members within each process avoids
+            # GIL contention while allowing one native XGBoost fit to use the
+            # fold's complete share of the global CPU budget.
+            "parallel_members": fold_workers == 1,
         })
     if fold_workers == 1:
         reports = [_evaluate_crossfit_fold(**job) for job in jobs]
@@ -764,6 +782,14 @@ def crossfit_implicit_q_report(
             "fold_workers": fold_workers,
             "threads_per_fold": (
                 total_threads if fold_workers == 1 else threads_per_fold
+            ),
+            "member_workers_per_fold": (
+                min(CALIBRATION_MEMBERS, total_threads)
+                if fold_workers == 1 else 1
+            ),
+            "threads_per_member": (
+                max(1, total_threads // min(CALIBRATION_MEMBERS, total_threads))
+                if fold_workers == 1 else threads_per_fold
             ),
         },
         "folds": reports,
