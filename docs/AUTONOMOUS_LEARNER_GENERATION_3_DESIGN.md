@@ -191,6 +191,13 @@ The short trajectory cannot train, calibrate, authorize, or evaluate a policy.
 After a scorer exists, the same smoke additionally requires native/teacher
 conformance, at most 4 ms scorer p95, and zero controller deadline misses.
 
+The runner makes these checks a hard dependency: a deterministic causal
+learner smoke runs first, followed by a 45-second fixed-RNG retail-Wine option
+wiring smoke. Only a passing `autonomous-generation-3-preflight-v1` artifact
+allows the first complete evidence Stage to launch. The Wine smoke corpus is
+marked `evidence_eligible: false` and is excluded from every fit and outcome
+comparison.
+
 ## 6. Multi-seed and natural-RNG evidence
 
 Generation-3 collection uses a deterministic seed schedule committed before
@@ -200,6 +207,12 @@ per round, up to a fixed maximum of 24 collection stages. Fit boundaries are
 therefore 12, 16, 20, and 24 stages. Existing generation-2 collection may be
 used for representation pretraining and contract development, but its canary
 and final runs are never learner or generation-3 evaluation data.
+
+The immutable schedule is
+`config/autonomous_generation3_seeds.json` (generation seed 260812). It fixes
+all 24 collection RNG/policy-seed pairs and all four rounds of three canary RNG
+pairs before any Generation-3 Wine outcome. The declared experiment is retail
+TH06 1.02h, Lunatic Reimu-A Practice Stage 6.
 
 Every active candidate receives three sequential paired fixed-RNG complete-
 Stage canaries on distinct precommitted seeds. Authorization requires:

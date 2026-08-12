@@ -218,3 +218,36 @@ def test_complete_stage_training_corpus_requires_fixed_rng_and_immutable(
         "--exploration-rate", "0",
     ])
     assert args.complete_stage_training_corpus_root == tmp_path / "complete-corpus"
+
+
+def test_option_smoke_is_time_bounded_fixed_rng_and_non_evidence(
+    tmp_path: Path,
+) -> None:
+    root = str(tmp_path / "smoke-corpus")
+    common = [
+        "--practice-stage", "6",
+        "--option-smoke-corpus-root", root,
+        "--immutable-policy",
+        "--exploration-rate", "0",
+        "--diagnostic-rng-seed", "0xd53c",
+    ]
+    with pytest.raises(SystemExit):
+        parse_args(common)
+    args = parse_args([*common, "--seconds", "45"])
+    assert args.option_smoke_corpus_root == tmp_path / "smoke-corpus"
+    assert args.seconds == 45.0
+
+
+def test_option_smoke_is_exclusive_with_evidence_corpus_modes(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(SystemExit):
+        parse_args([
+            "--practice-stage", "6",
+            "--option-smoke-corpus-root", str(tmp_path / "smoke"),
+            "--complete-stage-training-corpus-root", str(tmp_path / "training"),
+            "--seconds", "45",
+            "--immutable-policy",
+            "--exploration-rate", "0",
+            "--diagnostic-rng-seed", "1",
+        ])

@@ -253,6 +253,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Stage for factual offline-RL training"
         ),
     )
+    parser.add_argument(
+        "--option-smoke-corpus-root",
+        type=Path,
+        help=(
+            "collect a fixed-RNG, time-bounded, patched-life option corpus "
+            "for non-evidence Generation-3 wiring smoke only"
+        ),
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--practice-stage", type=int, choices=range(1, 7))
     mode.add_argument("--start-route", action="store_true")
@@ -302,11 +310,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error(
                 "first-failure corpus collection requires --immutable-policy"
             )
-    if (
-        args.first_failure_corpus_root is not None
-        and args.complete_stage_training_corpus_root is not None
-    ):
-        parser.error("first-failure and complete-Stage corpus modes are exclusive")
+    corpus_modes = sum(
+        value is not None
+        for value in (
+            args.first_failure_corpus_root,
+            args.complete_stage_training_corpus_root,
+            args.option_smoke_corpus_root,
+        )
+    )
+    if corpus_modes > 1:
+        parser.error("Wine corpus modes are mutually exclusive")
     if args.complete_stage_training_corpus_root is not None:
         if args.start_route:
             parser.error("complete-Stage training corpus currently requires Practice")
@@ -320,10 +333,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error(
                 "complete-Stage training corpus requires --diagnostic-rng-seed"
             )
+    if args.option_smoke_corpus_root is not None:
+        if args.start_route:
+            parser.error("option smoke currently requires Practice")
+        if args.seconds <= 0.0:
+            parser.error("option smoke requires a positive --seconds limit")
+        if not args.immutable_policy:
+            parser.error("option smoke requires --immutable-policy")
+        if args.diagnostic_rng_seed is None:
+            parser.error("option smoke requires --diagnostic-rng-seed")
     if (
         args.diagnostic_rng_seed is not None
         and args.first_failure_corpus_root is None
         and args.complete_stage_training_corpus_root is None
+        and args.option_smoke_corpus_root is None
     ):
         parser.error(
             "--diagnostic-rng-seed is training-only and requires "
@@ -380,6 +403,11 @@ def run(args: argparse.Namespace) -> int:
         if args.complete_stage_training_corpus_root is not None
         else None
     )
+    option_smoke_corpus_root = (
+        args.option_smoke_corpus_root.resolve()
+        if args.option_smoke_corpus_root is not None
+        else None
+    )
     artifact_dir = args.artifact_dir.resolve()
     artifact_dir.mkdir(parents=True, exist_ok=False)
     report_path = artifact_dir / "report.json"
@@ -398,6 +426,8 @@ def run(args: argparse.Namespace) -> int:
         "evaluation_mode": (
             "fixed-rng-complete-stage-training"
             if complete_stage_training_corpus_root is not None
+            else "fixed-rng-option-smoke-non-evidence"
+            if option_smoke_corpus_root is not None
             else "fixed-rng-first-failure-training"
             if args.diagnostic_rng_seed is not None
             else "first-failure-corpus"
@@ -412,6 +442,11 @@ def run(args: argparse.Namespace) -> int:
         "complete_stage_training_corpus_root": (
             str(complete_stage_training_corpus_root)
             if complete_stage_training_corpus_root is not None
+            else None
+        ),
+        "option_smoke_corpus_root": (
+            str(option_smoke_corpus_root)
+            if option_smoke_corpus_root is not None
             else None
         ),
         "display": args.display,
@@ -666,6 +701,13 @@ def run(args: argparse.Namespace) -> int:
                 "--continuous-stage",
                 "--corpus-root",
                 _windows_path(complete_stage_training_corpus_root),
+            ))
+        elif option_smoke_corpus_root is not None:
+            controller.extend((
+                "--patch-lives",
+                "--continuous-stage",
+                "--corpus-root",
+                _windows_path(option_smoke_corpus_root),
             ))
         elif first_failure_corpus_root is None:
             controller.extend(("--patch-lives", "--continuous-stage", "--no-corpus"))

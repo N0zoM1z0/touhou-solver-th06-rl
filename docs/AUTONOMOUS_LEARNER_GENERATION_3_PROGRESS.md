@@ -85,3 +85,11 @@ encoder. These are deterministic infrastructure smokes, not Wine outcome
 evidence.
 
 Repository tests after this checkpoint: 377 passed.
+
+## 2026-08-12: fail-fast preflight contract
+
+The fixed collection/canary seed schedule is now a tracked immutable artifact.
+Long collection is gated by a causal learner smoke and a 45-second retail-Wine
+option wiring smoke. The latter has a dedicated time-bounded corpus mode,
+patched HIT continuation, fixed diagnostic RNG, and an explicit non-evidence
+label. Its rows cannot enter fitting or effect evaluation.
