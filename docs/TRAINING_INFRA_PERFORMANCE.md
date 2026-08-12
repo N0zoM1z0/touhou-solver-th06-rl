@@ -351,3 +351,11 @@ embeddable Python under Wine. On seven production actors and 18 deterministic
 candidate rows, all 126 outputs completed and maximum portable-to-Windows error
 was `6.2943e-5`, below the same `1e-4` contract. DLL SHA-256 is
 `0aa7c5a95b90b2df0d032ec02f21fcd3a39be3ba440819d00c0cb025bc641ef0`.
+
+The single-disclosure qualification loaded/augmented 31 development and 13
+qualification episodes in 83.92 seconds, then spent 263.63 seconds scoring
+40,341 qualification options, for 347.56 seconds total. The current hot spot is
+Python per-option calls for seven actors, seven leave-one-out policies, and the
+evaluation tree. Native batched scoring already exists and should replace this
+offline loop after the qualification result is frozen; this performance issue
+does not affect the separately measured online path.

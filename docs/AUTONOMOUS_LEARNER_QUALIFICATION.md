@@ -107,6 +107,30 @@ agreement gate: population uncertainty is calibrated on the complete policy's
 physical-HIT effect. Failure discloses the set permanently and rejects the
 candidate; no observed gate may be relaxed.
 
+## Generation-6 result and consumed status
+
+Freeze commit `522aff7` was pushed before the first sample load. All frozen
+gates passed on the 13 qualification episodes. Overall estimated effect was
+`-5.2970 HIT/stage` with 95% upper bound `-4.1620`; the worst leave-one-actor
+upper bound was `-3.4153`. Stage 4 measured `-6.6269`, upper `-4.9269`, worst
+LOO `-4.2145`; Stage 6 measured `-4.4659`, upper `-3.0617`, worst LOO
+`-2.3678`. Every one of 13 episode effects was negative, all independent model
+terms were negative, and correction magnitude stayed at two. Report SHA-256 is
+`1da0212281902daf18c124d3e246a244ae19d4a92fa3177efd34711c460b3e34`.
+
+These episodes are now permanently disclosed development history. The pass
+permits canary design only; it does not authorize a policy or become Wine
+efficacy evidence.
+
+The first online handoff audit then found that the evaluated local target used
+each historical option's recorded behavior propensity to set intervention
+probability. That target is statistically well-defined, but a new episode
+cannot reconstruct the exact history-dependent v10 behavior propensity. The
+qualified numbers remain preserved, but deployment is blocked until an
+implementable propensity-lower-bound target is evaluated. Because the set is
+already disclosed, that follow-up is explicitly development, never a second
+qualification.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity
