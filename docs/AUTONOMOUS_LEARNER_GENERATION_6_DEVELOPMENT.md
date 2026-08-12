@@ -81,6 +81,44 @@ SHA-256
 It records the complete seven effects, seven loss gates, zero null overrides,
 and effective eight-CPU affinity.
 
+## 2026-08-12: low-rank Wine development failed
+
+The first full frozen-Wine development cross-fit used all 31 development
+episodes (102,737 factual options), three complete-episode folds, seven
+whole-episode bootstrap members, and two frozen Bellman iterations. Every
+fold fitted its hazard representation only on training episodes. The 13
+qualification episodes were not loaded.
+
+The model failed every outcome-generalization criterion. Held-out Q loss was
+1.046598 of the state-only comparator overall and improved only 11/31 episode
+groups. Stage 4 independently measured 1.068562 and 4/10; Stage 6 measured
+1.037371 and 7/21. The full seven-member pessimistic population proposed on
+6.83% of options, but removing each member preserved the exact selected action
+for only 31.09% of full-policy proposals. Conditional on any full/leave-one-out
+policy proposing, all perturbations agreed only 9.28%. The old 3/4 panel metric
+was 5.20%.
+
+This is not evidence that a few more optimizer epochs will fix the learner.
+Twenty of 21 member/fold fits beat their bootstrap training zero-effect loss,
+typically by 3--5%, while complete held-out episodes worsened. The low-rank
+varying-coefficient assumption or its regularization therefore overfits
+episode-specific treatment residuals and does not express transferable Wine
+action effects. It passed a known synthetic process but is falsified as the
+Generation-6 Wine learner candidate.
+
+The ignored machine report is
+`artifacts/autonomous-generation-6-development/low-rank-wine-development-v1.json`,
+SHA-256
+`2b5cb9d1c02c374b7421fcfc0e3038cab2db144b2755d3f6a99bc0f01f18a014`.
+It records `qualification_samples_loaded: false`, the exact CPU set, per-fold
+bootstrap/train diagnostics, every episode loss, and all policy metrics.
+
+The next diagnostic reuses this development data to measure the actual full
+seven-member policy of the nonlinear tree R-critic under leave-one-member-out
+perturbations. This distinguishes an incorrectly calibrated split-panel gate
+from estimator instability before another model family or any Wine collection
+is attempted. No old gate is relaxed after observing this failure.
+
 ## Performance contract
 
 All development launchers apply the Linux process-tree CPU affinity contract

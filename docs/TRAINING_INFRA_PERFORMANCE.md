@@ -237,7 +237,24 @@ parallelism only after a new serial-versus-concurrent differential proves exact
 HIT and normalized factual-option equality; until then collection remains
 normal-speed serial and uses about one CPU core.
 
-## Native implementation priority
+## 2026-08-12: Generation-6 low-rank reference profile
+
+The correctness-first 31-episode development cross-fit loaded 102,737 cached
+factual options in 11.51 seconds and spent 2,160.60 seconds in three sequential
+complete-episode folds, 2,172.11 seconds total. The entire process remained on
+the recorded CPU set 0--31. Sampled average use rose to approximately 24 cores;
+resident memory stabilized near 13.8 GB. Native libraries created about 157
+threads, but OS affinity prevented them from scheduling outside the 32-core
+host-sharing set.
+
+The profile identifies reusable data-plane and orchestration work, independent
+of the failed learner result. Candidate-invariant option packing is rebuilt for
+each fold, and seven causally independent whole-episode bootstrap members run
+serially inside each fold. The next optimization may cache immutable packed
+base arrays and execute members with fork/copy-on-write under fixed per-member
+CPU shares. It must reproduce row order, centered propensities, targets, seeds,
+losses, predictions, and selected actions before replacing this reference. No
+qualification or Wine run waits on that performance work.
 
 ## 2026-08-12: logical thread budgets do not enforce host sharing
 
