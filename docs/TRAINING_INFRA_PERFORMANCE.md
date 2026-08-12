@@ -396,3 +396,19 @@ Its ignored report SHA-256 is
 `0ca3821252b2c8d02591aafbce3534539a19cce9e981b9be697ff1f39899dc0c`.
 This is a pure deployment-infrastructure optimization; the frozen candidate
 and all offline qualification values remain unchanged.
+
+The isolated preflight was necessary but not sufficient. In the first live
+original-Wine Stage-4 canary, with TH06, capture, native safety, input delivery,
+and the 32-bit policy sharing the host, resident actor-policy p95 rose to
+`8.1554 ms`; 2,143 of 4,693 boundaries exceeded 4 ms. No decision crossed the
+16.67 ms deadline, but the stricter margin gate correctly rejected deployment.
+The run completed and cleaned normally, so this is a reproducible live-load
+performance defect rather than an outcome, safety, or learner failure.
+
+The next optimization target is the remaining Python/FFI boundary: the same
+234-wide candidate matrix is currently traversed and marshalled independently
+for support and actor normalization. A fused native entry point can reuse that
+matrix, perform state/action normalization, support, and seven-actor scoring in
+one call while preserving the exact candidate and choice. A new live canary is
+allowed only after exact portable equivalence and a successor frozen contract;
+the failed performance evidence remains immutable.

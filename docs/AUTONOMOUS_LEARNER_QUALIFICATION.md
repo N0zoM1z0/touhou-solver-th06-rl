@@ -164,6 +164,15 @@ This authorizes only the single predeclared normal-speed, natural-RNG,
 complete-Stage-4 wiring canary. A clean pass may freeze a separate alternating
 Stage-6 efficacy pilot; it still does not promote the policy.
 
+The single authorized Stage-4 wiring canary completed but failed the 4 ms
+resident latency gate (`8.1554 ms` p95, zero 60 Hz misses). Its other gates
+passed, including a nonzero intervention, immutable hashes, original-Wine
+complete-Stage accounting, zero Bomb, and exact cleanup. Therefore Generation
+6 is not authorized for Stage-6 efficacy play. The observed three HITs are not
+an efficacy estimate. Only a general implementation repair with portable/native
+action equivalence may define a new canary contract; the failed canary cannot
+be retried under its old identity.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

@@ -428,3 +428,31 @@ dense actor loops then reduced Win32 p95 to `3.2986 ms`, with exact portable,
 Linux, and Windows actions on 64 factual Wine contexts and zero deadline
 misses. No corpus, fit parameter, score rule, proposal, or qualification value
 changed. The frozen Stage-4 active wiring canary is the next evidence boundary.
+
+## First original-Wine wiring canary result
+
+The frozen normal-speed, natural-RNG, complete-Stage-4 canary ran once from
+commit `6908dd1` and completed cleanly with three physical HITs. It exercised
+147 actor proposals and one propensity-sampled eight-frame intervention across
+4,693 option boundaries. Bomb remained zero, the immutable state was unchanged,
+the original executable and optimized scorer hashes matched, all selected
+actions belonged to the native-safe vocabulary, no deadline was missed, and
+the Wine prefix was completely cleaned. Eighteen Hard-empty observations were
+handled by the existing native fail-close contract; there was no capture,
+authority, delivery, trace, or corpus failure.
+
+The canary nevertheless failed its predeclared deployment gate: real resident
+policy p95 was `8.1554 ms`, with 2,143 boundaries above 4 ms, versus `3.2986 ms`
+in isolated Wine preflight. It remained below the 16.67 ms controller deadline
+in every decision, but the 4 ms gate is not relaxed. Report SHA-256 is
+`eae09196301352e00a8d552abe5becb3b38b5ecedc2c6a7c81002e5f33e65537`;
+result SHA-256 is
+`5ce4f48dd85b8dca2679b1a8415ebe9fb5b042c165e60b4efd89b6e5c504c4fb`.
+
+The three-HIT observation is wiring evidence only: one stochastic intervention
+cannot estimate policy efficacy and is not compared with a historical
+baseline. The demonstrated problem is deployment infrastructure under live
+game contention. The next work is a generic native fused row-normalization /
+support / actor path, verified against the unchanged portable candidate. A
+successful repair requires a separately frozen successor canary; this failed
+schedule is never replayed or reinterpreted as a pass.
