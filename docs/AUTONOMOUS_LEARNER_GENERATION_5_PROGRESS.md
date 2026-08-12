@@ -101,3 +101,31 @@ fixed independent 3/4 panels, require each panel's pessimistic range rule and
 exact agreement on the selected action, while retaining the 10% proposal and
 80% conditional-agreement gates. If that smoke still fails, use the already
 declared Stage 4 -> 5 -> 6 curriculum diagnostic rather than changing a gate.
+
+## 2026-08-12: seven-member Stage-6 smoke activates the frozen curriculum
+
+The production-sized seven-member repeat used the fixed independent 3/4
+panels and the same 29 frozen Stage-6 episodes. It again found a stable held-out
+residual signal: cross-fitted Q loss was 7,533.49 versus 7,621.68 for the
+zero-effect comparator, a ratio of 0.988429, with improvement in 28/29 complete
+episodes. The chronologically later 16-episode development cohort improved
+16/16 with ratio 0.983367. This independently reproduces the estimator-level
+finding from the four-member smoke.
+
+The stricter production decision rule proposed 6,425 of 102,409 held-out
+options, or 6.27%, and therefore passed the predeclared 10% exposure ceiling.
+However, either panel proposed on 38,082 options and both panels selected the
+same non-incumbent action on only 6,425: 16.87% conditional agreement versus
+the frozen 80% requirement. Agreement including mutual incumbent abstention
+was 69.09%, which is not the declared decision metric and cannot substitute for
+the failed conditional gate. The proposal action counts are retained in the
+machine report for audit but are not a basis for action-specific adjustment.
+
+Verdict: the implicit-Q estimator learns repeatable Stage-6 treatment signal,
+but the data do not identify a sufficiently stable deployed decision. No
+Generation-5 candidate is authorized and no Stage-6 collection schedule may
+begin. This exact failure satisfies the previously declared trigger for the
+fixed Stage 4 -> 5 -> 6 curriculum diagnostic. The next Wine outcome therefore
+must occur only after its seeds, isolated worker assignments, canaries, and
+configuration hashes are committed. No threshold, reward, feature, behavior
+mixture, or action preference changes in response to this result.

@@ -58,7 +58,7 @@ cores used and zero completed entries: Python JSON parsing remained GIL-bound.
 The replacement runs each independent complete episode audit in a separate
 process, writes only a small atomic cache entry, then loads all verified entries
 in the parent. Large OptionStep objects are never copied through process IPC.
-First-build and warm-hit timings are pending the repeated 29-episode smoke.
+First-build and warm-hit timings use the same repeated 29-episode smoke.
 
 The process-parallel repeated smoke completed all 29 first-build cache entries
 and parent loading in 119.17 seconds, versus approximately 17 minutes for the
@@ -66,7 +66,20 @@ single-process baseline: at least an 8.6x wall-time improvement for the audited
 load stage. The complete run then spent 50.72 seconds on representation and
 augmentation and 447.38 seconds on five-fold low-tree cross-fitting, for 617.26
 seconds total. All 29 entries were misses as expected. A later warm-cache run
-will measure steady-state load without changing the smoke workload.
+measured steady-state load without changing the smoke workload.
+
+The production-sized seven-member repeat hit all 29 cache entries and loaded
+the complete audited corpus in 10.90 seconds. Relative to the approximately
+17-minute uncached baseline this is about 94x faster; relative to the 119.17-
+second parallel first build it is about 10.9x faster. Representation remained
+50.82 seconds and the larger seven-member five-fold fit took 639.79 seconds,
+for 701.51 seconds total. Cache metadata, payload hashes, row order, option
+counts, and downstream diagnostics all passed unchanged.
+
+This separates two costs clearly: repeated corpus audit/parse is now a small
+warm-cache cost, while cross-fitted population fitting is the dominant steady-
+state workload. Native work should target a measured fit kernel or data-layout
+bottleneck, not replace the now-amortized audit path speculatively.
 
 ## 2026-08-12: population fit parallelism
 
