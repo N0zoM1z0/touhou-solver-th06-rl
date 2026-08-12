@@ -169,6 +169,29 @@ class HotReloadPolicy:
                 "reactive-baseline-policy-error",
             )
 
+    def continue_certified(
+        self, context: PolicyContext
+    ) -> PolicyDecision | None:
+        """Let an interested policy trace a freshly certified input lease."""
+        assert self.policy is not None
+        callback = getattr(self.policy, "continue_certified", None)
+        if not callable(callback):
+            return None
+        try:
+            decision = callback(context)
+            if (
+                not isinstance(decision, PolicyDecision)
+                or decision.action not in context.locally_admissible_actions
+            ):
+                raise ValueError("policy continued outside the certified lease")
+            return decision
+        except Exception as error:
+            self.reload_failures += 1
+            self.last_error = (
+                f"continue_certified {type(error).__name__}: {error}"
+            )
+            return None
+
     def checkpoint(self) -> bool:
         if self.immutable:
             return False

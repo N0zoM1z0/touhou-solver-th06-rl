@@ -17,6 +17,8 @@ import tempfile
 import threading
 import time
 
+from .policy_api import PolicyOptionTrace
+
 from .th06.donor import enable_donor_imports
 
 enable_donor_imports()
@@ -26,8 +28,8 @@ from th06.model import BUTTON_BOMB  # noqa: E402
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v5"
-TRANSITION_SCHEMA = "th06-rl-transition-v6"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v6"
+TRANSITION_SCHEMA = "th06-rl-transition-v7"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
@@ -144,6 +146,7 @@ class FrameEvidence:
     action_features: tuple[
         tuple[str, tuple[tuple[str, float], ...]], ...
     ] = ()
+    option: PolicyOptionTrace | None = None
 
     def __post_init__(self) -> None:
         if not self.phase_id:
@@ -154,6 +157,22 @@ class FrameEvidence:
             self.published_action not in self.locally_admissible_actions
         ):
             raise ValueError("published action is outside the recorded local set")
+        if self.option is not None:
+            if self.policy_id != "safe-option-exploration-v1":
+                raise ValueError("option trace requires the generation-3 behavior policy")
+            if self.proposed_action != self.option.intent:
+                raise ValueError("option intent disagrees with the proposed action")
+            expected = (
+                self.option.boundary_probability
+                if self.option.boundary else 1.0
+            )
+            if not math.isclose(
+                self.behavior_probability,
+                expected,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError("frame propensity disagrees with option trace")
         if any(
             right.game_frame < left.game_frame
             for left, right in zip(self.dialogue_delivery, self.dialogue_delivery[1:])
@@ -574,8 +593,10 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         )
     )
     control_dead_end = after.evidence.reason in (
+        "control-dead-end:in-flight input unsafe",
         "control-dead-end:Hard safe set empty",
         "control-dead-end:local forecast has no safe continuation",
+        "authority-stop:in-flight input unsafe",
         "authority-stop:Hard safe set empty",
         "authority-stop:local forecast has no safe continuation",
     )
@@ -643,6 +664,42 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         learning_exclusions.append("bomb")
     if authority:
         learning_exclusions.append("authority-loss")
+    option = None
+    trace = before.evidence.option
+    if trace is not None:
+        termination = trace.termination_reason
+        after_trace = after.evidence.option
+        if termination is None and hit:
+            termination = "physical-hit"
+        elif termination is None and bomb:
+            termination = "bomb"
+        elif termination is None and control_dead_end:
+            termination = "hard-empty"
+        elif termination is None and authority:
+            termination = "authority-loss"
+        elif termination is None and before.snapshot.stage != after.snapshot.stage:
+            termination = "stage-transition"
+        elif termination is None and before.evidence.published_action is None:
+            termination = "publication-rejected"
+        elif termination is None and (
+            after_trace is None or after_trace.option_id != trace.option_id
+        ):
+            termination = (
+                after_trace.preceding_termination_reason
+                if after_trace is not None
+                else f"controller:{after.evidence.reason}"
+            )
+        option = {
+            "option_id": trace.option_id,
+            "boundary": trace.boundary,
+            "intent": trace.intent,
+            "boundary_probability": trace.boundary_probability,
+            "conditional_probability": before.evidence.behavior_probability,
+            "elapsed_frames_at_decision": trace.elapsed_frames,
+            "physical_elapsed_frames": outcome["elapsed_frames"],
+            "termination_reason": termination,
+            "preceding_termination_reason": trace.preceding_termination_reason,
+        }
     return {
         "schema_version": TRANSITION_SCHEMA,
         "sequence": before.sequence,
@@ -656,6 +713,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "published_action": before.evidence.published_action,
         "behavior_probability": before.evidence.behavior_probability,
         "policy_id": before.evidence.policy_id,
+        "option": option,
         # This compact projection is sufficient to reconstruct the exact
         # online UCB key without decoding the large raw hazard root. Raw
         # snapshots remain the learner-independent authority evidence.

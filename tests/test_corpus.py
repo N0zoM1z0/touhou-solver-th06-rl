@@ -15,6 +15,7 @@ from th06_rl.corpus import (
     RunMetadata,
     expand_compact,
 )
+from th06_rl.policy_api import PolicyOptionTrace
 from th06_rl.th06.donor import enable_donor_imports
 from th06_rl.th06.control_capture import ControlSnapshot, decode_control_snapshot
 from th06_rl.th06.source import automatic_source_context
@@ -166,7 +167,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
-    assert frame["schema_version"] == "th06-rl-authoritative-frame-v5"
+    assert frame["schema_version"] == "th06-rl-authoritative-frame-v6"
     assert frame["decision"]["dialogue_delivery"] == [
         {
             "game_frame": 7,
@@ -312,7 +313,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         proposed_action="stay",
         published_action="stay",
         behavior_probability=1.0,
-        policy_id="test",
+        policy_id="safe-option-exploration-v1",
         policy_generation=1,
         policy_sha256="abc",
         effort_horizon=4,
@@ -326,6 +327,13 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         solve_ms=0.1,
         reason="ok",
         snapshot_tier="control-v2",
+        option=PolicyOptionTrace(
+            option_id="option-1",
+            intent="stay",
+            boundary=True,
+            boundary_probability=1.0,
+            elapsed_frames=1,
+        ),
     )
     root_ref = recorder.record(control, evidence)
     recorder.record_anchor(
@@ -357,7 +365,18 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     )
     recorder.record(
         replace(control, frame=22),
-        replace(evidence, observation_gap=2),
+        replace(
+            evidence,
+            observation_gap=2,
+            option=PolicyOptionTrace(
+                option_id="option-2",
+                intent="stay",
+                boundary=True,
+                boundary_probability=1.0,
+                elapsed_frames=1,
+                preceding_termination_reason="observation-gap",
+            ),
+        ),
     )
     run_dir = recorder.close({"stage_completed": True})
     manifest = json.loads((run_dir / "manifest.json").read_text())
@@ -425,4 +444,15 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "observation_features": [],
         "hard_action_count": 1,
     }
-    assert transition["policy_id"] == "test"
+    assert transition["policy_id"] == "safe-option-exploration-v1"
+    assert transition["option"] == {
+        "option_id": "option-1",
+        "boundary": True,
+        "intent": "stay",
+        "boundary_probability": 1.0,
+        "conditional_probability": 1.0,
+        "elapsed_frames_at_decision": 1,
+        "physical_elapsed_frames": 2,
+        "termination_reason": "observation-gap",
+        "preceding_termination_reason": None,
+    }

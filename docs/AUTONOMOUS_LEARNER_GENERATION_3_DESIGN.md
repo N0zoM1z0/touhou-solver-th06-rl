@@ -89,9 +89,18 @@ clearance, survival bonus, stage progress, source phase, or teacher score is
 added to reward. Native geometry and self-supervised representation targets
 may be inputs or auxiliary losses, never reward terms.
 
+The learner does not collapse to a single empirically best fit. It retains a
+population whose members differ only through predeclared whole-episode
+resampling, cross-fit folds, and learner seeds. Every member sees the same
+algorithm, reward, feature contract, and option rules; there is no human-made
+specialist or failure-region member. Population disagreement is epistemic
+evidence, not a reason to pick the most optimistic member.
+
 The learner may use a large offline teacher, distributional outcomes, and
-cross-fitted nuisance ensembles. Only a compact immutable residual scorer and
-its calibrated uncertainty artifact enter Wine.
+cross-fitted nuisance ensembles. The deployment artifact preserves the
+population's advantage distribution, either as bounded native batch members
+or a conformance-tested distillation of its required statistics. It may not
+distill only the population mean and discard uncertainty.
 
 ## 4. Game-neutral hazard and history representation
 
@@ -127,6 +136,11 @@ chooses the smallest pessimistic bound; it does not choose by mean first and
 then test only that action. An override is allowed only when the chosen
 candidate's upper advantage bound is strictly below zero. Otherwise the policy
 abstains to the incumbent.
+
+Wine canary outcomes never select an individual population member, seed, or
+fold. The only evaluated candidate is the immutable aggregate policy produced
+by the predeclared calibration rule. This prevents best-of-population online
+selection and repeated-test leakage while retaining useful policy diversity.
 
 Support and uncertainty thresholds come from the declared grouped calibration
 procedure. Humans may not lower them after seeing a missed opportunity. The

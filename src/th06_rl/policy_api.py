@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 POLICY_API_VERSION = 1
@@ -45,14 +46,53 @@ class PolicyContext:
 
 
 @dataclass(frozen=True)
+class PolicyOptionTrace:
+    """Auditable assignment metadata for a temporally extended action intent."""
+
+    option_id: str
+    intent: str
+    boundary: bool
+    boundary_probability: float
+    elapsed_frames: int
+    termination_reason: str | None = None
+    preceding_termination_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.option_id or not self.intent:
+            raise ValueError("option identity and intent cannot be empty")
+        if (
+            not math.isfinite(self.boundary_probability)
+            or not 0.0 < self.boundary_probability <= 1.0
+        ):
+            raise ValueError("option boundary probability must be in (0, 1]")
+        if self.elapsed_frames <= 0:
+            raise ValueError("option elapsed frames must be positive")
+
+
+@dataclass(frozen=True)
 class PolicyDecision:
     action: str
     policy_id: str
     behavior_probability: float = 1.0
+    option: PolicyOptionTrace | None = None
 
     def __post_init__(self) -> None:
         if not 0.0 < self.behavior_probability <= 1.0:
             raise ValueError("behavior probability must be in (0, 1]")
+        if self.option is not None:
+            if self.option.intent != self.action:
+                raise ValueError("option intent must equal the published decision")
+            expected = (
+                self.option.boundary_probability
+                if self.option.boundary else 1.0
+            )
+            if not math.isclose(
+                self.behavior_probability,
+                expected,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError("decision probability disagrees with option assignment")
 
 
 @dataclass(frozen=True)

@@ -18,7 +18,7 @@ from typing import Iterator
 
 
 DATASET_SCHEMA = "th06-rl-hf-dataset-v1"
-TRANSITION_SCHEMAS = tuple(f"th06-rl-transition-v{version}" for version in range(1, 7))
+TRANSITION_SCHEMAS = tuple(f"th06-rl-transition-v{version}" for version in range(1, 8))
 ACTION_NAMES = (
     "stay", "up", "down", "left", "right",
     "up_left", "up_right", "down_left", "down_right",

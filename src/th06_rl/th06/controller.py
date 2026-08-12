@@ -886,6 +886,33 @@ def run(args: argparse.Namespace) -> int:
                         hard_count = 1
                         effort_horizon = 4
                         reason = "input-lease"
+                        policy = plugin.continue_certified(PolicyContext(
+                            frame=snapshot.frame,
+                            scope=expected_scope,
+                            source_context=source_context,
+                            baseline_action=desired_core.name,
+                            locally_admissible_actions=(desired_core.name,),
+                            player_x=snapshot.x,
+                            player_y=snapshot.y,
+                            power=snapshot.current_power,
+                            bullet_count=snapshot.live_bullet_count,
+                            laser_count=snapshot.laser_count,
+                            hard_action_count=1,
+                            exploration_rate=args.exploration_rate,
+                            current_action=current_action_name,
+                            hard_admissible_actions=(desired_core.name,),
+                            phase_elapsed_frames=phase_elapsed_frames,
+                            hard_action_evaluations=tuple(
+                                (
+                                    item.action.name,
+                                    _finite(item.min_clearance),
+                                    item.final_x,
+                                    item.final_y,
+                                )
+                                for item in retained
+                            ),
+                            effort_horizon=4,
+                        ))
                     else:
                         forecast = lower_observed_hazards(
                             snapshot,
@@ -1197,6 +1224,7 @@ def run(args: argparse.Namespace) -> int:
                     dialogue_delivery=tuple(dialogue_delivery),
                     observation_features=observation_features,
                     action_features=action_features,
+                    option=policy.option if policy is not None else None,
                 )
                 try:
                     snapshot_ref = recorder.record(snapshot, evidence)

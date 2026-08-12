@@ -90,6 +90,19 @@ def test_optional_failure_feedback_does_not_require_policy_callback(
     assert loader.last_error is None
 
 
+def test_optional_certified_continuation_is_absent_for_legacy_policy(
+    tmp_path,
+) -> None:
+    path = tmp_path / "policy.py"
+    path.write_bytes(POLICY)
+    loader = HotReloadPolicy(path)
+
+    assert loader.continue_certified(SimpleNamespace(
+        baseline_action="stay",
+        locally_admissible_actions=("stay",),
+    )) is None
+
+
 def test_immutable_policy_disables_reload_feedback_and_checkpoint(
     tmp_path,
     monkeypatch,
