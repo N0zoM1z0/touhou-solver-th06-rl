@@ -312,3 +312,13 @@ representation, and 310.11 seconds five-fold fitting/scoring. The 2.1% total
 difference is normal competing-host variation, not an algorithmic speed claim.
 This confirms that immutable-corpus learner changes can be falsified in about
 six minutes without starting original Wine.
+
+The stricter nested cross-fit actor removed the separate global representation
+pass and fitted five outer-fold representations concurrently. Each outer fold
+then fitted three inner label critics, one evaluation nuisance, and seven actor
+bootstraps. Despite stronger isolation, the complete 31-episode replay took
+266.58 seconds including 11.4 seconds warm loading, versus 374.46 seconds for
+the in-sample-weight actor. The hard CPU set remained 0--31 and sampled use was
+about 14 cores during native/actor fitting. This is a 1.40x end-to-end speedup
+from replacing seven bootstrap critics with four purpose-separated critics,
+while producing a statistically stricter result.

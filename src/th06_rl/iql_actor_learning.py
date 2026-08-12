@@ -767,6 +767,7 @@ def evaluate_iql_actor_fold(
     right_members = (3, 4, 5, 6)
     episode_reports: dict[str, dict[str, object]] = {}
     action_counts: Counter[str] = Counter()
+    mean_action_counts: Counter[str] = Counter()
     unsupported_candidates = 0
     for sample in heldout:
         report = episode_reports.setdefault(sample.episode_id, {
@@ -788,6 +789,10 @@ def evaluate_iql_actor_fold(
             "policy_model_effect": 0.0,
             "policy_dr_effect": 0.0,
             "policy_max_abs_correction": 0.0,
+            "policy_loo_intervention_exposure": [0.0] * 7,
+            "policy_loo_model_effect": [0.0] * 7,
+            "policy_loo_dr_effect": [0.0] * 7,
+            "policy_loo_max_abs_correction": [0.0] * 7,
             "behavior_kl_sum": 0.0,
         })
         report["options"] += 1
@@ -821,6 +826,8 @@ def evaluate_iql_actor_fold(
         report["mean_proposals"] += int(
             mean_choice != sample.baseline_action
         )
+        if mean_choice != sample.baseline_action:
+            mean_action_counts[mean_choice] += 1
         mean_leave_one_out = tuple(
             actor_population_choice(
                 scores[[
@@ -844,17 +851,12 @@ def evaluate_iql_actor_fold(
             and all(choice == mean_choice for choice in mean_leave_one_out)
         )
 
-        if mean_choice != sample.baseline_action:
-            candidate = sample.legal_actions.index(mean_choice)
+        policy_choices = (mean_choice, *mean_leave_one_out)
+        if any(choice != sample.baseline_action for choice in policy_choices):
             baseline = sample.legal_actions.index(sample.baseline_action)
             factual = sample.legal_actions.index(sample.action)
             propensity = np.asarray(
                 sample.behavior_probabilities, dtype=np.float64
-            )
-            exposure = min(
-                intervention_probability_cap,
-                intervention_density_ratio_cap * propensity[candidate],
-                intervention_density_ratio_cap * propensity[baseline],
             )
             q_effect = np.asarray(
                 evaluation_critic.q_model.predict(sample.candidate_vectors),
@@ -866,20 +868,45 @@ def evaluate_iql_actor_fold(
             key = (sample.episode_id, sample.option_id)
             factual_q = heldout_common[key] + centered_factual
             residual = heldout_targets[key] - factual_q
-            model_effect = exposure * (
-                q_effect[candidate] - q_effect[baseline]
-            )
-            correction = exposure * (
-                int(factual == candidate) - int(factual == baseline)
-            ) / propensity[factual]
+            effects = []
+            for choice in policy_choices:
+                if choice == sample.baseline_action:
+                    effects.append((0.0, 0.0, 0.0, 0.0))
+                    continue
+                candidate = sample.legal_actions.index(choice)
+                exposure = min(
+                    intervention_probability_cap,
+                    intervention_density_ratio_cap * propensity[candidate],
+                    intervention_density_ratio_cap * propensity[baseline],
+                )
+                model_effect = exposure * (
+                    q_effect[candidate] - q_effect[baseline]
+                )
+                correction = exposure * (
+                    int(factual == candidate) - int(factual == baseline)
+                ) / propensity[factual]
+                effects.append((
+                    float(exposure),
+                    float(model_effect),
+                    float(model_effect + correction * residual),
+                    abs(float(correction)),
+                ))
+            exposure, model_effect, dr_effect, abs_correction = effects[0]
             report["policy_intervention_exposure"] += exposure
-            report["policy_model_effect"] += float(model_effect)
-            report["policy_dr_effect"] += float(
-                model_effect + correction * residual
-            )
+            report["policy_model_effect"] += model_effect
+            report["policy_dr_effect"] += dr_effect
             report["policy_max_abs_correction"] = max(
-                report["policy_max_abs_correction"], abs(float(correction))
+                report["policy_max_abs_correction"], abs_correction
             )
+            for omitted, values in enumerate(effects[1:]):
+                exposure, model_effect, dr_effect, abs_correction = values
+                report["policy_loo_intervention_exposure"][omitted] += exposure
+                report["policy_loo_model_effect"][omitted] += model_effect
+                report["policy_loo_dr_effect"][omitted] += dr_effect
+                report["policy_loo_max_abs_correction"][omitted] = max(
+                    report["policy_loo_max_abs_correction"][omitted],
+                    abs_correction,
+                )
         full = actor_population_choice(scores, sample, supported=mask)
         leave_one_out = tuple(
             actor_population_choice(
@@ -945,6 +972,7 @@ def evaluate_iql_actor_fold(
         "episodes": episode_reports,
         "unsupported_candidates": unsupported_candidates,
         "proposal_actions": dict(sorted(action_counts.items())),
+        "mean_policy_actions": dict(sorted(mean_action_counts.items())),
     }
 
 
@@ -1085,6 +1113,19 @@ def crossfit_iql_actor_report(
         bootstrap_means = policy_dr_effects[generator.integers(
             0, len(policy_dr_effects), size=(4096, len(policy_dr_effects))
         )].mean(axis=1)
+        loo_effects = np.asarray([
+            [row["policy_loo_dr_effect"][member] for row in rows]
+            for member in range(7)
+        ], dtype=np.float64)
+        loo_bootstrap_upper = []
+        for member in range(7):
+            member_generator = np.random.default_rng(
+                cohort_seed + (member + 1) * 10_000
+            )
+            member_means = loo_effects[member][member_generator.integers(
+                0, len(rows), size=(4096, len(rows))
+            )].mean(axis=1)
+            loo_bootstrap_upper.append(float(np.quantile(member_means, 0.95)))
         return {
             "episode_groups": len(rows),
             "options": options,
@@ -1131,6 +1172,15 @@ def crossfit_iql_actor_report(
             ),
             "policy_dr_bootstrap_episode_groups": len(policy_dr_effects),
             "policy_dr_bootstrap_resamples": 4096,
+            "policy_loo_dr_hit_effect_means": [
+                float(values.mean()) for values in loo_effects
+            ],
+            "policy_loo_dr_hit_effect_bootstrap_upper_95": (
+                loo_bootstrap_upper
+            ),
+            "policy_loo_worst_bootstrap_upper_95": max(
+                loo_bootstrap_upper
+            ),
             "policy_dr_beneficial_episode_rate": float(
                 np.mean(policy_dr_effects < 0.0)
             ),
@@ -1165,6 +1215,10 @@ def crossfit_iql_actor_report(
         ),
         "proposal_actions": dict(sorted(sum(
             (Counter(report["proposal_actions"]) for report in reports),
+            Counter(),
+        ).items())),
+        "mean_policy_actions": dict(sorted(sum(
+            (Counter(report["mean_policy_actions"]) for report in reports),
             Counter(),
         ).items())),
     }
@@ -1347,6 +1401,9 @@ def run_cross_fitted_iql_actor_policy_smoke(
         ),
         "beneficial_policy_upper_bound_below_zero": (
             effect["policy_dr_hit_effect_bootstrap_upper_95"] < 0.0
+        ),
+        "all_leave_one_out_policies_upper_bound_below_zero": (
+            effect["policy_loo_worst_bootstrap_upper_95"] < 0.0
         ),
         "null_policy_interval_contains_zero": (
             null_effect["policy_dr_hit_effect_bootstrap_lower_95"] <= 0.0

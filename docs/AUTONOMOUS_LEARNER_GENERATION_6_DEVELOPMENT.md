@@ -315,10 +315,46 @@ estimated `-0.0621` with bootstrap interval `[-0.1869, 0.0630]`, correctly retai
 zero despite its actor having finite-sample preferences. All inner labels were
 out of episode, and the maximum factual correction was 0.2 under the fixture's
 50/50 behavior. The ignored report is
-`artifacts/autonomous-generation-6-development/crossfit-actor-policy-smoke-v2.json`,
+`artifacts/autonomous-generation-6-development/crossfit-actor-policy-smoke-v3.json`,
 SHA-256
-`cc5705c9c6bc453dcb7d5db66838abd0057905f7772574b476ebf3aab5f49503`.
+`d682ba5c63617073485cb7f9a2a5631c0ff720c31bd0eb98f5518d8c504b3b12`.
+All seven delayed-effect leave-one-actor-out policies also retained a negative
+bootstrap upper bound; the worst was `-0.0342`. Every matched-null leave-one-out
+policy retained a positive upper bound. Thus actor population uncertainty is
+calibrated at the policy-effect level without demanding identical frame-level
+actions.
 These gates unlock only a 31-episode Wine development replay.
+
+## 2026-08-12: first nested Wine replay is promising, not yet frozen
+
+The first nested cross-fit replay used 31 development episodes and 102,737
+outer-held-out options. Every outer-fold representation excluded held-out
+episodes; every AWR label excluded its complete inner episode. The complete
+mean policy proposed candidates on 6.27% of options but its propensity-bounded
+intervention exposure was only 0.366%.
+
+Its episode-grouped DR estimate was `-2.8284 HIT/stage`, with 4,096-bootstrap
+95% interval `[-3.7499, -1.9891]`; 28/31 episode effects were negative. Stage 4
+measured `-5.0203`, upper bound `-3.4538`, and Stage 6 measured `-1.7846`, upper
+bound `-1.0410`. Maximum factual correction was exactly the predeclared bound
+of two. The independent model term was also beneficial in all cohorts, though
+smaller (`-1.0411` overall), rather than the conclusion being carried solely by
+the learned Q model.
+
+This is the first reusable-corpus learner with a clearly negative held-out
+policy-level HIT signal in both Stages. It is not yet a qualification
+candidate. Mean-policy exact action stability under leave-one-actor-out was
+45.55%, so the next unchanged replay adds the missing correct uncertainty
+question: each of the seven leave-one-actor-out *complete policies* must retain
+a negative episode-bootstrap 95% HIT-effect upper bound. No per-frame threshold
+is relaxed and no hyperparameter, episode, action, or data distribution changes.
+
+The ignored intermediate report is
+`artifacts/autonomous-generation-6-development/crossfit-actor-wine-development-v1.json`,
+SHA-256
+`43f44b8ffb90958f92d68c1b259f5b25ad20302365d8837809299877d708ccb1`.
+Warm load plus the full five-fold nested replay took 266.58 seconds on hard CPU
+set 0--31. Qualification and Wine were not loaded.
 
 ## Performance contract
 
