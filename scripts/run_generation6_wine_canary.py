@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -20,19 +21,21 @@ from scripts.export_generation6_policy import export_state  # noqa: E402
 from scripts.run_generation5_wine import complete_run  # noqa: E402
 from th06_rl.offline import ACTION_NAMES  # noqa: E402
 from th06_rl.policies.autonomous_iql_actor import (  # noqa: E402
-    EXPECTED_CANARY_CONTRACT_SHA256,
+    ALLOWED_CANARY_CONTRACT_SHA256,
     POLICY_NAME,
 )
 from th06_rl.wine_workers import prepare_wine_worker  # noqa: E402
 
 
-CONTRACT = REPOSITORY / "config/autonomous_generation6_wine_canary.json"
 CANDIDATE = REPOSITORY / "artifacts/autonomous-generation-6-candidate/candidate-v1.json"
 QUALIFICATION = REPOSITORY / "artifacts/autonomous-generation-6-qualification/qualification-v1.json"
 DEPLOYABLE_AUDIT = REPOSITORY / "artifacts/autonomous-generation-6-qualification/deployable-target-audit-v1.json"
 POLICY_PLUGIN = REPOSITORY / "src/th06_rl/policies/autonomous_iql_actor.py"
 NATIVE_SCORER = REPOSITORY / "build/native-win32-fully-static/libth06_rl_ranker.dll"
-OUTPUT_ROOT = REPOSITORY / "artifacts/autonomous-generation-6-wine-canary"
+INFRA_EVENTS = frozenset({
+    "background-reactivated", "capture-gap-fail-close", "capture-incoherent",
+    "continuous-fail-close", "system-memory-stop", "system-memory-unavailable",
+})
 
 
 def _sha256(path: Path) -> str:
@@ -112,7 +115,8 @@ def _last_policy_status(trace_path: Path) -> dict[str, object]:
 
 def _audit(
     *, report: dict[str, object], artifact_dir: Path,
-    state_path: Path, schedule: dict[str, object],
+    state_path: Path, schedule: dict[str, object], contract_path: Path,
+    environment: dict[str, object],
 ) -> dict[str, object]:
     trace = report.get("trace")
     completion = report.get("controller_completion")
@@ -124,6 +128,7 @@ def _audit(
         raise ValueError("Generation-6 Wine report lacks policy metrics")
     selected = metrics.get("selected")
     selected_actions = set(selected) if isinstance(selected, dict) else set()
+    events = trace.get("event_counts")
     gates = {
         "expected_evaluation_mode": report.get("evaluation_mode")
         == "hit-continuation-benchmark",
@@ -137,6 +142,14 @@ def _audit(
         ),
         "optimized_native_scorer": report.get("policy_scorer_library_sha256")
         == _sha256(NATIVE_SCORER),
+        "frozen_cpu_partitions": (
+            report.get("game_cpu_list") == environment.get("game_cpu_list")
+            and report.get("controller_cpu_list")
+            == environment.get("controller_cpu_list")
+        ),
+        "zero_infrastructure_events": isinstance(events, dict) and not any(
+            int(events.get(name, 0)) for name in INFRA_EVENTS
+        ),
         "policy_loaded_once": (
             status.get("policy_id") == f"{POLICY_NAME}-active"
             and status.get("reload_failures") == 0
@@ -165,7 +178,7 @@ def _audit(
         "schema": "autonomous-generation-6-wine-canary-result-v1",
         "evidence_eligible": False,
         "authorization_eligible": False,
-        "contract_sha256": _sha256(CONTRACT),
+        "contract_sha256": _sha256(contract_path),
         "source_commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=REPOSITORY, text=True
         ).strip(),
@@ -185,11 +198,19 @@ def _audit(
     }
 
 
-def main() -> int:
-    if _sha256(CONTRACT) != EXPECTED_CANARY_CONTRACT_SHA256:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--contract", type=Path,
+        default=REPOSITORY / "config/autonomous_generation6_wine_canary_v2.json",
+    )
+    args = parser.parse_args(argv)
+    contract_path = args.contract.resolve()
+    if _sha256(contract_path) not in ALLOWED_CANARY_CONTRACT_SHA256:
         raise ValueError("Generation-6 canary contract drifted")
-    contract = _object(CONTRACT)
+    contract = _object(contract_path)
     environment = _bind_resources(contract)
+    output_root = (REPOSITORY / str(environment["worker_root"])).parent
     schedule_rows = contract.get("schedule")
     if not isinstance(schedule_rows, list) or len(schedule_rows) != 1:
         raise ValueError("Generation-6 canary schedule is not singular")
@@ -216,13 +237,13 @@ def main() -> int:
         directory=str(environment["worker_directory"]),
         display=str(environment["display"]),
     )
-    state_path = OUTPUT_ROOT / "policy-active.json"
+    state_path = output_root / "policy-active.json"
     expected_state = export_state(
         candidate_path=CANDIDATE,
         qualification_path=QUALIFICATION,
         deployable_audit_path=DEPLOYABLE_AUDIT,
         native_scorer_path=NATIVE_SCORER,
-        canary_contract_path=CONTRACT,
+        canary_contract_path=contract_path,
         mode="active",
         policy_seed=int(schedule["policy_seed"]),
     )
@@ -232,7 +253,7 @@ def main() -> int:
     else:
         _atomic_json(state_path, expected_state)
 
-    artifact_dir = OUTPUT_ROOT / str(schedule["id"])
+    artifact_dir = output_root / str(schedule["id"])
     report, _run_dir = complete_run(
         artifact_dir=artifact_dir,
         worker=worker,
@@ -242,12 +263,15 @@ def main() -> int:
         scorer=NATIVE_SCORER,
         rng_seed=None,
         corpus_root=None,
+        game_cpu_list=environment.get("game_cpu_list"),
+        controller_cpu_list=environment.get("controller_cpu_list"),
     )
     result = _audit(
         report=report, artifact_dir=artifact_dir,
         state_path=state_path, schedule=schedule,
+        contract_path=contract_path, environment=environment,
     )
-    result_path = OUTPUT_ROOT / "canary-result-v1.json"
+    result_path = output_root / "canary-result-v1.json"
     if result_path.is_file() and _object(result_path) != result:
         raise ValueError("Generation-6 canary result drifted")
     if not result_path.exists():

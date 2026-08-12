@@ -385,3 +385,201 @@ extern "C" TH06_RL_RANKER_API int th06_rl_encode_hazard_codebook_v1(
     outputs[output_count - 2] = std::log1p(count);
     return 0;
 }
+
+extern "C" TH06_RL_RANKER_API int th06_rl_score_supported_iql_actor_v1(
+    const float* features,
+    const std::int32_t row_count,
+    const std::int32_t feature_count,
+    const std::int32_t* row_actions,
+    const float* support_mean,
+    const float* support_scale,
+    const float* support_prototypes,
+    const std::int32_t support_prototype_count,
+    const std::int32_t* support_action_offsets,
+    const std::int32_t support_action_count,
+    const std::int32_t* state_indices,
+    const std::int32_t state_count,
+    const std::int32_t* actor_action_indices,
+    const std::int32_t actor_action_count,
+    const float* state_mean,
+    const float* state_scale,
+    const float* action_mean,
+    const float* action_scale,
+    const std::int32_t model_count,
+    const std::int32_t hidden_count,
+    const std::int32_t rank_count,
+    const float* state_hidden_weight,
+    const float* state_hidden_bias,
+    const float* state_latent_weight,
+    const float* state_latent_bias,
+    const float* action_hidden_weight,
+    const float* action_hidden_bias,
+    const float* action_latent_weight,
+    const float* action_latent_bias,
+    const float* action_score_weight,
+    const float* action_score_bias,
+    float* support_outputs,
+    float* actor_outputs) {
+    if (features == nullptr || row_actions == nullptr ||
+        state_indices == nullptr || actor_action_indices == nullptr ||
+        state_mean == nullptr || state_scale == nullptr ||
+        action_mean == nullptr || action_scale == nullptr ||
+        support_outputs == nullptr || actor_outputs == nullptr ||
+        row_count <= 0 || row_count > 64 || feature_count <= 0 ||
+        state_count <= 0 || state_count > 256 ||
+        actor_action_count <= 0 || actor_action_count > 128) {
+        return 10;
+    }
+    const int support_status = th06_rl_min_support_distance_v1(
+        features, row_count, feature_count, support_mean, support_scale,
+        support_prototypes, support_prototype_count, support_action_offsets,
+        support_action_count, row_actions, support_outputs);
+    if (support_status != 0) return 20 + support_status;
+
+    float state[256];
+    float actions[64 * 128];
+    for (std::int32_t feature = 0; feature < state_count; ++feature) {
+        const std::int32_t source = state_indices[feature];
+        if (source < 0 || source >= feature_count ||
+            !std::isfinite(state_mean[feature]) ||
+            !std::isfinite(state_scale[feature]) ||
+            state_scale[feature] <= 0.0f) {
+            return 11;
+        }
+        state[feature] = (
+            features[source] - state_mean[feature]
+        ) / state_scale[feature];
+    }
+    for (std::int32_t feature = 0; feature < actor_action_count; ++feature) {
+        if (actor_action_indices[feature] < 0 ||
+            actor_action_indices[feature] >= feature_count ||
+            !std::isfinite(action_mean[feature]) ||
+            !std::isfinite(action_scale[feature]) ||
+            action_scale[feature] <= 0.0f) {
+            return 12;
+        }
+    }
+    for (std::int32_t row = 0; row < row_count; ++row) {
+        for (std::int32_t feature = 0;
+             feature < actor_action_count; ++feature) {
+            actions[row * actor_action_count + feature] = (
+                features[row * feature_count + actor_action_indices[feature]] -
+                action_mean[feature]
+            ) / action_scale[feature];
+        }
+    }
+    const int actor_status = th06_rl_score_iql_actor_population_v1(
+        state, actions, row_count, state_count, actor_action_count,
+        model_count, hidden_count, rank_count, state_hidden_weight,
+        state_hidden_bias, state_latent_weight, state_latent_bias,
+        action_hidden_weight, action_hidden_bias, action_latent_weight,
+        action_latent_bias, action_score_weight, action_score_bias,
+        actor_outputs);
+    return actor_status == 0 ? 0 : 40 + actor_status;
+}
+
+extern "C" TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
+    const float* observation,
+    const std::int32_t observation_count,
+    const float* action_features,
+    const std::int32_t row_count,
+    const std::int32_t action_feature_count,
+    const std::int32_t baseline_row,
+    const std::int32_t current_row,
+    const float* hazard_primitives,
+    const std::int32_t hazard_primitive_count,
+    const std::int32_t hazard_feature_count,
+    const float* hazard_mean,
+    const float* hazard_scale,
+    const float* hazard_prototypes,
+    const std::int32_t hazard_prototype_count,
+    const std::int32_t hazard_output_count,
+    const float* history,
+    const std::int32_t history_count,
+    const std::int32_t* row_actions,
+    const float* support_mean,
+    const float* support_scale,
+    const float* support_prototypes,
+    const std::int32_t support_prototype_count,
+    const std::int32_t* support_action_offsets,
+    const std::int32_t support_action_count,
+    const std::int32_t* state_indices,
+    const std::int32_t state_count,
+    const std::int32_t* actor_action_indices,
+    const std::int32_t actor_action_count,
+    const float* state_mean,
+    const float* state_scale,
+    const float* action_mean,
+    const float* action_scale,
+    const std::int32_t model_count,
+    const std::int32_t hidden_count,
+    const std::int32_t rank_count,
+    const float* state_hidden_weight,
+    const float* state_hidden_bias,
+    const float* state_latent_weight,
+    const float* state_latent_bias,
+    const float* action_hidden_weight,
+    const float* action_hidden_bias,
+    const float* action_latent_weight,
+    const float* action_latent_bias,
+    const float* action_score_weight,
+    const float* action_score_bias,
+    float* support_outputs,
+    float* actor_outputs) {
+    const std::int32_t feature_count = observation_count +
+        2 * action_feature_count + 2 + hazard_output_count + history_count;
+    if (observation == nullptr || action_features == nullptr ||
+        history == nullptr || row_count <= 0 || row_count > 64 ||
+        observation_count <= 0 || action_feature_count <= 0 ||
+        baseline_row < 0 || baseline_row >= row_count || current_row < -1 ||
+        current_row >= row_count || hazard_output_count <= 0 ||
+        history_count <= 0 || feature_count <= 0 || feature_count > 512) {
+        return 50;
+    }
+    float hazard[256];
+    if (hazard_output_count > 256) return 51;
+    const int hazard_status = th06_rl_encode_hazard_codebook_v1(
+        hazard_primitives, hazard_primitive_count, hazard_feature_count,
+        hazard_mean, hazard_scale, hazard_prototypes, hazard_prototype_count,
+        hazard, hazard_output_count);
+    if (hazard_status != 0) return 60 + hazard_status;
+
+    float rows[64 * 512];
+    const float* baseline = action_features +
+        baseline_row * action_feature_count;
+    for (std::int32_t row = 0; row < row_count; ++row) {
+        float* output = rows + row * feature_count;
+        std::int32_t offset = 0;
+        for (std::int32_t index = 0; index < observation_count; ++index) {
+            output[offset++] = observation[index];
+        }
+        const float* selected = action_features + row * action_feature_count;
+        for (std::int32_t index = 0; index < action_feature_count; ++index) {
+            output[offset++] = selected[index];
+        }
+        for (std::int32_t index = 0; index < action_feature_count; ++index) {
+            output[offset++] = selected[index] - baseline[index];
+        }
+        output[offset++] = row == baseline_row ? 1.0f : 0.0f;
+        output[offset++] = row == current_row ? 1.0f : 0.0f;
+        for (std::int32_t index = 0; index < hazard_output_count; ++index) {
+            output[offset++] = hazard[index];
+        }
+        for (std::int32_t index = 0; index < history_count; ++index) {
+            output[offset++] = history[index];
+        }
+        if (offset != feature_count) return 52;
+    }
+    const int status = th06_rl_score_supported_iql_actor_v1(
+        rows, row_count, feature_count, row_actions,
+        support_mean, support_scale, support_prototypes,
+        support_prototype_count, support_action_offsets,
+        support_action_count, state_indices, state_count,
+        actor_action_indices, actor_action_count, state_mean, state_scale,
+        action_mean, action_scale, model_count, hidden_count, rank_count,
+        state_hidden_weight, state_hidden_bias, state_latent_weight,
+        state_latent_bias, action_hidden_weight, action_hidden_bias,
+        action_latent_weight, action_latent_bias, action_score_weight,
+        action_score_bias, support_outputs, actor_outputs);
+    return status == 0 ? 0 : 80 + status;
+}

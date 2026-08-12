@@ -86,6 +86,8 @@ def complete_run(
     scorer: Path | None,
     rng_seed: int | None,
     corpus_root: Path | None,
+    game_cpu_list: str | None = None,
+    controller_cpu_list: str | None = None,
 ) -> tuple[dict[str, object], Path | None]:
     """Run or resume one normal-speed original-Wine complete Stage.
 
@@ -126,6 +128,13 @@ def complete_run(
     ]
     if scorer is not None:
         command.extend(("--policy-scorer-library", str(scorer)))
+    if game_cpu_list is not None or controller_cpu_list is not None:
+        if not game_cpu_list or not controller_cpu_list:
+            raise ValueError("Wine CPU partitions must be provided together")
+        command.extend((
+            "--game-cpu-list", game_cpu_list,
+            "--controller-cpu-list", controller_cpu_list,
+        ))
     if corpus_root is not None:
         if rng_seed is None:
             raise ValueError("fixed-RNG corpus run has no RNG seed")

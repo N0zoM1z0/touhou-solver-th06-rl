@@ -173,6 +173,16 @@ an efficacy estimate. Only a general implementation repair with portable/native
 action equivalence may define a new canary contract; the failed canary cannot
 be retried under its old identity.
 
+The general fused-native repair passed a corrected maximum-width preflight:
+64 registered factual contexts with 181--256 hazards retained exact portable,
+Linux, and Wine actions; Wine p95 was `2.1229 ms` and maximum `2.4212 ms`.
+The separately frozen successor contract is
+`config/autonomous_generation6_wine_canary_v2.json`, SHA-256
+`37f136deab0e162e76bb67bb4f55d88b76eeefb87e8af392fb165d9c24d99c6b`.
+It names a new policy seed, artifact root, display, scorer hash, and disjoint
+game/controller CPU allocation inside CPUs 0--31. It authorizes exactly one
+new Stage-4 wiring canary; it neither erases nor retries the failed contract.
+
 ## Host-sharing contract
 
 Every offline qualification or fit launcher applies Linux process affinity

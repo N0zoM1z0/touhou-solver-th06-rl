@@ -21,7 +21,7 @@ from th06_rl.policies.autonomous_iql_actor import (  # noqa: E402
     CANDIDATE_SCHEMA,
     DENSITY_RATIO_CAP,
     EXPECTED_CANDIDATE_SHA256,
-    EXPECTED_CANARY_CONTRACT_SHA256,
+    ALLOWED_CANARY_CONTRACT_SHA256,
     EXPECTED_DEPLOYABLE_AUDIT_SHA256,
     EXPECTED_QUALIFICATION_SHA256,
     INTERVENTION_CAP,
@@ -102,9 +102,12 @@ def export_state(
     canary = _object(canary_contract_path)
     canary_sha256 = _sha256(canary_contract_path)
     if (
-        canary_sha256 != EXPECTED_CANARY_CONTRACT_SHA256
+        canary_sha256 not in ALLOWED_CANARY_CONTRACT_SHA256
         or
-        canary.get("schema") != "autonomous-generation-6-wine-canary-v1"
+        canary.get("schema") not in (
+            "autonomous-generation-6-wine-canary-v1",
+            "autonomous-generation-6-wine-canary-v2",
+        )
         or canary.get("candidate_sha256") != EXPECTED_CANDIDATE_SHA256
         or canary.get("qualification_result_sha256")
         != EXPECTED_QUALIFICATION_SHA256
@@ -129,6 +132,7 @@ def export_state(
         authorization["frozen_wine_canary"] = {
             "schema": "autonomous-generation-6-wine-canary-authorization-v1",
             "contract_sha256": canary_sha256,
+            "contract_schema": canary["schema"],
             "normal_speed": True,
             "natural_rng": True,
             "complete_stage_hit_continuation": True,

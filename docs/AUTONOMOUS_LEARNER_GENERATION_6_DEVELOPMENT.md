@@ -456,3 +456,13 @@ game contention. The next work is a generic native fused row-normalization /
 support / actor path, verified against the unchanged portable candidate. A
 successful repair requires a separately frozen successor canary; this failed
 schedule is never replayed or reinterpreted as a pass.
+
+The successor implementation fuses the remaining Python/FFI numerical path
+while keeping final proposal selection and safety authority unchanged. A
+maximum-width factual preflight (181--256 hazards) retained exact three-way
+actions and measured `2.1229 ms` Wine p95, `2.4212 ms` maximum, and zero misses.
+Its report SHA-256 is
+`d687027508acc5787a0db846f8c5b48ce64c3ccee4b7fe9f49dfeb6a150cce2f`.
+Generation-6 canary v2 is a new frozen experiment identity and separates the
+game/controller CPU sets within the same 32-core host budget to test the
+demonstrated live-contention defect.

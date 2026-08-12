@@ -34,7 +34,6 @@ from ..th06.learning_adapter import (
 )
 from .offline_ranker import (
     NATIVE_SCORER_ENV,
-    NativePrototypeSupport,
     PortablePrototypeSupport,
 )
 
@@ -57,9 +56,10 @@ EXPECTED_QUALIFICATION_SHA256 = (
 EXPECTED_DEPLOYABLE_AUDIT_SHA256 = (
     "f683abf05b0fc1165181c1b922882e8950eae48cb67060e54792e3bc6a86ba8f"
 )
-EXPECTED_CANARY_CONTRACT_SHA256 = (
-    "161d6c0461dcd180777c020f97f701492061beda9610e0fe58bcf31269572f3c"
-)
+ALLOWED_CANARY_CONTRACT_SHA256 = frozenset((
+    "161d6c0461dcd180777c020f97f701492061beda9610e0fe58bcf31269572f3c",
+    "37f136deab0e162e76bb67bb4f55d88b76eeefb87e8af392fb165d9c24d99c6b",
+))
 ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     "8b99074e0d9eeae232d4a79286646b1688004d721ba288c605cde74743ef62ec",
     "0aa7c5a95b90b2df0d032ec02f21fcd3a39be3ba440819d00c0cb025bc641ef0",
@@ -67,6 +67,12 @@ ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     # portable/native exact-action and Wine latency preflight.
     "f0e34ad5b0929b3333e850028f814036786078193176cf08968d6975b3e220fa",
     "e794045cb89e9f6439e4bdfc354325f89a0771a57aa75a4aa654aac9197f2b87",
+    # Fused rich-row support plus normalized actor entry point.
+    "96255f659ac6ec3d79f4b6742abccc3e7ee9de9115f804b6629ca526381d14d0",
+    "7010f61c7e4f56802e1caecabd18aea927ab7109d240d2025bc889cb0115a121",
+    # Single adapter-array -> hazard/support/actor FFI path.
+    "58c3a1aa82c73dba5f1200094546b16aa1d2044e0c5f046027719368ab5580ab",
+    "507b7e2bb797b6d90b12dbebf1d77c431d6f3ce9086cf522c749f5f10305fa1b",
 ))
 _ACTION_INDEX = {action: index for index, action in enumerate(ACTION_NAMES)}
 
@@ -89,7 +95,13 @@ class _NativeActorPopulation:
         "action_score_weight", "action_score_bias",
     )
 
-    def __init__(self, path: Path, artifacts: list[dict[str, object]]) -> None:
+    def __init__(
+        self,
+        path: Path,
+        artifacts: list[dict[str, object]],
+        support: PortablePrototypeSupport,
+        hazard_encoder: NativeHazardCodebookEncoder,
+    ) -> None:
         if len(artifacts) != 7:
             raise ValueError("Generation-6 requires seven actor artifacts")
         reference = artifacts[0]
@@ -144,16 +156,31 @@ class _NativeActorPopulation:
             ]
             arrays.append((ctypes.c_float * len(values))(*values))
         library = ctypes.CDLL(str(path))
-        function = library.th06_rl_score_iql_actor_population_v1
+        function = library.th06_rl_evaluate_iql_policy_v1
         pointer = ctypes.POINTER(ctypes.c_float)
+        integers = ctypes.POINTER(ctypes.c_int32)
         function.argtypes = [
-            pointer, pointer,
-            ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+            pointer, ctypes.c_int32,
+            pointer, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+            ctypes.c_int32,
+            pointer, ctypes.c_int32, ctypes.c_int32,
+            pointer, pointer, pointer, ctypes.c_int32, ctypes.c_int32,
+            pointer, ctypes.c_int32,
+            integers,
+            pointer, pointer, pointer, ctypes.c_int32, integers, ctypes.c_int32,
+            integers, ctypes.c_int32, integers, ctypes.c_int32,
+            pointer, pointer, pointer, pointer,
             ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
             *(pointer for _index in range(10)),
-            pointer,
+            pointer, pointer,
         ]
         function.restype = ctypes.c_int
+        support_flat = [
+            value for group in support.groups for row in group for value in row
+        ]
+        support_offsets = [0]
+        for group in support.groups:
+            support_offsets.append(support_offsets[-1] + len(group))
         self.library = library
         self.function = function
         self.arrays = tuple(arrays)
@@ -167,40 +194,105 @@ class _NativeActorPopulation:
         self.hidden = hidden
         self.rank = rank
         self.model_count = len(artifacts)
+        self.feature_count = len(names)
+        self.state_indices_array = (
+            ctypes.c_int32 * len(state_indices)
+        )(*state_indices)
+        self.action_indices_array = (
+            ctypes.c_int32 * len(action_indices)
+        )(*action_indices)
+        self.state_mean_array = (ctypes.c_float * len(state_mean))(*state_mean)
+        self.state_scale_array = (ctypes.c_float * len(state_scale))(*state_scale)
+        self.action_mean_array = (ctypes.c_float * len(action_mean))(*action_mean)
+        self.action_scale_array = (ctypes.c_float * len(action_scale))(*action_scale)
+        self.support_mean = (
+            ctypes.c_float * support.feature_count
+        )(*support.mean)
+        self.support_scale = (
+            ctypes.c_float * support.feature_count
+        )(*support.scale)
+        self.support_prototypes = (
+            ctypes.c_float * len(support_flat)
+        )(*support_flat)
+        self.support_offsets = (
+            ctypes.c_int32 * len(support_offsets)
+        )(*support_offsets)
+        self.support_prototype_count = support_offsets[-1]
+        self.support_action_count = len(support.groups)
+        self.hazard_encoder = hazard_encoder
 
-    def predict(self, rows: list[list[float]]) -> tuple[tuple[float, ...], ...]:
-        if not rows or any(len(row) != len(self.names) for row in rows):
-            raise ValueError("Generation-6 actor input shape is invalid")
-        state = [
-            (rows[0][index] - center) / scale
-            for index, center, scale in zip(
-                self.state_indices, self.state_mean, self.state_scale, strict=True
+    def evaluate_context(
+        self,
+        observation: tuple[float, ...],
+        actions: list[tuple[float, ...]],
+        hazards: tuple[tuple[float, ...], ...],
+        history: tuple[float, ...],
+        *,
+        baseline_row: int,
+        current_row: int,
+        action_indices: list[int],
+    ) -> tuple[tuple[float, ...], tuple[tuple[float, ...], ...]]:
+        if (
+            not observation
+            or not actions
+            or len(observation) != len(OBSERVATION_FEATURE_NAMES)
+            or any(len(row) != len(ACTION_FEATURE_NAMES) for row in actions)
+            or len(history) != len(HISTORY_FEATURE_NAMES)
+            or len(hazards) > 256
+            or any(
+                len(row) != self.hazard_encoder.feature_count for row in hazards
             )
-        ]
-        actions = [[
-            (row[index] - center) / scale
-            for index, center, scale in zip(
-                self.action_indices,
-                self.action_mean,
-                self.action_scale,
-                strict=True,
-            )
-        ] for row in rows]
-        state_array = (ctypes.c_float * len(state))(*state)
-        flat_actions = [value for row in actions for value in row]
-        action_array = (ctypes.c_float * len(flat_actions))(*flat_actions)
-        output = (ctypes.c_float * (self.model_count * len(rows)))()
+            or not 0 <= baseline_row < len(actions)
+            or not -1 <= current_row < len(actions)
+        ):
+            raise ValueError("Generation-6 policy input shape is invalid")
+        if len(action_indices) != len(actions):
+            raise ValueError("Generation-6 support action shape is invalid")
+        observation_input = (ctypes.c_float * len(observation))(*observation)
+        flat_actions = (ctypes.c_float * (
+            len(actions) * len(actions[0])
+        ))(*(value for row in actions for value in row))
+        flat_hazard_values = tuple(value for row in hazards for value in row)
+        hazard_input = (ctypes.c_float * max(1, len(flat_hazard_values)))(
+            *(flat_hazard_values or (0.0,))
+        )
+        history_input = (ctypes.c_float * len(history))(*history)
+        row_actions = (ctypes.c_int32 * len(action_indices))(*action_indices)
+        support_output = (ctypes.c_float * len(actions))()
+        actor_output = (
+            ctypes.c_float * (self.model_count * len(actions))
+        )()
         status = self.function(
-            state_array, action_array, len(rows), len(state), len(actions[0]),
-            self.model_count, self.hidden, self.rank, *self.arrays, output,
+            observation_input, len(observation),
+            flat_actions, len(actions), len(actions[0]),
+            baseline_row, current_row,
+            hazard_input, len(hazards), self.hazard_encoder.feature_count,
+            self.hazard_encoder.mean, self.hazard_encoder.scale,
+            self.hazard_encoder.prototypes,
+            self.hazard_encoder.prototype_count,
+            self.hazard_encoder.output_count,
+            history_input, len(history),
+            row_actions,
+            self.support_mean, self.support_scale, self.support_prototypes,
+            self.support_prototype_count, self.support_offsets,
+            self.support_action_count,
+            self.state_indices_array, len(self.state_indices),
+            self.action_indices_array, len(self.action_indices),
+            self.state_mean_array, self.state_scale_array,
+            self.action_mean_array, self.action_scale_array,
+            self.model_count, self.hidden, self.rank,
+            *self.arrays, support_output, actor_output,
         )
         if status != 0:
-            raise RuntimeError(f"native Generation-6 actor failed with {status}")
-        return tuple(
-            tuple(float(output[member * len(rows) + row])
-                  for row in range(len(rows)))
+            raise RuntimeError(
+                f"native Generation-6 support/actor failed with {status}"
+            )
+        scores = tuple(
+            tuple(float(actor_output[member * len(actions) + row])
+                  for row in range(len(actions)))
             for member in range(self.model_count)
         )
+        return tuple(float(value) for value in support_output), scores
 
 
 class AutonomousIqlActorPolicy:
@@ -312,15 +404,14 @@ class AutonomousIqlActorPolicy:
         portable_support = PortablePrototypeSupport(
             support_artifact, feature_count=len(rich_feature_names())
         )
-        self.scorer = _NativeActorPopulation(path, actors)
-        self.support = NativePrototypeSupport(
-            path, expected_sha256=actual, portable=portable_support
-        )
         self.hazard_encoder = NativeHazardCodebookEncoder(
             path,
             expected_sha256=actual,
             artifact=representation,
             output_count=len(hazard_codebook_feature_names()),
+        )
+        self.scorer = _NativeActorPopulation(
+            path, actors, portable_support, self.hazard_encoder
         )
         supported = frozenset(map(
             str, support_artifact.get("factual_supported_actions", ())
@@ -340,7 +431,7 @@ class AutonomousIqlActorPolicy:
                 canary.get("schema")
                 != "autonomous-generation-6-wine-canary-authorization-v1"
                 or canary.get("contract_sha256")
-                != EXPECTED_CANARY_CONTRACT_SHA256
+                not in ALLOWED_CANARY_CONTRACT_SHA256
                 or canary.get("normal_speed") is not True
                 or canary.get("natural_rng") is not True
                 or canary.get("complete_stage_hit_continuation") is not True
@@ -410,15 +501,40 @@ class AutonomousIqlActorPolicy:
             raise RuntimeError("Generation-6 online feature width differs")
         return rows
 
+    def _adapter_arrays(
+        self, context, legal: tuple[str, ...]
+    ) -> tuple[tuple[float, ...], list[tuple[float, ...]]]:
+        observation = tuple(context.observation_features)
+        if tuple(name for name, _value in observation) != OBSERVATION_FEATURE_NAMES:
+            raise ValueError("Generation-6 observation feature schema differs")
+        raw_actions = dict(context.action_features)
+        if len(raw_actions) != len(context.action_features):
+            raise ValueError("Generation-6 action feature set has duplicates")
+        actions = []
+        for action in legal:
+            raw = tuple(raw_actions.get(action, ()))
+            if tuple(name for name, _value in raw) != ACTION_FEATURE_NAMES:
+                raise ValueError("Generation-6 action feature schema differs")
+            actions.append(tuple(float(value) for _name, value in raw))
+        return (
+            tuple(float(value) for _name, value in observation), actions
+        )
+
     def _proposal(self, context, legal: tuple[str, ...], baseline: str) -> str:
         started = time.perf_counter()
-        hazard = self.hazard_encoder.encode(tuple(context.hazard_primitives))
         history = self._history(context)
-        rows = self._candidate_rows(
-            context, legal, baseline, hazard, history
-        )
-        distances = self.support.distances(
-            rows, [_ACTION_INDEX[action] for action in legal]
+        observation, actions = self._adapter_arrays(context, legal)
+        distances, scores = self.scorer.evaluate_context(
+            observation,
+            actions,
+            tuple(context.hazard_primitives),
+            history,
+            baseline_row=legal.index(baseline),
+            current_row=(
+                legal.index(context.current_action)
+                if context.current_action in legal else -1
+            ),
+            action_indices=[_ACTION_INDEX[action] for action in legal],
         )
         supported = [
             index for index, action in enumerate(legal)
@@ -427,7 +543,6 @@ class AutonomousIqlActorPolicy:
             and distances[index] <= self.support_threshold
         ]
         self.support_abstentions += len(legal) - 1 - len(supported)
-        scores = self.scorer.predict(rows)
         means = [
             sum(member[index] for member in scores) / len(scores)
             for index in range(len(legal))

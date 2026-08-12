@@ -128,11 +128,17 @@ def _factual_contexts(count: int) -> list[PolicyContext]:
         option = row.get("option")
         if isinstance(option, dict) and option.get("boundary") is True:
             result.append(_context(row))
-            if len(result) == count:
-                break
-    if len(result) != count:
+    if len(result) < count:
         raise RuntimeError("factual Wine source has too few option boundaries")
-    return result
+    # This set is a computational-width stress fixture, not statistical
+    # gameplay evidence. Select only by input sizes known to dominate runtime;
+    # never by action, HIT, phase, RNG, learner score, or outcome.
+    result.sort(key=lambda context: (
+        len(context.hazard_primitives),
+        len(context.locally_admissible_actions),
+        context.frame,
+    ), reverse=True)
+    return sorted(result[:count], key=lambda context: context.frame)
 
 
 def _portable_choices(

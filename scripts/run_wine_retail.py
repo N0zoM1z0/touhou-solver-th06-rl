@@ -293,6 +293,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--display", default=":97")
+    parser.add_argument(
+        "--game-cpu-list",
+        help="optional taskset CPU list reserved for the retail Wine process tree",
+    )
+    parser.add_argument(
+        "--controller-cpu-list",
+        help="optional disjoint taskset CPU list reserved for the controller",
+    )
     parser.add_argument("--artifact-dir", type=Path)
     args = parser.parse_args(argv)
     if args.seconds < 0:
@@ -354,6 +362,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         )
     if not args.display.startswith(":") or not args.display[1:].isdigit():
         parser.error("--display must look like :97")
+    if bool(args.game_cpu_list) != bool(args.controller_cpu_list):
+        parser.error("game/controller CPU lists must be declared together")
+    if args.game_cpu_list:
+        def cpu_set(value: str) -> set[int]:
+            completed = subprocess.run(
+                ["taskset", "-c", value, "true"], check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            if completed.returncode:
+                parser.error(f"invalid taskset CPU list: {value}")
+            result = set()
+            for part in value.split(","):
+                bounds = part.split("-", 1)
+                start = int(bounds[0])
+                stop = int(bounds[-1])
+                result.update(range(start, stop + 1))
+            return result
+        game_cpus = cpu_set(args.game_cpu_list)
+        controller_cpus = cpu_set(args.controller_cpu_list)
+        inherited = set(os.sched_getaffinity(0))
+        if (
+            not game_cpus or not controller_cpus
+            or game_cpus & controller_cpus
+            or not ((game_cpus | controller_cpus) <= inherited)
+        ):
+            parser.error(
+                "game/controller CPU lists must be nonempty, disjoint, and inherited"
+            )
     if args.artifact_dir is None:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         args.artifact_dir = (
@@ -450,6 +486,8 @@ def run(args: argparse.Namespace) -> int:
             else None
         ),
         "display": args.display,
+        "game_cpu_list": args.game_cpu_list,
+        "controller_cpu_list": args.controller_cpu_list,
         "wine_prefix": str(prefix),
         "retail_executable": str(executable),
         "expected_retail_sha256": RETAIL_SHA256,
@@ -631,8 +669,11 @@ def run(args: argparse.Namespace) -> int:
             )
             prefix_marker.write_text("wine-11.0 headless retail\n", encoding="utf-8")
 
+        game_command = [str(args.wine), f"./{RETAIL_EXECUTABLE}"]
+        if args.game_cpu_list:
+            game_command = ["taskset", "-c", args.game_cpu_list, *game_command]
         game_process = subprocess.Popen(
-            [str(args.wine), f"./{RETAIL_EXECUTABLE}"],
+            game_command,
             cwd=game_dir,
             env=environment,
             stdin=subprocess.DEVNULL,
@@ -736,8 +777,14 @@ def run(args: argparse.Namespace) -> int:
         if args.immutable_policy:
             controller.append("--immutable-policy")
         report["controller_command"] = controller
+        controller_host_command = controller
+        if args.controller_cpu_list:
+            controller_host_command = [
+                "taskset", "-c", args.controller_cpu_list, *controller
+            ]
+        report["controller_host_command"] = controller_host_command
         result = subprocess.run(
-            controller,
+            controller_host_command,
             cwd=repository,
             env=environment,
             stdin=subprocess.DEVNULL,

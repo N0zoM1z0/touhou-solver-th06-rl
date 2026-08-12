@@ -412,3 +412,32 @@ matrix, perform state/action normalization, support, and seven-actor scoring in
 one call while preserving the exact candidate and choice. A new live canary is
 allowed only after exact portable equivalence and a successor frozen contract;
 the failed performance evidence remains immutable.
+
+## 2026-08-12: fused resident scorer and load isolation
+
+The generic repair now performs adapter-array row construction, bounded hazard
+encoding, action-conditional support, normalization, and the full seven-actor
+population in one native call. It does not rank actions and cannot see game
+memory, collision state, input, propensity, HITs, phases, or RNG; Python still
+chooses a positive mean-score proposal only among the native-safe rows. Thus
+the optimization changes neither learner semantics nor safety ownership.
+
+The first 64-context preflight had accidentally sampled zero-hazard opening
+boundaries. The corrected stress selector is explicitly computational: from
+one registered sequential Wine episode it takes the largest hazard and safe-set
+input widths without reading actions, HITs, phases, RNG, scores, or outcomes.
+The frozen set contains 181--256 hazard primitives. On it all portable, Linux,
+and Win32 actions were exact; Linux p95 was `0.7493 ms`, Wine p95 `2.1229 ms`,
+Wine maximum `2.4212 ms`, and no sample exceeded 4 ms or the frame deadline.
+Report SHA-256 is
+`d687027508acc5787a0db846f8c5b48ce64c3ccee4b7fe9f49dfeb6a150cce2f`.
+The independent 126-output Win32 actor differential remained `6.8665e-5`.
+
+The fused Linux/Win32 binaries are
+`58c3a1aa82c73dba5f1200094546b16aa1d2044e0c5f046027719368ab5580ab`
+and
+`507b7e2bb797b6d90b12dbebf1d77c431d6f3ce9086cf522c749f5f10305fa1b`.
+The successor live canary additionally reserves CPUs 0--7 for the original
+game and 8--31 for the controller. Both remain inside the user-requested
+32-CPU set; the split prevents the game and scorer from evicting each other
+without changing original 60 Hz pacing or running concurrent Wine trials.
