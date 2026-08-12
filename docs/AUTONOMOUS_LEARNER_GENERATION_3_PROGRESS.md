@@ -169,3 +169,27 @@ The existing evidence corpus is preserved. Resume permits exactly the audited
 old/new preflight hash pair, records the migration in `generation.json`, and
 rejects every schedule/outcome/config change. A new causal plus short Wine
 preflight must pass under the repaired hash before fitting resumes.
+
+## 2026-08-12: repaired round 1 rejected without canary
+
+The new hash-bound causal and 45-second Wine preflights both passed. The
+official round-1 fit then completed on the same 12 frozen episodes: 33,161
+training options from nine whole Stages and 11,076 validation options from
+three disjoint whole Stages. Training/validation interval HIT counts were
+332/90, exactly matching their manifests.
+
+All causal grouping, support, population, calibration, finite-value, native
+binding, and HIT-presence gates passed. The immutable candidate was rejected
+only by the predeclared population-preserving distillation bounds:
+
+- held-out DR advantage RMSE: 86.1797 HIT versus 86.1578 for zero advantage;
+- distillation p95 absolute error: 3.7091 HIT versus the fixed 0.05 gate;
+- distillation maximum absolute error: 370.8625 HIT versus the fixed 0.25 gate;
+- calibrated one-sided radius: 2476.2625 HIT.
+
+This is presently evidence of a high-variance, unsupported candidate, not an
+infrastructure exception and not a final efficacy verdict. No member was
+selected, no threshold was relaxed, and no reward, feature, action, seed,
+option, distribution, or model setting changed. The orchestrator therefore
+skipped canary and automatically resumed the committed schedule at collection
+episode 12, toward the 16-Stage fit boundary.
