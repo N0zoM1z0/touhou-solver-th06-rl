@@ -44,6 +44,14 @@ RICH_FEATURE_SCHEMA = "learned-hazard-codebook-option-tree-v1"
 HAZARD_CODEBOOK_SCHEMA = "game-neutral-hazard-codebook-v1"
 HAZARD_PROTOTYPES = 24
 HAZARD_CODEBOOK_SAMPLE = 65_536
+NONEXECUTED_OPTION_TERMINATIONS = frozenset({
+    "publication-rejected",
+    "hard-empty",
+    "authority-loss",
+    "stage-transition",
+    "bomb",
+    "physical-hit",
+})
 
 
 @dataclass(frozen=True)
@@ -246,7 +254,8 @@ def load_option_episode(
         if option is not None and executed != action:
             outcome = row.get("outcome_terms")
             if (
-                option.get("termination_reason") != "publication-rejected"
+                option.get("termination_reason")
+                not in NONEXECUTED_OPTION_TERMINATIONS
                 or row.get("learning_eligible") is not False
                 or not isinstance(outcome, dict)
             ):
@@ -1358,7 +1367,8 @@ def audit_wine_option_smoke(
             raise ValueError("Wine smoke conditional propensity is invalid")
         if executed != action:
             if (
-                option.get("termination_reason") != "publication-rejected"
+                option.get("termination_reason")
+                not in NONEXECUTED_OPTION_TERMINATIONS
                 or row.get("learning_eligible") is not False
             ):
                 raise ValueError("Wine smoke has an ambiguous unpublished option")

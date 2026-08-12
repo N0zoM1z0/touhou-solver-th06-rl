@@ -212,9 +212,33 @@ def test_short_wine_smoke_audits_options_without_becoming_evidence(
             "termination_reason": "publication-rejected",
         },
     })
+    rows.insert(0, {
+        "policy_id": "safe-option-exploration-v1",
+        "legal_actions": ["stay", "left"],
+        "baseline_action": "stay",
+        "published_action": None,
+        "executed_action": "stay",
+        "behavior_probability": 0.05,
+        "learning_eligible": False,
+        "policy_context": {
+            "hazard_primitives": [[0.0] * len(HAZARD_PRIMITIVE_FEATURE_NAMES)],
+            "history_features": [
+                [name, 0.0] for name in HISTORY_FEATURE_NAMES
+            ],
+        },
+        "option": {
+            "option_id": "rejected-at-hard-empty",
+            "boundary": True,
+            "intent": "left",
+            "boundary_probability": 0.05,
+            "conditional_probability": 0.05,
+            "elapsed_frames_at_decision": 1,
+            "termination_reason": "hard-empty",
+        },
+    })
     monkeypatch.setattr(module, "_rows", lambda *_args: iter(rows))
 
     report = audit_wine_option_smoke(tmp_path)
     assert report["passed"] is True
     assert report["evidence_eligible"] is False
-    assert report["rejected_option_rows"] == 1
+    assert report["rejected_option_rows"] == 2
