@@ -2,7 +2,9 @@
 
 ## Current state
 
-`main` is a pruned infrastructure baseline. It intentionally has no authorized
+`main` is a pruned infrastructure baseline. The active
+`generation7-causal-policy-contract` branch implements G7-A and a stopped G7-B
+offline investigation. The repository intentionally has no authorized
 learner, candidate, canary, or final-evaluation runner. Generations 1--6 failed
 to demonstrate a repeatable reduction in complete-Stage physical HIT count;
 their algorithm code and scattered experiment contracts were removed. Their
@@ -12,6 +14,8 @@ original-Wine corpora were not changed and remain reusable through
 The terminal learner diagnosis, independent audit, disputed points, corpus
 statistics, and Generation-7 decisions are consolidated in
 `docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md`.
+G7-A/B implementation results and the current stop decision are in
+`docs/GENERATION7_PROGRESS.md`.
 
 ## Product objective
 
@@ -58,24 +62,25 @@ automatically a sample from one well-defined behavior policy `mu`. Any value or
 advantage learner must condition nuisance estimation on source/cohort (and
 stage where needed), or explicitly define a shared deployable reference policy.
 
-## Generation-7 order of work
+## Generation-7 status
 
-1. Repair the causal feature contract and enforce feature availability.
-2. Define one exact residual stochastic policy distribution shared by fitting,
-   OPE, shadow, and native deployment.
-3. Add bounded proper actor objectives and adversarial extreme-logit tests.
-4. Prove action-effect identifiability on existing randomized assignments with
-   null, delayed-effect, episode-bootstrap, and cross-source/stage gates.
-5. Compare baseline-relative orthogonal/direct advantage, one-step constrained
-   improvement, and repaired IQL plus proper AWR.
-6. Run richer causal-state and hazard-set ablations only after the compact
-   state baseline is measured.
-7. Collect new Wine data only after a specific support gap is demonstrated and
-   a generic one-deviation collection contract is frozen.
+1. G7-A causal feature, outcome, proper-objective, and exact-policy contracts
+   are implemented and tested.
+2. Raw IPW signal failed action/reward nulls; cross-fitted orthogonal signal
+   passed its exploratory nulls and was directionally stable across source and
+   stage.
+3. One-step direct and DR agree, but IPS and matched behavior-FQE disagree.
+4. Thirty-two-option sequential DR has catastrophic cumulative-weight support
+   (minimum fold ESS about 32.5; maximum weight about 1.27e9).
+5. Compact and history/hazard bilinear state ablations enlarge direct effects
+   without repairing estimator calibration.
+6. Proper AWR exists as a bounded challenger, but is not a candidate.
+7. Canonical IQL, G7-C collection, Wine shadow/canary/A-B, and deployment are
+   stopped and unauthorized.
 
-Do not run original-Wine outcome-facing experiments merely because an offline
-metric improves. Generation 7 must first pass its frozen learner-only gates,
-then exact policy conformance and latency, then an incumbent-occupancy shadow.
+The next research contract should narrow the estimand and solve calibration
+and overlap rather than add model capacity. Do not run original-Wine
+outcome-facing experiments merely because an offline metric improves.
 
 ## Operational discipline
 

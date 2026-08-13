@@ -1,7 +1,7 @@
 # Start here
 
 The repository contains a Wine-only environment/data/safety foundation and no
-authorized gameplay learner on `main`. Historical learner generations 1--6
+authorized gameplay learner. Historical learner generations 1--6
 were removed after their terminal audit; their immutable Wine facts remain in
 the capability-indexed corpus registry.
 
@@ -11,13 +11,15 @@ Read in this order:
 2. `AGENTS.md` for safety and scientific rules;
 3. `docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md` for the consolidated
    failure analysis and the frozen Generation-7 research direction;
-4. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the end-to-end contract;
-5. `docs/IMMUTABLE_WINE_DATA_PLANE.md` and
+4. `docs/GENERATION7_PROGRESS.md` for the implemented gates, full-corpus
+   offline findings, and current stop decision;
+5. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the end-to-end contract;
+6. `docs/IMMUTABLE_WINE_DATA_PLANE.md` and
    `config/wine_corpus_registry.json` for reusable factual data;
-6. `docs/REPOSITORY_PRUNE.md` for the removal/retention boundary;
-7. `docs/TRAINING_INFRA_PERFORMANCE.md` for historical performance and the
+7. `docs/REPOSITORY_PRUNE.md` for the removal/retention boundary;
+8. `docs/TRAINING_INFRA_PERFORMANCE.md` for historical performance and the
    failed concurrent-Wine differential;
-8. `docs/HARD_EMPTY_SOURCE_AUDIT.md` and `docs/WINE_RETAIL_VALIDATION.md`
+9. `docs/HARD_EMPTY_SOURCE_AUDIT.md` and `docs/WINE_RETAIL_VALIDATION.md`
    before gameplay-facing work.
 
 ## Non-negotiable separation
@@ -43,12 +45,14 @@ src/th06_rl/th06/       original-retail Wine capture/control adapter
 src/th06_rl/corpus.py   lossless factual recorder
 src/th06_rl/wine_*.py   immutable registry, validation, and worker infra
 src/th06_rl/policies/   generic safe exploration primitives only
+src/th06_rl/generation7/ causal contracts and offline-only G7 learners/OPE
 native/                 bounded geometry and retained scorer primitives
 scripts/                environment, replay, audit, and infra commands
 tests/                  active contract tests
 docs/                   current contracts and consolidated audit evidence
 ```
 
-Generation 7 is developed on a separate branch. No old generation command is
-an available fallback, and ignored artifacts or historical Git commits must
-not be restored into the active tree.
+Generation 7 is developed on `generation7-causal-policy-contract`. Its G7-B
+gates currently fail, so it is not a gameplay candidate. No old generation
+command is an available fallback, and ignored artifacts or historical Git
+commits must not be restored into the active tree.

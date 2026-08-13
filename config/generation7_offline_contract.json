@@ -1,0 +1,85 @@
+{
+  "schema": "generation7-offline-contract-v1",
+  "created_utc": "2026-08-13",
+  "wine_outcome_facing_authorized": false,
+  "required_corpus_capabilities": [
+    "factual_semi_markov_options",
+    "native_safe_candidates",
+    "sequential_offline_rl"
+  ],
+  "episode_grouping": "physical-run",
+  "cost": {
+    "name": "physical_hit_count",
+    "gamma": 1.0,
+    "terminal_value": 0.0,
+    "reward_shaping": false
+  },
+  "reference_policy": {
+    "schema": "incumbent-uniform-residual-v1",
+    "epsilon": 0.05,
+    "temperature": 1.0,
+    "maximum_log_tilt": 2.0
+  },
+  "actor": {
+    "objective": "nonnegative-awr-weighted-mle-plus-reference-kl",
+    "awr_temperature": 1.0,
+    "maximum_weight": 20.0,
+    "kl_coefficient": 0.05
+  },
+  "orthogonal_direct": {
+    "proximal_horizon_options": 32,
+    "effect_representation": "action_only",
+    "effect_representation_ablation": [
+      "action_only",
+      "compact_bilinear",
+      "richer_bilinear"
+    ],
+    "nuisance_ridge_alpha": 10.0,
+    "effect_ridge_alpha": 10.0,
+    "actor_epochs": 8,
+    "actor_learning_rate": 0.02,
+    "actor_l2": 0.001
+  },
+  "statistical_support": {
+    "minimum_factual_assignments_per_action": 100,
+    "minimum_episode_groups_per_action": 10
+  },
+  "fqe": {
+    "horizon_options": 32,
+    "ridge_alpha": 10.0
+  },
+  "ope_gates": {
+    "calibration_standard_errors": 2.0,
+    "minimum_sequential_dr_effective_sample_size": 500.0,
+    "maximum_sequential_dr_cumulative_weight": 1000.0,
+    "maximum_absolute_effect_prediction": 10.0
+  },
+  "variants": [
+    "baseline-relative-orthogonal-direct",
+    "one-step-reference-improvement",
+    "canonical-iql-proper-awr"
+  ],
+  "proximal_horizons_options": [1, 2, 4, 8, 16, 32],
+  "crossfit_folds": 5,
+  "bootstrap_replicates": 500,
+  "orthogonal_null_replicates": 100,
+  "seeds": {
+    "fold": 26081301,
+    "null": 26081302,
+    "bootstrap": 26081303,
+    "synthetic": 26081304
+  },
+  "required_gates": [
+    "feature-availability-lint",
+    "extreme-logit-proper-loss",
+    "hit-terminal-conservation",
+    "factual-action-permutation-null",
+    "reward-suffix-permutation-null",
+    "synthetic-delayed-effect",
+    "episode-bootstrap-sign-stability",
+    "cross-source-stage-direction-report",
+    "exact-policy-direct-dr-fqe-crosscheck"
+  ],
+  "new_collection_authorized": false,
+  "concurrent_wine_collection_authorized": false
+}

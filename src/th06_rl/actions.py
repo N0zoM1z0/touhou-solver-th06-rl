@@ -1,4 +1,4 @@
-"""Canonical movement/focus vocabulary used by retained learner generations."""
+"""Canonical movement/focus vocabulary exposed by the environment adapter."""
 
 ACTION_NAMES = (
     "stay",

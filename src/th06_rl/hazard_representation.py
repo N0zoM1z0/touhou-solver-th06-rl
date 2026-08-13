@@ -26,6 +26,13 @@ HAZARD_PRIMITIVE_FEATURE_NAMES = (
     "kind_segment",
     "kind_body",
 )
+HAZARD_SUMMARY_FEATURE_NAMES = (
+    *(f"mean_{name}" for name in HAZARD_PRIMITIVE_FEATURE_NAMES),
+    *(f"max_abs_{name}" for name in HAZARD_PRIMITIVE_FEATURE_NAMES),
+    "minimum_distance_unit",
+    "count_log",
+    "empty",
+)
 MAX_HAZARD_PRIMITIVES = 256
 HAZARD_CODEBOOK_SCHEMA = "game-neutral-hazard-codebook-v1"
 HAZARD_CODEBOOK_PROTOTYPES = 24
@@ -64,6 +71,46 @@ def hazard_codebook_feature_names(
         "hazard:count_log",
         "hazard:empty",
     )
+
+
+def summarize_hazard_primitives(
+    primitives: tuple[tuple[float, ...], ...],
+) -> tuple[float, ...]:
+    """Fixed, causal set summary used before any learned Deep Sets ablation."""
+    width = len(HAZARD_PRIMITIVE_FEATURE_NAMES)
+    if (
+        len(primitives) > MAX_HAZARD_PRIMITIVES
+        or any(len(row) != width for row in primitives)
+        or any(not math.isfinite(float(value)) for row in primitives for value in row)
+    ):
+        raise ValueError("hazard primitive set is invalid")
+    if primitives:
+        average = tuple(
+            sum(float(row[index]) for row in primitives) / len(primitives)
+            for index in range(width)
+        )
+        maximum = tuple(
+            max(abs(float(row[index])) for row in primitives)
+            for index in range(width)
+        )
+        distance_index = HAZARD_PRIMITIVE_FEATURE_NAMES.index("distance_unit")
+        minimum_distance = min(
+            float(row[distance_index]) for row in primitives
+        )
+    else:
+        average = (0.0,) * width
+        maximum = (0.0,) * width
+        minimum_distance = 0.0
+    result = (
+        *average,
+        *maximum,
+        minimum_distance,
+        math.log1p(len(primitives)),
+        float(not primitives),
+    )
+    if len(result) != len(HAZARD_SUMMARY_FEATURE_NAMES):
+        raise RuntimeError("hazard summary width drifted")
+    return tuple(result)
 
 
 def encode_hazard_set(

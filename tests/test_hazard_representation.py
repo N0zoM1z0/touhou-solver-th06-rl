@@ -3,13 +3,25 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from th06_rl.hazard_representation import (
+    HAZARD_SUMMARY_FEATURE_NAMES,
     HAZARD_PRIMITIVE_FEATURE_NAMES,
     HISTORY_FEATURE_NAMES,
     MAX_HAZARD_PRIMITIVES,
     make_history_observation,
     project_hazard_primitives,
     project_history_features,
+    summarize_hazard_primitives,
 )
+
+
+def test_fixed_hazard_summary_is_bounded_width_and_empty_aware() -> None:
+    empty = summarize_hazard_primitives(())
+    assert len(empty) == len(HAZARD_SUMMARY_FEATURE_NAMES)
+    assert empty[-1] == 1.0
+    row = tuple(float(index) for index in range(14))
+    populated = summarize_hazard_primitives((row, row))
+    assert populated[-1] == 0.0
+    assert populated[-2] > 0.0
 
 
 def _snapshot(*, bullets=(), lasers=(), enemies=(), frame=10):
