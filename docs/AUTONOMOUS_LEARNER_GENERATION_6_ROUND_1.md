@@ -9,6 +9,15 @@ observed gameplay location. The machine contract is frozen before collection;
 after freezing, outcome-facing code, schedules, seeds, gates, and mixtures do
 not change.
 
+The machine contract is `config/autonomous_generation6_round1.json`, SHA-256
+`d733d919726393b60d243b1be2501cc0a57888b1c8e588ed34d257a0aa081a52`.
+It binds implementation checkpoint `c1db773`, the base registry, complete
+source-game inventory, original executable, Wine binary, controller/scorer
+binaries, current Generation-6 actor, all learner/runner inputs, every policy
+seed, and the exact evidence schedule. The two policy files differ from their
+pre-authorization hashes only by adding this contract digest to their explicit
+allowlists.
+
 The round state machine is:
 
 `12 Wine Stages -> append registry -> all-corpus cross-fit/refit -> full native smoke -> 2 Wine canaries -> 12 Stage-6 A/B Stages`

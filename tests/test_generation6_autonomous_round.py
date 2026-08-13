@@ -80,6 +80,7 @@ def _contract():
         "environment": {
             "game_cpu_list": ",".join(map(str, cpus[:2])),
             "controller_cpu_list": ",".join(map(str, cpus[2:])),
+            "source_game_inventory_sha256": "g" * 64,
         },
         "offline": {
             "crossfit_seed": 4_000,

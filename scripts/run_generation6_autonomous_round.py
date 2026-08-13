@@ -239,6 +239,7 @@ def _validate_contract_shape(contract: dict[str, object]) -> None:
         game_cpus & controller_cpus
         or len(game_cpus | controller_cpus) > 32
         or not (game_cpus | controller_cpus) <= set(os.sched_getaffinity(0))
+        or len(str(environment.get("source_game_inventory_sha256", ""))) != 64
     ):
         raise ValueError("Generation-6 Wine CPU partition is invalid")
     if (
@@ -710,6 +711,9 @@ def run(args: argparse.Namespace) -> int:
         worker=0,
         directory=str(environment["worker_directory"]),
         display=str(environment["display"]),
+        source_inventory_sha256=str(
+            environment["source_game_inventory_sha256"]
+        ),
     )
     accepted = root / "accepted-corpus"
     for row in schedule[len(state["collection"]):]:

@@ -53,3 +53,20 @@ def test_wine_worker_rejects_contract_drift(tmp_path: Path) -> None:
             directory="wine-0",
             display=":101",
         )
+
+
+def test_wine_worker_rejects_frozen_source_inventory_drift(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "東方紅魔郷.exe").write_bytes(b"retail")
+    with pytest.raises(ValueError, match="source-game inventory differs"):
+        prepare_wine_worker(
+            root=tmp_path / "workers",
+            source_game_dir=source,
+            worker=0,
+            directory="wine-0",
+            display=":91",
+            source_inventory_sha256="0" * 64,
+        )

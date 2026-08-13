@@ -75,7 +75,13 @@ def prepare_wine_worker(
     executable = source_game_dir / RETAIL_EXECUTABLE
     if not executable.is_file() or executable.is_symlink():
         raise FileNotFoundError(executable)
-    inventory = source_inventory_sha256 or _inventory_sha256(source_game_dir)
+    actual_inventory = _inventory_sha256(source_game_dir)
+    if (
+        source_inventory_sha256 is not None
+        and actual_inventory != source_inventory_sha256
+    ):
+        raise ValueError("Wine worker source-game inventory differs")
+    inventory = source_inventory_sha256 or actual_inventory
     expected = {
         "schema": WORKER_SCHEMA,
         "worker": worker,

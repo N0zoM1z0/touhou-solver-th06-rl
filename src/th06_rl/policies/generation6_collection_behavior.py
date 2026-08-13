@@ -30,7 +30,9 @@ POLICY_NAME = "propensity-aware-option-exploration-v1"
 ACTOR_MASS = 0.50
 UNIFORM_MASS = 0.25
 ESS_MASS = 0.25
-ALLOWED_COLLECTION_CONTRACT_SHA256: frozenset[str] = frozenset()
+ALLOWED_COLLECTION_CONTRACT_SHA256: frozenset[str] = frozenset((
+    "d733d919726393b60d243b1be2501cc0a57888b1c8e588ed34d257a0aa081a52",
+))
 _ACTION_INDEX = {action: index for index, action in enumerate(ACTION_NAMES)}
 
 
