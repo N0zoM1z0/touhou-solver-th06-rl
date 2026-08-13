@@ -17,6 +17,12 @@ import sys
 import time
 from typing import Any
 
+REPOSITORY = Path(__file__).resolve().parents[1]
+if str(REPOSITORY / "src") not in sys.path:
+    sys.path.insert(0, str(REPOSITORY / "src"))
+
+from th06_rl.process_priority import ProcessPriorityContract, validate_nice
+
 
 RETAIL_SHA256 = "9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb852245"
 RETAIL_EXECUTABLE = "東方紅魔郷.exe"
@@ -24,6 +30,17 @@ STARTUP_MARKER = "TH06_RL_WINE_STARTUP normalized=1"
 FULL_UNLOCK_SCORE_SHA256 = "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e94d26b749c71"
 _PRACTICE_COMPLETE_RE = re.compile(
     rb"Practice Stage (\d+) complete; physical_hits=(\d+)"
+)
+_PRIORITY_ENVIRONMENT = (
+    "DISPLAY",
+    "LANG",
+    "LC_ALL",
+    "LP_NUM_THREADS",
+    "MESA_GLTHREAD",
+    "TH06_RL_OFFLINE_SCORER_LIBRARY",
+    "WINEDEBUG",
+    "WINEDLLOVERRIDES",
+    "WINEPREFIX",
 )
 
 
@@ -98,6 +115,7 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
         "max_bullets": 0,
         "physical_hit_events": None,
         "physical_hits_in_run": 0,
+        "source_exact_hard_fallbacks": 0,
         "decisions": None,
         "last_policy_metrics": None,
         "corpus_run_ids": [],
@@ -134,6 +152,8 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
                 "authority-stop:physical HIT",
             }:
                 summary["physical_hits_in_run"] += 1
+            if record.get("hard_collision_margin") == 0.0:
+                summary["source_exact_hard_fallbacks"] += 1
     summary["event_counts"] = dict(sorted(events.items()))
     summary["corpus_run_ids"] = sorted(corpus_run_ids)
     if frames:
@@ -176,6 +196,77 @@ def _stop_process(process: subprocess.Popen[Any] | None, timeout: float = 5.0) -
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=timeout)
+
+
+def _attested_process_pid(
+    path: Path, host_process: subprocess.Popen[Any], timeout: float = 10.0,
+) -> int:
+    """Resolve the exec child hidden behind sudo's monitor process."""
+    deadline = time.monotonic() + timeout
+    last_error = "attestation was not created"
+    while time.monotonic() < deadline:
+        attestation = _priority_attestation(path)
+        if isinstance(attestation, dict):
+            pid = attestation.get("pid")
+            if (
+                attestation.get("schema") == "bounded-wine-process-priority-v1"
+                and isinstance(pid, int)
+                and pid > 1
+                and (Path("/proc") / str(pid)).is_dir()
+            ):
+                return pid
+            last_error = str(attestation.get("error", "invalid attested PID"))
+        if host_process.poll() is not None:
+            raise RuntimeError(
+                "bounded-priority child exited before PID attestation"
+            )
+        time.sleep(0.01)
+    raise TimeoutError(
+        f"bounded-priority child PID attestation timed out: {last_error}"
+    )
+
+
+def _wait_prefix_exit(prefix: Path, timeout: float = 5.0) -> None:
+    """Allow Wine's per-prefix helper children to finish after wineserver -k."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and _prefix_processes(prefix):
+        time.sleep(0.05)
+
+
+def _bounded_priority_command(
+    command: list[str], *, cpu_list: str, nice: int, attestation: Path,
+) -> list[str]:
+    """Build the fail-closed host wrapper for one latency-sensitive child."""
+    ProcessPriorityContract.from_values(nice=nice, cpu_list=cpu_list)
+    return [
+        "sudo",
+        "-n",
+        "--preserve-env=" + ",".join(_PRIORITY_ENVIRONMENT),
+        sys.executable,
+        str(Path(__file__).resolve().with_name("exec_bounded_priority.py")),
+        "--nice",
+        str(nice),
+        "--cpu-list",
+        cpu_list,
+        "--attestation",
+        str(attestation),
+        "--",
+        *command,
+    ]
+
+
+def _priority_attestation(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise TypeError("attestation root is not an object")
+        return value
+    except (OSError, TypeError, ValueError) as error:
+        # Preserve the run report so its strict outer audit can fail closed
+        # with the malformed attestation as explicit evidence.
+        return {"error": f"{type(error).__name__}: {error}"}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -242,6 +333,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "mode does not patch lives"
         ),
     )
+    parser.add_argument(
+        "--complete-stage-training-corpus-root",
+        type=Path,
+        help=(
+            "collect one patched-life, HIT-continuation Practice Stage for "
+            "factual offline-RL training; RNG is natural unless an explicit "
+            "diagnostic seed is supplied"
+        ),
+    )
+    parser.add_argument(
+        "--option-smoke-corpus-root",
+        type=Path,
+        help=(
+            "collect a fixed-RNG, time-bounded, patched-life option corpus "
+            "for non-evidence Generation-3 wiring smoke only"
+        ),
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--practice-stage", type=int, choices=range(1, 7))
     mode.add_argument("--start-route", action="store_true")
@@ -274,6 +382,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--display", default=":97")
+    parser.add_argument(
+        "--game-cpu-list",
+        help="optional taskset CPU list reserved for the retail Wine process tree",
+    )
+    parser.add_argument(
+        "--controller-cpu-list",
+        help="optional disjoint taskset CPU list reserved for the controller",
+    )
+    parser.add_argument(
+        "--game-nice",
+        type=int,
+        help="bounded SCHED_OTHER nice value for the retail Wine process tree",
+    )
+    parser.add_argument(
+        "--controller-nice",
+        type=int,
+        help="bounded SCHED_OTHER nice value for the controller process tree",
+    )
     parser.add_argument("--artifact-dir", type=Path)
     args = parser.parse_args(argv)
     if args.seconds < 0:
@@ -291,16 +417,84 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error(
                 "first-failure corpus collection requires --immutable-policy"
             )
+    corpus_modes = sum(
+        value is not None
+        for value in (
+            args.first_failure_corpus_root,
+            args.complete_stage_training_corpus_root,
+            args.option_smoke_corpus_root,
+        )
+    )
+    if corpus_modes > 1:
+        parser.error("Wine corpus modes are mutually exclusive")
+    if args.complete_stage_training_corpus_root is not None:
+        if args.start_route:
+            parser.error("complete-Stage training corpus currently requires Practice")
+        if args.seconds != 0.0:
+            parser.error("complete-Stage training corpus requires --seconds 0")
+        if not args.immutable_policy:
+            parser.error(
+                "complete-Stage training corpus requires --immutable-policy"
+            )
+    if args.option_smoke_corpus_root is not None:
+        if args.start_route:
+            parser.error("option smoke currently requires Practice")
+        if args.seconds <= 0.0:
+            parser.error("option smoke requires a positive --seconds limit")
+        if not args.immutable_policy:
+            parser.error("option smoke requires --immutable-policy")
+        if args.diagnostic_rng_seed is None:
+            parser.error("option smoke requires --diagnostic-rng-seed")
     if (
         args.diagnostic_rng_seed is not None
         and args.first_failure_corpus_root is None
+        and args.complete_stage_training_corpus_root is None
+        and args.option_smoke_corpus_root is None
     ):
         parser.error(
             "--diagnostic-rng-seed is training-only and requires "
-            "--first-failure-corpus-root"
+            "a declared corpus root"
         )
     if not args.display.startswith(":") or not args.display[1:].isdigit():
         parser.error("--display must look like :97")
+    if bool(args.game_cpu_list) != bool(args.controller_cpu_list):
+        parser.error("game/controller CPU lists must be declared together")
+    if bool(args.game_nice is not None) != bool(args.controller_nice is not None):
+        parser.error("game/controller nice values must be declared together")
+    if args.game_nice is not None and not args.game_cpu_list:
+        parser.error("bounded process priority requires explicit CPU partitions")
+    for value in (args.game_nice, args.controller_nice):
+        if value is not None:
+            try:
+                validate_nice(value)
+            except ValueError as error:
+                parser.error(str(error))
+    if args.game_cpu_list:
+        def cpu_set(value: str) -> set[int]:
+            completed = subprocess.run(
+                ["taskset", "-c", value, "true"], check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            if completed.returncode:
+                parser.error(f"invalid taskset CPU list: {value}")
+            result = set()
+            for part in value.split(","):
+                bounds = part.split("-", 1)
+                start = int(bounds[0])
+                stop = int(bounds[-1])
+                result.update(range(start, stop + 1))
+            return result
+        game_cpus = cpu_set(args.game_cpu_list)
+        controller_cpus = cpu_set(args.controller_cpu_list)
+        inherited = set(os.sched_getaffinity(0))
+        if (
+            not game_cpus or not controller_cpus
+            or game_cpus & controller_cpus
+            or not ((game_cpus | controller_cpus) <= inherited)
+        ):
+            parser.error(
+                "game/controller CPU lists must be nonempty, disjoint, and inherited"
+            )
     if args.artifact_dir is None:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         args.artifact_dir = (
@@ -345,6 +539,16 @@ def run(args: argparse.Namespace) -> int:
         if args.first_failure_corpus_root is not None
         else None
     )
+    complete_stage_training_corpus_root = (
+        args.complete_stage_training_corpus_root.resolve()
+        if args.complete_stage_training_corpus_root is not None
+        else None
+    )
+    option_smoke_corpus_root = (
+        args.option_smoke_corpus_root.resolve()
+        if args.option_smoke_corpus_root is not None
+        else None
+    )
     artifact_dir = args.artifact_dir.resolve()
     artifact_dir.mkdir(parents=True, exist_ok=False)
     report_path = artifact_dir / "report.json"
@@ -361,7 +565,15 @@ def run(args: argparse.Namespace) -> int:
         "immutable_policy": args.immutable_policy,
         "diagnostic_rng_seed": args.diagnostic_rng_seed,
         "evaluation_mode": (
-            "fixed-rng-first-failure-training"
+            (
+                "fixed-rng-complete-stage-training"
+                if args.diagnostic_rng_seed is not None
+                else "natural-rng-complete-stage-training"
+            )
+            if complete_stage_training_corpus_root is not None
+            else "fixed-rng-option-smoke-non-evidence"
+            if option_smoke_corpus_root is not None
+            else "fixed-rng-first-failure-training"
             if args.diagnostic_rng_seed is not None
             else "first-failure-corpus"
             if first_failure_corpus_root is not None
@@ -372,7 +584,21 @@ def run(args: argparse.Namespace) -> int:
             if first_failure_corpus_root is not None
             else None
         ),
+        "complete_stage_training_corpus_root": (
+            str(complete_stage_training_corpus_root)
+            if complete_stage_training_corpus_root is not None
+            else None
+        ),
+        "option_smoke_corpus_root": (
+            str(option_smoke_corpus_root)
+            if option_smoke_corpus_root is not None
+            else None
+        ),
         "display": args.display,
+        "game_cpu_list": args.game_cpu_list,
+        "controller_cpu_list": args.controller_cpu_list,
+        "game_nice": args.game_nice,
+        "controller_nice": args.controller_nice,
         "wine_prefix": str(prefix),
         "retail_executable": str(executable),
         "expected_retail_sha256": RETAIL_SHA256,
@@ -554,8 +780,21 @@ def run(args: argparse.Namespace) -> int:
             )
             prefix_marker.write_text("wine-11.0 headless retail\n", encoding="utf-8")
 
+        game_command = [str(args.wine), f"./{RETAIL_EXECUTABLE}"]
+        game_priority_path = artifact_dir / "game-priority.json"
+        controller_priority_path = artifact_dir / "controller-priority.json"
+        if args.game_nice is not None:
+            game_command = _bounded_priority_command(
+                game_command,
+                cpu_list=args.game_cpu_list,
+                nice=args.game_nice,
+                attestation=game_priority_path,
+            )
+        elif args.game_cpu_list:
+            game_command = ["taskset", "-c", args.game_cpu_list, *game_command]
+        report["game_host_command"] = game_command
         game_process = subprocess.Popen(
-            [str(args.wine), f"./{RETAIL_EXECUTABLE}"],
+            game_command,
             cwd=game_dir,
             env=environment,
             stdin=subprocess.DEVNULL,
@@ -563,6 +802,13 @@ def run(args: argparse.Namespace) -> int:
             stderr=subprocess.STDOUT,
         )
         report["game_host_pid"] = game_process.pid
+        if args.game_nice is not None:
+            game_target_pid = _attested_process_pid(
+                game_priority_path, game_process
+            )
+        else:
+            game_target_pid = game_process.pid
+        report["game_process_pid"] = game_target_pid
         time.sleep(1.0)
         gdb_result = subprocess.run(
             [
@@ -573,7 +819,7 @@ def run(args: argparse.Namespace) -> int:
                 "-nx",
                 "-batch",
                 "-p",
-                str(game_process.pid),
+                str(game_target_pid),
                 "-x",
                 str(repository / "scripts/gdb/normalize_wine_retail_startup.py"),
             ],
@@ -618,7 +864,21 @@ def run(args: argparse.Namespace) -> int:
                 "--diagnostic-rng-seed",
                 hex(args.diagnostic_rng_seed),
             ))
-        if first_failure_corpus_root is None:
+        if complete_stage_training_corpus_root is not None:
+            controller.extend((
+                "--patch-lives",
+                "--continuous-stage",
+                "--corpus-root",
+                _windows_path(complete_stage_training_corpus_root),
+            ))
+        elif option_smoke_corpus_root is not None:
+            controller.extend((
+                "--patch-lives",
+                "--continuous-stage",
+                "--corpus-root",
+                _windows_path(option_smoke_corpus_root),
+            ))
+        elif first_failure_corpus_root is None:
             controller.extend(("--patch-lives", "--continuous-stage", "--no-corpus"))
         else:
             controller.extend(
@@ -645,8 +905,21 @@ def run(args: argparse.Namespace) -> int:
         if args.immutable_policy:
             controller.append("--immutable-policy")
         report["controller_command"] = controller
+        controller_host_command = controller
+        if args.controller_nice is not None:
+            controller_host_command = _bounded_priority_command(
+                controller,
+                cpu_list=args.controller_cpu_list,
+                nice=args.controller_nice,
+                attestation=controller_priority_path,
+            )
+        elif args.controller_cpu_list:
+            controller_host_command = [
+                "taskset", "-c", args.controller_cpu_list, *controller
+            ]
+        report["controller_host_command"] = controller_host_command
         result = subprocess.run(
-            controller,
+            controller_host_command,
             cwd=repository,
             env=environment,
             stdin=subprocess.DEVNULL,
@@ -685,6 +958,10 @@ def run(args: argparse.Namespace) -> int:
                 stderr=subprocess.DEVNULL,
             )
         _stop_process(xvfb_process)
+        if prefix_owned:
+            # dbus-launch --autolaunch is tied to the private X display and
+            # cannot exit while Xvfb is still alive.
+            _wait_prefix_exit(prefix)
         controller_log.close()
         game_log.close()
         xvfb_log.close()
@@ -713,6 +990,12 @@ def run(args: argparse.Namespace) -> int:
         if score.is_file():
             report["score_sha256_after"] = _sha256(score)
         report["leftover_prefix_processes"] = _prefix_processes(prefix)
+        report["game_priority_attestation"] = _priority_attestation(
+            artifact_dir / "game-priority.json"
+        )
+        report["controller_priority_attestation"] = _priority_attestation(
+            artifact_dir / "controller-priority.json"
+        )
         report["finished_utc"] = datetime.now(timezone.utc).isoformat()
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"

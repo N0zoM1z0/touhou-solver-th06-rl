@@ -20,10 +20,21 @@ from th06_rl.policies.offline_ranker import (
     MODEL_SCHEMA,
     STATE_SCHEMA,
     OfflineRankerPolicy,
+    NativeXGBoostPopulation,
     NativeXGBoostRegressor,
+    NativePrototypeSupport,
+    PortablePrototypeSupport,
     PortableXGBoostRegressor,
 )
 from th06_rl.policy_api import PolicyContext
+from th06_rl.hazard_representation import (
+    HAZARD_PRIMITIVE_FEATURE_NAMES,
+    NativeHazardCodebookEncoder,
+)
+from th06_rl.advantage_learning import (
+    encode_hazard_set,
+    hazard_codebook_feature_names,
+)
 
 
 def _state(mode: str, *, selection: dict[str, object] | None = None) -> dict[str, object]:
@@ -179,4 +190,54 @@ def test_isolated_native_batch_scorer_matches_portable_model(tmp_path: Path) -> 
     assert native.predict_many(rows) == pytest.approx(
         portable.predict_many(rows),
         abs=1e-6,
+    )
+    population = NativeXGBoostPopulation(
+        library,
+        expected_sha256=hashlib.sha256(library.read_bytes()).hexdigest(),
+        portable=[portable, portable, portable],
+    )
+    assert population.predict_many(rows) == pytest.approx([
+        portable.predict_many(rows),
+        portable.predict_many(rows),
+        portable.predict_many(rows),
+    ], abs=1e-6)
+
+    support_artifact = {
+        "mean": [0.5, 1.0],
+        "scale": [2.0, 4.0],
+        "prototypes": [[[0.0, 0.0]]] * 18,
+    }
+    portable_support = PortablePrototypeSupport(
+        support_artifact, feature_count=2
+    )
+    native_support = NativePrototypeSupport(
+        library,
+        expected_sha256=hashlib.sha256(library.read_bytes()).hexdigest(),
+        portable=portable_support,
+    )
+    queries = [[0.5, 1.0], [2.5, 5.0]]
+    assert native_support.distances(queries, [0, 17]) == pytest.approx(
+        portable_support.distances(queries, [0, 17]), abs=1e-6
+    )
+
+    codebook = {
+        "schema": "game-neutral-hazard-codebook-v1",
+        "primitive_feature_names": list(HAZARD_PRIMITIVE_FEATURE_NAMES),
+        "prototype_count": 24,
+        "mean": [0.5] * 14,
+        "scale": [2.0] * 14,
+        "prototypes": [[float(index) / 24.0] * 14 for index in range(24)],
+    }
+    primitives = (
+        tuple(float(index) / 10.0 for index in range(14)),
+        tuple(float(index) / 20.0 for index in range(14)),
+    )
+    native_codebook = NativeHazardCodebookEncoder(
+        library,
+        expected_sha256=hashlib.sha256(library.read_bytes()).hexdigest(),
+        artifact=codebook,
+        output_count=len(hazard_codebook_feature_names()),
+    )
+    assert native_codebook.encode(primitives) == pytest.approx(
+        encode_hazard_set(primitives, codebook), abs=2e-6
     )

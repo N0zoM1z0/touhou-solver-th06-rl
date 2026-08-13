@@ -44,6 +44,13 @@ update weights. Split training and validation by complete physical episode,
 never by adjacent frame. A learned policy defaults to the frozen incumbent
 outside supported physical features and abstains on model disagreement.
 
+Generation 6's `action_centered_actor_losses` is a historical diagnostic, not
+an allowed optimization objective. Its per-row control variate is unbiased for
+a fixed model but unbounded below under empirical actor optimization; the
+56-episode fit exploited it and failed original-Wine confirmation. Do not refit
+or extend that actor ERM. Any successor must use a bounded proper objective and
+pass an extreme-logit anti-exploitation smoke before Wine gameplay.
+
 ## Autonomous-learning boundary
 
 Gameplay improvement belongs to the fixed learning algorithm and repeated
@@ -83,7 +90,7 @@ context may partition evidence but may not select a handwritten route.
 ## Physical-run safety
 
 - Stop on the first HIT, authority failure, or Bomb request unless running an
-  explicitly marked full-Stage HIT-continuation evaluation.
+  explicitly marked complete-Stage HIT-continuation training or evaluation.
 - Menu/dialogue control stays separate from battle movement.
 - Never launch the Windows game through a PTY.
 - Release every input, stop the exact trial PID, and check for leftover game,

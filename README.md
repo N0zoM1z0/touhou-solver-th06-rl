@@ -19,6 +19,14 @@ learning and defaults to the frozen incumbent outside independently supported
 regions. Policy quality is improved by unattended data rounds, never by
 hand-tuning a failure location.
 
+Corpus, learner/framework, and fitted result have independent identities and
+lifecycles. A corpus is immutable reusable Wine evidence, not property of the
+algorithm that first used it. Replacing or repairing a learner must replay all
+compatible registered episodes before collecting more gameplay, so different
+offline RL methods can be compared on the same facts without changing their
+distribution. The normative contract is
+[docs/IMMUTABLE_WINE_DATA_PLANE.md](docs/IMMUTABLE_WINE_DATA_PLANE.md).
+
 The reconstructed Linux/headless simulator is retired from the learning and
 evaluation path. Historical scripts remain only as unreferenced quarantine
 until a separate cleanup removes code proven unused by the Wine-only path.
@@ -34,15 +42,16 @@ complete original-retail Wine Practice Stages with HIT continuation. Fixed RNG,
 accelerated Wine, first-failure prefixes, shadow replay, and offline metrics may
 reject or select a candidate, but may not promote one.
 
-Run one fully predeclared, resumable generation with:
+Run the current fully predeclared, resumable Generation-6 round with:
 
 ```bash
-PYTHONPATH=.:src .venv/bin/python scripts/run_autonomous_learning.py \
-  --output-root artifacts/autonomous-wine-generation-1
+PYTHONPATH=.:src .venv/bin/python scripts/run_generation6_autonomous_round.py \
+  --contract config/autonomous_generation6_round1.json \
+  --output-root artifacts/autonomous-generation-6-round-1
 ```
 
-The default generation owns two collection/fit rounds, held-out shadow,
-bounded Wine canaries, and (only after those gates pass) alternating complete
-Stage A/B. `generation.json` is the crash/audit ledger. Do not alter generation
-parameters after it has been created; start a new generation for a general
-algorithm change.
+The contract owns twelve balanced collection Stages, an all-registry grouped
+refit, full Linux/Wine native smoke, bounded Wine canaries, and (only after
+those gates pass) twelve alternating complete-Stage-6 A/B trials.
+`generation.json` is the crash/audit ledger. Do not alter the contract after it
+has been allowlisted; start a new round for a general algorithm change.

@@ -24,6 +24,11 @@ def write(address: int, payload: bytes) -> None:
     inferior.write_memory(address, payload)
 
 
+# Wine legitimately uses SIGUSR1 while a freshly attached process is still
+# starting. GDB's default stop would return from `continue` before TH06 reaches
+# the authoritative timing-loop breakpoint and make a successful attach look
+# like a version mismatch. Pass the signal through and keep waiting.
+gdb.execute("handle SIGUSR1 nostop noprint pass", to_string=True)
 stop = gdb.Breakpoint(f"*0x{BREAKPOINT:08x}", internal=False)
 gdb.execute("continue", to_string=True)
 stop.delete()

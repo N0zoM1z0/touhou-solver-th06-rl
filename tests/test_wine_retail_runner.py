@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
 from scripts.run_wine_retail import (
+    _attested_process_pid,
+    _bounded_priority_command,
     _summarize_controller_completion,
     _summarize_trace,
     _windows_path,
@@ -32,6 +37,7 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
             "frame": 121,
             "bullets": 9,
             "reason": "physical-hit",
+            "hard_collision_margin": 0.0,
             "policy": {
                 "metrics": {"physical_hit_events": 2, "decisions": 77}
             },
@@ -48,6 +54,7 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
     assert summary["max_bullets"] == 9
     assert summary["physical_hit_events"] == 2
     assert summary["physical_hits_in_run"] == 1
+    assert summary["source_exact_hard_fallbacks"] == 1
     assert summary["decisions"] == 77
     assert summary["corpus_run_ids"] == ["run-a"]
     assert summary["last_policy_metrics"] == {
@@ -126,6 +133,64 @@ def test_runner_accepts_isolated_offline_scorer(tmp_path: Path) -> None:
     assert args.policy_scorer_library == scorer
 
 
+def test_runner_requires_bounded_priority_as_a_complete_cpu_contract(
+    tmp_path: Path,
+) -> None:
+    cpus = sorted(os.sched_getaffinity(0))[:4]
+    common = [
+        "--practice-stage", "6",
+        "--artifact-dir", str(tmp_path / "run"),
+        "--game-cpu-list", ",".join(map(str, cpus[:2])),
+        "--controller-cpu-list", ",".join(map(str, cpus[2:])),
+    ]
+    with pytest.raises(SystemExit):
+        parse_args([*common, "--game-nice", "-10"])
+    with pytest.raises(SystemExit):
+        parse_args([
+            *common, "--game-nice", "-16", "--controller-nice", "-10"
+        ])
+
+    args = parse_args([
+        *common, "--game-nice", "-10", "--controller-nice", "-10"
+    ])
+    assert args.game_nice == args.controller_nice == -10
+
+
+def test_bounded_priority_wrapper_is_explicit_and_attested(tmp_path: Path) -> None:
+    command = _bounded_priority_command(
+        ["wine", "game.exe"],
+        cpu_list="8-31",
+        nice=-10,
+        attestation=tmp_path / "priority.json",
+    )
+
+    assert command[:3] == [
+        "sudo", "-n",
+        "--preserve-env=DISPLAY,LANG,LC_ALL,LP_NUM_THREADS,MESA_GLTHREAD,"
+        "TH06_RL_OFFLINE_SCORER_LIBRARY,WINEDEBUG,WINEDLLOVERRIDES,WINEPREFIX",
+    ]
+    assert command[command.index("--nice") + 1] == "-10"
+    assert command[command.index("--cpu-list") + 1] == "8-31"
+    assert command[-2:] == ["wine", "game.exe"]
+
+
+def test_attested_child_pid_bypasses_sudo_monitor_pid(tmp_path: Path) -> None:
+    process = subprocess.Popen([
+        sys.executable, "-c", "import time; time.sleep(30)"
+    ])
+    try:
+        attestation = tmp_path / "priority.json"
+        attestation.write_text(json.dumps({
+            "schema": "bounded-wine-process-priority-v1",
+            "pid": os.getpid(),
+        }), encoding="utf-8")
+        assert _attested_process_pid(attestation, process) == os.getpid()
+        assert process.pid != os.getpid()
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
+
+
 def test_first_failure_corpus_requires_frozen_natural_practice(
     tmp_path: Path,
 ) -> None:
@@ -197,3 +262,63 @@ def test_fixed_rng_is_allowed_only_for_training_corpus(tmp_path: Path) -> None:
         str(tmp_path / "corpus"),
     ])
     assert args.diagnostic_rng_seed == 0x1234
+
+
+def test_complete_stage_training_corpus_allows_natural_or_fixed_rng_and_requires_immutable(
+    tmp_path: Path,
+) -> None:
+    root = str(tmp_path / "complete-corpus")
+    with pytest.raises(SystemExit):
+        parse_args([
+            "--practice-stage", "6",
+            "--complete-stage-training-corpus-root", root,
+        ])
+    args = parse_args([
+        "--practice-stage", "6",
+        "--complete-stage-training-corpus-root", root,
+        "--immutable-policy",
+        "--exploration-rate", "0",
+    ])
+    assert args.complete_stage_training_corpus_root == tmp_path / "complete-corpus"
+    assert args.diagnostic_rng_seed is None
+    fixed = parse_args([
+        "--practice-stage", "6",
+        "--complete-stage-training-corpus-root", root,
+        "--diagnostic-rng-seed", "123",
+        "--immutable-policy",
+        "--exploration-rate", "0",
+    ])
+    assert fixed.diagnostic_rng_seed == 123
+
+
+def test_option_smoke_is_time_bounded_fixed_rng_and_non_evidence(
+    tmp_path: Path,
+) -> None:
+    root = str(tmp_path / "smoke-corpus")
+    common = [
+        "--practice-stage", "6",
+        "--option-smoke-corpus-root", root,
+        "--immutable-policy",
+        "--exploration-rate", "0",
+        "--diagnostic-rng-seed", "0xd53c",
+    ]
+    with pytest.raises(SystemExit):
+        parse_args(common)
+    args = parse_args([*common, "--seconds", "45"])
+    assert args.option_smoke_corpus_root == tmp_path / "smoke-corpus"
+    assert args.seconds == 45.0
+
+
+def test_option_smoke_is_exclusive_with_evidence_corpus_modes(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(SystemExit):
+        parse_args([
+            "--practice-stage", "6",
+            "--option-smoke-corpus-root", str(tmp_path / "smoke"),
+            "--complete-stage-training-corpus-root", str(tmp_path / "training"),
+            "--seconds", "45",
+            "--immutable-policy",
+            "--exploration-rate", "0",
+            "--diagnostic-rng-seed", "1",
+        ])

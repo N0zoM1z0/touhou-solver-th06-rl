@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Run Generation-6 nested cross-fit actor policy-effect contracts."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+REPOSITORY = Path(__file__).resolve().parents[1]
+if str(REPOSITORY / "src") not in sys.path:
+    sys.path.insert(0, str(REPOSITORY / "src"))
+
+from th06_rl.iql_actor_learning import (  # noqa: E402
+    run_cross_fitted_iql_actor_policy_smoke,
+)
+from th06_rl.resource_control import enforce_training_cpu_affinity  # noqa: E402
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--threads", type=int, default=8)
+    args = parser.parse_args(argv)
+    if args.output.exists():
+        raise FileExistsError(f"refusing to replace smoke report: {args.output}")
+    affinity = enforce_training_cpu_affinity(args.threads)
+    report = run_cross_fitted_iql_actor_policy_smoke(threads=args.threads)
+    report["resource_contract"] = affinity.as_dict()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps({
+        "output": str(args.output),
+        "passed": report["passed"],
+        "delayed_effect_policy": report["delayed_effect_policy"],
+        "null_effect_policy": report["null_effect_policy"],
+    }, sort_keys=True))
+    return 0 if report["passed"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

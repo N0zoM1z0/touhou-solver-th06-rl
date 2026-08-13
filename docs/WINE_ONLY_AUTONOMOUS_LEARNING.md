@@ -30,6 +30,12 @@ A TH08 port should supply another adapter and scope configuration while reusing
 the exploration, transition schema, grouped fitting, shadow/canary gates,
 orchestration, and evaluation aggregation unchanged.
 
+Collected facts are not owned by a learner generation. The immutable Wine data
+plane, replaceable algorithm, and fitted model artifact are separate contracts.
+Learners query the capability registry for the minimum semantics they need and
+reuse every compatible episode; they may not recollect data merely because the
+model family changed. See `IMMUTABLE_WINE_DATA_PLANE.md`.
+
 ## No human gameplay tuning
 
 After a run, poor survival or a high HIT count is training data, not permission
@@ -80,15 +86,21 @@ atomically:
    rules between these states.
 
 The process may be interrupted and resumed without replaying completed work.
-It never starts concurrent Wine instances. Offline fitting may parallelize.
+Training collection may use concurrent original-Wine workers only after a
+normal-speed differential compatibility gate. Each worker must have an
+isolated game directory, Wine prefix, display, artifact directory, and corpus
+root; each remains paced by the original 60 Hz executable and passes the same
+per-run audit before merge. Canary and final evaluation remain single-instance,
+alternating, normal-speed jobs. Offline fitting may parallelize.
 
-The implemented entrypoint is `scripts/run_autonomous_learning.py`. Its first
-generation defaults are locked before Wine starts: two five-episode collection
-rounds, two whole-episode validation groups, 0.10 uniform safe-set exploration,
-a 120-frame factual return, clipped propensity 20, a grouped ridge committee,
-two bounded active canaries, and two alternating complete-Stage A/B pairs.
-These are algorithm-generation parameters, not failure-region knobs. The
-runner refuses to resume an existing `generation.json` with different values.
+The current implemented entrypoint is
+`scripts/run_generation6_autonomous_round.py`, bound to a separately committed
+machine contract. It collects a balanced Stage-4/5/6 natural-RNG panel with a
+frozen actor/uniform/inverse-ESS mixture, appends it to the immutable registry,
+refits all compatible old and new corpus, and runs conjunctive offline/native
+smoke before any active Wine canary. The exact current design and stopping rule
+are in `AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md`. Older generation runners
+remain historical audit implementations and are not the current command.
 
 Every active candidate is hash-chained:
 
@@ -121,6 +133,14 @@ clipped by a predeclared bound. The initial model is a small regularized
 action-relative residual with grouped out-of-fold uncertainty; richer model
 families require general held-out evidence and a new generation.
 
+For option-boundary complete-Stage returns, a rejected tentative option is not
+a treatment or a new decision boundary. Physical HITs that appear while
+learning is paused for the normal death/invulnerability lifecycle remain part
+of the preceding factual interval and all earlier returns. Prefix HITs before
+the first factual boundary are reported separately. Transition HITs, factual
+interval HITs, prefix HITs, and manifest HITs must conserve exactly; accounting
+may neither discard a HIT nor assign one to an action Wine did not execute.
+
 ## Runtime and promotion invariants
 
 - Capture is coherent and publication is preceded by a fresh issue check.
@@ -130,7 +150,8 @@ families require general held-out evidence and a new generation.
 - No movement depends on game RNG, frame, run identity, or handwritten phase.
 - Fixed RNG, acceleration, snapshots, and first-failure runs are training tools
   only; they cannot promote a candidate.
-- Wine jobs are sequential and exact cleanup is verified after every episode.
+- Every Wine worker is resource-isolated and exact cleanup is verified after
+  every episode; canary and final-evaluation Wine jobs are sequential.
 
 Final promotion uses original retail Wine at normal timing, without fixed RNG,
 from a natural complete Practice Stage start through termination, with HIT
@@ -152,3 +173,37 @@ inspection only when:
   aggregate without safety/latency regression (`effective`).
 
 No intermediate offline metric is a verdict.
+
+## Current evidence
+
+Generation 1 completed two unattended Wine collection/fit rounds and was
+rejected by its unchanged shadow gate. See
+`AUTONOMOUS_GENERATION_1_RESULT.md`. Its negative result does not alter the
+autonomous-learning boundary above. Generation 2 replaced the learner and
+completed its factual complete-Stage contract. Its second round passed a
+fixed-RNG canary, but normal-speed natural-RNG evaluation ended at baseline 17
+HITs versus candidate 18, so it is frozen as ineffective. See
+`AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` and
+`AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md`. A later attempt is a new declared
+algorithm generation, not a failure-region adjustment. Generation 3 is frozen
+as superseded without canary authorization after its complete-return AIPW
+estimator produced structurally high variance; see
+`AUTONOMOUS_LEARNER_GENERATION_3_RESULT.md`. Generation 4 is declared before
+new outcomes in `AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md`. It retains the
+same Wine/native/HIT boundaries while replacing the estimator with sequential
+semi-Markov offline RL, generalized action centering, autonomous propensity-
+aware exploration, policy-level cross-fitting, and a full native population.
+It completed 16 new Wine Stages but produced no stable held-out advantage and
+never earned canary authorization, so it is frozen as ineffective; see
+`AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md`. Generation 5 used factual in-sample
+implicit Bellman iteration, lower cost expectile value fitting, and supported
+pessimistic population selection. Its Stage-4 boundary-15 smoke learned
+held-out Bellman structure but failed to identify a stable action, so
+collection stopped without a candidate. See
+`AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md`.
+
+The successor learner must first qualify on frozen factual Wine corpora split
+by complete episode. These offline checks exist to reject broken algorithms
+quickly and cannot reinterpret historical gameplay as authorization or
+promotion evidence. Only after the learner architecture and its gates are
+frozen may it collect new Wine evidence.

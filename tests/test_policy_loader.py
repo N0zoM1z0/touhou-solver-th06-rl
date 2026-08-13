@@ -20,6 +20,41 @@ def create_policy():
     return Policy()
 """
 
+OPTION_POLICY = b"""
+from th06_rl.policy_api import POLICY_API_VERSION, PolicyDecision
+
+class Policy:
+    api_version = POLICY_API_VERSION
+    name = 'test-option'
+    def __init__(self):
+        self.rejected = 0
+    def decide(self, context):
+        return PolicyDecision(context.baseline_action, self.name)
+    def reject_publication(self, decision):
+        self.rejected += 1
+
+def create_policy():
+    return Policy()
+"""
+
+METRICS_POLICY = b"""
+from th06_rl.policy_api import POLICY_API_VERSION, PolicyDecision
+
+class Policy:
+    api_version = POLICY_API_VERSION
+    name = 'test-metrics'
+    def __init__(self):
+        self.calls = 0
+    def decide(self, context):
+        return PolicyDecision(context.baseline_action, self.name)
+    def metrics(self):
+        self.calls += 1
+        return {'calls': self.calls}
+
+def create_policy():
+    return Policy()
+"""
+
 
 def test_unchanged_policy_does_not_cross_unc_read_boundary(
     tmp_path,
@@ -90,6 +125,19 @@ def test_optional_failure_feedback_does_not_require_policy_callback(
     assert loader.last_error is None
 
 
+def test_optional_certified_continuation_is_absent_for_legacy_policy(
+    tmp_path,
+) -> None:
+    path = tmp_path / "policy.py"
+    path.write_bytes(POLICY)
+    loader = HotReloadPolicy(path)
+
+    assert loader.continue_certified(SimpleNamespace(
+        baseline_action="stay",
+        locally_admissible_actions=("stay",),
+    )) is None
+
+
 def test_immutable_policy_disables_reload_feedback_and_checkpoint(
     tmp_path,
     monkeypatch,
@@ -110,3 +158,31 @@ def test_immutable_policy_disables_reload_feedback_and_checkpoint(
     loader.observe(object())
     loader.observe_failure(object())
     assert loader.status()["immutable"] is True
+
+
+def test_immutable_policy_still_receives_operational_publication_rejection(
+    tmp_path,
+) -> None:
+    path = tmp_path / "option-policy.py"
+    path.write_bytes(OPTION_POLICY)
+    loader = HotReloadPolicy(path, immutable=True)
+    decision = loader.decide(SimpleNamespace(
+        baseline_action="stay",
+        locally_admissible_actions=("stay",),
+    ))
+
+    loader.reject_publication(decision)
+
+    assert loader.policy.rejected == 1
+
+
+def test_identity_status_does_not_materialize_expensive_metrics(tmp_path) -> None:
+    path = tmp_path / "metrics-policy.py"
+    path.write_bytes(METRICS_POLICY)
+    loader = HotReloadPolicy(path, immutable=True)
+
+    identity = loader.status(include_metrics=False)
+
+    assert "metrics" not in identity
+    assert loader.policy.calls == 0
+    assert loader.status()["metrics"] == {"calls": 1}

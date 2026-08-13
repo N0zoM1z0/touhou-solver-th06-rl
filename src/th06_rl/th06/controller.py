@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 from dataclasses import replace
 import hashlib
 import json
@@ -22,6 +23,11 @@ from ..corpus import (
     RunMetadata,
 )
 from ..native import NativeKernel
+from ..hazard_representation import (
+    make_history_observation,
+    project_hazard_primitives,
+    project_history_features,
+)
 from ..policy_api import PolicyContext, PolicyFailureEvent, PolicyOutcome
 from ..policy_loader import HotReloadPolicy
 from ..policy_transaction import StagePolicyTransaction
@@ -43,6 +49,7 @@ from .menu import (
 from .learning_adapter import project_learning_features
 from .source import (
     AuthorityUnavailable,
+    COLLISION_MARGIN,
     automatic_source_context,
     core_action_from_input,
     donor_action,
@@ -129,8 +136,10 @@ def _authority_loss(reason: str) -> bool:
 
 def _control_dead_end(reason: str) -> bool:
     return reason in (
+        "control-dead-end:in-flight input unsafe",
         "control-dead-end:Hard safe set empty",
         "control-dead-end:local forecast has no safe continuation",
+        "authority-stop:in-flight input unsafe",
         "authority-stop:Hard safe set empty",
         "authority-stop:local forecast has no safe continuation",
     )
@@ -197,6 +206,25 @@ def _reactive_baseline(candidates, current_action):
             item.action.focused,
             item.action.name,
         ),
+    )
+
+
+def _certify_hard_with_source_fallback(kernel, **kwargs):
+    """Prefer the uncertainty margin, but never erase source-legal control.
+
+    TH06's shipped collision test has no extra geometric margin.  The resident
+    0.35 px margin remains the normal contract; only an empty conservative set
+    triggers a second certificate under the exact shipped AABB contract.
+    """
+    conservative = kernel.certify_actions(
+        **kwargs,
+        collision_margin=COLLISION_MARGIN,
+    )
+    if conservative:
+        return conservative, COLLISION_MARGIN
+    return (
+        kernel.certify_actions(**kwargs, collision_margin=0.0),
+        0.0,
     )
 
 
@@ -272,6 +300,7 @@ def run(args: argparse.Namespace) -> int:
     stage_completed = False
     hit_count = 0
     control_dead_end_count = 0
+    source_exact_fallback_count = 0
     capture_failure_count = 0
     infrastructure_failure_count = 0
     infrastructure_failures: dict[str, int] = {}
@@ -391,6 +420,7 @@ def run(args: argparse.Namespace) -> int:
         previous_snapshot = None
         previous_player_state = None
         pending_learning = None
+        learning_history = deque(maxlen=3)
         policy_source_context = None
         policy_source_start_frame = None
         last_frame = None
@@ -747,6 +777,8 @@ def run(args: argparse.Namespace) -> int:
             hit = physical_hit(previous_player_state, snapshot.player_state)
             previous_player_state = snapshot.player_state
             previous_snapshot = snapshot
+            if prior_frame is not None and snapshot.frame < prior_frame:
+                learning_history.clear()
             reason = "ok"
             selected = None
             proposed = None
@@ -759,9 +791,13 @@ def run(args: argparse.Namespace) -> int:
             baseline_action = None
             selected_evaluation = None
             hard_count = 0
+            hard_collision_margin = None
             effort_horizon = 0
             observation_features = ()
             action_features = ()
+            hazard_primitives = ()
+            history_features = ()
+            history_observation = None
             solve_started = time.perf_counter()
             try:
                 if hit:
@@ -820,6 +856,9 @@ def run(args: argparse.Namespace) -> int:
                 else:
                     current_core = core_action_from_input(snapshot.input_mask)
                     current_action_name = current_core.name
+                    history_observation = make_history_observation(
+                        snapshot, current_action_name
+                    )
                     kinematics = kinematics_from_snapshot(snapshot)
                     lease_status = (
                         lease.status(snapshot.input_mask, snapshot.frame)
@@ -835,19 +874,24 @@ def run(args: argparse.Namespace) -> int:
                             _donor_action_mask(lease_status.action)
                         )
                         hard_forecast = lower_observed_hazards(snapshot, 4)
-                        retained = kernel.certify_actions(
-                            x=snapshot.x,
-                            y=snapshot.y,
-                            half_width=snapshot.half_width,
-                            half_height=snapshot.half_height,
-                            kinematics=kinematics,
-                            current_action=current_core,
-                            hazards=hard_forecast.hazards,
-                            candidates=(desired_core,),
-                            delivery_delays=lease_status.delivery_delays,
+                        retained, hard_collision_margin = (
+                            _certify_hard_with_source_fallback(
+                                kernel,
+                                x=snapshot.x,
+                                y=snapshot.y,
+                                half_width=snapshot.half_width,
+                                half_height=snapshot.half_height,
+                                kinematics=kinematics,
+                                current_action=current_core,
+                                hazards=hard_forecast.hazards,
+                                candidates=(desired_core,),
+                                delivery_delays=lease_status.delivery_delays,
+                            )
                         )
                         if not retained:
                             raise AuthorityUnavailable("in-flight input unsafe")
+                        if hard_collision_margin == 0.0:
+                            source_exact_fallback_count += 1
                         selected = desired_core
                         proposed = desired_core
                         published = desired_core.name if keyboard is not None else None
@@ -857,6 +901,33 @@ def run(args: argparse.Namespace) -> int:
                         hard_count = 1
                         effort_horizon = 4
                         reason = "input-lease"
+                        policy = plugin.continue_certified(PolicyContext(
+                            frame=snapshot.frame,
+                            scope=expected_scope,
+                            source_context=source_context,
+                            baseline_action=desired_core.name,
+                            locally_admissible_actions=(desired_core.name,),
+                            player_x=snapshot.x,
+                            player_y=snapshot.y,
+                            power=snapshot.current_power,
+                            bullet_count=snapshot.live_bullet_count,
+                            laser_count=snapshot.laser_count,
+                            hard_action_count=1,
+                            exploration_rate=args.exploration_rate,
+                            current_action=current_action_name,
+                            hard_admissible_actions=(desired_core.name,),
+                            phase_elapsed_frames=phase_elapsed_frames,
+                            hard_action_evaluations=tuple(
+                                (
+                                    item.action.name,
+                                    _finite(item.min_clearance),
+                                    item.final_x,
+                                    item.final_y,
+                                )
+                                for item in retained
+                            ),
+                            effort_horizon=4,
+                        ))
                     else:
                         forecast = lower_observed_hazards(
                             snapshot,
@@ -868,18 +939,23 @@ def run(args: argparse.Namespace) -> int:
                         prepared_hard = prepared_forecast.prefix(
                             forecast.hard_horizon,
                         )
-                        hard = kernel.certify_actions(
-                            x=snapshot.x,
-                            y=snapshot.y,
-                            half_width=snapshot.half_width,
-                            half_height=snapshot.half_height,
-                            kinematics=kinematics,
-                            current_action=current_core,
-                            hazards=prepared_hard,
+                        hard, hard_collision_margin = (
+                            _certify_hard_with_source_fallback(
+                                kernel,
+                                x=snapshot.x,
+                                y=snapshot.y,
+                                half_width=snapshot.half_width,
+                                half_height=snapshot.half_height,
+                                kinematics=kinematics,
+                                current_action=current_core,
+                                hazards=prepared_hard,
+                            )
                         )
                         hard_count = len(hard)
                         if not hard:
                             raise AuthorityUnavailable("Hard safe set empty")
+                        if hard_collision_margin == 0.0:
+                            source_exact_fallback_count += 1
                         lookahead = kernel.certify_actions(
                             x=snapshot.x,
                             y=snapshot.y,
@@ -889,6 +965,7 @@ def run(args: argparse.Namespace) -> int:
                             current_action=current_core,
                             hazards=prepared_forecast,
                             candidates=tuple(item.action for item in hard),
+                            collision_margin=hard_collision_margin,
                         )
                         # A longer constant-action gate is advisory: when every
                         # constant path closes, retain the immediate Hard set so
@@ -897,6 +974,18 @@ def run(args: argparse.Namespace) -> int:
                         legal = lookahead or hard
                         effort_horizon = (
                             forecast.source_coverage if lookahead else 4
+                        )
+                        action_profiles = kernel.profile_actions(
+                            x=snapshot.x,
+                            y=snapshot.y,
+                            half_width=snapshot.half_width,
+                            half_height=snapshot.half_height,
+                            kinematics=kinematics,
+                            current_action=current_core,
+                            hazards=prepared_forecast,
+                            candidates=tuple(item.action for item in hard),
+                            checkpoints=(1, 2, 3, 4, 6, 8, 10, 12),
+                            collision_margin=hard_collision_margin,
                         )
                         locally_admissible = tuple(
                             item.action.name for item in legal
@@ -909,7 +998,13 @@ def run(args: argparse.Namespace) -> int:
                                 hard,
                                 locally_admissible,
                                 effort_horizon,
+                                action_profiles,
                             )
+                        )
+                        hazard_primitives = project_hazard_primitives(snapshot)
+                        history_features = project_history_features(
+                            history_observation,
+                            tuple(learning_history),
                         )
                         policy = plugin.decide(PolicyContext(
                             frame=snapshot.frame,
@@ -941,6 +1036,8 @@ def run(args: argparse.Namespace) -> int:
                             effort_horizon=effort_horizon,
                             observation_features=observation_features,
                             action_features=action_features,
+                            hazard_primitives=hazard_primitives,
+                            history_features=history_features,
                         ))
                         selected = next(
                             item.action for item in legal
@@ -961,6 +1058,7 @@ def run(args: argparse.Namespace) -> int:
                             current_action=current_core,
                             hazards=prepared_hard,
                             candidates=(selected,),
+                            collision_margin=hard_collision_margin,
                         )
                         if not fresh:
                             raise AuthorityUnavailable(
@@ -981,6 +1079,7 @@ def run(args: argparse.Namespace) -> int:
             except AuthorityUnavailable as error:
                 error_text = str(error)
                 dead_end = error_text in (
+                        "in-flight input unsafe",
                         "Hard safe set empty",
                         "local forecast has no safe continuation",
                 )
@@ -1007,6 +1106,7 @@ def run(args: argparse.Namespace) -> int:
                         if error_text == "physical Bomb state/input"
                         else 12
                         if error_text in (
+                            "in-flight input unsafe",
                             "Hard safe set empty",
                             "local forecast has no safe continuation",
                         )
@@ -1084,6 +1184,12 @@ def run(args: argparse.Namespace) -> int:
                     next_player_y=snapshot.y,
                     learning_eligible=False,
                 ))
+                # Assignment is tentative until the final frame/fresh-Hard
+                # check actually publishes input. Abort it even for immutable
+                # behavior policies so a continuation cannot masquerade as a
+                # factual option start.
+                if current_action_name != policy.action:
+                    plugin.reject_publication(policy)
             if policy is not None and published is not None:
                 pending_learning = {
                     "frame": snapshot.frame,
@@ -1092,7 +1198,15 @@ def run(args: argparse.Namespace) -> int:
                     "action": published,
                     "capture_ms": capture_ms,
                 }
-            policy_status = plugin.status()
+            # Policy identity is required in every factual frame, but complete
+            # diagnostic counters are not.  Generation-6 metrics sort a rolling
+            # latency window and materialize several action dictionaries; doing
+            # that on every 60 Hz frame created allocation/scheduler pressure in
+            # the same process as the deadline-sensitive scorer.  Sample full
+            # metrics once per game second and emit an exact final snapshot.
+            policy_status = plugin.status(
+                include_metrics=snapshot.frame % 60 == 0
+            )
             if recorder is not None:
                 evidence = FrameEvidence(
                     phase_id=source_context,
@@ -1146,6 +1260,9 @@ def run(args: argparse.Namespace) -> int:
                     dialogue_delivery=tuple(dialogue_delivery),
                     observation_features=observation_features,
                     action_features=action_features,
+                    hazard_primitives=hazard_primitives,
+                    history_features=history_features,
+                    option=policy.option if policy is not None else None,
                 )
                 try:
                     snapshot_ref = recorder.record(snapshot, evidence)
@@ -1250,6 +1367,9 @@ def run(args: argparse.Namespace) -> int:
                             "controller_exit_code": 0,
                             "physical_hits": hit_count,
                             "control_dead_ends": control_dead_end_count,
+                            "source_exact_hard_fallbacks": (
+                                source_exact_fallback_count
+                            ),
                             "capture_failures": capture_failure_count,
                             "anchor_failures": anchor_failure_count,
                             "corpus_failure": corpus_failure,
@@ -1265,6 +1385,8 @@ def run(args: argparse.Namespace) -> int:
                         # The run directory and its last atomic manifest remain
                         # as explicit partial evidence. Cleanup must continue.
                         pass
+            if history_observation is not None:
+                learning_history.append(history_observation)
             record = {
                 "time": time.time(),
                 "run_id": recorder.run_id if recorder is not None else None,
@@ -1276,6 +1398,7 @@ def run(args: argparse.Namespace) -> int:
                 "bullets": snapshot.live_bullet_count,
                 "lasers": snapshot.laser_count,
                 "hard_count": hard_count,
+                "hard_collision_margin": hard_collision_margin,
                 "effort_horizon": effort_horizon,
                 "action": selected.name if selected is not None else None,
                 "reason": reason,
@@ -1332,6 +1455,12 @@ def run(args: argparse.Namespace) -> int:
         else:
             termination_reason = "time-limit"
     finally:
+        if trace is not None and plugin is not None:
+            emit_trace({
+                "time": time.time(),
+                "event": "policy-final-status",
+                "policy": plugin.status(),
+            })
         if policy_transaction is not None:
             try:
                 if (
@@ -1381,6 +1510,9 @@ def run(args: argparse.Namespace) -> int:
                             "controller_exit_code": exit_code,
                             "physical_hits": hit_count,
                             "control_dead_ends": control_dead_end_count,
+                            "source_exact_hard_fallbacks": (
+                                source_exact_fallback_count
+                            ),
                             "capture_failures": capture_failure_count,
                             "anchor_failures": anchor_failure_count,
                             "infrastructure_failures": infrastructure_failure_count,

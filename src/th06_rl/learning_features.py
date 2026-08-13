@@ -6,6 +6,7 @@ import math
 
 
 FEATURE_SCHEMA = "safe-action-relative-interactions-v1"
+TREE_FEATURE_SCHEMA = "native-trajectory-tree-candidates-v2"
 
 
 def _feature_map(
@@ -99,4 +100,55 @@ def candidate_vector(
             for observation_value in observation_values
             for delta_value in delta_values
         ),
+    ))
+
+
+def tree_feature_names(
+    observation_names: tuple[str, ...],
+    action_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Compact raw/delta features; nonlinear trees learn their interactions."""
+    if not observation_names or not action_names:
+        raise ValueError("observation and action feature schemas must be nonempty")
+    if len(set(observation_names)) != len(observation_names):
+        raise ValueError("observation feature names contain duplicates")
+    if len(set(action_names)) != len(action_names):
+        raise ValueError("action feature names contain duplicates")
+    return (
+        *(f"observation:{name}" for name in observation_names),
+        *(f"action:{name}" for name in action_names),
+        *(f"delta_from_baseline:{name}" for name in action_names),
+        "matches_baseline",
+        "matches_current",
+    )
+
+
+def tree_candidate_vector(
+    *,
+    observation_features,
+    action_features,
+    action: str,
+    baseline_action: str,
+    current_action: str,
+    observation_names: tuple[str, ...],
+    action_names: tuple[str, ...],
+) -> tuple[float, ...]:
+    observation = _feature_map(observation_features, label="observation")
+    if tuple(observation) != observation_names:
+        raise ValueError("adapter observation feature schema mismatch")
+    raw_actions = dict(action_features)
+    if action not in raw_actions or baseline_action not in raw_actions:
+        raise ValueError("candidate or baseline action features are absent")
+    selected = _feature_map(raw_actions[action], label=f"action {action}")
+    baseline = _feature_map(
+        raw_actions[baseline_action], label=f"action {baseline_action}"
+    )
+    if tuple(selected) != action_names or tuple(baseline) != action_names:
+        raise ValueError("adapter action feature schema mismatch")
+    return tuple((
+        *(observation[name] for name in observation_names),
+        *(selected[name] for name in action_names),
+        *(selected[name] - baseline[name] for name in action_names),
+        float(action == baseline_action),
+        float(action == current_action),
     ))

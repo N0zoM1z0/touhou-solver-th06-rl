@@ -294,6 +294,9 @@ def _replay_run(
     compact = run.get("schemas", {}).get("transition") in (
         "th06-rl-transition-v5",
         "th06-rl-transition-v6",
+        "th06-rl-transition-v7",
+        "th06-rl-transition-v8",
+        "th06-rl-transition-v9",
     )
     frame_rows = (
         None

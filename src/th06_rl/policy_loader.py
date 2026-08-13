@@ -169,6 +169,42 @@ class HotReloadPolicy:
                 "reactive-baseline-policy-error",
             )
 
+    def continue_certified(
+        self, context: PolicyContext
+    ) -> PolicyDecision | None:
+        """Let an interested policy trace a freshly certified input lease."""
+        assert self.policy is not None
+        callback = getattr(self.policy, "continue_certified", None)
+        if not callable(callback):
+            return None
+        try:
+            decision = callback(context)
+            if (
+                not isinstance(decision, PolicyDecision)
+                or decision.action not in context.locally_admissible_actions
+            ):
+                raise ValueError("policy continued outside the certified lease")
+            return decision
+        except Exception as error:
+            self.reload_failures += 1
+            self.last_error = (
+                f"continue_certified {type(error).__name__}: {error}"
+            )
+            return None
+
+    def reject_publication(self, decision: PolicyDecision) -> None:
+        """Abort tentative operational policy state after no input was issued.
+
+        This callback remains available for immutable policies because it is
+        action-delivery bookkeeping, not learner feedback or a checkpoint
+        mutation.
+        """
+        if self.policy is None:
+            return
+        callback = getattr(self.policy, "reject_publication", None)
+        if callable(callback):
+            callback(decision)
+
     def checkpoint(self) -> bool:
         if self.immutable:
             return False
@@ -242,7 +278,18 @@ class HotReloadPolicy:
                 f"observe_failure {type(error).__name__}: {error}"
             )
 
-    def status(self) -> dict[str, object]:
+    def status(self, *, include_metrics: bool = True) -> dict[str, object]:
+        result = {
+            "immutable": self.immutable,
+            "generation": self.generation,
+            "reloads": self.reloads,
+            "reload_failures": self.reload_failures,
+            "last_error": self.last_error,
+            "sha256": self.digest,
+            "policy_id": getattr(self.policy, "name", None),
+        }
+        if not include_metrics:
+            return result
         try:
             metrics = (
                 self.policy.metrics()
@@ -252,13 +299,4 @@ class HotReloadPolicy:
             )
         except Exception as error:
             metrics = {"error": f"{type(error).__name__}: {error}"}
-        return {
-            "immutable": self.immutable,
-            "generation": self.generation,
-            "reloads": self.reloads,
-            "reload_failures": self.reload_failures,
-            "last_error": self.last_error,
-            "sha256": self.digest,
-            "policy_id": getattr(self.policy, "name", None),
-            "metrics": metrics,
-        }
+        return {**result, "metrics": metrics}
