@@ -7,34 +7,36 @@ people repair infrastructure but do not hand-tune gameplay cases.
 
 Read in this order:
 
-1. `AGENTS.md` for safety and product boundaries;
-2. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the data, training, and
+1. `HAND_OFF.md` for the current terminal result, non-negotiable requirements,
+   corpus inventory, learner history, and exact next boundary;
+2. `AGENTS.md` for safety and product boundaries;
+3. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the data, training, and
    promotion contract;
-3. `docs/IMMUTABLE_WINE_DATA_PLANE.md` for the permanent capability-indexed
+4. `docs/IMMUTABLE_WINE_DATA_PLANE.md` for the permanent capability-indexed
    corpus registry and the separation of data, learner, and fitted artifact;
-4. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the frozen
+5. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the frozen
    generation-2 learner, observation, Hard-empty audit, and evidence contract;
-5. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
+6. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
    evidence and ineffective verdict;
-6. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md`, its progress record, and
+7. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md`, its progress record, and
    `docs/AUTONOMOUS_LEARNER_GENERATION_3_RESULT.md` for the frozen superseded
    complete-return learner;
-7. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the frozen sequential
+8. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the frozen sequential
    semi-Markov learner, action-centered critic, exploration, and evidence
    contract;
-8. `docs/AUTONOMOUS_LEARNER_GENERATION_4_PROGRESS.md` for its append-only
+9. `docs/AUTONOMOUS_LEARNER_GENERATION_4_PROGRESS.md` for its append-only
    implementation and execution record, followed by
    `docs/AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md` for its ineffective verdict;
-9. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
+10. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
    and upstream-repository cache;
-10. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the frozen in-sample
+11. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the frozen in-sample
    implicit-Q learner and its predeclared smoke/evidence gates, followed by
    `docs/AUTONOMOUS_LEARNER_GENERATION_5_PROGRESS.md` and
    `docs/AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md` for its Stage-4 fail-fast
    result and ineffective-for-continuation verdict;
-11. `docs/AUTONOMOUS_LEARNER_QUALIFICATION.md` for the frozen-corpus rejection
+12. `docs/AUTONOMOUS_LEARNER_QUALIFICATION.md` for the frozen-corpus rejection
    funnel that must pass before another Wine collection wave;
-12. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the IQL actor
+13. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the IQL actor
    development record, followed by its Stage-6 pilot design and
    `docs/AUTONOMOUS_LEARNER_GENERATION_6_RESULT.md` for the completed positive
    directional result and non-promotion boundary, then
@@ -52,33 +54,25 @@ Read in this order:
    `docs/GENERATION6_DECISION_GAMEPLAY_RESULT.md` for its clean but
    conclusively ineffective Wine result and the discovered unbounded actor
    objective;
-13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
+14. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
-14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
+15. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
    optimizations, failed attempts, and correctness differentials;
-15. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+16. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-16. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+17. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
-Generations 3, 4, and 5 are frozen. Generation 6 passed frozen-corpus
-qualification, native serving, and a six-run original-Wine Stage-6 directional
-pilot: candidate aggregate HIT was 25 versus incumbent 28. The small panel is
-promising but not promotion evidence; a larger confirmation or autonomous
-learning round must be separately frozen before more outcome-facing play.
-Generation-6 autonomous round 1 stopped immutably invalid on a reproduced CFS
-scheduler tail. Round 2 then stopped before gameplay on a privileged-wrapper
-PID bug and produced no new corpus. Round 3 keeps the old standard, binds both
-repairs and their smokes, reuses only round 1's complete machine-passing
-ten-episode prefix, collects the two predeclared missing Stage-5/6 episodes,
-and then refits all old and new sequential corpora before fresh Wine evidence.
-Its learner-only float64 serving successor subsequently passed every numeric,
-Win32, latency, and Stage-4 wiring gate. The Stage-6 confirmation was stopped
-after four complete blocks when the candidate had 42 HIT versus the
-incumbent's 34 and was no worse in only one block: even winning both remaining
-blocks could reach only three of the required four. The serving path remains
-valid; the fitted learner is rejected. Offline replay then exposed that its
-action-centered actor ERM objective is unbounded below and had diverged as the
-corpus grew, so another Generation-6 refit with that objective is forbidden.
+Generations 1 through 6 are frozen without a promoted candidate. Generation 6
+did pass frozen-corpus qualification, native serving, and a small directional
+pilot, but that historical promise was superseded by its larger clean Wine
+confirmation. After four complete Stage-6 blocks the candidate had 42 HIT
+versus the incumbent's 34 and the frozen positive rule was mathematically
+impossible. Offline diagnosis then proved that the fitted action-centered
+actor ERM objective is unbounded below and had diverged as corpus grew. The
+learner is rejected and another Generation-6 refit is forbidden. Its float64
+serving, numeric differential, scheduler/PID repairs, and corpus remain valid.
+The next step is a separately frozen bounded proper learner on the existing
+registry, as specified in `HAND_OFF.md`.
 
 ## Non-negotiable separation
 

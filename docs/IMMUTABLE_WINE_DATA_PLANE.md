@@ -63,20 +63,24 @@ transition schema, executable hash, Stage, and physical HIT outcome. Selection
 is by a required semantic capability set, never by model generation or observed
 HIT count.
 
-The initial audit contains 59 clean complete Wine Stages:
+The current registry contains 71 clean complete Wine Stages. The original
+audit contained 59; Generation-6 round 3 later appended 12 natural-RNG Stages
+as one hash-bound source:
 
 | Access | Episodes | Permitted use |
 | --- | ---: | --- |
-| Training, randomized option semantics | 44 | sequential offline RL, action effect, representation, behavior value |
+| Training, randomized option semantics | 56 | sequential offline RL, action effect, representation, behavior value |
 | Training, deterministic older semantics | 12 | representation and behavior state/value only |
 | Infrastructure regression only | 3 | serial/concurrent differential; never learner input |
 
-The 44 sequential episodes comprise 13 transition-v9 Stage-6, 16
-transition-v10 Stage-6, and 15 transition-v10 Stage-4 runs. Version 9 has a
-complete propensity distribution reconstructible from its frozen randomized
-behavior contract; version 10 records the complete vector directly. Both have
-factual option successors, native-safe candidate sets, and exact Stage HIT
-conservation.
+The 56 sequential episodes comprise 13 transition-v9 Stage-6, 16
+transition-v10 Stage-6, 15 transition-v10 Stage-4, and 12 startup-audited
+natural-RNG transition-v10 Generation-6-behavior runs. Version 9 has a complete
+propensity distribution reconstructible from its frozen randomized behavior
+contract; version 10 records the complete vector directly. Both have factual
+option successors, native-safe candidate sets, and exact Stage HIT
+conservation. The current sequential view contains 167,250 factual options;
+that measured count is an audit snapshot, not a hard-coded selection rule.
 
 The 12 transition-v6 episodes used deterministic behavior and cannot identify
 a randomized treatment effect. They remain valuable for self-supervised hazard
@@ -107,8 +111,11 @@ new source root; this prevents outcome- or failure-conditioned omission. The
 runner then atomically adds exactly one source row and revalidates the complete
 registry. A crash after moving an accepted episode or writing the registry is
 reconciled from hashes and the ledger, never by drawing a replacement gameplay
-outcome. Generation-6 round 1 is the first user of this append protocol; see
-`AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md`.
+outcome. Generation-6 round 1 was the first attempted user of this protocol;
+round 3 performed the first successful audited append after repairing the
+generic scheduler and PID-attestation defects. See
+`AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md` and
+`AUTONOMOUS_LEARNER_GENERATION_6_ROUND_3.md`.
 
 ## Partition is a learner-run property
 
