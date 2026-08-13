@@ -106,7 +106,9 @@ def _last_policy_status(trace_path: Path) -> dict[str, object]:
                 continue
             value = json.loads(line)
             policy = value.get("policy") if isinstance(value, dict) else None
-            if isinstance(policy, dict):
+            if isinstance(policy, dict) and isinstance(
+                policy.get("metrics"), dict
+            ):
                 last = policy
     if not isinstance(last, dict):
         raise ValueError("Generation-6 canary has no policy status")

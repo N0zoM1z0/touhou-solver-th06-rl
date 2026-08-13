@@ -37,6 +37,24 @@ def create_policy():
     return Policy()
 """
 
+METRICS_POLICY = b"""
+from th06_rl.policy_api import POLICY_API_VERSION, PolicyDecision
+
+class Policy:
+    api_version = POLICY_API_VERSION
+    name = 'test-metrics'
+    def __init__(self):
+        self.calls = 0
+    def decide(self, context):
+        return PolicyDecision(context.baseline_action, self.name)
+    def metrics(self):
+        self.calls += 1
+        return {'calls': self.calls}
+
+def create_policy():
+    return Policy()
+"""
+
 
 def test_unchanged_policy_does_not_cross_unc_read_boundary(
     tmp_path,
@@ -156,3 +174,15 @@ def test_immutable_policy_still_receives_operational_publication_rejection(
     loader.reject_publication(decision)
 
     assert loader.policy.rejected == 1
+
+
+def test_identity_status_does_not_materialize_expensive_metrics(tmp_path) -> None:
+    path = tmp_path / "metrics-policy.py"
+    path.write_bytes(METRICS_POLICY)
+    loader = HotReloadPolicy(path, immutable=True)
+
+    identity = loader.status(include_metrics=False)
+
+    assert "metrics" not in identity
+    assert loader.policy.calls == 0
+    assert loader.status()["metrics"] == {"calls": 1}

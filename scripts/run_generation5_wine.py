@@ -23,6 +23,7 @@ from scripts.run_autonomous_learning_v3 import (  # noqa: E402
 )
 from th06_rl.advantage_learning import _object, _validate_run  # noqa: E402
 from th06_rl.audited_option_loader import load_audited_option_episode  # noqa: E402
+from th06_rl.process_priority import parse_cpu_list, validate_nice  # noqa: E402
 from th06_rl.sequential_learning import TRANSITION_SCHEMA  # noqa: E402
 
 
@@ -37,6 +38,10 @@ def _validate_complete_run(
     stage: int,
     rng_seed: int | None,
     corpus_root: Path | None,
+    game_cpu_list: str | None = None,
+    controller_cpu_list: str | None = None,
+    game_nice: int | None = None,
+    controller_nice: int | None = None,
 ) -> tuple[dict[str, object], Path | None]:
     report = _object(artifact_dir / "report.json")
     _validate_retail_report(
@@ -63,6 +68,36 @@ def _validate_complete_run(
         or not _trace_is_clean(report)
     ):
         raise RuntimeError("isolated Wine complete-Stage provenance failed")
+    priority_values = (
+        ("game", game_cpu_list, game_nice),
+        ("controller", controller_cpu_list, controller_nice),
+    )
+    if any(value is not None for _role, _cpus, value in priority_values):
+        if any(
+            value is None or cpus is None
+            for _role, cpus, value in priority_values
+        ):
+            raise ValueError("complete-Stage priority contract is incomplete")
+        for role, cpu_list, nice in priority_values:
+            assert cpu_list is not None and nice is not None
+            validate_nice(nice)
+            attestation = report.get(f"{role}_priority_attestation")
+            expected_cpus = list(parse_cpu_list(cpu_list))
+            if (
+                report.get(f"{role}_nice") != nice
+                or not isinstance(attestation, dict)
+                or attestation.get("schema") != "bounded-wine-process-priority-v1"
+                or attestation.get("scheduler") != "SCHED_OTHER"
+                or attestation.get("nice") != nice
+                or attestation.get("effective_nice") != nice
+                or attestation.get("cpus") != expected_cpus
+                or attestation.get("effective_cpus") != expected_cpus
+                or attestation.get("uid") != attestation.get("target_uid")
+                or attestation.get("gid") != attestation.get("target_gid")
+            ):
+                raise RuntimeError(
+                    f"isolated Wine {role} priority attestation failed"
+                )
     run_dir = None
     if corpus_root is not None:
         trace = report.get("trace")
@@ -92,6 +127,8 @@ def complete_run(
     corpus_root: Path | None,
     game_cpu_list: str | None = None,
     controller_cpu_list: str | None = None,
+    game_nice: int | None = None,
+    controller_nice: int | None = None,
 ) -> tuple[dict[str, object], Path | None]:
     """Run or resume one normal-speed original-Wine complete Stage.
 
@@ -111,6 +148,10 @@ def complete_run(
                 stage=stage,
                 rng_seed=rng_seed,
                 corpus_root=corpus_root,
+                game_cpu_list=game_cpu_list,
+                controller_cpu_list=controller_cpu_list,
+                game_nice=game_nice,
+                controller_nice=controller_nice,
             )
         except (FileNotFoundError, TypeError, ValueError, RuntimeError):
             _archive_incomplete(artifact_dir)
@@ -139,6 +180,15 @@ def complete_run(
             "--game-cpu-list", game_cpu_list,
             "--controller-cpu-list", controller_cpu_list,
         ))
+    if game_nice is not None or controller_nice is not None:
+        if game_nice is None or controller_nice is None:
+            raise ValueError("Wine process nice values must be provided together")
+        validate_nice(game_nice)
+        validate_nice(controller_nice)
+        command.extend((
+            "--game-nice", str(game_nice),
+            "--controller-nice", str(controller_nice),
+        ))
     if corpus_root is not None:
         command.extend((
             "--complete-stage-training-corpus-root", str(corpus_root),
@@ -156,6 +206,10 @@ def complete_run(
                 stage=stage,
                 rng_seed=rng_seed,
                 corpus_root=corpus_root,
+                game_cpu_list=game_cpu_list,
+                controller_cpu_list=controller_cpu_list,
+                game_nice=game_nice,
+                controller_nice=controller_nice,
             )
             if completed.returncode != int(report["controller_returncode"]):
                 raise RuntimeError("outer and recorded Wine return codes differ")

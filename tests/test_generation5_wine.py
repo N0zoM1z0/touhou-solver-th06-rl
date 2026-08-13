@@ -167,3 +167,39 @@ def test_complete_run_passes_frozen_disjoint_cpu_partitions(
     command = commands[0]
     assert command[command.index("--game-cpu-list") + 1] == "0-7"
     assert command[command.index("--controller-cpu-list") + 1] == "8-31"
+
+
+def test_complete_run_passes_bounded_process_priority(monkeypatch, tmp_path) -> None:
+    commands = []
+    monkeypatch.setattr(
+        "scripts.run_generation5_wine._validate_complete_run",
+        lambda **_arguments: ({"controller_returncode": 0}, None),
+    )
+    monkeypatch.setattr(
+        "scripts.run_generation5_wine.subprocess.run",
+        lambda command, **_kwargs: commands.append(command)
+        or SimpleNamespace(returncode=0),
+    )
+
+    complete_run(
+        artifact_dir=tmp_path / "episode",
+        worker={
+            "game_dir": tmp_path / "game",
+            "wine_prefix": tmp_path / "prefix",
+            "display": ":108",
+        },
+        stage=4,
+        policy_plugin=Path("policy.py"),
+        policy_state=Path("state.json"),
+        scorer=Path("scorer.dll"),
+        rng_seed=None,
+        corpus_root=None,
+        game_cpu_list="0-7",
+        controller_cpu_list="8-31",
+        game_nice=-10,
+        controller_nice=-10,
+    )
+
+    command = commands[0]
+    assert command[command.index("--game-nice") + 1] == "-10"
+    assert command[command.index("--controller-nice") + 1] == "-10"

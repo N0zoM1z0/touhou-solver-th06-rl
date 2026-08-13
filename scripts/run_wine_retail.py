@@ -17,6 +17,12 @@ import sys
 import time
 from typing import Any
 
+REPOSITORY = Path(__file__).resolve().parents[1]
+if str(REPOSITORY / "src") not in sys.path:
+    sys.path.insert(0, str(REPOSITORY / "src"))
+
+from th06_rl.process_priority import ProcessPriorityContract, validate_nice
+
 
 RETAIL_SHA256 = "9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb852245"
 RETAIL_EXECUTABLE = "東方紅魔郷.exe"
@@ -24,6 +30,17 @@ STARTUP_MARKER = "TH06_RL_WINE_STARTUP normalized=1"
 FULL_UNLOCK_SCORE_SHA256 = "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e94d26b749c71"
 _PRACTICE_COMPLETE_RE = re.compile(
     rb"Practice Stage (\d+) complete; physical_hits=(\d+)"
+)
+_PRIORITY_ENVIRONMENT = (
+    "DISPLAY",
+    "LANG",
+    "LC_ALL",
+    "LP_NUM_THREADS",
+    "MESA_GLTHREAD",
+    "TH06_RL_OFFLINE_SCORER_LIBRARY",
+    "WINEDEBUG",
+    "WINEDLLOVERRIDES",
+    "WINEPREFIX",
 )
 
 
@@ -181,6 +198,42 @@ def _stop_process(process: subprocess.Popen[Any] | None, timeout: float = 5.0) -
         process.wait(timeout=timeout)
 
 
+def _bounded_priority_command(
+    command: list[str], *, cpu_list: str, nice: int, attestation: Path,
+) -> list[str]:
+    """Build the fail-closed host wrapper for one latency-sensitive child."""
+    ProcessPriorityContract.from_values(nice=nice, cpu_list=cpu_list)
+    return [
+        "sudo",
+        "-n",
+        "--preserve-env=" + ",".join(_PRIORITY_ENVIRONMENT),
+        sys.executable,
+        str(Path(__file__).resolve().with_name("exec_bounded_priority.py")),
+        "--nice",
+        str(nice),
+        "--cpu-list",
+        cpu_list,
+        "--attestation",
+        str(attestation),
+        "--",
+        *command,
+    ]
+
+
+def _priority_attestation(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise TypeError("attestation root is not an object")
+        return value
+    except (OSError, TypeError, ValueError) as error:
+        # Preserve the run report so its strict outer audit can fail closed
+        # with the malformed attestation as explicit evidence.
+        return {"error": f"{type(error).__name__}: {error}"}
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     repository = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -302,6 +355,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--controller-cpu-list",
         help="optional disjoint taskset CPU list reserved for the controller",
     )
+    parser.add_argument(
+        "--game-nice",
+        type=int,
+        help="bounded SCHED_OTHER nice value for the retail Wine process tree",
+    )
+    parser.add_argument(
+        "--controller-nice",
+        type=int,
+        help="bounded SCHED_OTHER nice value for the controller process tree",
+    )
     parser.add_argument("--artifact-dir", type=Path)
     args = parser.parse_args(argv)
     if args.seconds < 0:
@@ -361,6 +424,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--display must look like :97")
     if bool(args.game_cpu_list) != bool(args.controller_cpu_list):
         parser.error("game/controller CPU lists must be declared together")
+    if bool(args.game_nice is not None) != bool(args.controller_nice is not None):
+        parser.error("game/controller nice values must be declared together")
+    if args.game_nice is not None and not args.game_cpu_list:
+        parser.error("bounded process priority requires explicit CPU partitions")
+    for value in (args.game_nice, args.controller_nice):
+        if value is not None:
+            try:
+                validate_nice(value)
+            except ValueError as error:
+                parser.error(str(error))
     if args.game_cpu_list:
         def cpu_set(value: str) -> set[int]:
             completed = subprocess.run(
@@ -489,6 +562,8 @@ def run(args: argparse.Namespace) -> int:
         "display": args.display,
         "game_cpu_list": args.game_cpu_list,
         "controller_cpu_list": args.controller_cpu_list,
+        "game_nice": args.game_nice,
+        "controller_nice": args.controller_nice,
         "wine_prefix": str(prefix),
         "retail_executable": str(executable),
         "expected_retail_sha256": RETAIL_SHA256,
@@ -671,8 +746,18 @@ def run(args: argparse.Namespace) -> int:
             prefix_marker.write_text("wine-11.0 headless retail\n", encoding="utf-8")
 
         game_command = [str(args.wine), f"./{RETAIL_EXECUTABLE}"]
-        if args.game_cpu_list:
+        game_priority_path = artifact_dir / "game-priority.json"
+        controller_priority_path = artifact_dir / "controller-priority.json"
+        if args.game_nice is not None:
+            game_command = _bounded_priority_command(
+                game_command,
+                cpu_list=args.game_cpu_list,
+                nice=args.game_nice,
+                attestation=game_priority_path,
+            )
+        elif args.game_cpu_list:
             game_command = ["taskset", "-c", args.game_cpu_list, *game_command]
+        report["game_host_command"] = game_command
         game_process = subprocess.Popen(
             game_command,
             cwd=game_dir,
@@ -779,7 +864,14 @@ def run(args: argparse.Namespace) -> int:
             controller.append("--immutable-policy")
         report["controller_command"] = controller
         controller_host_command = controller
-        if args.controller_cpu_list:
+        if args.controller_nice is not None:
+            controller_host_command = _bounded_priority_command(
+                controller,
+                cpu_list=args.controller_cpu_list,
+                nice=args.controller_nice,
+                attestation=controller_priority_path,
+            )
+        elif args.controller_cpu_list:
             controller_host_command = [
                 "taskset", "-c", args.controller_cpu_list, *controller
             ]
@@ -852,6 +944,12 @@ def run(args: argparse.Namespace) -> int:
         if score.is_file():
             report["score_sha256_after"] = _sha256(score)
         report["leftover_prefix_processes"] = _prefix_processes(prefix)
+        report["game_priority_attestation"] = _priority_attestation(
+            artifact_dir / "game-priority.json"
+        )
+        report["controller_priority_attestation"] = _priority_attestation(
+            artifact_dir / "controller-priority.json"
+        )
         report["finished_utc"] = datetime.now(timezone.utc).isoformat()
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"

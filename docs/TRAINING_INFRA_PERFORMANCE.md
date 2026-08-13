@@ -552,3 +552,37 @@ produce exact portable, Linux, and Wine/Win32 proposals on 64 immutable
 computational-width factual contexts, with p95 below 4 ms and no deadline miss,
 before an active state can be exported. The state used for this test is
 shadow-only, so native validation cannot accidentally become a canary.
+
+## 2026-08-13: Generation-6 CFS deadline-tail reproducer and repair
+
+Autonomous round 1 stopped after its eleventh collection Stage because the
+resident actor recorded two calls above the `16.67 ms` frame deadline. The
+episode still had p95 `2.9630 ms`, and both misses appeared inside one short
+window where capture and the complete controller solve also produced
+simultaneous 18--53 ms tails. An isolated 20,000-call factual-width Win32 replay
+had p95 `1.2508 ms`, maximum `1.4047 ms`, and no miss. This excluded a
+deterministic model-width or hazard-input cost explosion.
+
+The new controlled stress audit runs the same 64 maximum-width factual
+contexts and canonical SSE2 DLL for 10,000 calls while 32 ordinary CFS workers
+contend on CPUs 0--31. Equal-priority execution reproduced 29 deadline misses
+and a `24.6883 ms` maximum despite p95 `1.3199 ms`. Exact nice `-10` under the
+same load retained p95 `1.3137 ms`, reduced maximum to `9.4206 ms`, and had
+zero misses. All portable/Linux/Win32 actions stayed exact. The ignored formal
+report SHA-256 is
+`8526220a0fc1d467bee4b9c24d4e6fa8b786560093a03ca91fabcb63ee5c591f`.
+
+Wine children now use bounded `SCHED_OTHER` priority, never real-time
+scheduling. A small root wrapper validates the explicit inherited CPU set and
+nice range, applies them, drops completely to the invoking non-root user, and
+writes a run-local attestation. The strict complete-run validator checks the
+effective UID/GID, CPU list, scheduler, and nice value. The controller also
+stops sorting the actor's 4,096-sample latency window and reconstructing all
+action diagnostics on every factual frame: immutable identity stays per-frame,
+while full metrics are emitted every 60 frames and in one exact final record.
+
+These are model- and game-neutral scheduling/telemetry repairs. The 32-CPU cap,
+normal Wine pacing, native safety, action choice, propensity, factual data,
+reward, and zero-deadline gate do not change. The failed round remains invalid;
+a new frozen contract is required. Full reasoning and reproduction steps are
+in `GENERATION6_LATENCY_TAIL_AUDIT.md`.

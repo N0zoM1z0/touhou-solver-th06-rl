@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from scripts.run_wine_retail import (
+    _bounded_priority_command,
     _summarize_controller_completion,
     _summarize_trace,
     _windows_path,
@@ -126,6 +128,47 @@ def test_runner_accepts_isolated_offline_scorer(tmp_path: Path) -> None:
         ]
     )
     assert args.policy_scorer_library == scorer
+
+
+def test_runner_requires_bounded_priority_as_a_complete_cpu_contract(
+    tmp_path: Path,
+) -> None:
+    cpus = sorted(os.sched_getaffinity(0))[:4]
+    common = [
+        "--practice-stage", "6",
+        "--artifact-dir", str(tmp_path / "run"),
+        "--game-cpu-list", ",".join(map(str, cpus[:2])),
+        "--controller-cpu-list", ",".join(map(str, cpus[2:])),
+    ]
+    with pytest.raises(SystemExit):
+        parse_args([*common, "--game-nice", "-10"])
+    with pytest.raises(SystemExit):
+        parse_args([
+            *common, "--game-nice", "-16", "--controller-nice", "-10"
+        ])
+
+    args = parse_args([
+        *common, "--game-nice", "-10", "--controller-nice", "-10"
+    ])
+    assert args.game_nice == args.controller_nice == -10
+
+
+def test_bounded_priority_wrapper_is_explicit_and_attested(tmp_path: Path) -> None:
+    command = _bounded_priority_command(
+        ["wine", "game.exe"],
+        cpu_list="8-31",
+        nice=-10,
+        attestation=tmp_path / "priority.json",
+    )
+
+    assert command[:3] == [
+        "sudo", "-n",
+        "--preserve-env=DISPLAY,LANG,LC_ALL,LP_NUM_THREADS,MESA_GLTHREAD,"
+        "TH06_RL_OFFLINE_SCORER_LIBRARY,WINEDEBUG,WINEDLLOVERRIDES,WINEPREFIX",
+    ]
+    assert command[command.index("--nice") + 1] == "-10"
+    assert command[command.index("--cpu-list") + 1] == "8-31"
+    assert command[-2:] == ["wine", "game.exe"]
 
 
 def test_first_failure_corpus_requires_frozen_natural_practice(

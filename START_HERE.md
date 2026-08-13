@@ -39,7 +39,9 @@ Read in this order:
    `docs/AUTONOMOUS_LEARNER_GENERATION_6_RESULT.md` for the completed positive
    directional result and non-promotion boundary, then
    `docs/AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md` for the current frozen
-   all-corpus autonomous collection/refit/evidence state machine;
+   all-corpus autonomous collection/refit/evidence state machine, and
+   `docs/GENERATION6_LATENCY_TAIL_AUDIT.md` for its immutable latency failure,
+   controlled reproducer, and generic successor repair;
 13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,

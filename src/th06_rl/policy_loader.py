@@ -278,7 +278,18 @@ class HotReloadPolicy:
                 f"observe_failure {type(error).__name__}: {error}"
             )
 
-    def status(self) -> dict[str, object]:
+    def status(self, *, include_metrics: bool = True) -> dict[str, object]:
+        result = {
+            "immutable": self.immutable,
+            "generation": self.generation,
+            "reloads": self.reloads,
+            "reload_failures": self.reload_failures,
+            "last_error": self.last_error,
+            "sha256": self.digest,
+            "policy_id": getattr(self.policy, "name", None),
+        }
+        if not include_metrics:
+            return result
         try:
             metrics = (
                 self.policy.metrics()
@@ -288,13 +299,4 @@ class HotReloadPolicy:
             )
         except Exception as error:
             metrics = {"error": f"{type(error).__name__}: {error}"}
-        return {
-            "immutable": self.immutable,
-            "generation": self.generation,
-            "reloads": self.reloads,
-            "reload_failures": self.reload_failures,
-            "last_error": self.last_error,
-            "sha256": self.digest,
-            "policy_id": getattr(self.policy, "name", None),
-            "metrics": metrics,
-        }
+        return {**result, "metrics": metrics}

@@ -1198,7 +1198,15 @@ def run(args: argparse.Namespace) -> int:
                     "action": published,
                     "capture_ms": capture_ms,
                 }
-            policy_status = plugin.status()
+            # Policy identity is required in every factual frame, but complete
+            # diagnostic counters are not.  Generation-6 metrics sort a rolling
+            # latency window and materialize several action dictionaries; doing
+            # that on every 60 Hz frame created allocation/scheduler pressure in
+            # the same process as the deadline-sensitive scorer.  Sample full
+            # metrics once per game second and emit an exact final snapshot.
+            policy_status = plugin.status(
+                include_metrics=snapshot.frame % 60 == 0
+            )
             if recorder is not None:
                 evidence = FrameEvidence(
                     phase_id=source_context,
@@ -1447,6 +1455,12 @@ def run(args: argparse.Namespace) -> int:
         else:
             termination_reason = "time-limit"
     finally:
+        if trace is not None and plugin is not None:
+            emit_trace({
+                "time": time.time(),
+                "event": "policy-final-status",
+                "policy": plugin.status(),
+            })
         if policy_transaction is not None:
             try:
                 if (
