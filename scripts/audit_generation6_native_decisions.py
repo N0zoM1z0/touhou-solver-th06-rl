@@ -58,6 +58,7 @@ from th06_rl.wine_corpus_registry import (  # noqa: E402
 
 SCHEMA = "autonomous-generation-6-native-decision-conformance-v1"
 DEFAULT_AUDIT_WORKERS = 16
+DEFAULT_AUDIT_MAXIMUM_SECONDS = 180.0
 _FORKED_AUDIT: dict[str, object] | None = None
 _WORKER_THREAD_LIMIT = None
 
@@ -373,6 +374,11 @@ def main(argv: list[str] | None = None) -> int:
         "--workers", type=int, default=DEFAULT_AUDIT_WORKERS,
         help="episode and scalar-panel worker processes (bounded by --threads)",
     )
+    parser.add_argument(
+        "--maximum-seconds", type=float,
+        default=DEFAULT_AUDIT_MAXIMUM_SECONDS,
+        help="wall-clock regression ceiling for corpus plus scalar panel",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.output.exists():
@@ -380,6 +386,8 @@ def main(argv: list[str] | None = None) -> int:
     if (
         len(args.contract_sha256) != 64 or args.expected_options < 1
         or not 1 <= args.workers <= args.threads <= 32
+        or not math.isfinite(args.maximum_seconds)
+        or args.maximum_seconds <= 0.0
     ):
         parser.error("contract SHA and expected option count are required")
     started = time.perf_counter()
@@ -477,6 +485,7 @@ def main(argv: list[str] | None = None) -> int:
                 "elapsed_seconds": time.perf_counter() - started,
             }, sort_keys=True), flush=True)
     episode_rows.sort(key=lambda row: str(row["run_id"]))
+    linux_completed = time.perf_counter()
 
     panel_rows = []
     panel_exact = panel_covered = panel_certified = 0
@@ -505,6 +514,7 @@ def main(argv: list[str] | None = None) -> int:
                     "panel_cases": len(selected_panel),
                     "elapsed_seconds": time.perf_counter() - started,
                 }, sort_keys=True), flush=True)
+    completed = time.perf_counter()
     gates = {
         "exact_expected_full_corpus_option_count": options == args.expected_options,
         "all_rows_finite_and_fixed_width": finite_rows == options,
@@ -526,8 +536,10 @@ def main(argv: list[str] | None = None) -> int:
             panel_exact == len(panel_rows)
         ),
         "bomb_absent_from_action_space": "bomb" not in ACTION_NAMES,
+        "bounded_parallel_audit_inside_wall_clock_ceiling": (
+            completed - started <= args.maximum_seconds
+        ),
     }
-    completed = time.perf_counter()
     result = {
         "schema": SCHEMA,
         "evidence_eligible": False,
@@ -581,6 +593,12 @@ def main(argv: list[str] | None = None) -> int:
         "worker_processes": process_count,
         "math_library_threads_per_worker": 1,
         "timing_seconds": completed - started,
+        "timing": {
+            "linux_corpus_seconds": linux_completed - started,
+            "scalar_panel_seconds": completed - linux_completed,
+            "total_seconds": completed - started,
+            "maximum_seconds": args.maximum_seconds,
+        },
         "gates": gates,
         "passed": all(gates.values()),
     }

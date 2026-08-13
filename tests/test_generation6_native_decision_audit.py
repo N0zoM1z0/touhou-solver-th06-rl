@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from scripts.audit_generation6_native_decisions import (
+    DEFAULT_AUDIT_MAXIMUM_SECONDS,
     DEFAULT_AUDIT_WORKERS,
     _Panel,
 )
@@ -46,3 +47,4 @@ def test_parallel_panel_reduction_is_input_order_invariant() -> None:
 def test_full_corpus_audit_keeps_bounded_parallelism_as_default() -> None:
     assert DEFAULT_AUDIT_WORKERS == 16
     assert DEFAULT_AUDIT_WORKERS <= 32
+    assert DEFAULT_AUDIT_MAXIMUM_SECONDS == 180.0

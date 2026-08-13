@@ -662,7 +662,10 @@ under the repository-wide 32-CPU cap.
 On the full 56-episode / 167,250-option / 2,415,808-candidate workload, the
 parallel float64 serving smoke completed both the Linux differential and 320
 scalar envelope cases in 106.5 seconds. The main corpus pass finished in about
-83 seconds. Future learner/export variants must use this runner and retain its
+83 seconds. The frozen successor allows a 180-second wall-clock ceiling, so
+ordinary host contention has headroom while a return to the roughly 19-minute
+serial path still fails automatically. The report splits Linux-corpus and
+scalar-panel time. Future learner/export variants must use this runner and retain its
 reported worker count, exact option identity, deterministic panel selection,
 and serial-equivalent result; reverting to an unbounded pool or the old
 single-process loop is an infrastructure regression.
