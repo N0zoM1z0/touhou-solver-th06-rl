@@ -678,3 +678,32 @@ partitions by immutable episode across 16 single-threaded fork workers under
 the same 32-CPU affinity contract. The preflight reports this stage separately
 and rejects context loading above 120 seconds; later algorithm/export changes
 may not silently restore the serial corpus scan or select an easier fixture.
+
+## 2026-08-13: decision successor Wine proof and logical fail-fast
+
+The float64 scorer subsequently ran two complete Stage-4 canaries and eight
+complete Stage-6 evaluations under the original-Wine contract. The largest
+resident scorer p95 was `3.2269 ms`; all ten runs had zero frame-deadline
+misses, exact immutable state, native-safe publication, zero Bomb, and clean
+prefix teardown. This is long-running confirmation that the numeric serving
+repair did not trade portability for online latency. Future learners must keep
+the exact differential and the `<4 ms`/zero-miss Wine gates rather than return
+to Python scoring or raw-logit float32 comparison.
+
+After four paired blocks, the candidate had been no worse once. Two blocks
+remained, so its best possible final result was three no-worse blocks versus
+the frozen requirement of four. The run stopped at that complete-block
+boundary, saving four full Stage-6 executions. A future runner may encode this
+as a predeclared, rejection-only performance optimization:
+
+`observed_passes + remaining_blocks < required_passes -> reject`
+
+The same best-possible-bound rule applies to candidate-exposure counts. It may
+run only after a complete atomic block and may never grant early acceptance;
+positive evidence still requires the full schedule and every conjunctive
+runtime, safety, aggregate, and identity gate. Outcome-dependent selection,
+stage/spell/frame filtering, and post-hoc threshold changes remain forbidden.
+The game-neutral `minimum_count_gate_impossible` helper and its regression
+tests preserve this one-way stopping semantics for successor orchestrators.
+The detailed result and learner diagnosis are in
+`GENERATION6_DECISION_GAMEPLAY_RESULT.md`.
