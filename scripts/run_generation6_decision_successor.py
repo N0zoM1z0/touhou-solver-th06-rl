@@ -117,6 +117,24 @@ def validate_gameplay_contract(
     successor_sha = _sha256(paths["successor_contract"])
     candidate_sha = _sha256(paths["candidate"])
     registry_sha = _sha256(paths["registry"])
+    successor_frozen = successor.get("frozen_inputs")
+    runtime_successor_inputs = (
+        "/usr/bin/wine",
+        "reference/th06-game-original/th06/東方紅魔郷.exe",
+        "reference/th06-game-original/full-unlock-score.dat",
+        "reference/tools/windows-python-3.11.9-embed-win32/python.exe",
+        "build/native-win32-fully-static/libth06_rl_native.dll",
+        "build/native-win32-fully-static/libth06_rl_ranker.dll",
+        "config/wine_corpus_registry.json",
+    )
+    if not isinstance(successor_frozen, dict) or any(
+        not (Path(name) if Path(name).is_absolute() else REPOSITORY / name).is_file()
+        or _sha256(
+            Path(name) if Path(name).is_absolute() else REPOSITORY / name
+        ) != successor_frozen.get(name)
+        for name in runtime_successor_inputs
+    ):
+        raise ValueError("decision gameplay original-Wine runtime drifted")
     if (
         successor.get("schema")
         != "autonomous-generation-6-decision-successor-contract-v2"
@@ -129,6 +147,12 @@ def validate_gameplay_contract(
         or offline.get("contract_sha256") != successor_sha
         or offline.get("candidate_sha256") != candidate_sha
         or offline.get("training_registry_sha256") != registry_sha
+        or offline.get("decision_audit_sha256")
+        != _sha256(paths["decision_audit"])
+        or offline.get("online_preflight_sha256")
+        != _sha256(paths["wine_preflight"])
+        or _sha256(WINE_SCORER)
+        != contract["bindings"]["wine_scorer"]["sha256"]
         or not isinstance(offline.get("gates"), dict)
         or not offline["gates"]
         or not all(value is True for value in offline["gates"].values())
