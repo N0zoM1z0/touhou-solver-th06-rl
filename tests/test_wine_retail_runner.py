@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
 from scripts.run_wine_retail import (
+    _attested_process_pid,
     _bounded_priority_command,
     _summarize_controller_completion,
     _summarize_trace,
@@ -169,6 +172,23 @@ def test_bounded_priority_wrapper_is_explicit_and_attested(tmp_path: Path) -> No
     assert command[command.index("--nice") + 1] == "-10"
     assert command[command.index("--cpu-list") + 1] == "8-31"
     assert command[-2:] == ["wine", "game.exe"]
+
+
+def test_attested_child_pid_bypasses_sudo_monitor_pid(tmp_path: Path) -> None:
+    process = subprocess.Popen([
+        sys.executable, "-c", "import time; time.sleep(30)"
+    ])
+    try:
+        attestation = tmp_path / "priority.json"
+        attestation.write_text(json.dumps({
+            "schema": "bounded-wine-process-priority-v1",
+            "pid": os.getpid(),
+        }), encoding="utf-8")
+        assert _attested_process_pid(attestation, process) == os.getpid()
+        assert process.pid != os.getpid()
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
 
 
 def test_first_failure_corpus_requires_frozen_natural_practice(

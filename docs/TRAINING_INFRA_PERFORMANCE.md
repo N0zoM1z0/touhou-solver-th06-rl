@@ -586,3 +586,14 @@ normal Wine pacing, native safety, action choice, propensity, factual data,
 reward, and zero-deadline gate do not change. The failed round remains invalid;
 a new frozen contract is required. Full reasoning and reproduction steps are
 in `GENERATION6_LATENCY_TAIL_AUDIT.md`.
+
+## 2026-08-13: bounded-priority child identity
+
+The first repaired-round startup exposed that sudo's monitor PID is not the
+exec child's PID. The wrapper attested Wine PID `3909394`, while Popen returned
+monitor PID `3909392`; attaching the startup GDB script to the monitor could
+never reach TH06. No controller or new corpus was created. The generic runner
+now resolves the live attested PID before GDB attach and records both
+identities. Cleanup also waits up to five seconds for verified per-prefix Wine
+helpers to exit after `wineserver -k`, avoiding immediate retry races without
+killing an unrelated or shared process.

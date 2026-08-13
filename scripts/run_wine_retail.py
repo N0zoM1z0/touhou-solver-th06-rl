@@ -198,6 +198,41 @@ def _stop_process(process: subprocess.Popen[Any] | None, timeout: float = 5.0) -
         process.wait(timeout=timeout)
 
 
+def _attested_process_pid(
+    path: Path, host_process: subprocess.Popen[Any], timeout: float = 10.0,
+) -> int:
+    """Resolve the exec child hidden behind sudo's monitor process."""
+    deadline = time.monotonic() + timeout
+    last_error = "attestation was not created"
+    while time.monotonic() < deadline:
+        attestation = _priority_attestation(path)
+        if isinstance(attestation, dict):
+            pid = attestation.get("pid")
+            if (
+                attestation.get("schema") == "bounded-wine-process-priority-v1"
+                and isinstance(pid, int)
+                and pid > 1
+                and (Path("/proc") / str(pid)).is_dir()
+            ):
+                return pid
+            last_error = str(attestation.get("error", "invalid attested PID"))
+        if host_process.poll() is not None:
+            raise RuntimeError(
+                "bounded-priority child exited before PID attestation"
+            )
+        time.sleep(0.01)
+    raise TimeoutError(
+        f"bounded-priority child PID attestation timed out: {last_error}"
+    )
+
+
+def _wait_prefix_exit(prefix: Path, timeout: float = 5.0) -> None:
+    """Allow Wine's per-prefix helper children to finish after wineserver -k."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and _prefix_processes(prefix):
+        time.sleep(0.05)
+
+
 def _bounded_priority_command(
     command: list[str], *, cpu_list: str, nice: int, attestation: Path,
 ) -> list[str]:
@@ -767,6 +802,13 @@ def run(args: argparse.Namespace) -> int:
             stderr=subprocess.STDOUT,
         )
         report["game_host_pid"] = game_process.pid
+        if args.game_nice is not None:
+            game_target_pid = _attested_process_pid(
+                game_priority_path, game_process
+            )
+        else:
+            game_target_pid = game_process.pid
+        report["game_process_pid"] = game_target_pid
         time.sleep(1.0)
         gdb_result = subprocess.run(
             [
@@ -777,7 +819,7 @@ def run(args: argparse.Namespace) -> int:
                 "-nx",
                 "-batch",
                 "-p",
-                str(game_process.pid),
+                str(game_target_pid),
                 "-x",
                 str(repository / "scripts/gdb/normalize_wine_retail_startup.py"),
             ],
@@ -915,6 +957,7 @@ def run(args: argparse.Namespace) -> int:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            _wait_prefix_exit(prefix)
         _stop_process(xvfb_process)
         controller_log.close()
         game_log.close()

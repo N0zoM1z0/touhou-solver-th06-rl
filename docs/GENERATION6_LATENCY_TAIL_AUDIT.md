@@ -103,3 +103,22 @@ features, policy decisions, and option traces are unchanged.
 Round 1 is not rewritten. A successor contract must bind the repaired source,
 priority values, formal stress report, new identity, and new Wine attempts
 before any further outcome-facing run.
+
+## 2026-08-13 successor startup audit
+
+The first round-2 launch failed before the controller entered gameplay and
+created no new corpus. The priority wrapper correctly attested the Wine child
+as PID `3909394`, while `subprocess.Popen` exposed sudo's monitor PID
+`3909392`. The existing startup normalizer attached GDB to the monitor. GDB
+returned normally but could not observe the TH06 startup marker, so the run
+failed closed. Two immediate infrastructure retries then rejected the prefix
+because a transient per-prefix `dbus-launch` helper had not exited yet.
+
+This is a general privileged-wrapper process-identity defect. The repair waits
+for the exclusive priority attestation, verifies that its PID is live, records
+both host-monitor and actual process PIDs, and attaches GDB to the attested
+Wine PID. Prefix cleanup now gives Wine's own helper children a bounded grace
+period after `wineserver -k`; it still never kills an unverified shared
+process. Round 2 remains frozen and is not resumed with the changed runner. A
+new successor contract must bind this additional repair before another Wine
+attempt.
