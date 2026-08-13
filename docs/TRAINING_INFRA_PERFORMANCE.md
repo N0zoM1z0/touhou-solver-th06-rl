@@ -600,3 +600,23 @@ wait from five to fifteen seconds had no effect, and the helper exited
 immediately after Xvfb stopped. Cleanup now stops the owned Xvfb before a
 bounded five-second helper grace. This avoids immediate retry races without
 killing an unrelated or shared process.
+
+## 2026-08-13: repaired-round collection and refit profile
+
+The repaired round's two new original-Wine Stages covered 56,957 game frames
+and completed in about 18 minutes wall time, with scorer p95 values 3.1006 and
+3.1105 ms and zero deadline misses. Cleanup and priority attestations passed
+on both. The scheduler repair therefore removes the observed blocker without
+accelerating game time or consuming more than the 0--31 CPU allocation.
+
+The following all-registry cross-fit loaded 56 episodes / 167,250 options and
+completed in 685.42 seconds. Five folds ran as five processes and used roughly
+12--15 cores in aggregate. The subsequent seven-member production fit is the
+new dominant offline cost: after 40 minutes it was still actively computing,
+used the full 32-thread allowance, and held about 29 GiB RSS. CPU time kept
+increasing and there was no crash or wait deadlock. This frozen run is allowed
+to complete unchanged so it yields a comparable artifact and exact duration;
+the next general performance audit should profile production actor fitting,
+especially repeated full-dataset augmentation/training and thread/memory
+scaling. It must preserve model math and output before any optimization is
+accepted.

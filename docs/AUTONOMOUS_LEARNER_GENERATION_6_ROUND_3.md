@@ -63,3 +63,42 @@ effective signal requires all reports valid, candidate exposure in at least
 four blocks, strictly fewer aggregate candidate HITs, and candidate no worse
 in at least four blocks. Promotion is forbidden. A negative result leads to
 learner/general-infrastructure analysis, never manual data-distribution repair.
+
+## 2026-08-13 execution progress
+
+The two new complete-Stage collection rows both passed every frozen gate:
+
+| Episode | Stage | HIT | Options | Actor p95 | >4 ms | Deadline misses |
+|---:|---:|---:|---:|---:|---:|---:|
+| 11 | 6 | 39 | 2,879 | 3.1006 ms | 23 | 0 |
+| 12 | 5 | 32 | 1,421 | 3.1105 ms | 11 | 0 |
+
+Both used natural RNG, conserved physical HITs across the Wine report,
+manifest, and factual intervals, recorded complete behavior propensities,
+selected only native-safe actions, used no Bomb, preserved the immutable
+policy, attested both process partitions at exact `SCHED_OTHER/-10`, and left
+no prefix process. Together they covered 56,957 observed game frames without
+a scorer deadline miss. The old failed episode had two misses by frame 3,580;
+this long-run differential supports the scheduling diagnosis and repair.
+
+The new registry source contains exactly twelve audited runs and has inventory
+SHA-256
+`81e2891e5e15b07cf10f06e15842d593d8ceff1d5b89728012691629aeb20357`.
+It was checkpointed in commit `53da64a`; the ten reused rows and two new rows
+remain one immutable source for future learner variants.
+
+All-registry grouped cross-fit then consumed 56 episodes and 167,250 factual
+options. Its physical-HIT-only policy DR estimates were:
+
+| Cohort | Episodes | Mean HIT effect | Bootstrap upper 95% | Beneficial episodes |
+|---|---:|---:|---:|---:|
+| Overall | 56 | -8.0895 | -6.5683 | 94.6% |
+| Stage 4 | 19 | -12.2189 | -9.2508 | 100% |
+| Stage 5 | 4 | -14.2670 | -10.5715 | 100% |
+| Stage 6 | 33 | -4.9632 | -3.7991 | 90.9% |
+
+The worst seven-member leave-one-out upper bound remained `-6.3652`, and
+synthetic causal/null smoke passed. These are encouraging offline diagnostics,
+not Wine efficacy. Only 37 of 167,250 options met the complete-population
+proposal rule in cross-fit, so active exposure remains a material uncertainty
+that the native smoke and Wine canary must test.
