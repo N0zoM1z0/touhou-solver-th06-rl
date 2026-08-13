@@ -226,7 +226,7 @@ def _attested_process_pid(
     )
 
 
-def _wait_prefix_exit(prefix: Path, timeout: float = 5.0) -> None:
+def _wait_prefix_exit(prefix: Path, timeout: float = 15.0) -> None:
     """Allow Wine's per-prefix helper children to finish after wineserver -k."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline and _prefix_processes(prefix):

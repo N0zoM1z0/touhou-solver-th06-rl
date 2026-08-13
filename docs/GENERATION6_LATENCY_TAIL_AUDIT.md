@@ -118,7 +118,9 @@ This is a general privileged-wrapper process-identity defect. The repair waits
 for the exclusive priority attestation, verifies that its PID is live, records
 both host-monitor and actual process PIDs, and attaches GDB to the attested
 Wine PID. Prefix cleanup now gives Wine's own helper children a bounded grace
-period after `wineserver -k`; it still never kills an unverified shared
-process. Round 2 remains frozen and is not resumed with the changed runner. A
-new successor contract must bind this additional repair before another Wine
-attempt.
+period after `wineserver -k`; an initial five-second smoke showed the isolated
+`dbus-launch` helper exits cleanly but needs several additional seconds, so the
+measured bound is fifteen seconds. The runner still never kills an unverified
+shared process. Round 2 remains frozen and is not resumed with the changed
+runner. A new successor contract must bind this additional repair before
+another Wine attempt.
