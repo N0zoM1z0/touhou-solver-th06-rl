@@ -93,22 +93,21 @@ root; each remains paced by the original 60 Hz executable and passes the same
 per-run audit before merge. Canary and final evaluation remain single-instance,
 alternating, normal-speed jobs. Offline fitting may parallelize.
 
-The current implemented entrypoint is
-`scripts/run_generation6_autonomous_round.py`, bound to a separately committed
-machine contract. It collects a balanced Stage-4/5/6 natural-RNG panel with a
-frozen actor/uniform/inverse-ESS mixture, appends it to the immutable registry,
-refits all compatible old and new corpus, and runs conjunctive offline/native
-smoke before any active Wine canary. The exact current design and stopping rule
-are in `AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md`. Older generation runners
-remain historical audit implementations and are not the current command.
+There is currently no authorized learner-generation runner or gameplay
+candidate. `scripts/run_generation6_autonomous_round.py` and the other
+generation runners are retained as frozen audit implementations, not as the
+current command. Generation 6 is conclusively rejected; its actor objective
+must not be refit. The next learner starts as a separately frozen Generation-7
+contract on the existing registry and must pass learner-only qualification
+before any outcome-facing Wine run. See `HAND_OFF.md` for that boundary.
 
 Every active candidate is hash-chained:
 
 `fit state -> held-out shadow audit -> bounded canary state -> canary audit -> full-evaluation state`
 
-The online state loader rejects a missing or stale link. The canary has a fixed
-64-override exposure budget; only a clean canary audit can authorize an
-unbounded complete-Stage evaluation.
+The online state loader rejects a missing or stale link. Each generation
+predeclares its canary exposure budget and causal promotion rule; only a clean
+canary audit can authorize a complete-Stage evaluation.
 
 ## Exploration and factual learning
 
@@ -126,12 +125,13 @@ episode/scope/provenance IDs. An action Wine did not execute has no successor
 label. Fixed RNG can reduce training variance but does not create a
 counterfactual pair; different physical roots remain different episodes.
 
-Rewards use one stable environment-neutral contract based on factual survival,
-HIT, and continued availability of safe actions. Reward parameters are fixed in
-the generation manifest. Importance weighting uses recorded propensities and is
-clipped by a predeclared bound. The initial model is a small regularized
-action-relative residual with grouped out-of-fold uncertainty; richer model
-families require general held-out evidence and a new generation.
+The sole gameplay cost is the factual physical HIT count, with `gamma = 1` and
+terminal value zero. Survival time, progress, phase, graze, clearance, and
+continued availability of safe actions are diagnostics or observations, never
+reward shaping. A generation freezes its learner, propensity treatment,
+grouped validation, and uncertainty contract before fitting. Model complexity
+is unrestricted offline provided the exact deployable policy remains bounded,
+immutable, and fast enough online.
 
 For option-boundary complete-Stage returns, a rejected tentative option is not
 a treatment or a new decision boundary. Physical HITs that appear while
@@ -161,7 +161,7 @@ physical HIT count followed by the predeclared aggregate. Offline loss,
 first-failure survival, or shadow agreement may reject a candidate but cannot
 promote it.
 
-## First-generation stopping rule
+## Generation stopping rule
 
 Before collection begins, record the maximum round/episode budget, grouped
 validation gate, canary count, and complete-Stage A/B count. Stop for human
@@ -200,10 +200,16 @@ implicit Bellman iteration, lower cost expectile value fitting, and supported
 pessimistic population selection. Its Stage-4 boundary-15 smoke learned
 held-out Bellman structure but failed to identify a stable action, so
 collection stopped without a candidate. See
-`AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md`.
+`AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md`. Generation 6 separated critic and
+policy extraction, accumulated a 56-episode sequential registry view, and
+preserved important native-serving and performance repairs. Its larger clean
+Wine confirmation nevertheless reached 42 candidate HITs versus 34 incumbent
+HITs. Offline diagnosis then proved its action-centered empirical actor
+objective unbounded below, so Generation 6 is frozen as ineffective and must
+not be refit. See `GENERATION6_DECISION_GAMEPLAY_RESULT.md` and `HAND_OFF.md`.
 
-The successor learner must first qualify on frozen factual Wine corpora split
-by complete episode. These offline checks exist to reject broken algorithms
-quickly and cannot reinterpret historical gameplay as authorization or
-promotion evidence. Only after the learner architecture and its gates are
+Generation 7 must first qualify a bounded proper learner on frozen factual Wine
+corpora split by complete episode. These offline checks exist to reject broken
+algorithms quickly and cannot reinterpret historical gameplay as authorization
+or promotion evidence. Only after the learner architecture and its gates are
 frozen may it collect new Wine evidence.
