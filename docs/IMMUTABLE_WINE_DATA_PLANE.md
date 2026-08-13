@@ -111,11 +111,10 @@ new source root; this prevents outcome- or failure-conditioned omission. The
 runner then atomically adds exactly one source row and revalidates the complete
 registry. A crash after moving an accepted episode or writing the registry is
 reconciled from hashes and the ledger, never by drawing a replacement gameplay
-outcome. Generation-6 round 1 was the first attempted user of this protocol;
-round 3 performed the first successful audited append after repairing the
-generic scheduler and PID-attestation defects. See
-`AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md` and
-`AUTONOMOUS_LEARNER_GENERATION_6_ROUND_3.md`.
+outcome. The first attempted user of this protocol exposed scheduler and
+PID-attestation defects; the repaired round performed the first successful
+audited append. The general repairs remain recorded in
+`TRAINING_INFRA_PERFORMANCE.md` after generation-specific runners were pruned.
 
 ## Partition is a learner-run property
 

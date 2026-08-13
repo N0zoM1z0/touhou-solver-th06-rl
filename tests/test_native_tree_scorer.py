@@ -7,11 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from th06_rl.advantage_learning import (
+from th06_rl.hazard_representation import (
     encode_hazard_set,
     hazard_codebook_feature_names,
-)
-from th06_rl.hazard_representation import (
     HAZARD_PRIMITIVE_FEATURE_NAMES,
     NativeHazardCodebookEncoder,
 )

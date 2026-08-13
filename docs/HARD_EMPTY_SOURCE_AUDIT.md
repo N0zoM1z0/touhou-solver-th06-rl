@@ -78,9 +78,9 @@ Consecutive control frames may each contribute a root, so these are not 1,468
 independent episodes. They are continuous factual follow-ups, and they show
 that the fallback repaired the margin-only false-empty class without hiding
 true source-geometry closures. There is no evidence-backed Hard-empty
-infrastructure change to make after generation 2. See
-`AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for the learner verdict and exact
-artifact paths.
+infrastructure change to make from this evidence. Historical learner verdicts
+are consolidated in `LEARNER_AUDIT_AND_GENERATION7_DECISION.md`; the ignored
+audit artifacts remain hash-bound local evidence.
 
 An already-issued input lease that becomes source-unsafe on the next coherent
 Wine frame is likewise a control dead-end, not an infrastructure failure. The

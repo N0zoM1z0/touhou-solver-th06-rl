@@ -27,6 +27,8 @@ HAZARD_PRIMITIVE_FEATURE_NAMES = (
     "kind_body",
 )
 MAX_HAZARD_PRIMITIVES = 256
+HAZARD_CODEBOOK_SCHEMA = "game-neutral-hazard-codebook-v1"
+HAZARD_CODEBOOK_PROTOTYPES = 24
 HISTORY_OBSERVATIONS = 4
 _HISTORY_FIELDS = (
     "present",
@@ -44,6 +46,107 @@ HISTORY_FEATURE_NAMES = tuple(
     for lag in range(HISTORY_OBSERVATIONS)
     for name in _HISTORY_FIELDS
 )
+
+
+def hazard_codebook_feature_names(
+    prototype_count: int = HAZARD_CODEBOOK_PROTOTYPES,
+) -> tuple[str, ...]:
+    if prototype_count <= 0:
+        raise ValueError("hazard codebook needs at least one prototype")
+    return (
+        *(f"hazard:prototype_fraction_{index}" for index in range(prototype_count)),
+        *(
+            f"hazard:prototype_min_distance_{index}"
+            for index in range(prototype_count)
+        ),
+        *(f"hazard:mean_{name}" for name in HAZARD_PRIMITIVE_FEATURE_NAMES),
+        *(f"hazard:max_abs_{name}" for name in HAZARD_PRIMITIVE_FEATURE_NAMES),
+        "hazard:count_log",
+        "hazard:empty",
+    )
+
+
+def encode_hazard_set(
+    primitives: tuple[tuple[float, ...], ...],
+    artifact: dict[str, object],
+) -> tuple[float, ...]:
+    """Portable reference for the retained native codebook encoder."""
+    width = len(HAZARD_PRIMITIVE_FEATURE_NAMES)
+    prototype_count = int(artifact.get("prototype_count", -1))
+    mean = tuple(float(value) for value in artifact.get("mean", ()))
+    scale = tuple(float(value) for value in artifact.get("scale", ()))
+    prototypes = tuple(
+        tuple(float(value) for value in row)
+        for row in artifact.get("prototypes", ())
+    )
+    if (
+        artifact.get("schema") != HAZARD_CODEBOOK_SCHEMA
+        or tuple(artifact.get("primitive_feature_names", ()))
+        != HAZARD_PRIMITIVE_FEATURE_NAMES
+        or prototype_count <= 0
+        or len(mean) != width
+        or len(scale) != width
+        or len(prototypes) != prototype_count
+        or any(len(row) != width for row in prototypes)
+        or any(not math.isfinite(value) for value in mean)
+        or any(not math.isfinite(value) or value <= 0.0 for value in scale)
+        or any(not math.isfinite(value) for row in prototypes for value in row)
+        or len(primitives) > MAX_HAZARD_PRIMITIVES
+        or any(len(row) != width for row in primitives)
+    ):
+        raise ValueError("hazard codebook contract mismatch")
+    normalized = tuple(
+        tuple(
+            (float(value) - center) / spread
+            for value, center, spread in zip(row, mean, scale, strict=True)
+        )
+        for row in primitives
+    )
+    distances = tuple(
+        tuple(
+            sum(
+                (value - prototype_value) ** 2
+                for value, prototype_value in zip(row, prototype, strict=True)
+            ) / width
+            for prototype in prototypes
+        )
+        for row in normalized
+    )
+    if normalized:
+        assignments = tuple(
+            min(range(prototype_count), key=row.__getitem__) for row in distances
+        )
+        fractions = tuple(
+            assignments.count(index) / len(assignments)
+            for index in range(prototype_count)
+        )
+        minimum = tuple(
+            min(row[index] for row in distances)
+            for index in range(prototype_count)
+        )
+        average = tuple(
+            sum(row[index] for row in normalized) / len(normalized)
+            for index in range(width)
+        )
+        max_abs = tuple(
+            max(abs(row[index]) for row in normalized) for index in range(width)
+        )
+    else:
+        fractions = (0.0,) * prototype_count
+        minimum = (0.0,) * prototype_count
+        average = (0.0,) * width
+        max_abs = (0.0,) * width
+    encoded = (
+        *fractions,
+        *minimum,
+        *average,
+        *max_abs,
+        math.log1p(len(primitives)),
+        float(not primitives),
+    )
+    if len(encoded) != len(hazard_codebook_feature_names(prototype_count)):
+        raise RuntimeError("hazard codebook encoding width mismatch")
+    return tuple(encoded)
 
 
 @dataclass(frozen=True)
@@ -283,7 +386,7 @@ class NativeHazardCodebookEncoder:
         )
         width = len(HAZARD_PRIMITIVE_FEATURE_NAMES)
         if (
-            artifact.get("schema") != "game-neutral-hazard-codebook-v1"
+            artifact.get("schema") != HAZARD_CODEBOOK_SCHEMA
             or tuple(artifact.get("primitive_feature_names", ()))
             != HAZARD_PRIMITIVE_FEATURE_NAMES
             or len(mean) != width

@@ -94,12 +94,11 @@ per-run audit before merge. Canary and final evaluation remain single-instance,
 alternating, normal-speed jobs. Offline fitting may parallelize.
 
 There is currently no authorized learner-generation runner or gameplay
-candidate. `scripts/run_generation6_autonomous_round.py` and the other
-generation runners are retained as frozen audit implementations, not as the
-current command. Generation 6 is conclusively rejected; its actor objective
-must not be refit. The next learner starts as a separately frozen Generation-7
-contract on the existing registry and must pass learner-only qualification
-before any outcome-facing Wine run. See `HAND_OFF.md` for that boundary.
+candidate on `main`. Failed Generation-1--6 executable paths were removed;
+they may not be restored as a fallback. The next learner starts as a separately
+frozen Generation-7 contract on the existing registry and must pass
+learner-only qualification before any outcome-facing Wine run. See
+`LEARNER_AUDIT_AND_GENERATION7_DECISION.md` and `HAND_OFF.md`.
 
 Every active candidate is hash-chained:
 
@@ -176,37 +175,11 @@ No intermediate offline metric is a verdict.
 
 ## Current evidence
 
-Generation 1 completed two unattended Wine collection/fit rounds and was
-rejected by its unchanged shadow gate. See
-`AUTONOMOUS_GENERATION_1_RESULT.md`. Its negative result does not alter the
-autonomous-learning boundary above. Generation 2 replaced the learner and
-completed its factual complete-Stage contract. Its second round passed a
-fixed-RNG canary, but normal-speed natural-RNG evaluation ended at baseline 17
-HITs versus candidate 18, so it is frozen as ineffective. See
-`AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` and
-`AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md`. A later attempt is a new declared
-algorithm generation, not a failure-region adjustment. Generation 3 is frozen
-as superseded without canary authorization after its complete-return AIPW
-estimator produced structurally high variance; see
-`AUTONOMOUS_LEARNER_GENERATION_3_RESULT.md`. Generation 4 is declared before
-new outcomes in `AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md`. It retains the
-same Wine/native/HIT boundaries while replacing the estimator with sequential
-semi-Markov offline RL, generalized action centering, autonomous propensity-
-aware exploration, policy-level cross-fitting, and a full native population.
-It completed 16 new Wine Stages but produced no stable held-out advantage and
-never earned canary authorization, so it is frozen as ineffective; see
-`AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md`. Generation 5 used factual in-sample
-implicit Bellman iteration, lower cost expectile value fitting, and supported
-pessimistic population selection. Its Stage-4 boundary-15 smoke learned
-held-out Bellman structure but failed to identify a stable action, so
-collection stopped without a candidate. See
-`AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md`. Generation 6 separated critic and
-policy extraction, accumulated a 56-episode sequential registry view, and
-preserved important native-serving and performance repairs. Its larger clean
-Wine confirmation nevertheless reached 42 candidate HITs versus 34 incumbent
-HITs. Offline diagnosis then proved its action-centered empirical actor
-objective unbounded below, so Generation 6 is frozen as ineffective and must
-not be refit. See `GENERATION6_DECISION_GAMEPLAY_RESULT.md` and `HAND_OFF.md`.
+Generations 1--6 did not establish a repeatable complete-Stage physical-HIT
+improvement. Their terminal evidence, mathematical failure analysis, corpus
+statistics, and valid retained-infrastructure boundary are consolidated in
+`LEARNER_AUDIT_AND_GENERATION7_DECISION.md`; executable historical algorithms
+are intentionally absent.
 
 Generation 7 must first qualify a bounded proper learner on frozen factual Wine
 corpora split by complete episode. These offline checks exist to reject broken

@@ -94,8 +94,7 @@
         "recorded_complete_behavior_propensity",
         "native_safe_candidates",
         "sequential_offline_rl",
-        "natural_rng",
-        "generation6_actor_ess_behavior"
+        "natural_rng"
       ],
       "expected_clean_complete_runs": 12,
       "id": "generation6-round3-startup-audited-natural",

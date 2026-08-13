@@ -17,8 +17,11 @@ for path in (REPOSITORY, REPOSITORY / "src"):
         sys.path.insert(0, str(path))
 
 from scripts.replay_corpus import _hydrate, _load_objects  # noqa: E402
-from th06_rl.autonomous_learning import _transition_rows, _validate_run  # noqa: E402
 from th06_rl.native import ACTIONS, NativeKernel  # noqa: E402
+from th06_rl.wine_transitions import (  # noqa: E402
+    iter_transition_rows,
+    validate_wine_run,
+)
 from th06_rl.th06.control_capture import decode_control_snapshot  # noqa: E402
 from th06_rl.th06.source import (  # noqa: E402
     COLLISION_MARGIN,
@@ -75,10 +78,14 @@ def _source_binding(source_root: Path) -> dict[str, object]:
 
 def audit_run(run_dir: Path, native_library: Path) -> dict[str, object]:
     run_dir = run_dir.resolve()
-    _run, manifest = _validate_run(run_dir)
+    _run, manifest, transition_schema = validate_wine_run(run_dir)
     objects = _load_objects(run_dir)
     frames = list(_rows(sorted(run_dir.glob("frames-*.jsonl.gz"))))
-    transitions = list(_transition_rows(run_dir, manifest))
+    transitions = list(iter_transition_rows(
+        run_dir,
+        manifest,
+        expected_transition_schema=transition_schema,
+    ))
     transition_by_next = {
         str(row.get("next_snapshot_ref")): index
         for index, row in enumerate(transitions)

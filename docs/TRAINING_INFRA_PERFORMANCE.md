@@ -584,8 +584,8 @@ while full metrics are emitted every 60 frames and in one exact final record.
 These are model- and game-neutral scheduling/telemetry repairs. The 32-CPU cap,
 normal Wine pacing, native safety, action choice, propensity, factual data,
 reward, and zero-deadline gate do not change. The failed round remains invalid;
-a new frozen contract is required. Full reasoning and reproduction steps are
-in `GENERATION6_LATENCY_TAIL_AUDIT.md`.
+a new frozen contract is required. This section retains the reasoning because
+the generation-specific runner and separate audit report were pruned.
 
 ## 2026-08-13: bounded-priority child identity
 
@@ -705,5 +705,5 @@ runtime, safety, aggregate, and identity gate. Outcome-dependent selection,
 stage/spell/frame filtering, and post-hoc threshold changes remain forbidden.
 The game-neutral `minimum_count_gate_impossible` helper and its regression
 tests preserve this one-way stopping semantics for successor orchestrators.
-The detailed result and learner diagnosis are in
-`GENERATION6_DECISION_GAMEPLAY_RESULT.md`.
+The learner diagnosis and successor decision are consolidated in
+`LEARNER_AUDIT_AND_GENERATION7_DECISION.md`.
