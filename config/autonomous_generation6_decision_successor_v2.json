@@ -1,0 +1,149 @@
+{
+  "schema": "autonomous-generation-6-decision-successor-contract-v2",
+  "authorization_eligible": false,
+  "purpose": "learner-only float64-serving successor: reuse the complete registered corpus and seven-member fit, certify the exact baseline-centered decision, then run a frozen Wine panel, new canary, and Stage-6 HIT evidence",
+  "implementation_commit": "b859a2dcfbc12bdcb1f7ba46d6d50a7a7fd7d2bd",
+  "predecessor": {
+    "path": "config/autonomous_generation6_decision_successor.json",
+    "sha256": "4568c3f794e041f3d9ee2c8c0d6c5a4515a1fef99e2bfb84dc1c127d9588ebad",
+    "disposition": "rejected-by-full-float32-development-audit"
+  },
+  "normal_speed": true,
+  "natural_rng": true,
+  "complete_stage_hit_continuation": true,
+  "bomb": "forbidden",
+  "single_wine_instance": true,
+  "maximum_interventions": 64,
+  "retail_executable_sha256": "9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb852245",
+  "reused_training": {
+    "registry": "config/wine_corpus_registry.json",
+    "registry_sha256": "cc341c5abe43781b02c21f2f555e1fc436895c30fd4d9caab0bd4d3c0a860ddb",
+    "episodes": 56,
+    "factual_options": 167250,
+    "fit_checkpoint": "artifacts/autonomous-generation-6-round-3/offline/candidate.fit.json",
+    "fit_checkpoint_sha256": "e689b9b08902c2ecc761648898d682fca641468ff282aba495da74e1df2dc219",
+    "crossfit": "artifacts/autonomous-generation-6-round-3/offline/crossfit.json",
+    "crossfit_sha256": "fd12ad3906eb3f8495c1ec662f4ce6b29c6941933b135d550884dae137b018b2",
+    "synthetic": "artifacts/autonomous-generation-6-round-3/offline/synthetic.json",
+    "synthetic_sha256": "bd7dddc43dd454f9a87338387c2fda10335bdfad40e0f0b8c8f45121647e3739",
+    "new_wine_collection": false,
+    "refit": false,
+    "manual_stage_phase_frame_rng_hit_or_failure_targeting": false
+  },
+  "reused_infrastructure_evidence": {
+    "latency_tail_audit": {
+      "path": "artifacts/autonomous-generation-6-latency-audit/formal-v1.json",
+      "sha256": "8526220a0fc1d467bee4b9c24d4e6fa8b786560093a03ca91fabcb63ee5c591f"
+    },
+    "startup_smoke": {
+      "path": "artifacts/autonomous-generation-6-pid-smoke-v3/report.json",
+      "sha256": "dfd0515f8c5b282783013c3ffc90eccbbf4e4ed6d95e27dc90d4ad5762902915"
+    }
+  },
+  "numeric_conformance": {
+    "reference": "native-order-centered-float64-v1",
+    "serialized_parameter_precision": "float32",
+    "serving_intermediate_precision": "float64",
+    "normalization_precision": "float32",
+    "ffp_contract": "off",
+    "tanh_absolute_allowance_float64_unit_roundoffs": 8,
+    "panel_per_dimension": 64,
+    "panel_dimensions": [
+      "near_tie",
+      "maximum_hazard_count",
+      "maximum_candidate_width",
+      "maximum_feature_magnitude",
+      "identity_hash_stratified"
+    ],
+    "full_linux_factual_options": 167250,
+    "require_all_native_hazard_rows_finite": true,
+    "legacy_hazard_component_2e_5_is_diagnostic_only": true,
+    "require_exact_support_mask": true,
+    "require_exact_mean_population_proposal_and_tie_break": true,
+    "require_selected_margin_above_forward_error_envelope": true,
+    "windows_repetitions": 2000,
+    "latency_p95_below_ms": 4.0,
+    "deadline_ms": 16.666666666666668,
+    "deadline_misses": 0,
+    "manual_panel_targeting": false
+  },
+  "audit_performance": {
+    "maximum_cpus": 32,
+    "worker_processes": 16,
+    "math_library_threads_per_worker": 1,
+    "full_corpus_and_panel_maximum_seconds": 180.0,
+    "development_baseline_seconds": 106.5,
+    "development_serial_extrapolation_seconds": 1140.0,
+    "episode_parallelism": "fork-copy-on-write",
+    "panel_reduction": "identity-sha256-tie-break-order-invariant"
+  },
+  "canary": {
+    "stage": 4,
+    "required_clean_runs": 2,
+    "required_candidate_exposure": true,
+    "schedule": [
+      {"trial": 1, "stage": 4, "policy_seed": 661101},
+      {"trial": 2, "stage": 4, "policy_seed": 661102}
+    ]
+  },
+  "evaluation": {
+    "stage": 6,
+    "complete_runs": 12,
+    "blocks": 6,
+    "schedule": [
+      {"trial": 1, "block": 0, "role": "incumbent", "policy_seed": 661201},
+      {"trial": 2, "block": 0, "role": "candidate", "policy_seed": 661202},
+      {"trial": 3, "block": 1, "role": "candidate", "policy_seed": 661203},
+      {"trial": 4, "block": 1, "role": "incumbent", "policy_seed": 661204},
+      {"trial": 5, "block": 2, "role": "incumbent", "policy_seed": 661205},
+      {"trial": 6, "block": 2, "role": "candidate", "policy_seed": 661206},
+      {"trial": 7, "block": 3, "role": "candidate", "policy_seed": 661207},
+      {"trial": 8, "block": 3, "role": "incumbent", "policy_seed": 661208},
+      {"trial": 9, "block": 4, "role": "incumbent", "policy_seed": 661209},
+      {"trial": 10, "block": 4, "role": "candidate", "policy_seed": 661210},
+      {"trial": 11, "block": 5, "role": "candidate", "policy_seed": 661211},
+      {"trial": 12, "block": 5, "role": "incumbent", "policy_seed": 661212}
+    ],
+    "effective_learning_signal": "all audits pass; candidate exercised in at least 4/6 Stages; candidate aggregate HIT strictly lower; candidate no worse in at least 4/6 blocks",
+    "promotion": "forbidden; this successor remains confirmation evidence only"
+  },
+  "environment": {
+    "wine": "/usr/bin/wine",
+    "wine_version": "wine-11.0",
+    "source_game_dir": "reference/th06-game-original/th06",
+    "source_game_inventory_sha256": "2b02849a8a41c2ab8975540239b8a306582341306e416de17cb1ad349a175e60",
+    "worker_directory": "wine-0",
+    "display": ":112",
+    "game_cpu_list": "0-7",
+    "controller_cpu_list": "8-31",
+    "scheduler": "SCHED_OTHER",
+    "game_nice": -10,
+    "controller_nice": -10
+  },
+  "frozen_inputs": {
+    "/usr/bin/wine": "0fa5abe77c0d27991801983bd878fedd360b61fc26cca4777fd705a8a54ae6b9",
+    "reference/th06-game-original/th06/東方紅魔郷.exe": "9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb852245",
+    "reference/th06-game-original/full-unlock-score.dat": "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e94d26b749c71",
+    "reference/tools/windows-python-3.11.9-embed-win32/python.exe": "e60592888c3128132df3489a2462716bb268063bfe3564bfe1f2f3dbe9ceafd1",
+    "build/native-win32-fully-static/libth06_rl_native.dll": "71b27bef942928dfc04b6a489ef261cb6485cd5bab2cd4d4ebf4081991a22b5b",
+    "build/native-win32-fully-static/libth06_rl_ranker.dll": "5fad7ae536f3933fbe467f6b485455937c200be9b960958207ba90a8e501bb27",
+    "build/native/libth06_rl_ranker.so": "b0d8a2ea8efeb2e4d3b0798f109a9d2c5da992e8d78a3ab8434776590c88a283",
+    "config/autonomous_generation6_decision_successor.json": "4568c3f794e041f3d9ee2c8c0d6c5a4515a1fef99e2bfb84dc1c127d9588ebad",
+    "config/wine_corpus_registry.json": "cc341c5abe43781b02c21f2f555e1fc436895c30fd4d9caab0bd4d3c0a860ddb",
+    "artifacts/autonomous-generation-6-round-3/offline/candidate.fit.json": "e689b9b08902c2ecc761648898d682fca641468ff282aba495da74e1df2dc219",
+    "artifacts/autonomous-generation-6-round-3/offline/crossfit.json": "fd12ad3906eb3f8495c1ec662f4ce6b29c6941933b135d550884dae137b018b2",
+    "artifacts/autonomous-generation-6-round-3/offline/synthetic.json": "bd7dddc43dd454f9a87338387c2fda10335bdfad40e0f0b8c8f45121647e3739",
+    "artifacts/autonomous-generation-6-latency-audit/formal-v1.json": "8526220a0fc1d467bee4b9c24d4e6fa8b786560093a03ca91fabcb63ee5c591f",
+    "artifacts/autonomous-generation-6-pid-smoke-v3/report.json": "dfd0515f8c5b282783013c3ffc90eccbbf4e4ed6d95e27dc90d4ad5762902915",
+    "native/CMakeLists.txt": "afc66509bd4e1474b006ea238af2f687c448286ba891695295821d931610fa58",
+    "native/include/th06_rl_ranker.h": "769f75c44676e3a6ad80ae2471227ccfcaefad1e291c5909b8b3ee2369f8d57f",
+    "native/src/th06_rl_ranker.cpp": "b7c4e87ec32885a4173e94b9a711b8a3826323c3a6a8f93ce8ef5173d203243b",
+    "scripts/audit_generation6_native_decisions.py": "a73c8c372611202cf5cd7f9779a3fd06d58532798d579971435a442327d07e0b",
+    "src/th06_rl/iql_actor_learning.py": "83be7c584c44a938bb7a6219ca089bab620e7e6413cd7c8ec1c663980143f1bd",
+    "src/th06_rl/native_decision_conformance.py": "4a05c2c991541d0ca1cac379ee0555235f0e1b8ad49a6fecd4599bd58747905f",
+    "docs/GENERATION6_DECISION_NUMERIC_SUCCESSOR.md": "16883f8c34a93da59ef1cca1cfe39a7adf9e23f774fc660261fafaf60b3de0ff",
+    "docs/TRAINING_INFRA_PERFORMANCE.md": "6eb51b753182425c394bfbdc91eadb065722a3ebf2c78096b7c1478e599acf82",
+    "tests/test_generation6_native_decision_audit.py": "4915c1290d8e977d9ca7139ecb206cab1f928f26e7295814cb119343ac47234b",
+    "tests/test_native_decision_conformance.py": "7b077c038f9baeab105fe4630d24f9c2e02f14afb4c4fece5c86dd3fd5812831"
+  }
+}
