@@ -1,0 +1,97 @@
+{
+  "schema": "autonomous-generation-6-decision-gameplay-contract-v1",
+  "authorization_eligible": false,
+  "purpose": "after conjunctive offline numeric and Wine-panel conformance, run fresh original-Wine Stage-4 canaries and paired full Stage-6 physical-HIT evidence",
+  "implementation_commit": "c5e23196fd3fa276164b6da248d92bf037bfceb5",
+  "normal_speed": true,
+  "natural_rng": true,
+  "complete_stage_hit_continuation": true,
+  "bomb": "forbidden",
+  "single_wine_instance": true,
+  "maximum_interventions": 64,
+  "bindings": {
+    "successor_contract": {
+      "path": "config/autonomous_generation6_decision_successor_v2.json",
+      "sha256": "c2014a44daabe9307b565e48636f29c8a0114f82a01c2b85aa0994d7c4e3601d"
+    },
+    "candidate": {
+      "path": "artifacts/autonomous-generation-6-decision-successor-v2/offline/candidate.json",
+      "sha256": "551c87cff33a06dc8583e6ed9471bec4d94a5e0ea68432aa572e5a67e9715166"
+    },
+    "offline_audit": {
+      "path": "artifacts/autonomous-generation-6-decision-successor-v2/offline/audit.json",
+      "sha256": "eb324d4deeec29dca7b910d8666761422de56c2ed41288723c46dea0848426e1"
+    },
+    "decision_audit": {
+      "path": "artifacts/autonomous-generation-6-decision-successor-v2/offline/native-decision.json",
+      "sha256": "5a89c3254909c9085a199cf26eee946b7d33d391c007e7ed1dda8d922ada9e53"
+    },
+    "wine_preflight": {
+      "path": "artifacts/autonomous-generation-6-decision-successor-v2/offline/wine-panel-preflight.json",
+      "sha256": "5209f14926d1b86455ddcd11fc4ce6bd23fbde62f1f565aebce0ef0910a86687"
+    },
+    "registry": {
+      "path": "config/wine_corpus_registry.json",
+      "sha256": "cc341c5abe43781b02c21f2f555e1fc436895c30fd4d9caab0bd4d3c0a860ddb"
+    },
+    "wine_scorer": {
+      "path": "build/native-win32-fully-static/libth06_rl_ranker.dll",
+      "sha256": "5fad7ae536f3933fbe467f6b485455937c200be9b960958207ba90a8e501bb27"
+    }
+  },
+  "canary": {
+    "stage": 4,
+    "required_clean_runs": 2,
+    "required_candidate_exposure": true,
+    "schedule": [
+      {"trial": 1, "stage": 4, "policy_seed": 661101},
+      {"trial": 2, "stage": 4, "policy_seed": 661102}
+    ]
+  },
+  "evaluation": {
+    "stage": 6,
+    "complete_runs": 12,
+    "blocks": 6,
+    "schedule": [
+      {"trial": 1, "block": 0, "role": "incumbent", "policy_seed": 661201},
+      {"trial": 2, "block": 0, "role": "candidate", "policy_seed": 661202},
+      {"trial": 3, "block": 1, "role": "candidate", "policy_seed": 661203},
+      {"trial": 4, "block": 1, "role": "incumbent", "policy_seed": 661204},
+      {"trial": 5, "block": 2, "role": "incumbent", "policy_seed": 661205},
+      {"trial": 6, "block": 2, "role": "candidate", "policy_seed": 661206},
+      {"trial": 7, "block": 3, "role": "candidate", "policy_seed": 661207},
+      {"trial": 8, "block": 3, "role": "incumbent", "policy_seed": 661208},
+      {"trial": 9, "block": 4, "role": "incumbent", "policy_seed": 661209},
+      {"trial": 10, "block": 4, "role": "candidate", "policy_seed": 661210},
+      {"trial": 11, "block": 5, "role": "candidate", "policy_seed": 661211},
+      {"trial": 12, "block": 5, "role": "incumbent", "policy_seed": 661212}
+    ],
+    "effective_learning_signal": "all audits pass; candidate exercised in at least 4/6 Stages; candidate aggregate HIT strictly lower; candidate no worse in at least 4/6 blocks",
+    "promotion": "forbidden; confirmation evidence only"
+  },
+  "environment": {
+    "wine": "/usr/bin/wine",
+    "wine_version": "wine-11.0",
+    "source_game_dir": "reference/th06-game-original/th06",
+    "source_game_inventory_sha256": "2b02849a8a41c2ab8975540239b8a306582341306e416de17cb1ad349a175e60",
+    "worker_directory": "wine-0",
+    "display": ":112",
+    "game_cpu_list": "0-7",
+    "controller_cpu_list": "8-31",
+    "scheduler": "SCHED_OTHER",
+    "game_nice": -10,
+    "controller_nice": -10
+  },
+  "frozen_inputs": {
+    "scripts/run_generation6_decision_successor.py": "8c8d054b173f53dbd02a37116ea8e7636ef52f44801134298fd6aeaea257479e",
+    "scripts/export_generation6_round_policy.py": "2915b28003916671080ebf50f8ddad6ac7dddde114fe8152bae8ee2f4f704820",
+    "scripts/run_generation5_wine.py": "72d3d472d211e4f8b0656d9520fe23828efb1ea749faa4356940f897113ceee2",
+    "scripts/run_wine_retail.py": "4d675b9784fa3ea49c2c124cf006b98a2ad19268aaac89d08abe35d03d88e6ee",
+    "scripts/run_generation6_autonomous_round.py": "37a60ccec3f975ee08969bb00e62c7f094b5717d6e85fcf19ace22064d00aa9d",
+    "src/th06_rl/policies/autonomous_iql_actor.py": "11edc7d06b8f5e5d4dd98ed6eae664cd245135d4fbe957d5529405c6e0eeff67",
+    "build/native-win32-fully-static/libth06_rl_native.dll": "71b27bef942928dfc04b6a489ef261cb6485cd5bab2cd4d4ebf4081991a22b5b",
+    "build/native-win32-fully-static/libth06_rl_ranker.dll": "5fad7ae536f3933fbe467f6b485455937c200be9b960958207ba90a8e501bb27",
+    "reference/th06-game-original/th06/東方紅魔郷.exe": "9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb852245",
+    "reference/th06-game-original/full-unlock-score.dat": "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e94d26b749c71"
+  }
+}
