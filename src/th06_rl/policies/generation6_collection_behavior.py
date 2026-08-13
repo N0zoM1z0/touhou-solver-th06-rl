@@ -33,6 +33,7 @@ ESS_MASS = 0.25
 ALLOWED_COLLECTION_CONTRACT_SHA256: frozenset[str] = frozenset((
     "d733d919726393b60d243b1be2501cc0a57888b1c8e588ed34d257a0aa081a52",
     "e49e363ba0da7a2b89ddb78116612a9ca164d022188db787376c0e0390c09c4f",
+    "a4276c321d92ccf8ee17aa8cf7cad57934e7c0742135402bc781ea048ff6e960",
 ))
 _ACTION_INDEX = {action: index for index, action in enumerate(ACTION_NAMES)}
 

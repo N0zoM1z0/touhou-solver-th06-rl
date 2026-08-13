@@ -43,7 +43,9 @@ Read in this order:
    `docs/GENERATION6_LATENCY_TAIL_AUDIT.md` for its immutable latency failure,
    controlled reproducer, and generic successor repair, followed by
    `docs/AUTONOMOUS_LEARNER_GENERATION_6_ROUND_2.md` for the separately frozen
-   repaired successor;
+   startup-aborted successor and
+   `docs/AUTONOMOUS_LEARNER_GENERATION_6_ROUND_3.md` for the fully audited
+   current successor;
 13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
@@ -58,10 +60,11 @@ pilot: candidate aggregate HIT was 25 versus incumbent 28. The small panel is
 promising but not promotion evidence; a larger confirmation or autonomous
 learning round must be separately frozen before more outcome-facing play.
 Generation-6 autonomous round 1 stopped immutably invalid on a reproduced CFS
-scheduler tail. Round 2 keeps the old standard, reuses only round 1's complete
-machine-passing ten-episode prefix, collects the two predeclared missing
-Stage-5/6 episodes under the generic repair, and then refits all old and new
-sequential corpora before fresh Wine evidence.
+scheduler tail. Round 2 then stopped before gameplay on a privileged-wrapper
+PID bug and produced no new corpus. Round 3 keeps the old standard, binds both
+repairs and their smokes, reuses only round 1's complete machine-passing
+ten-episode prefix, collects the two predeclared missing Stage-5/6 episodes,
+and then refits all old and new sequential corpora before fresh Wine evidence.
 
 ## Non-negotiable separation
 
