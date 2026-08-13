@@ -1,10 +1,16 @@
 from copy import deepcopy
+import hashlib
+import json
 import os
+from pathlib import Path
 
 import pytest
 
+import scripts.run_generation6_autonomous_round as autonomous_round
 from scripts.run_generation6_autonomous_round import (
+    _materialize_reused_collection,
     _paired_verdict,
+    _priority_passed,
     _validate_contract_shape,
 )
 
@@ -109,6 +115,167 @@ def test_round_contract_requires_balanced_outcome_blind_collection() -> None:
     drifted["collection"]["schedule"][0]["rng_seed"] = 99
     with pytest.raises(ValueError, match="balanced/frozen"):
         _validate_contract_shape(drifted)
+
+
+def _successor_contract() -> dict[str, object]:
+    contract = _contract()
+    old_schedule = contract["collection"]["schedule"]
+    reused = [
+        {
+            **row,
+            "source": f"artifacts/old/episode-{row['episode']:02d}/run",
+            "report": f"artifacts/old/episode-{row['episode']:02d}/report.json",
+            "report_sha256": "a" * 64,
+            "manifest_sha256": "b" * 64,
+            "run_sha256": "c" * 64,
+        }
+        for row in old_schedule[:10]
+    ]
+    contract["collection"].update({
+        "reused_episodes": 10,
+        "new_episodes": 2,
+        "prior_ledger": "artifacts/old/generation.json",
+        "prior_ledger_sha256": "d" * 64,
+        "reused_schedule": reused,
+        "schedule": old_schedule[10:],
+    })
+    contract["environment"].update({
+        "scheduler": "SCHED_OTHER",
+        "game_nice": -10,
+        "controller_nice": -10,
+    })
+    return contract
+
+
+def test_successor_contract_reuses_only_a_bound_balanced_prefix() -> None:
+    contract = _successor_contract()
+    _validate_contract_shape(contract)
+
+    missing = deepcopy(contract)
+    missing["collection"]["reused_schedule"].pop()
+    with pytest.raises(ValueError, match="balanced/frozen"):
+        _validate_contract_shape(missing)
+
+    unbound = deepcopy(contract)
+    del unbound["collection"]["reused_schedule"][0]["run_sha256"]
+    with pytest.raises(ValueError, match="binding"):
+        _validate_contract_shape(unbound)
+
+    unbounded_priority = deepcopy(contract)
+    unbounded_priority["environment"]["scheduler"] = "SCHED_FIFO"
+    with pytest.raises(ValueError, match="process priority"):
+        _validate_contract_shape(unbounded_priority)
+
+
+def _digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_reuse_materializes_complete_machine_passing_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = tmp_path / "repo"
+    source = repository / "artifacts/old/accepted/episode-01/run"
+    source.mkdir(parents=True)
+    (source / "manifest.json").write_text("{}\n", encoding="utf-8")
+    (source / "run.json").write_text("{}\n", encoding="utf-8")
+    report = repository / "artifacts/old/episode-01/report.json"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text("{}\n", encoding="utf-8")
+    report_hash = _digest(report)
+    passing = {
+        "episode": 1,
+        "stage": 4,
+        "policy_seed": 1000,
+        "passed": True,
+        "corpus_run_dir": str(source),
+        "report_sha256": report_hash,
+        "manifest_sha256": _digest(source / "manifest.json"),
+        "run_sha256": _digest(source / "run.json"),
+    }
+    failed = {**passing, "episode": 2, "stage": 5, "passed": False}
+    ledger_path = repository / "artifacts/old/generation.json"
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger_path.write_text(json.dumps({
+        "schema": autonomous_round.SCHEMA,
+        "status": "invalid",
+        "decision": "collection-audit-failed",
+        "collection": [passing, failed],
+    }), encoding="utf-8")
+    contract = {"collection": {
+        "prior_ledger": str(ledger_path.relative_to(repository)),
+        "prior_ledger_sha256": _digest(ledger_path),
+        "reused_schedule": [{
+            "episode": 1,
+            "stage": 4,
+            "policy_seed": 1000,
+            "source": str(source.relative_to(repository)),
+            "report": str(report.relative_to(repository)),
+            "report_sha256": report_hash,
+            "manifest_sha256": passing["manifest_sha256"],
+            "run_sha256": passing["run_sha256"],
+        }],
+    }}
+    monkeypatch.setattr(autonomous_round, "REPOSITORY", repository)
+    monkeypatch.setattr(autonomous_round, "_validate_run", lambda *args, **kwargs: None)
+
+    accepted = repository / "artifacts/new/accepted-corpus"
+    rows = _materialize_reused_collection(
+        contract=contract, accepted_root=accepted
+    )
+    destination = accepted / "episode-01/run"
+    assert rows[0]["reused_under_successor_contract"] is True
+    assert rows[0]["corpus_run_dir"] == str(destination)
+    assert destination.is_dir()
+    assert os.stat(source / "run.json").st_ino == os.stat(
+        destination / "run.json"
+    ).st_ino
+
+    # A contract may not cherry-pick around a failed row or omit a passing row.
+    incomplete = deepcopy(contract)
+    incomplete["collection"]["reused_schedule"] = []
+    assert _materialize_reused_collection(
+        contract=incomplete, accepted_root=accepted
+    ) == []
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger["collection"].insert(1, {**passing, "episode": 2})
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    incomplete["collection"]["prior_ledger_sha256"] = _digest(ledger_path)
+    incomplete["collection"]["reused_schedule"] = contract["collection"][
+        "reused_schedule"
+    ]
+    with pytest.raises(ValueError, match="complete passing prefix"):
+        _materialize_reused_collection(
+            contract=incomplete, accepted_root=accepted
+        )
+
+
+def test_priority_gate_requires_exact_dropped_identity_attestation() -> None:
+    environment = {
+        "game_cpu_list": "0-1",
+        "controller_cpu_list": "2-3",
+        "game_nice": -10,
+        "controller_nice": -10,
+    }
+    report = {}
+    for role, cpus in (("game", [0, 1]), ("controller", [2, 3])):
+        report[f"{role}_nice"] = -10
+        report[f"{role}_priority_attestation"] = {
+            "schema": "bounded-wine-process-priority-v1",
+            "authority": "linux-setpriority-and-sched-setaffinity",
+            "scheduler": "SCHED_OTHER",
+            "nice": -10,
+            "effective_nice": -10,
+            "cpus": cpus,
+            "effective_cpus": cpus,
+            "uid": 1000,
+            "target_uid": 1000,
+            "gid": 1000,
+            "target_gid": 1000,
+        }
+    assert _priority_passed(report, environment)
+    report["controller_priority_attestation"]["effective_nice"] = -9
+    assert not _priority_passed(report, environment)
 
 
 def test_paired_round_reports_invalid_shape_without_partial_verdict() -> None:

@@ -40,6 +40,7 @@ from scripts.run_generation6_wine_canary import (  # noqa: E402
 from th06_rl.advantage_learning import _validate_run  # noqa: E402
 from th06_rl.audited_option_loader import load_audited_option_episode  # noqa: E402
 from th06_rl.offline import ACTION_NAMES  # noqa: E402
+from th06_rl.process_priority import parse_cpu_list, validate_nice  # noqa: E402
 from th06_rl.policies.autonomous_iql_actor import (  # noqa: E402
     ALLOWED_AUTONOMOUS_ROUND_CONTRACT_SHA256,
     POLICY_NAME as ACTOR_POLICY_NAME,
@@ -138,6 +139,7 @@ def _validate_contract_shape(contract: dict[str, object]) -> None:
     offline = contract.get("offline")
     append = contract.get("registry_append")
     frozen = contract.get("frozen_inputs")
+    latency_audit = contract.get("latency_tail_audit")
     if not all(isinstance(value, dict) for value in (
         collection, canary, evaluation, environment, offline, append, frozen
     )):
@@ -150,21 +152,62 @@ def _validate_contract_shape(contract: dict[str, object]) -> None:
     assert isinstance(append, dict)
     assert isinstance(frozen, dict)
     schedule = collection.get("schedule")
+    reused_schedule = collection.get("reused_schedule", [])
+    if not isinstance(reused_schedule, list):
+        raise ValueError("Generation-6 reused collection schedule is invalid")
+    combined_schedule = [*reused_schedule, *schedule] if isinstance(
+        schedule, list
+    ) else []
     if (
         collection.get("episodes") != 12
         or collection.get("stages") != [4, 5, 6]
         or not isinstance(schedule, list)
-        or len(schedule) != 12
+        or len(combined_schedule) != 12
+        or collection.get("new_episodes", len(schedule)) != len(schedule)
+        or collection.get("reused_episodes", len(reused_schedule))
+        != len(reused_schedule)
         or any(
             not isinstance(row, dict)
             or set(row) != {"episode", "stage", "policy_seed"}
             for row in schedule
         )
-        or [row.get("episode") for row in schedule] != list(range(1, 13))
+        or any(
+            not isinstance(row, dict)
+            or not {"episode", "stage", "policy_seed"} <= set(row)
+            for row in reused_schedule
+        )
+        or [row.get("episode") for row in combined_schedule]
+        != list(range(1, 13))
         or {stage: sum(row["stage"] == stage for row in schedule)
-            for stage in (4, 5, 6)} != {4: 4, 5: 4, 6: 4}
+            for stage in (4, 5, 6)} != {
+                stage: 4 - sum(
+                    row["stage"] == stage for row in reused_schedule
+                )
+                for stage in (4, 5, 6)
+            }
     ):
         raise ValueError("Generation-6 collection schedule is not balanced/frozen")
+    if reused_schedule and (
+        len(str(collection.get("prior_ledger_sha256", ""))) != 64
+        or not isinstance(collection.get("prior_ledger"), str)
+        or not str(collection.get("prior_ledger"))
+        or any(
+            set(row) != {
+                "episode", "stage", "policy_seed", "source", "report",
+                "report_sha256", "manifest_sha256", "run_sha256",
+            }
+            for row in reused_schedule
+        )
+    ):
+        raise ValueError("Generation-6 reused collection binding is invalid")
+    if latency_audit is not None and (
+        not isinstance(latency_audit, dict)
+        or set(latency_audit) != {"path", "sha256"}
+        or not isinstance(latency_audit.get("path"), str)
+        or not latency_audit["path"]
+        or len(str(latency_audit.get("sha256", ""))) != 64
+    ):
+        raise ValueError("Generation-6 latency-tail audit binding is invalid")
     canary_schedule = canary.get("schedule")
     if (
         not isinstance(canary_schedule, list)
@@ -207,7 +250,7 @@ def _validate_contract_shape(contract: dict[str, object]) -> None:
         raise ValueError("Generation-6 paired Stage-6 schedule is invalid")
     seeds = [
         int(row["policy_seed"])
-        for rows in (schedule, canary_schedule, evaluation_schedule)
+        for rows in (combined_schedule, canary_schedule, evaluation_schedule)
         for row in rows
     ]
     if len(set(seeds)) != len(seeds) or any(not 0 <= seed < 2**64 for seed in seeds):
@@ -235,6 +278,9 @@ def _validate_contract_shape(contract: dict[str, object]) -> None:
         raise ValueError("Generation-6 registry append contract is invalid")
     game_cpus = _cpu_set(environment.get("game_cpu_list"))
     controller_cpus = _cpu_set(environment.get("controller_cpu_list"))
+    game_nice = environment.get("game_nice")
+    controller_nice = environment.get("controller_nice")
+    priority_declared = game_nice is not None or controller_nice is not None
     if (
         game_cpus & controller_cpus
         or len(game_cpus | controller_cpus) > 32
@@ -242,6 +288,20 @@ def _validate_contract_shape(contract: dict[str, object]) -> None:
         or len(str(environment.get("source_game_inventory_sha256", ""))) != 64
     ):
         raise ValueError("Generation-6 Wine CPU partition is invalid")
+    if priority_declared:
+        try:
+            if (
+                game_nice is None
+                or controller_nice is None
+                or validate_nice(int(game_nice)) != int(game_nice)
+                or validate_nice(int(controller_nice)) != int(controller_nice)
+                or environment.get("scheduler") != "SCHED_OTHER"
+            ):
+                raise ValueError
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Generation-6 Wine process priority is invalid"
+            ) from error
     if (
         contract.get("maximum_interventions") != 64
         or len(str(contract.get("retail_executable_sha256", ""))) != 64
@@ -280,6 +340,36 @@ def _contract(path: Path) -> tuple[dict[str, object], str]:
             continue
         if not file.is_file() or _sha256(file) != expected:
             raise ValueError(f"Generation-6 round frozen input drifted: {raw}")
+    latency_binding = contract.get("latency_tail_audit")
+    if isinstance(latency_binding, dict):
+        audit_path = (REPOSITORY / str(latency_binding["path"])).resolve()
+        if (
+            not audit_path.is_relative_to(REPOSITORY)
+            or not audit_path.is_file()
+            or _sha256(audit_path) != latency_binding["sha256"]
+        ):
+            raise ValueError("Generation-6 latency-tail audit drifted")
+        latency_audit = _object(audit_path)
+        gates = latency_audit.get("gates")
+        priority = latency_audit.get("priority")
+        environment = contract["environment"]
+        expected_cpus = sorted(
+            _cpu_set(environment["game_cpu_list"])
+            | _cpu_set(environment["controller_cpu_list"])
+        )
+        if (
+            latency_audit.get("schema")
+            != "generation6-scheduler-tail-latency-audit-v1"
+            or latency_audit.get("passed") is not True
+            or not isinstance(gates, dict)
+            or not gates
+            or not all(value is True for value in gates.values())
+            or not isinstance(priority, dict)
+            or priority.get("scheduler") != "SCHED_OTHER"
+            or priority.get("nice") != environment.get("controller_nice")
+            or priority.get("cpus") != expected_cpus
+        ):
+            raise ValueError("Generation-6 latency-tail repair is not proven")
     if _sha256(REGISTRY) != contract["frozen_inputs"][
         "config/wine_corpus_registry.json"
     ]:
@@ -337,9 +427,47 @@ def _clean_trace(report: dict[str, object]) -> bool:
     )
 
 
+def _priority_arguments(environment: dict[str, object]) -> dict[str, int]:
+    if environment.get("game_nice") is None:
+        return {}
+    return {
+        "game_nice": int(environment["game_nice"]),
+        "controller_nice": int(environment["controller_nice"]),
+    }
+
+
+def _priority_passed(
+    report: dict[str, object], environment: dict[str, object]
+) -> bool:
+    if environment.get("game_nice") is None:
+        return True
+    for role in ("game", "controller"):
+        cpu_list = str(environment[f"{role}_cpu_list"])
+        nice = int(environment[f"{role}_nice"])
+        attestation = report.get(f"{role}_priority_attestation")
+        expected_cpus = list(parse_cpu_list(cpu_list))
+        if (
+            report.get(f"{role}_nice") != nice
+            or not isinstance(attestation, dict)
+            or attestation.get("schema")
+            != "bounded-wine-process-priority-v1"
+            or attestation.get("authority")
+            != "linux-setpriority-and-sched-setaffinity"
+            or attestation.get("scheduler") != "SCHED_OTHER"
+            or attestation.get("nice") != nice
+            or attestation.get("effective_nice") != nice
+            or attestation.get("cpus") != expected_cpus
+            or attestation.get("effective_cpus") != expected_cpus
+            or attestation.get("uid") != attestation.get("target_uid")
+            or attestation.get("gid") != attestation.get("target_gid")
+        ):
+            return False
+    return True
+
+
 def _audit_collection(
     *, report: dict[str, object], artifact: Path, run_dir: Path,
-    state_path: Path,
+    state_path: Path, environment: dict[str, object],
 ) -> dict[str, object]:
     completion = report.get("controller_completion")
     status = _last_policy_status(artifact / "trace.jsonl")
@@ -389,6 +517,7 @@ def _audit_collection(
         ),
         "zero_infrastructure_events": _clean_trace(report),
         "zero_leftover_prefix_processes": not report.get("leftover_prefix_processes"),
+        "bounded_process_priority": _priority_passed(report, environment),
     }
     return {
         "report_sha256": _sha256(artifact / "report.json"),
@@ -407,7 +536,7 @@ def _audit_collection(
 
 def _recover_accepted_collection(
     *, accepted_episode: Path, artifact: Path, worker: dict[str, object],
-    stage: int,
+    stage: int, environment: dict[str, object],
 ) -> tuple[dict[str, object], Path] | None:
     """Recover the atomic move -> ledger crash window without resampling."""
     if not accepted_episode.exists():
@@ -422,10 +551,107 @@ def _recover_accepted_collection(
     report, run_dir = _validate_complete_run(
         artifact_dir=artifact, worker=worker, stage=stage, rng_seed=None,
         corpus_root=accepted_episode,
+        game_cpu_list=str(environment["game_cpu_list"]),
+        controller_cpu_list=str(environment["controller_cpu_list"]),
+        **_priority_arguments(environment),
     )
     if run_dir is None or run_dir != manifests[0].parent:
         raise RuntimeError("accepted episode/report binding differs")
     return report, run_dir
+
+
+def _materialize_reused_collection(
+    *, contract: dict[str, object], accepted_root: Path,
+) -> list[dict[str, object]]:
+    """Hard-link the complete passing prefix from an immutable failed round.
+
+    Reuse is selected only by the prior machine ledger's conjunctive gates.
+    It cannot skip a passing row or inspect HIT, Stage location, or outcome.
+    The first failed row and everything after it remain excluded.
+    """
+    collection = contract["collection"]
+    reused = collection.get("reused_schedule", [])
+    if not isinstance(reused, list) or not reused:
+        return []
+    ledger_path = (REPOSITORY / str(collection["prior_ledger"])).resolve()
+    if (
+        not ledger_path.is_relative_to(REPOSITORY)
+        or _sha256(ledger_path) != collection["prior_ledger_sha256"]
+    ):
+        raise ValueError("prior Generation-6 collection ledger differs")
+    ledger = _object(ledger_path)
+    prior_rows = ledger.get("collection")
+    if (
+        ledger.get("schema") != SCHEMA
+        or ledger.get("status") != "invalid"
+        or ledger.get("decision") != "collection-audit-failed"
+        or not isinstance(prior_rows, list)
+    ):
+        raise ValueError("prior Generation-6 collection is not reusable")
+    passing_prefix = []
+    for row in prior_rows:
+        if not isinstance(row, dict) or row.get("passed") is not True:
+            break
+        passing_prefix.append(row)
+    if len(passing_prefix) != len(reused):
+        raise ValueError("reused collection is not the complete passing prefix")
+
+    result = []
+    staging = accepted_root.parent / "reuse-staging"
+    staging.mkdir(parents=True, exist_ok=True)
+    for specification, prior in zip(reused, passing_prefix, strict=True):
+        expected = {
+            name: specification[name]
+            for name in (
+                "episode", "stage", "policy_seed", "report_sha256",
+                "manifest_sha256", "run_sha256",
+            )
+        }
+        if any(prior.get(name) != value for name, value in expected.items()):
+            raise ValueError("reused collection row differs from prior ledger")
+        source = (REPOSITORY / str(specification["source"])).resolve()
+        report = (REPOSITORY / str(specification["report"])).resolve()
+        if (
+            not source.is_relative_to(REPOSITORY)
+            or not report.is_relative_to(REPOSITORY)
+            or Path(str(prior.get("corpus_run_dir", ""))).resolve() != source
+            or not source.is_dir()
+            or not report.is_file()
+            or _sha256(report) != specification["report_sha256"]
+            or _sha256(source / "manifest.json")
+            != specification["manifest_sha256"]
+            or _sha256(source / "run.json") != specification["run_sha256"]
+        ):
+            raise ValueError("reused collection corpus binding differs")
+        _validate_run(source, transition_schema=TRANSITION_SCHEMA)
+        destination = (
+            accepted_root / f"episode-{int(specification['episode']):02d}"
+            / source.name
+        )
+        if not destination.exists():
+            with tempfile.TemporaryDirectory(
+                prefix=f"episode-{int(specification['episode']):02d}-",
+                dir=staging,
+            ) as temporary:
+                staged = Path(temporary) / source.name
+                shutil.copytree(source, staged, copy_function=os.link)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(staged, destination)
+        if (
+            _sha256(destination / "manifest.json")
+            != specification["manifest_sha256"]
+            or _sha256(destination / "run.json") != specification["run_sha256"]
+        ):
+            raise ValueError("materialized reused collection differs")
+        _validate_run(destination, transition_schema=TRANSITION_SCHEMA)
+        row = dict(prior)
+        row.update({
+            "corpus_run_dir": str(destination),
+            "reused_from": str(source),
+            "reused_under_successor_contract": True,
+        })
+        result.append(row)
+    return result
 
 
 def _append_registry(
@@ -536,7 +762,7 @@ def _offline(
 
 def _audit_evaluation(
     *, report: dict[str, object], artifact: Path, state_path: Path,
-    role: str,
+    role: str, environment: dict[str, object],
 ) -> dict[str, object]:
     completion = report.get("controller_completion")
     status = _last_policy_status(artifact / "trace.jsonl")
@@ -580,6 +806,7 @@ def _audit_evaluation(
         "zero_infrastructure_events": _clean_trace(report),
         "zero_corpus": not report.get("trace", {}).get("corpus_run_ids"),
         "zero_leftover_prefix_processes": not report.get("leftover_prefix_processes"),
+        "bounded_process_priority": _priority_passed(report, environment),
     }
     return {
         "role": role,
@@ -689,13 +916,17 @@ def run(args: argparse.Namespace) -> int:
     if not isinstance(collection_rows, list):
         raise ValueError("Generation-6 collection ledger is invalid")
     schedule = contract["collection"]["schedule"]
-    if len(collection_rows) > len(schedule) or any(
+    reused_schedule = contract["collection"].get("reused_schedule", [])
+    combined_schedule = [*reused_schedule, *schedule]
+    if len(collection_rows) > len(combined_schedule) or any(
         not isinstance(actual, dict)
         or int(actual.get("episode", -1)) != int(expected["episode"])
         or int(actual.get("stage", -1)) != int(expected["stage"])
         or int(actual.get("policy_seed", -1)) != int(expected["policy_seed"])
         or actual.get("passed") is not True
-        for actual, expected in zip(collection_rows, schedule, strict=False)
+        for actual, expected in zip(
+            collection_rows, combined_schedule, strict=False
+        )
     ):
         raise ValueError("Generation-6 collection ledger/schedule differs")
     registered = state.get("registry")
@@ -716,7 +947,19 @@ def run(args: argparse.Namespace) -> int:
         ),
     )
     accepted = root / "accepted-corpus"
-    for row in schedule[len(state["collection"]):]:
+    reused_rows = _materialize_reused_collection(
+        contract=contract, accepted_root=accepted
+    )
+    if reused_rows:
+        if not state["collection"]:
+            state["collection"] = reused_rows
+            _atomic_json(state_path, state)
+        elif state["collection"][:len(reused_rows)] != reused_rows:
+            raise ValueError("Generation-6 reused collection ledger differs")
+    new_completed = len(state["collection"]) - len(reused_rows)
+    if not 0 <= new_completed <= len(schedule):
+        raise ValueError("Generation-6 successor collection progress differs")
+    for row in schedule[new_completed:]:
         episode = int(row["episode"])
         behavior = root / "behavior" / f"episode-{episode:02d}.json"
         _collection_state(
@@ -727,7 +970,7 @@ def run(args: argparse.Namespace) -> int:
         accepted_episode = accepted / f"episode-{episode:02d}"
         recovered = _recover_accepted_collection(
             accepted_episode=accepted_episode, artifact=artifact,
-            worker=worker, stage=int(row["stage"]),
+            worker=worker, stage=int(row["stage"]), environment=environment,
         )
         if recovered is None:
             report, run_dir = complete_run(
@@ -737,6 +980,7 @@ def run(args: argparse.Namespace) -> int:
                 corpus_root=root / "spool" / f"episode-{episode:02d}",
                 game_cpu_list=str(environment["game_cpu_list"]),
                 controller_cpu_list=str(environment["controller_cpu_list"]),
+                **_priority_arguments(environment),
             )
             assert run_dir is not None
             destination = accepted_episode / run_dir.name
@@ -749,7 +993,7 @@ def run(args: argparse.Namespace) -> int:
         _validate_run(destination, transition_schema=TRANSITION_SCHEMA)
         audited = _audit_collection(
             report=report, artifact=artifact, run_dir=destination,
-            state_path=behavior,
+            state_path=behavior, environment=environment,
         )
         audited.update({
             "episode": episode, "stage": int(row["stage"]),
@@ -806,11 +1050,12 @@ def run(args: argparse.Namespace) -> int:
             scorer=WINE_SCORER, rng_seed=None, corpus_root=None,
             game_cpu_list=str(environment["game_cpu_list"]),
             controller_cpu_list=str(environment["controller_cpu_list"]),
+            **_priority_arguments(environment),
         )
         assert run_dir is None
         audited = _audit_evaluation(
             report=report, artifact=artifact, state_path=policy_state,
-            role="candidate",
+            role="candidate", environment=environment,
         )
         audited["trial"] = trial
         state["canary"].append(audited)
@@ -852,10 +1097,12 @@ def run(args: argparse.Namespace) -> int:
             scorer=WINE_SCORER, rng_seed=None, corpus_root=None,
             game_cpu_list=str(environment["game_cpu_list"]),
             controller_cpu_list=str(environment["controller_cpu_list"]),
+            **_priority_arguments(environment),
         )
         assert run_dir is None
         audited = _audit_evaluation(
-            report=report, artifact=artifact, state_path=policy_state, role=role
+            report=report, artifact=artifact, state_path=policy_state,
+            role=role, environment=environment,
         )
         audited.update({"trial": trial, "block": int(row["block"])})
         state["evaluation"].append(audited)
