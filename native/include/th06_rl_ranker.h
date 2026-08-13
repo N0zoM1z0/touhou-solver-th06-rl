@@ -107,6 +107,32 @@ TH06_RL_RANKER_API int th06_rl_score_iql_actor_population_v1(
     const float* action_score_bias,
     float* outputs);
 
+// Score only the baseline-centred quantities consumed by deployment.  The
+// common action bias and state-dependent offset are cancelled before the
+// final float32 dot products, avoiding a lossy subtraction of large logits.
+// The baseline row is defined to be exactly zero for every population member.
+TH06_RL_RANKER_API int th06_rl_score_centered_iql_actor_population_v1(
+    const float* states,
+    const float* actions,
+    std::int32_t row_count,
+    std::int32_t state_count,
+    std::int32_t action_count,
+    std::int32_t baseline_row,
+    std::int32_t model_count,
+    std::int32_t hidden_count,
+    std::int32_t rank_count,
+    const float* state_hidden_weight,
+    const float* state_hidden_bias,
+    const float* state_latent_weight,
+    const float* state_latent_bias,
+    const float* action_hidden_weight,
+    const float* action_hidden_bias,
+    const float* action_latent_weight,
+    const float* action_latent_bias,
+    const float* action_score_weight,
+    const float* action_score_bias,
+    float* outputs);
+
 // Fuse the two immutable online consumers of one rich candidate matrix:
 // action-conditional prototype support and normalized actor-population
 // scoring. This avoids a second Python/FFI marshal and performs no ranking or
@@ -116,6 +142,7 @@ TH06_RL_RANKER_API int th06_rl_score_supported_iql_actor_v1(
     std::int32_t row_count,
     std::int32_t feature_count,
     const std::int32_t* row_actions,
+    std::int32_t baseline_row,
     const float* support_mean,
     const float* support_scale,
     const float* support_prototypes,
@@ -147,7 +174,8 @@ TH06_RL_RANKER_API int th06_rl_score_supported_iql_actor_v1(
     float* actor_outputs);
 
 // Construct the rich rows, encode the observed hazard set, evaluate support,
-// and score the complete actor population in one FFI call. Inputs are the
+// and score the complete baseline-centred actor population in one FFI call.
+// Inputs are the
 // generic adapter arrays already present in PolicyContext; this function has
 // no game memory, collision, input, propensity, or action-selection access.
 TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(

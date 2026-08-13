@@ -46,7 +46,9 @@ Read in this order:
    startup-aborted successor and
    `docs/AUTONOMOUS_LEARNER_GENERATION_6_ROUND_3.md` for the fully audited
    current successor, and `docs/GENERATION6_NATIVE_EQUIVALENCE_AUDIT.md` for
-   its offline rejection and the required learner-only successor boundary;
+   its offline rejection and the required learner-only successor boundary,
+   followed by `docs/GENERATION6_DECISION_NUMERIC_SUCCESSOR.md` for the new
+   baseline-centred decision-level conformance contract;
 13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,

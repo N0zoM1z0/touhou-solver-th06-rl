@@ -270,6 +270,17 @@ class NativeIqlActorPopulation:
             pointer,
         ]
         function.restype = ctypes.c_int
+        centered_function = (
+            library.th06_rl_score_centered_iql_actor_population_v1
+        )
+        centered_function.argtypes = [
+            pointer, pointer,
+            ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+            ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+            *(pointer for _index in range(10)),
+            pointer,
+        ]
+        centered_function.restype = ctypes.c_int
 
         def packed(name: str):
             values = np.concatenate([
@@ -280,6 +291,7 @@ class NativeIqlActorPopulation:
 
         self.library = library
         self.function = function
+        self.centered_function = centered_function
         self.models = tuple(models)
         self.layout = reference.layout
         self.state_mean = np.asarray(reference.state_mean, dtype=np.float32)
@@ -328,6 +340,51 @@ class NativeIqlActorPopulation:
             raise RuntimeError(f"native IQL actor scorer failed with status {status}")
         return tuple(
             tuple(float(output[model * len(matrix) + row]) for row in range(len(matrix)))
+            for model in range(self.model_count)
+        )
+
+    def predict_centered(
+        self, rows, *, baseline_index: int,
+    ) -> tuple[tuple[float, ...], ...]:
+        """Score the policy's directly baseline-centred native quantity."""
+        import numpy as np
+
+        matrix = np.asarray(rows, dtype=np.float32)
+        if not 0 <= baseline_index < len(matrix):
+            raise ValueError("native centered actor baseline is invalid")
+        states = matrix[:, self.layout.state_indices]
+        if not np.allclose(states, states[0], atol=1e-7):
+            raise ValueError("native centered actor candidates changed state")
+        state = (states[0] - self.state_mean) / self.state_scale
+        actions = (
+            matrix[:, self.layout.action_indices] - self.action_mean
+        ) / self.action_scale
+        state_input = (ctypes.c_float * len(state))(*state)
+        flat_actions = actions.reshape(-1)
+        action_input = (ctypes.c_float * len(flat_actions))(*flat_actions)
+        output = (ctypes.c_float * (self.model_count * len(matrix)))()
+        status = self.centered_function(
+            state_input,
+            action_input,
+            len(matrix),
+            len(state),
+            actions.shape[1],
+            baseline_index,
+            self.model_count,
+            self.hidden,
+            self.rank,
+            *self.arrays,
+            output,
+        )
+        if status != 0:
+            raise RuntimeError(
+                f"native centered IQL actor scorer failed with status {status}"
+            )
+        return tuple(
+            tuple(
+                float(output[model * len(matrix) + row])
+                for row in range(len(matrix))
+            )
             for model in range(self.model_count)
         )
 

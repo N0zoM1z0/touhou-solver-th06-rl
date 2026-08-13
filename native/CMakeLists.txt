@@ -16,7 +16,12 @@ if(MSVC)
   target_compile_options(th06_rl_ranker PRIVATE /W4 /permissive-)
 else()
   target_compile_options(th06_rl_native PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(th06_rl_ranker PRIVATE -Wall -Wextra -Wpedantic)
+  # The actor's portable serving identity is its documented scalar float32
+  # reduction order.  Do not let one compiler fuse multiply/add while the
+  # Win32/SSE2 target rounds them separately.
+  target_compile_options(
+    th06_rl_ranker PRIVATE -Wall -Wextra -Wpedantic -ffp-contract=off
+  )
 endif()
 
 # The Windows controller is also exercised under Wine with an embeddable

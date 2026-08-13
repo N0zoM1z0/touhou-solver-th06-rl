@@ -620,3 +620,29 @@ the next general performance audit should profile production actor fitting,
 especially repeated full-dataset augmentation/training and thread/memory
 scaling. It must preserve model math and output before any optimization is
 accepted.
+
+## 2026-08-13: decision-level float32 serving
+
+Round 3's raw-logit gate compared NumPy/OpenBLAS scores with a scalar native
+kernel before subtracting their common baseline. On the frozen checkpoint the
+raw maximum error reached `0.0009765625`, although a read-only panel retained
+64/64 exact actions. A real-arithmetic forward bound was also needlessly loose:
+it charged the decision for cancellation error in common bias and state terms
+that the policy never consumes.
+
+The successor keeps the seven trained members but makes the native hot kernel
+accumulate baseline-centred hidden/latent differences directly. Both native
+targets compile this kernel with `-ffp-contract=off`; no model distillation or
+weight modification is involved. A target-portability envelope starts from a
+declared eight-unit-roundoff `tanhf` allowance and propagates only target
+variation through the exact scalar operation sequence using local ULPs and
+intermediate absolute sums. Four previously unresolved factual cases improved
+from real-arithmetic margin/envelope ratios `0.31`--`0.52` to portability ratios
+`6.49`--`11.04`; Linux target differences were `1.34e-5`--`2.44e-4` and stayed
+inside the corresponding bounds. This smoke is definition validation, not the
+formal full-corpus or Win32 result.
+
+The full audit reuses the fit checkpoint and option cache, so numerical-serving
+iterations avoid both original-Wine runtime and the 53-minute production fit.
+It must still traverse every registered factual option and then run the frozen
+wide Win32 panel before online authorization.
