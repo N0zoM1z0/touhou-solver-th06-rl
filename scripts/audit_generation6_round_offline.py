@@ -95,12 +95,57 @@ def offline_gates(
     return gates
 
 
+def successor_identity_gates(
+    *, contract: dict[str, object], contract_sha256: str,
+    candidate: dict[str, object], decision: dict[str, object],
+    decision_sha256: str, online: dict[str, object],
+    synthetic_sha256: str, crossfit_sha256: str, registry_sha256: str,
+) -> dict[str, bool]:
+    numeric = candidate.get("native_decision_conformance")
+    frozen_training = contract.get("reused_training")
+    frozen_inputs = contract.get("frozen_inputs")
+    return {
+        "decision_audit_passed_and_candidate_bound": (
+            decision.get("passed") is True
+            and isinstance(numeric, dict)
+            and numeric.get("sha256") == decision_sha256
+            and online.get("decision_audit_sha256") == decision_sha256
+        ),
+        "decision_contract_identity_exact": (
+            decision.get("contract_sha256") == contract_sha256
+            and candidate.get("autonomous_round_contract_sha256")
+            == contract_sha256
+        ),
+        "frozen_reused_artifact_hashes_exact": (
+            isinstance(frozen_training, dict)
+            and frozen_training.get("synthetic_sha256") == synthetic_sha256
+            and frozen_training.get("crossfit_sha256") == crossfit_sha256
+            and frozen_training.get("registry_sha256") == registry_sha256
+        ),
+        "frozen_native_binary_hashes_exact": (
+            isinstance(frozen_inputs, dict)
+            and frozen_inputs.get("build/native/libth06_rl_ranker.so")
+            == online.get("linux_library_sha256")
+            and frozen_inputs.get(
+                "build/native-win32-fully-static/libth06_rl_ranker.dll"
+            ) == online.get("windows_library_sha256")
+        ),
+        "frozen_panel_has_no_cross_target_mismatch": (
+            online.get("schema")
+            == "autonomous-generation-6-decision-panel-preflight-v2"
+            and online.get("factual_contexts") == 320
+            and online.get("mismatches") == []
+        ),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--synthetic", type=Path, required=True)
     parser.add_argument("--crossfit", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--online", type=Path, required=True)
+    parser.add_argument("--decision-audit", type=Path)
     parser.add_argument("--registry", type=Path, required=True)
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -108,11 +153,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.output.exists():
         raise FileExistsError(args.output)
     contract = _object(args.contract)
-    if contract.get("schema") != "autonomous-generation-6-round-contract-v1":
+    schema = contract.get("schema")
+    if schema not in (
+        "autonomous-generation-6-round-contract-v1",
+        "autonomous-generation-6-decision-successor-contract-v2",
+    ):
         raise ValueError("Generation-6 autonomous round contract is invalid")
-    required = tuple(
-        f"stage-{int(stage)}" for stage in contract["collection"]["stages"]
+    successor = schema == "autonomous-generation-6-decision-successor-contract-v2"
+    required = (
+        ("stage-4", "stage-5", "stage-6")
+        if successor else tuple(
+            f"stage-{int(stage)}" for stage in contract["collection"]["stages"]
+        )
     )
+    if successor != (args.decision_audit is not None):
+        raise ValueError("decision audit presence differs from contract generation")
     synthetic = _object(args.synthetic)
     crossfit = _object(args.crossfit)
     candidate = _object(args.candidate)
@@ -124,8 +179,23 @@ def main(argv: list[str] | None = None) -> int:
         candidate_sha256=_sha256(args.candidate),
         registry_sha256=registry_sha, required_cohorts=required,
     )
+    decision_sha = None
+    if successor:
+        decision = _object(args.decision_audit)
+        decision_sha = _sha256(args.decision_audit)
+        gates.update(successor_identity_gates(
+            contract=contract, contract_sha256=_sha256(args.contract),
+            candidate=candidate, decision=decision,
+            decision_sha256=decision_sha, online=online,
+            synthetic_sha256=_sha256(args.synthetic),
+            crossfit_sha256=_sha256(args.crossfit),
+            registry_sha256=registry_sha,
+        ))
     result = {
-        "schema": "autonomous-generation-6-round-offline-smoke-v1",
+        "schema": (
+            "autonomous-generation-6-decision-offline-smoke-v2"
+            if successor else "autonomous-generation-6-round-offline-smoke-v1"
+        ),
         "evidence_eligible": False,
         "authorization_eligible": False,
         "contract_sha256": _sha256(args.contract),
@@ -134,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         "crossfit_sha256": _sha256(args.crossfit),
         "candidate_sha256": _sha256(args.candidate),
         "online_preflight_sha256": _sha256(args.online),
+        "decision_audit_sha256": decision_sha,
         "required_cohorts": list(required),
         "gates": gates,
         "passed": all(gates.values()),

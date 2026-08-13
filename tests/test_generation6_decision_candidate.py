@@ -108,13 +108,13 @@ def test_materializer_reuses_fit_only_after_all_decision_gates() -> None:
         )
 
 
-def test_new_float64_binaries_are_preflight_only_until_wine_gate() -> None:
+def test_new_float64_binaries_are_promoted_only_after_wine_gate() -> None:
     for digest in (
         "b0d8a2ea8efeb2e4d3b0798f109a9d2c5da992e8d78a3ab8434776590c88a283",
         "5fad7ae536f3933fbe467f6b485455937c200be9b960958207ba90a8e501bb27",
     ):
         assert digest in ALLOWED_PREFLIGHT_NATIVE_SCORER_SHA256
-        assert digest not in ALLOWED_NATIVE_SCORER_SHA256
+        assert digest in ALLOWED_NATIVE_SCORER_SHA256
 
 
 def test_frozen_panel_context_loading_keeps_bounded_parallel_contract() -> None:

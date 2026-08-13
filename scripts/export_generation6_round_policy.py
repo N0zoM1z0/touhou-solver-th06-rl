@@ -80,12 +80,23 @@ def export_round_state(
         or candidate.get("passed") is not True
         or candidate.get("autonomous_round_contract_sha256") != contract_sha
         or candidate.get("training_identity", {}).get("sha256") != registry_sha
-        or smoke.get("schema")
-        != "autonomous-generation-6-round-offline-smoke-v1"
+        or smoke.get("schema") not in (
+            "autonomous-generation-6-round-offline-smoke-v1",
+            "autonomous-generation-6-decision-offline-smoke-v2",
+        )
         or smoke.get("passed") is not True
         or smoke.get("contract_sha256") != contract_sha
         or smoke.get("training_registry_sha256") != registry_sha
         or smoke.get("candidate_sha256") != candidate_sha
+        or (
+            contract.get("schema")
+            == "autonomous-generation-6-decision-successor-contract-v2"
+            and (
+                smoke.get("schema")
+                != "autonomous-generation-6-decision-offline-smoke-v2"
+                or len(str(smoke.get("decision_audit_sha256", ""))) != 64
+            )
+        )
         or scorer_sha not in ALLOWED_NATIVE_SCORER_SHA256
     ):
         raise ValueError("Generation-6 autonomous round evidence is invalid")

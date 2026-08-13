@@ -79,6 +79,26 @@ as the decision authority. The raw component threshold remains reported but is
 not allowed to reject an unchanged support mask. This rule is generic and was
 frozen only in a successor after the first contract failed.
 
+The frozen v2 formal audits then passed without collecting or refitting:
+
+- full Linux corpus: 56 episodes, 167,250 boundaries and 2,415,808 candidate
+  rows; all actions and support masks exact;
+- forward-error panel: 320/320 exact, covered, and margin-certified; minimum
+  margin/envelope ratio `501,946`;
+- bounded audit runtime: 83.85 seconds for the corpus, 25.99 seconds for the
+  scalar panel, 109.84 seconds total under the 180-second gate;
+- exact frozen Win32/Wine panel: portable = Linux = Win32 on 320/320 contexts,
+  with no mismatches;
+- online-path p95: Linux `0.488 ms`, Win32/Wine `1.221 ms`, with zero deadline
+  misses and a Win32 maximum of `1.392 ms` across 2,000 repetitions.
+
+The immutable evidence identities are the Linux decision report SHA-256
+`5a89c3254909c9085a199cf26eee946b7d33d391c007e7ed1dda8d922ada9e53`
+and Wine-panel report SHA-256
+`5209f14926d1b86455ddcd11fc4ce6bd23fbde62f1f565aebce0ef0910a86687`.
+Passing this numeric/deployment gate authorizes a fresh gameplay canary; it is
+not evidence that the learned policy reduces HITs.
+
 ## Predeclared numerical contract
 
 The audit has three conjunctive layers.

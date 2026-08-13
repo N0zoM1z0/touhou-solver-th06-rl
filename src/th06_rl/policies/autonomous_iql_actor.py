@@ -89,10 +89,15 @@ ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     "87be7d7c3f5711e3f744214031696257ee045be00a8f62c229e3519155ea8c92",
     # Same fused math compiled for the Win32 baseline SSE2 scalar ABI.
     "471013f1daa40c57829722a61f1729726a803bcccd4d0a898738ecd096f8c01a",
+    # Float64-intermediate Linux/Win32 pair admitted after the frozen 320-case
+    # Wine panel (report SHA 5209f149...0a86687): exact actions, zero misses,
+    # and p95 0.488/1.221 ms respectively.
+    "b0d8a2ea8efeb2e4d3b0798f109a9d2c5da992e8d78a3ab8434776590c88a283",
+    "5fad7ae536f3933fbe467f6b485455937c200be9b960958207ba90a8e501bb27",
 ))
-# New serving binaries may enter only the shadow preflight path until the
-# frozen Linux/Win32 panel proves exact actions and latency. They are promoted
-# to ALLOWED_NATIVE_SCORER_SHA256 in a later evidence-bound commit.
+# New serving binaries may enter this superset only for shadow preflight. The
+# current float64 pair is also in the evidence allowlist because its frozen
+# Linux/Win32 panel has passed.
 ALLOWED_PREFLIGHT_NATIVE_SCORER_SHA256 = (
     ALLOWED_NATIVE_SCORER_SHA256 | frozenset((
         "b0d8a2ea8efeb2e4d3b0798f109a9d2c5da992e8d78a3ab8434776590c88a283",
