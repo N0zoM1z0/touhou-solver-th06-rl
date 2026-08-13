@@ -5,8 +5,17 @@ from th06_rl.th06.controller import (
     _control_dead_end,
     _advance_route_scope,
     _valid_executable_basename,
-    parse_args,
+    parse_args as _parse_args,
 )
+
+
+def parse_args(args: list[str]):
+    return _parse_args([
+        *args,
+        "--policy-plugin", "candidate.py",
+        "--policy-state", "candidate.json",
+        "--immutable-policy",
+    ])
 
 
 def test_in_flight_source_unsafe_is_a_control_dead_end_not_infra_loss() -> None:
@@ -60,7 +69,9 @@ def test_controller_accepts_immutable_policy_evaluation() -> None:
 
 def test_controller_rejects_exploration_for_immutable_policy() -> None:
     with pytest.raises(SystemExit):
-        parse_args(["--practice-stage", "6", "--immutable-policy"])
+        parse_args([
+            "--practice-stage", "6", "--exploration-rate", "0.01"
+        ])
 
 
 def test_controller_accepts_fail_closed_capture_gap_resume() -> None:

@@ -24,7 +24,7 @@ from .hazard_representation import (
     MAX_HAZARD_PRIMITIVES,
 )
 from .learning_features import tree_candidate_vector, tree_feature_names
-from .offline import ACTION_NAMES
+from .actions import ACTION_NAMES
 from .th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAMES
 
 

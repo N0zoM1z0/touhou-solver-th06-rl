@@ -21,7 +21,7 @@ from .hazard_representation import (
     HISTORY_FEATURE_NAMES,
 )
 from .learning_features import tree_feature_names
-from .offline import ACTION_NAMES
+from .actions import ACTION_NAMES
 from .th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAMES
 
 

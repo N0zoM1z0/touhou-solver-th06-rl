@@ -49,7 +49,7 @@ from th06_rl.qualification_corpus import load_qualification_partition  # noqa: E
 from th06_rl.resource_control import enforce_training_cpu_affinity  # noqa: E402
 from th06_rl.sequential_learning import _support  # noqa: E402
 from th06_rl.sequential_learning import OrthogonalOption  # noqa: E402
-from th06_rl.offline import ACTION_NAMES  # noqa: E402
+from th06_rl.actions import ACTION_NAMES  # noqa: E402
 from th06_rl.wine_corpus_registry import (  # noqa: E402
     load_wine_corpus_registry,
     select_wine_corpora,

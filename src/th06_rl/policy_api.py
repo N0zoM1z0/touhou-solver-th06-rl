@@ -1,4 +1,4 @@
-"""Stable hot-reload boundary above the non-learning reactive baseline."""
+"""Stable immutable-policy boundary above the native reactive baseline."""
 
 from __future__ import annotations
 
@@ -130,32 +130,3 @@ class PolicyDecision:
                 abs_tol=1e-12,
             ):
                 raise ValueError("decision probability disagrees with option assignment")
-
-
-@dataclass(frozen=True)
-class PolicyOutcome:
-    frame: int
-    scope: tuple[int, int, int, int]
-    source_context: str
-    action: str
-    published: bool
-    elapsed_frames: int
-    life_lost: bool
-    bomb_used: bool
-    control_dead_end: bool
-    authority_lost: bool
-    phase_changed: bool
-    next_hard_action_count: int
-    next_player_x: float
-    next_player_y: float
-    learning_eligible: bool = True
-
-
-@dataclass(frozen=True)
-class PolicyFailureEvent:
-    """Confirmed physical failure delivered independently of publication."""
-
-    frame: int
-    scope: tuple[int, int, int, int]
-    source_context: str
-    kind: str

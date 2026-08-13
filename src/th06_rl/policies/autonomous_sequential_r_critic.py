@@ -17,7 +17,7 @@ from ..advantage_learning import (
 )
 from ..hazard_representation import HISTORY_FEATURE_NAMES, NativeHazardCodebookEncoder
 from ..learning_features import tree_candidate_vector
-from ..offline import ACTION_NAMES
+from ..actions import ACTION_NAMES
 from ..policy_api import POLICY_API_VERSION, PolicyDecision
 from ..sequential_learning import (
     POPULATION_MEMBERS,

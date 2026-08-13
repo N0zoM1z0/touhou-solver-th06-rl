@@ -12,7 +12,7 @@ from th06_rl.hazard_representation import (
     HAZARD_PRIMITIVE_FEATURE_NAMES,
     HISTORY_FEATURE_NAMES,
 )
-from th06_rl.offline import ACTION_NAMES
+from th06_rl.actions import ACTION_NAMES
 from th06_rl.policies.autonomous_sequential_r_critic import (
     AutonomousSequentialRCriticPolicy,
 )

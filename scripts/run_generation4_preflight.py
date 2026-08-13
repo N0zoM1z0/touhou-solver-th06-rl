@@ -24,7 +24,7 @@ from th06_rl.hazard_representation import (  # noqa: E402
     HAZARD_PRIMITIVE_FEATURE_NAMES,
     HISTORY_FEATURE_NAMES,
 )
-from th06_rl.offline import ACTION_NAMES  # noqa: E402
+from th06_rl.actions import ACTION_NAMES  # noqa: E402
 from th06_rl.policies.autonomous_sequential_r_critic import (  # noqa: E402
     AutonomousSequentialRCriticPolicy,
 )

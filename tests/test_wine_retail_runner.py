@@ -14,8 +14,19 @@ from scripts.run_wine_retail import (
     _summarize_controller_completion,
     _summarize_trace,
     _windows_path,
-    parse_args,
+    parse_args as _parse_args,
 )
+
+
+FROZEN_POLICY_ARGS = [
+    "--policy-plugin", "candidate.py",
+    "--policy-state", "candidate.json",
+    "--immutable-policy",
+]
+
+
+def parse_args(args: list[str]):
+    return _parse_args([*args, *FROZEN_POLICY_ARGS])
 
 
 def test_windows_path_uses_wines_z_drive(tmp_path: Path) -> None:
@@ -69,12 +80,12 @@ def test_runner_accepts_route_as_a_distinct_mode(tmp_path: Path) -> None:
     assert args.practice_stage is None
     assert args.wine_prefix == Path("/home/c/.wine-th06-rl-retail")
     assert args.score_template.name == "full-unlock-score.dat"
-    assert args.policy_plugin.name == "adaptive.py"
-    assert args.policy_state.name == "lunatic_reimu_a_route.json"
-    assert args.exploration_rate == 0.03
+    assert args.policy_plugin.name == "candidate.py"
+    assert args.policy_state.name == "candidate.json"
+    assert args.exploration_rate == 0.0
 
 
-def test_runner_records_a_scope_specific_practice_policy_state(tmp_path: Path) -> None:
+def test_runner_uses_only_the_explicit_policy_state(tmp_path: Path) -> None:
     args = parse_args(
         [
             "--practice-stage",
@@ -88,7 +99,7 @@ def test_runner_records_a_scope_specific_practice_policy_state(tmp_path: Path) -
         ]
     )
 
-    assert args.policy_state.name == "hard_reimu_a_stage4.json"
+    assert args.policy_state.name == "candidate.json"
     assert args.exploration_rate == 0.0
 
 
@@ -98,7 +109,8 @@ def test_immutable_runner_requires_zero_exploration(tmp_path: Path) -> None:
             [
                 "--practice-stage",
                 "6",
-                "--immutable-policy",
+                "--exploration-rate",
+                "0.01",
                 "--artifact-dir",
                 str(tmp_path / "run"),
             ]
@@ -108,7 +120,6 @@ def test_immutable_runner_requires_zero_exploration(tmp_path: Path) -> None:
         [
             "--practice-stage",
             "6",
-            "--immutable-policy",
             "--exploration-rate",
             "0",
             "--artifact-dir",
@@ -202,12 +213,8 @@ def test_first_failure_corpus_requires_frozen_natural_practice(
         "--artifact-dir",
         str(tmp_path / "run"),
     ]
-    with pytest.raises(SystemExit):
-        parse_args(common)
-
     args = parse_args([
         *common,
-        "--immutable-policy",
         "--exploration-rate",
         "0",
     ])
@@ -264,19 +271,13 @@ def test_fixed_rng_is_allowed_only_for_training_corpus(tmp_path: Path) -> None:
     assert args.diagnostic_rng_seed == 0x1234
 
 
-def test_complete_stage_training_corpus_allows_natural_or_fixed_rng_and_requires_immutable(
+def test_complete_stage_training_corpus_allows_natural_or_fixed_rng(
     tmp_path: Path,
 ) -> None:
     root = str(tmp_path / "complete-corpus")
-    with pytest.raises(SystemExit):
-        parse_args([
-            "--practice-stage", "6",
-            "--complete-stage-training-corpus-root", root,
-        ])
     args = parse_args([
         "--practice-stage", "6",
         "--complete-stage-training-corpus-root", root,
-        "--immutable-policy",
         "--exploration-rate", "0",
     ])
     assert args.complete_stage_training_corpus_root == tmp_path / "complete-corpus"
@@ -285,7 +286,6 @@ def test_complete_stage_training_corpus_allows_natural_or_fixed_rng_and_requires
         "--practice-stage", "6",
         "--complete-stage-training-corpus-root", root,
         "--diagnostic-rng-seed", "123",
-        "--immutable-policy",
         "--exploration-rate", "0",
     ])
     assert fixed.diagnostic_rng_seed == 123
@@ -318,7 +318,11 @@ def test_option_smoke_is_exclusive_with_evidence_corpus_modes(
             "--option-smoke-corpus-root", str(tmp_path / "smoke"),
             "--complete-stage-training-corpus-root", str(tmp_path / "training"),
             "--seconds", "45",
-            "--immutable-policy",
             "--exploration-rate", "0",
             "--diagnostic-rng-seed", "1",
         ])
+
+
+def test_runner_has_no_implicit_policy() -> None:
+    with pytest.raises(SystemExit):
+        _parse_args(["--start-route"])

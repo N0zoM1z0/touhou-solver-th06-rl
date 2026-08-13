@@ -37,7 +37,7 @@ from th06_rl.native_decision_conformance import (  # noqa: E402
     actor_centered_float64_scores,
 )
 from th06_rl.learning_features import tree_candidate_vector  # noqa: E402
-from th06_rl.offline import ACTION_NAMES  # noqa: E402
+from th06_rl.actions import ACTION_NAMES  # noqa: E402
 from th06_rl.policy_api import PolicyContext  # noqa: E402
 from th06_rl.policies.autonomous_iql_actor import (  # noqa: E402
     AutonomousIqlActorPolicy,

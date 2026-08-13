@@ -30,7 +30,7 @@ from scripts.run_generation6_wine_canary import (  # noqa: E402
     _object,
     _sha256,
 )
-from th06_rl.offline import ACTION_NAMES  # noqa: E402
+from th06_rl.actions import ACTION_NAMES  # noqa: E402
 from th06_rl.policies.autonomous_iql_actor import (  # noqa: E402
     ALLOWED_CANARY_CONTRACT_SHA256,
     POLICY_NAME,

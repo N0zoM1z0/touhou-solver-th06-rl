@@ -6,7 +6,7 @@ from th06_rl.conservative_learning import (
     fit_conservative_fqi,
 )
 from th06_rl.learning_features import tree_feature_names
-from th06_rl.offline import ACTION_NAMES
+from th06_rl.actions import ACTION_NAMES
 from th06_rl.th06.learning_adapter import (
     ACTION_FEATURE_NAMES,
     OBSERVATION_FEATURE_NAMES,

@@ -17,7 +17,7 @@ from ..learning_features import (
     tree_candidate_vector,
     tree_feature_names,
 )
-from ..offline import ACTION_NAMES
+from ..actions import ACTION_NAMES
 from ..policy_api import POLICY_API_VERSION, PolicyDecision
 from .offline_ranker import (
     NATIVE_SCORER_ENV,
