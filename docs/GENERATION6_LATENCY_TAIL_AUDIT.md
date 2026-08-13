@@ -126,3 +126,11 @@ five-second passive wait. The runner still never kills an unverified shared
 process. Round 2 remains frozen and is not resumed with the changed runner. A
 new successor contract must bind this additional repair before another Wine
 attempt.
+
+The final no-corpus startup smoke report is SHA-256
+`dfd0515f8c5b282783013c3ffc90eccbbf4e4ed6d95e27dc90d4ad5762902915`.
+It recorded host-monitor PID `3930835`, attested Wine PID `3930838`, successful
+GDB normalization, controller return code zero, exact `SCHED_OTHER/-10`
+attestations on both CPU partitions, zero decisions, zero corpus run IDs, and
+zero leftover prefix processes. It is explicitly ineligible as gameplay or
+efficacy evidence.

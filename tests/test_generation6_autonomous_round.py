@@ -11,6 +11,7 @@ from scripts.run_generation6_autonomous_round import (
     _materialize_reused_collection,
     _paired_verdict,
     _priority_passed,
+    _startup_smoke_passed,
     _validate_contract_shape,
 )
 
@@ -276,6 +277,49 @@ def test_priority_gate_requires_exact_dropped_identity_attestation() -> None:
     assert _priority_passed(report, environment)
     report["controller_priority_attestation"]["effective_nice"] = -9
     assert not _priority_passed(report, environment)
+
+
+def test_startup_smoke_is_non_gameplay_and_binds_exec_child_identity() -> None:
+    environment = {
+        "game_cpu_list": "0-1",
+        "controller_cpu_list": "2-3",
+        "game_nice": -10,
+        "controller_nice": -10,
+    }
+    report = {
+        "error": None,
+        "gdb_normalized": True,
+        "controller_returncode": 0,
+        "immutable_policy_state_equal": True,
+        "evaluation_mode": "hit-continuation-benchmark",
+        "complete_stage_training_corpus_root": None,
+        "first_failure_corpus_root": None,
+        "option_smoke_corpus_root": None,
+        "seconds": 0.25,
+        "trace": {"corpus_run_ids": [], "decisions": 0},
+        "leftover_prefix_processes": [],
+        "game_host_pid": 100,
+        "game_process_pid": 101,
+    }
+    for role, cpus in (("game", [0, 1]), ("controller", [2, 3])):
+        report[f"{role}_nice"] = -10
+        report[f"{role}_priority_attestation"] = {
+            "schema": "bounded-wine-process-priority-v1",
+            "authority": "linux-setpriority-and-sched-setaffinity",
+            "scheduler": "SCHED_OTHER",
+            "nice": -10,
+            "effective_nice": -10,
+            "cpus": cpus,
+            "effective_cpus": cpus,
+            "uid": 1000,
+            "target_uid": 1000,
+            "gid": 1000,
+            "target_gid": 1000,
+            "pid": 101 if role == "game" else 102,
+        }
+    assert _startup_smoke_passed(report, environment)
+    report["trace"]["corpus_run_ids"] = ["forbidden"]
+    assert not _startup_smoke_passed(report, environment)
 
 
 def test_paired_round_reports_invalid_shape_without_partial_verdict() -> None:

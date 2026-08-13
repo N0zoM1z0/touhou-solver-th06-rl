@@ -83,3 +83,28 @@ regardless of sign.
 No result authorizes manual distribution repair. A weak or negative outcome is
 evidence about the learner or general infrastructure and leads to another
 predeclared autonomous iteration.
+
+## Execution result: startup-aborted
+
+Round 2 did not enter a new collection episode. Its first game launch exposed
+that sudo returned a monitor PID while the priority wrapper attested a distinct
+Wine exec-child PID. The startup GDB script attached to the monitor and failed
+closed before controller launch. Two immediate infra retries saw the same
+private prefix's transient `dbus-launch` helper and also refused to proceed.
+
+The retained ledger, SHA-256
+`5bfd8d521e65ee673be5ea13661fc64903aed95e0d99c49dbb73eb0f8c60eb22`,
+contains only the ten mechanically reused round-1 rows. No new trajectory,
+option, HIT outcome, or registry source was produced. It remains a historical
+`collecting` crash ledger rather than being edited after the fact. Round 2 is
+operationally closed and must not be resumed because its frozen runner no
+longer matches the additional generic repair.
+
+After repairing attested child-PID selection and private-X cleanup ordering, a
+0.25-second original-Wine startup smoke completed with GDB normalization,
+exact game/controller priority attestations, controller return code zero,
+immutable policy state, zero decisions, zero corpus IDs, and zero leftover
+prefix processes. Its report SHA-256 is
+`dfd0515f8c5b282783013c3ffc90eccbbf4e4ed6d95e27dc90d4ad5762902915`.
+This is infrastructure evidence only. A new round must bind it before any
+complete-Stage attempt.

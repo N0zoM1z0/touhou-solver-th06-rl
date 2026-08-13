@@ -140,6 +140,7 @@ def _validate_contract_shape(contract: dict[str, object]) -> None:
     append = contract.get("registry_append")
     frozen = contract.get("frozen_inputs")
     latency_audit = contract.get("latency_tail_audit")
+    startup_smoke = contract.get("startup_smoke")
     if not all(isinstance(value, dict) for value in (
         collection, canary, evaluation, environment, offline, append, frozen
     )):
@@ -208,6 +209,14 @@ def _validate_contract_shape(contract: dict[str, object]) -> None:
         or len(str(latency_audit.get("sha256", ""))) != 64
     ):
         raise ValueError("Generation-6 latency-tail audit binding is invalid")
+    if startup_smoke is not None and (
+        not isinstance(startup_smoke, dict)
+        or set(startup_smoke) != {"path", "sha256"}
+        or not isinstance(startup_smoke.get("path"), str)
+        or not startup_smoke["path"]
+        or len(str(startup_smoke.get("sha256", ""))) != 64
+    ):
+        raise ValueError("Generation-6 startup smoke binding is invalid")
     canary_schedule = canary.get("schedule")
     if (
         not isinstance(canary_schedule, list)
@@ -370,6 +379,18 @@ def _contract(path: Path) -> tuple[dict[str, object], str]:
             or priority.get("cpus") != expected_cpus
         ):
             raise ValueError("Generation-6 latency-tail repair is not proven")
+    startup_binding = contract.get("startup_smoke")
+    if isinstance(startup_binding, dict):
+        startup_path = (REPOSITORY / str(startup_binding["path"])).resolve()
+        if (
+            not startup_path.is_relative_to(REPOSITORY)
+            or not startup_path.is_file()
+            or _sha256(startup_path) != startup_binding["sha256"]
+            or not _startup_smoke_passed(
+                _object(startup_path), contract["environment"]
+            )
+        ):
+            raise ValueError("Generation-6 repaired Wine startup smoke failed")
     if _sha256(REGISTRY) != contract["frozen_inputs"][
         "config/wine_corpus_registry.json"
     ]:
@@ -463,6 +484,35 @@ def _priority_passed(
         ):
             return False
     return True
+
+
+def _startup_smoke_passed(
+    report: dict[str, object], environment: dict[str, object]
+) -> bool:
+    trace = report.get("trace")
+    game_attestation = report.get("game_priority_attestation")
+    return bool(
+        report.get("error") is None
+        and report.get("gdb_normalized") is True
+        and report.get("controller_returncode") == 0
+        and report.get("immutable_policy_state_equal") is True
+        and report.get("evaluation_mode") == "hit-continuation-benchmark"
+        and report.get("complete_stage_training_corpus_root") is None
+        and report.get("first_failure_corpus_root") is None
+        and report.get("option_smoke_corpus_root") is None
+        and isinstance(report.get("seconds"), (int, float))
+        and 0 < float(report["seconds"]) <= 1.0
+        and isinstance(trace, dict)
+        and trace.get("corpus_run_ids") == []
+        and trace.get("decisions") == 0
+        and report.get("leftover_prefix_processes") == []
+        and isinstance(report.get("game_host_pid"), int)
+        and isinstance(report.get("game_process_pid"), int)
+        and report["game_host_pid"] != report["game_process_pid"]
+        and isinstance(game_attestation, dict)
+        and game_attestation.get("pid") == report["game_process_pid"]
+        and _priority_passed(report, environment)
+    )
 
 
 def _audit_collection(
