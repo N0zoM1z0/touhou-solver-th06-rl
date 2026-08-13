@@ -594,8 +594,9 @@ exec child's PID. The wrapper attested Wine PID `3909394`, while Popen returned
 monitor PID `3909392`; attaching the startup GDB script to the monitor could
 never reach TH06. No controller or new corpus was created. The generic runner
 now resolves the live attested PID before GDB attach and records both
-identities. Cleanup also waits up to five seconds for verified per-prefix Wine
-helpers to exit after `wineserver -k`. A no-corpus startup smoke showed the
-helper exited shortly after that first bound, so the passive grace was raised
-to fifteen seconds before freezing the next contract. This avoids immediate
-retry races without killing an unrelated or shared process.
+identities. Two no-corpus smokes then proved that `dbus-launch --autolaunch`
+cannot exit while the run's private Xvfb is alive: increasing a pre-X-shutdown
+wait from five to fifteen seconds had no effect, and the helper exited
+immediately after Xvfb stopped. Cleanup now stops the owned Xvfb before a
+bounded five-second helper grace. This avoids immediate retry races without
+killing an unrelated or shared process.

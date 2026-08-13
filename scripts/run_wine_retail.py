@@ -226,7 +226,7 @@ def _attested_process_pid(
     )
 
 
-def _wait_prefix_exit(prefix: Path, timeout: float = 15.0) -> None:
+def _wait_prefix_exit(prefix: Path, timeout: float = 5.0) -> None:
     """Allow Wine's per-prefix helper children to finish after wineserver -k."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline and _prefix_processes(prefix):
@@ -957,8 +957,11 @@ def run(args: argparse.Namespace) -> int:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            _wait_prefix_exit(prefix)
         _stop_process(xvfb_process)
+        if prefix_owned:
+            # dbus-launch --autolaunch is tied to the private X display and
+            # cannot exit while Xvfb is still alive.
+            _wait_prefix_exit(prefix)
         controller_log.close()
         game_log.close()
         xvfb_log.close()
