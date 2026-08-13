@@ -133,6 +133,31 @@ TH06_RL_RANKER_API int th06_rl_score_centered_iql_actor_population_v1(
     const float* action_score_bias,
     float* outputs);
 
+// The deployment successor evaluates the frozen float32 parameters with
+// scalar float64 intermediates and returns centered advantages as doubles.
+// This resolves near-zero decisions without changing any fitted parameter.
+TH06_RL_RANKER_API int th06_rl_score_centered_iql_actor_population_f64_v1(
+    const float* states,
+    const float* actions,
+    std::int32_t row_count,
+    std::int32_t state_count,
+    std::int32_t action_count,
+    std::int32_t baseline_row,
+    std::int32_t model_count,
+    std::int32_t hidden_count,
+    std::int32_t rank_count,
+    const float* state_hidden_weight,
+    const float* state_hidden_bias,
+    const float* state_latent_weight,
+    const float* state_latent_bias,
+    const float* action_hidden_weight,
+    const float* action_hidden_bias,
+    const float* action_latent_weight,
+    const float* action_latent_bias,
+    const float* action_score_weight,
+    const float* action_score_bias,
+    double* outputs);
+
 // Fuse the two immutable online consumers of one rich candidate matrix:
 // action-conditional prototype support and normalized actor-population
 // scoring. This avoids a second Python/FFI marshal and performs no ranking or
@@ -171,7 +196,7 @@ TH06_RL_RANKER_API int th06_rl_score_supported_iql_actor_v1(
     const float* action_score_weight,
     const float* action_score_bias,
     float* support_outputs,
-    float* actor_outputs);
+    double* actor_outputs);
 
 // Construct the rich rows, encode the observed hazard set, evaluate support,
 // and score the complete baseline-centred actor population in one FFI call.

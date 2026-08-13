@@ -455,6 +455,168 @@ th06_rl_score_centered_iql_actor_population_v1(
     return 0;
 }
 
+extern "C" TH06_RL_RANKER_API int
+th06_rl_score_centered_iql_actor_population_f64_v1(
+    const float* states,
+    const float* actions,
+    const std::int32_t row_count,
+    const std::int32_t state_count,
+    const std::int32_t action_count,
+    const std::int32_t baseline_row,
+    const std::int32_t model_count,
+    const std::int32_t hidden_count,
+    const std::int32_t rank_count,
+    const float* state_hidden_weight,
+    const float* state_hidden_bias,
+    const float* state_latent_weight,
+    const float* state_latent_bias,
+    const float* action_hidden_weight,
+    const float* action_hidden_bias,
+    const float* action_latent_weight,
+    const float* action_latent_bias,
+    const float* action_score_weight,
+    const float* action_score_bias,
+    double* outputs) {
+    if (states == nullptr || actions == nullptr ||
+        state_hidden_weight == nullptr || state_hidden_bias == nullptr ||
+        state_latent_weight == nullptr || state_latent_bias == nullptr ||
+        action_hidden_weight == nullptr || action_hidden_bias == nullptr ||
+        action_latent_weight == nullptr || action_latent_bias == nullptr ||
+        action_score_weight == nullptr || action_score_bias == nullptr ||
+        outputs == nullptr || row_count <= 0 || state_count <= 0 ||
+        action_count <= 0 || baseline_row < 0 || baseline_row >= row_count ||
+        model_count <= 0 || hidden_count <= 0 || hidden_count > 256 ||
+        rank_count <= 0 || rank_count > 128) {
+        return 1;
+    }
+    const double rank_scale = 1.0 / std::sqrt(static_cast<double>(rank_count));
+    for (std::int32_t model = 0; model < model_count; ++model) {
+        const std::int64_t shw = static_cast<std::int64_t>(model) *
+            state_count * hidden_count;
+        const std::int64_t shb = static_cast<std::int64_t>(model) * hidden_count;
+        const std::int64_t slw = static_cast<std::int64_t>(model) *
+            hidden_count * rank_count;
+        const std::int64_t slb = static_cast<std::int64_t>(model) * rank_count;
+        const std::int64_t ahw = static_cast<std::int64_t>(model) *
+            action_count * hidden_count;
+        const std::int64_t ahb = static_cast<std::int64_t>(model) * hidden_count;
+        const std::int64_t alw = static_cast<std::int64_t>(model) *
+            hidden_count * rank_count;
+        const std::int64_t alb = static_cast<std::int64_t>(model) * rank_count;
+        double state_hidden[256];
+        double state_latent[128];
+        for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+            state_hidden[hidden] = static_cast<double>(
+                state_hidden_bias[shb + hidden]);
+        }
+        for (std::int32_t feature = 0; feature < state_count; ++feature) {
+            const double input = static_cast<double>(states[feature]);
+            const float* weights = state_hidden_weight + shw +
+                static_cast<std::int64_t>(feature) * hidden_count;
+            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                state_hidden[hidden] += input * static_cast<double>(weights[hidden]);
+            }
+        }
+        for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+            state_hidden[hidden] = std::tanh(state_hidden[hidden]);
+        }
+        for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+            state_latent[rank] = static_cast<double>(
+                state_latent_bias[slb + rank]);
+        }
+        for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+            const double input = state_hidden[hidden];
+            const float* weights = state_latent_weight + slw +
+                static_cast<std::int64_t>(hidden) * rank_count;
+            for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+                state_latent[rank] += input * static_cast<double>(weights[rank]);
+            }
+        }
+
+        double baseline_hidden[256];
+        for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+            baseline_hidden[hidden] = static_cast<double>(
+                action_hidden_bias[ahb + hidden]);
+        }
+        const float* baseline_action = actions + baseline_row * action_count;
+        for (std::int32_t feature = 0; feature < action_count; ++feature) {
+            const double input = static_cast<double>(baseline_action[feature]);
+            const float* weights = action_hidden_weight + ahw +
+                static_cast<std::int64_t>(feature) * hidden_count;
+            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                baseline_hidden[hidden] +=
+                    input * static_cast<double>(weights[hidden]);
+            }
+        }
+        for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+            baseline_hidden[hidden] = std::tanh(baseline_hidden[hidden]);
+        }
+        double baseline_latent[128];
+        for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+            baseline_latent[rank] = static_cast<double>(
+                action_latent_bias[alb + rank]);
+        }
+        for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+            const double input = baseline_hidden[hidden];
+            const float* weights = action_latent_weight + alw +
+                static_cast<std::int64_t>(hidden) * rank_count;
+            for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+                baseline_latent[rank] +=
+                    input * static_cast<double>(weights[rank]);
+            }
+        }
+
+        for (std::int32_t row = 0; row < row_count; ++row) {
+            if (row == baseline_row) {
+                outputs[model * row_count + row] = 0.0;
+                continue;
+            }
+            double action_hidden[256];
+            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                action_hidden[hidden] = static_cast<double>(
+                    action_hidden_bias[ahb + hidden]);
+            }
+            for (std::int32_t feature = 0; feature < action_count; ++feature) {
+                const double input = static_cast<double>(
+                    actions[row * action_count + feature]);
+                const float* weights = action_hidden_weight + ahw +
+                    static_cast<std::int64_t>(feature) * hidden_count;
+                for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                    action_hidden[hidden] +=
+                        input * static_cast<double>(weights[hidden]);
+                }
+            }
+            double score = 0.0;
+            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                action_hidden[hidden] = std::tanh(action_hidden[hidden]);
+                score += (action_hidden[hidden] - baseline_hidden[hidden]) *
+                    static_cast<double>(action_score_weight[ahb + hidden]);
+            }
+            double action_latent[128];
+            for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+                action_latent[rank] = static_cast<double>(
+                    action_latent_bias[alb + rank]);
+            }
+            for (std::int32_t hidden = 0; hidden < hidden_count; ++hidden) {
+                const double input = action_hidden[hidden];
+                const float* weights = action_latent_weight + alw +
+                    static_cast<std::int64_t>(hidden) * rank_count;
+                for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+                    action_latent[rank] +=
+                        input * static_cast<double>(weights[rank]);
+                }
+            }
+            double dot = 0.0;
+            for (std::int32_t rank = 0; rank < rank_count; ++rank) {
+                dot += (action_latent[rank] - baseline_latent[rank]) *
+                    state_latent[rank];
+            }
+            outputs[model * row_count + row] = score + dot * rank_scale;
+        }
+    }
+    return 0;
+}
+
 extern "C" TH06_RL_RANKER_API int th06_rl_encode_hazard_codebook_v1(
     const float* primitives,
     const std::int32_t primitive_count,
@@ -571,7 +733,7 @@ extern "C" TH06_RL_RANKER_API int th06_rl_score_supported_iql_actor_v1(
     const float* action_score_weight,
     const float* action_score_bias,
     float* support_outputs,
-    float* actor_outputs) {
+    double* actor_outputs) {
     if (features == nullptr || row_actions == nullptr ||
         state_indices == nullptr || actor_action_indices == nullptr ||
         state_mean == nullptr || state_scale == nullptr ||
@@ -621,7 +783,7 @@ extern "C" TH06_RL_RANKER_API int th06_rl_score_supported_iql_actor_v1(
             ) / action_scale[feature];
         }
     }
-    const int actor_status = th06_rl_score_centered_iql_actor_population_v1(
+    const int actor_status = th06_rl_score_centered_iql_actor_population_f64_v1(
         state, actions, row_count, state_count, actor_action_count,
         baseline_row, model_count, hidden_count, rank_count, state_hidden_weight,
         state_hidden_bias, state_latent_weight, state_latent_bias,
@@ -732,7 +894,7 @@ extern "C" TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
         if (offset != feature_count) return 52;
     }
     float support_outputs[64];
-    float actor_outputs[64 * 16];
+    double actor_outputs[64 * 16];
     const int status = th06_rl_score_supported_iql_actor_v1(
         rows, row_count, feature_count, row_actions, baseline_row,
         support_mean, support_scale, support_prototypes,
@@ -758,8 +920,7 @@ extern "C" TH06_RL_RANKER_API int th06_rl_evaluate_iql_policy_v1(
         ++supported_count;
         double mean = 0.0;
         for (std::int32_t model = 0; model < model_count; ++model) {
-            mean += static_cast<double>(
-                actor_outputs[model * row_count + row]);
+            mean += actor_outputs[model * row_count + row];
         }
         mean /= static_cast<double>(model_count);
         const double advantage = mean;

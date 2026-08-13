@@ -646,3 +646,23 @@ The full audit reuses the fit checkpoint and option cache, so numerical-serving
 iterations avoid both original-Wine runtime and the 53-minute production fit.
 It must still traverse every registered factual option and then run the frozen
 wide Win32 panel before online authorization.
+
+The first serial profile processed 3,719 options in 25.3 seconds, implying
+roughly 19 minutes for 56 episodes before the scalar panel. The general audit
+now forks at the immutable episode boundary: 16 single-threaded workers share
+the fitted arrays copy-on-write, return deterministic per-dimension panel
+heaps, and the parent reduces them with content-hash tie breaks. The scalar
+panel uses the same bounded worker pool. Each child initializes its own
+BLAS/OpenMP thread pool limit at one, so bounded parallelism does not depend on
+shell environment variables and cannot silently become process-by-thread
+oversubscription after a learner change. A regression test proves panel
+reduction is invariant to completion order and locks the default at 16 workers
+under the repository-wide 32-CPU cap.
+
+On the full 56-episode / 167,250-option / 2,415,808-candidate workload, the
+parallel float64 serving smoke completed both the Linux differential and 320
+scalar envelope cases in 106.5 seconds. The main corpus pass finished in about
+83 seconds. Future learner/export variants must use this runner and retain its
+reported worker count, exact option identity, deterministic panel selection,
+and serial-equivalent result; reverting to an unbounded pool or the old
+single-process loop is an infrastructure regression.

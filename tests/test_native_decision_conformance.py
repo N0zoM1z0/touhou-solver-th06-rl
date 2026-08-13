@@ -9,6 +9,7 @@ from th06_rl.iql_actor_learning import IqlActorModel, NativeIqlActorPopulation
 from th06_rl.low_rank_learning import FeatureRoleLayout
 from th06_rl.native_decision_conformance import (
     actor_centered_forward_reference,
+    actor_centered_float64_scores,
     actor_forward_reference,
     certify_mean_population_decision,
     native_order_float32_centered_advantages,
@@ -86,6 +87,22 @@ def test_scalar_reference_and_envelope_cover_frozen_native_kernel() -> None:
     assert np.array_equal(portability.scores, centered_scalar)
     assert np.all(
         np.abs(centered - portability.scores) <= portability.error_bounds
+    )
+    centered_double = np.asarray(
+        native.predict_centered_double(rows, baseline_index=2)[0]
+    )
+    portable_double = actor_centered_float64_scores(
+        model, rows, baseline_index=2
+    )
+    portability_double = native_order_centered_portability_reference(
+        model, rows, baseline_index=2, serving_precision="float64"
+    )
+    assert np.allclose(
+        centered_double, portable_double, rtol=1e-12, atol=1e-12
+    )
+    assert np.all(
+        np.abs(centered_double - portability_double.scores)
+        <= portability_double.error_bounds
     )
     assert np.all(
         np.abs(centered - centered_reference.scores)

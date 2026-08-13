@@ -3,11 +3,14 @@
 The learner is trained and inspected with array libraries, while deployment
 uses a fixed scalar C++ kernel.  Raw logits are not a policy identity: common
 offsets cancel when the baseline-centred proposal is formed.  This module
-therefore provides two independent references:
+therefore provides independent references for the historical float32 scorer
+and the float64-intermediate serving successor:
 
-* ``native_order_float32_scores`` mirrors the documented C++ reduction order;
+* ``native_order_float32_scores`` mirrors the historical C++ reduction order;
 * ``actor_forward_reference`` evaluates the mathematical network in float64
-  and propagates a conservative float32 forward-error envelope.
+  and propagates a conservative float32 forward-error envelope;
+* ``native_order_centered_portability_reference`` follows the declared scalar
+  serving precision and bounds target-local ``tanh`` variation.
 
 The envelope is intentionally based on absolute intermediate products and
 operation counts.  It never grows or shrinks according to the final logit.
@@ -329,6 +332,66 @@ def actor_centered_forward_reference(
     )
 
 
+def actor_centered_float64_scores(
+    model: IqlActorModel, rows, *, baseline_index: int,
+):
+    """Fast array reference for the frozen float32-parameter/f64 policy."""
+    import numpy as np
+
+    matrix = np.asarray(rows, dtype=np.float32)
+    if (
+        matrix.ndim != 2 or matrix.shape[1] != len(model.layout.names)
+        or not 0 <= baseline_index < len(matrix)
+    ):
+        raise ValueError("float64 centered actor input shape differs")
+    states = matrix[:, model.layout.state_indices]
+    if not np.array_equal(states, np.broadcast_to(states[0], states.shape)):
+        raise ValueError("float64 centered actor candidates changed state")
+    # Online normalization is intentionally retained as float32.  Only the
+    # fitted actor tower is promoted, so representation/support semantics do
+    # not change and serialized weights remain the sole learned parameters.
+    state = np.asarray(
+        (states[0] - model.state_mean) / model.state_scale,
+        dtype=np.float32,
+    ).astype(np.float64)
+    action = np.asarray(
+        (matrix[:, model.layout.action_indices] - model.action_mean)
+        / model.action_scale,
+        dtype=np.float32,
+    ).astype(np.float64)
+
+    def f64(value):
+        return np.asarray(value, dtype=np.float32).astype(np.float64)
+
+    state_hidden = np.tanh(
+        state @ f64(model.state_hidden_weight)
+        + f64(model.state_hidden_bias)
+    )
+    state_latent = (
+        state_hidden @ f64(model.state_latent_weight)
+        + f64(model.state_latent_bias)
+    )
+    action_hidden = np.tanh(
+        action @ f64(model.action_hidden_weight)
+        + f64(model.action_hidden_bias)
+    )
+    action_latent = (
+        action_hidden @ f64(model.action_latent_weight)
+        + f64(model.action_latent_bias)
+    )
+    hidden_delta = action_hidden - action_hidden[baseline_index]
+    latent_delta = action_latent - action_latent[baseline_index]
+    result = (
+        hidden_delta @ f64(model.action_score_weight)
+        + np.sum(latent_delta * state_latent[None, :], axis=1)
+        / math.sqrt(len(state_latent))
+    )
+    result[baseline_index] = 0.0
+    if not np.isfinite(result).all():
+        raise ValueError("float64 centered actor produced a non-finite result")
+    return result
+
+
 def native_order_float32_scores(model: IqlActorModel, rows):
     """Mirror ``th06_rl_score_iql_actor_population_v1`` scalar order.
 
@@ -517,11 +580,13 @@ def native_order_float32_centered_advantages(
 
 def native_order_centered_portability_reference(
     model: IqlActorModel, rows, *, baseline_index: int,
+    serving_precision: str = "float32",
 ) -> ActorForwardReference:
     """Bound target variation around the specified scalar float32 policy.
 
-    IEEE float32 operations have identical operands and prescribed ordering on
-    the frozen targets; only ``tanhf`` is allowed a target-local perturbation.
+    IEEE operations have identical operands, serving precision, and prescribed
+    ordering on the frozen targets; only ``tanh`` is allowed a target-local
+    perturbation.
     Once that perturbation exists, each subsequent multiply/add includes one
     local-ULP rounding discontinuity.  This is much tighter—and more relevant
     to deployment—than bounding the distance from float32 to an unused
@@ -529,6 +594,14 @@ def native_order_centered_portability_reference(
     """
     import numpy as np
 
+    if serving_precision == "float32":
+        serving_type = np.float32
+        tanh_allowance = TANH_ABSOLUTE_ALLOWANCE
+    elif serving_precision == "float64":
+        serving_type = np.float64
+        tanh_allowance = 8.0 * (2.0 ** -53)
+    else:
+        raise ValueError("unsupported centered actor serving precision")
     matrix = np.asarray(rows, dtype=np.float32)
     if (
         matrix.ndim != 2 or matrix.shape[1] != len(model.layout.names)
@@ -536,30 +609,30 @@ def native_order_centered_portability_reference(
     ):
         raise ValueError("portability reference input shape differs")
 
-    def f32(value):
-        return np.float32(value)
+    def cast(value):
+        return serving_type(value)
 
     maximum_sum = 0.0
 
     def rounding_jump(value, variation: float) -> float:
         if variation <= 0.0:
             return 0.0
-        magnitude = np.float32(abs(float(value)) + variation)
+        magnitude = serving_type(abs(float(value)) + variation)
         spacing = float(np.spacing(magnitude))
         if not math.isfinite(spacing):
             raise ValueError("portability reference overflowed")
         return max(spacing, float(np.nextafter(
-            np.float32(0.0), np.float32(1.0)
+            serving_type(0.0), serving_type(1.0)
         )))
 
     def add(left, left_error, right, right_error):
         variation = float(left_error) + float(right_error)
-        value = f32(left + right)
+        value = cast(left + right)
         return value, variation + rounding_jump(value, variation)
 
     def subtract(left, left_error, right, right_error):
         variation = float(left_error) + float(right_error)
-        value = f32(left - right)
+        value = cast(left - right)
         return value, variation + rounding_jump(value, variation)
 
     def multiply(left, left_error, right, right_error):
@@ -568,7 +641,7 @@ def native_order_centered_portability_reference(
             + abs(float(right)) * float(left_error)
             + float(left_error) * float(right_error)
         )
-        value = f32(left * right)
+        value = cast(left * right)
         return value, variation + rounding_jump(value, variation)
 
     def normalized(row, indices, mean, scale):
@@ -576,7 +649,8 @@ def native_order_centered_portability_reference(
         for source, center, width in zip(indices, mean, scale, strict=True):
             # With equal serialized operands, IEEE subtraction/division are
             # part of the canonical policy rather than a cross-target error.
-            result.append((f32(f32(row[source] - center) / width), 0.0))
+            normalized = np.float32(np.float32(row[source] - center) / width)
+            result.append((cast(normalized), 0.0))
         return result
 
     state_indices = list(model.layout.state_indices)
@@ -592,7 +666,7 @@ def native_order_centered_portability_reference(
     rank_count = len(model.state_latent_bias)
     state_hidden = []
     for hidden in range(hidden_count):
-        value, error = f32(model.state_hidden_bias[hidden]), 0.0
+        value, error = cast(model.state_hidden_bias[hidden]), 0.0
         absolute_sum = abs(float(value))
         for feature, (input_value, input_error) in enumerate(state):
             weight = model.state_hidden_weight[feature, hidden]
@@ -605,12 +679,12 @@ def native_order_centered_portability_reference(
         closest = max(abs(float(value)) - error, 0.0)
         derivative = 1.0 - math.tanh(closest) ** 2
         state_hidden.append((
-            f32(math.tanh(float(value))),
-            derivative * error + TANH_ABSOLUTE_ALLOWANCE,
+            cast(math.tanh(float(value))),
+            derivative * error + tanh_allowance,
         ))
     state_latent = []
     for rank in range(rank_count):
-        value, error = f32(model.state_latent_bias[rank]), 0.0
+        value, error = cast(model.state_latent_bias[rank]), 0.0
         absolute_sum = abs(float(value))
         for hidden, (input_value, input_error) in enumerate(state_hidden):
             weight = model.state_latent_weight[hidden, rank]
@@ -630,7 +704,7 @@ def native_order_centered_portability_reference(
         )
         hidden_values = []
         for hidden in range(hidden_count):
-            value, error = f32(model.action_hidden_bias[hidden]), 0.0
+            value, error = cast(model.action_hidden_bias[hidden]), 0.0
             absolute_sum = abs(float(value))
             for feature, (input_value, input_error) in enumerate(action):
                 weight = model.action_hidden_weight[feature, hidden]
@@ -643,12 +717,12 @@ def native_order_centered_portability_reference(
             closest = max(abs(float(value)) - error, 0.0)
             derivative = 1.0 - math.tanh(closest) ** 2
             hidden_values.append((
-                f32(math.tanh(float(value))),
-                derivative * error + TANH_ABSOLUTE_ALLOWANCE,
+                cast(math.tanh(float(value))),
+                derivative * error + tanh_allowance,
             ))
         latent_values = []
         for rank in range(rank_count):
-            value, error = f32(model.action_latent_bias[rank]), 0.0
+            value, error = cast(model.action_latent_bias[rank]), 0.0
             absolute_sum = abs(float(value))
             for hidden, (input_value, input_error) in enumerate(hidden_values):
                 weight = model.action_latent_weight[hidden, rank]
@@ -662,16 +736,16 @@ def native_order_centered_portability_reference(
         return hidden_values, latent_values
 
     baseline_hidden, baseline_latent = action_tower(matrix[baseline_index])
-    rank_scale = f32(1.0 / math.sqrt(float(f32(rank_count))))
+    rank_scale = cast(1.0 / math.sqrt(float(serving_type(rank_count))))
     outputs = []
     output_errors = []
     for index, row in enumerate(matrix):
         if index == baseline_index:
-            outputs.append(f32(0.0))
+            outputs.append(cast(0.0))
             output_errors.append(0.0)
             continue
         action_hidden, action_latent = action_tower(row)
-        score, score_error = f32(0.0), 0.0
+        score, score_error = cast(0.0), 0.0
         absolute_score_sum = 0.0
         for hidden, (value, baseline) in enumerate(zip(
             action_hidden, baseline_hidden, strict=True
@@ -684,7 +758,7 @@ def native_order_centered_portability_reference(
             score, score_error = add(
                 score, score_error, product, product_error
             )
-        dot, dot_error = f32(0.0), 0.0
+        dot, dot_error = cast(0.0), 0.0
         absolute_dot_sum = 0.0
         for value, baseline, state_value in zip(
             action_latent, baseline_latent, state_latent, strict=True
@@ -704,7 +778,7 @@ def native_order_centered_portability_reference(
         )
         outputs.append(output)
         output_errors.append(output_error)
-    result = np.asarray(outputs, dtype=np.float32)
+    result = np.asarray(outputs, dtype=serving_type)
     errors = np.asarray(output_errors, dtype=np.float64)
     if not np.isfinite(result).all() or not np.isfinite(errors).all():
         raise ValueError("portability reference produced a non-finite result")
