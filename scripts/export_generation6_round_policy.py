@@ -19,6 +19,7 @@ for path in (REPOSITORY, REPOSITORY / "src"):
 from th06_rl.policies.autonomous_iql_actor import (  # noqa: E402
     ALLOWED_AUTONOMOUS_ROUND_CONTRACT_SHA256,
     ALLOWED_NATIVE_SCORER_SHA256,
+    ALLOWED_PREFLIGHT_NATIVE_SCORER_SHA256,
     CANDIDATE_SCHEMA,
     DENSITY_RATIO_CAP,
     INTERVENTION_CAP,
@@ -40,6 +41,19 @@ def _object(path: Path) -> dict[str, object]:
     return value
 
 
+def _valid_contract(contract: dict[str, object]) -> bool:
+    return bool(
+        contract.get("schema") in (
+            "autonomous-generation-6-round-contract-v1",
+            "autonomous-generation-6-decision-successor-contract-v2",
+        )
+        and contract.get("normal_speed") is True
+        and contract.get("natural_rng") is True
+        and contract.get("complete_stage_hit_continuation") is True
+        and contract.get("bomb") == "forbidden"
+    )
+
+
 def export_round_state(
     *, candidate_path: Path, smoke_path: Path, registry_path: Path,
     scorer_path: Path, contract_path: Path, mode: str, policy_seed: int,
@@ -51,11 +65,7 @@ def export_round_state(
         raise ValueError("Generation-6 autonomous round is not allowlisted")
     contract = _object(contract_path)
     if (
-        contract.get("schema") != "autonomous-generation-6-round-contract-v1"
-        or contract.get("normal_speed") is not True
-        or contract.get("natural_rng") is not True
-        or contract.get("complete_stage_hit_continuation") is not True
-        or contract.get("bomb") != "forbidden"
+        not _valid_contract(contract)
     ):
         raise ValueError("Generation-6 autonomous round contract is invalid")
     candidate_bytes = candidate_path.read_bytes()
@@ -146,14 +156,13 @@ def export_round_preflight_state(
     registry_sha = _sha256(registry_path)
     scorer_sha = _sha256(scorer_path)
     if (
-        contract.get("schema")
-        != "autonomous-generation-6-round-contract-v1"
+        not _valid_contract(contract)
         or not isinstance(candidate, dict)
         or candidate.get("schema") != CANDIDATE_SCHEMA
         or candidate.get("passed") is not True
         or candidate.get("autonomous_round_contract_sha256") != contract_sha
         or candidate.get("training_identity", {}).get("sha256") != registry_sha
-        or scorer_sha not in ALLOWED_NATIVE_SCORER_SHA256
+        or scorer_sha not in ALLOWED_PREFLIGHT_NATIVE_SCORER_SHA256
     ):
         raise ValueError("Generation-6 round preflight inputs are invalid")
     return {
@@ -193,22 +202,35 @@ def export_round_preflight_state(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", type=Path, required=True)
-    parser.add_argument("--smoke", type=Path, required=True)
+    parser.add_argument("--smoke", type=Path)
     parser.add_argument("--registry", type=Path, required=True)
     parser.add_argument("--scorer", type=Path, required=True)
     parser.add_argument("--contract", type=Path, required=True)
-    parser.add_argument("--mode", choices=("shadow", "active"), required=True)
+    parser.add_argument(
+        "--mode", choices=("preflight", "shadow", "active"), required=True
+    )
     parser.add_argument("--policy-seed", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.output.exists():
         raise FileExistsError(args.output)
-    state = export_round_state(
-        candidate_path=args.candidate, smoke_path=args.smoke,
-        registry_path=args.registry, scorer_path=args.scorer,
-        contract_path=args.contract, mode=args.mode,
-        policy_seed=args.policy_seed,
-    )
+    if args.mode == "preflight":
+        if args.smoke is not None:
+            parser.error("--smoke is forbidden for a preflight-only state")
+        state = export_round_preflight_state(
+            candidate_path=args.candidate, registry_path=args.registry,
+            scorer_path=args.scorer, contract_path=args.contract,
+            policy_seed=args.policy_seed,
+        )
+    else:
+        if args.smoke is None:
+            parser.error("--smoke is required for shadow/active evidence states")
+        state = export_round_state(
+            candidate_path=args.candidate, smoke_path=args.smoke,
+            registry_path=args.registry, scorer_path=args.scorer,
+            contract_path=args.contract, mode=args.mode,
+            policy_seed=args.policy_seed,
+        )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(state, sort_keys=True, separators=(",", ":")) + "\n"

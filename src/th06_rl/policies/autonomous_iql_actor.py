@@ -68,6 +68,8 @@ ALLOWED_AUTONOMOUS_ROUND_CONTRACT_SHA256: frozenset[str] = frozenset((
     "d733d919726393b60d243b1be2501cc0a57888b1c8e588ed34d257a0aa081a52",
     "e49e363ba0da7a2b89ddb78116612a9ca164d022188db787376c0e0390c09c4f",
     "a4276c321d92ccf8ee17aa8cf7cad57934e7c0742135402bc781ea048ff6e960",
+    # Float64-intermediate decision successor, frozen before formal replay.
+    "c2014a44daabe9307b565e48636f29c8a0114f82a01c2b85aa0994d7c4e3601d",
 ))
 ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     "8b99074e0d9eeae232d4a79286646b1688004d721ba288c605cde74743ef62ec",
@@ -88,6 +90,15 @@ ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     # Same fused math compiled for the Win32 baseline SSE2 scalar ABI.
     "471013f1daa40c57829722a61f1729726a803bcccd4d0a898738ecd096f8c01a",
 ))
+# New serving binaries may enter only the shadow preflight path until the
+# frozen Linux/Win32 panel proves exact actions and latency. They are promoted
+# to ALLOWED_NATIVE_SCORER_SHA256 in a later evidence-bound commit.
+ALLOWED_PREFLIGHT_NATIVE_SCORER_SHA256 = (
+    ALLOWED_NATIVE_SCORER_SHA256 | frozenset((
+        "b0d8a2ea8efeb2e4d3b0798f109a9d2c5da992e8d78a3ab8434776590c88a283",
+        "5fad7ae536f3933fbe467f6b485455937c200be9b960958207ba90a8e501bb27",
+    ))
+)
 _ACTION_INDEX = {action: index for index, action in enumerate(ACTION_NAMES)}
 _LEXICAL_RANK = {
     action: index for index, action in enumerate(sorted(ACTION_NAMES))
@@ -489,10 +500,15 @@ class AutonomousIqlActorPolicy:
         native = state.get("native_scorer")
         path = Path(path_value)
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        admitted_scorers = (
+            ALLOWED_PREFLIGHT_NATIVE_SCORER_SHA256
+            if autonomous_round_preflight_authorization
+            else ALLOWED_NATIVE_SCORER_SHA256
+        )
         if (
             not isinstance(native, dict)
             or actual != native.get("sha256")
-            or actual not in ALLOWED_NATIVE_SCORER_SHA256
+            or actual not in admitted_scorers
         ):
             raise ValueError("Generation-6 native scorer hash differs")
         support_artifact = candidate.get("support")

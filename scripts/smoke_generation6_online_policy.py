@@ -8,6 +8,7 @@ from dataclasses import asdict
 import hashlib
 import json
 import math
+import multiprocessing
 import os
 from pathlib import Path
 import subprocess
@@ -32,6 +33,9 @@ from th06_rl.iql_actor_learning import (  # noqa: E402
     actor_population_choice,
     iql_actor_model_from_artifact,
 )
+from th06_rl.native_decision_conformance import (  # noqa: E402
+    actor_centered_float64_scores,
+)
 from th06_rl.learning_features import tree_candidate_vector  # noqa: E402
 from th06_rl.offline import ACTION_NAMES  # noqa: E402
 from th06_rl.policy_api import PolicyContext  # noqa: E402
@@ -42,6 +46,7 @@ from th06_rl.policies.offline_ranker import (  # noqa: E402
     NATIVE_SCORER_ENV,
     PortablePrototypeSupport,
 )
+from th06_rl.resource_control import enforce_training_cpu_affinity  # noqa: E402
 from th06_rl.th06.learning_adapter import (  # noqa: E402
     ACTION_FEATURE_NAMES,
     OBSERVATION_FEATURE_NAMES,
@@ -50,6 +55,39 @@ from th06_rl.wine_corpus_registry import (  # noqa: E402
     load_wine_corpus_registry,
     select_wine_corpora,
 )
+
+
+_PANEL_TARGETS: dict[str, set[str]] | None = None
+_PREFLIGHT_THREAD_LIMIT = None
+DEFAULT_PREFLIGHT_WORKERS = 16
+DEFAULT_CONTEXT_LOAD_MAXIMUM_SECONDS = 120.0
+
+
+def _limit_preflight_worker_threads() -> None:
+    from threadpoolctl import threadpool_limits
+
+    global _PREFLIGHT_THREAD_LIMIT
+    _PREFLIGHT_THREAD_LIMIT = threadpool_limits(limits=1)
+
+
+def _extract_panel_contexts(entry) -> list[tuple[str, PolicyContext]]:
+    if _PANEL_TARGETS is None:
+        raise RuntimeError("frozen panel fork context is absent")
+    wanted = _PANEL_TARGETS.get(entry.run_id)
+    if not wanted:
+        return []
+    manifest = _object(entry.path / "manifest.json")
+    found = []
+    for row in _rows(
+        entry.path, manifest, transition_schema=entry.transition_schema
+    ):
+        option = row.get("option")
+        if not isinstance(option, dict) or option.get("boundary") is not True:
+            continue
+        option_id = str(option.get("option_id", ""))
+        if option_id in wanted:
+            found.append((option_id, _context(row)))
+    return found
 
 
 def _sha256(path: Path) -> str:
@@ -140,6 +178,70 @@ def _factual_contexts(count: int) -> list[PolicyContext]:
     return sorted(result[:count], key=lambda context: context.frame)
 
 
+def _frozen_panel_contexts(
+    decision_audit: dict[str, object], *, workers: int,
+) -> tuple[list[PolicyContext], list[str], list[dict[str, object]]]:
+    """Reconstruct the exact outcome-blind panel selected by the Linux audit."""
+    panel = decision_audit.get("wide_panel")
+    rows = panel.get("rows") if isinstance(panel, dict) else None
+    if (
+        decision_audit.get("passed") is not True
+        or not isinstance(rows, list) or not rows
+    ):
+        raise ValueError("frozen decision panel is absent or rejected")
+    identities = []
+    targets: dict[str, set[str]] = {}
+    expected = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise TypeError("frozen decision panel row is invalid")
+        episode_id = str(row.get("episode_id", ""))
+        option_id = str(row.get("option_id", ""))
+        canonical = str(row.get("canonical_choice", ""))
+        if not episode_id or not option_id or canonical not in ACTION_NAMES:
+            raise ValueError("frozen decision panel identity is invalid")
+        identity = {"episode_id": episode_id, "option_id": option_id}
+        if identity in identities:
+            raise ValueError("frozen decision panel contains a duplicate")
+        identities.append(identity)
+        expected.append(canonical)
+        targets.setdefault(episode_id, set()).add(option_id)
+
+    _registry, entries = load_wine_corpus_registry(
+        REPOSITORY / "config/wine_corpus_registry.json", repository=REPOSITORY
+    )
+    eligible = select_wine_corpora(
+        entries,
+        required_capabilities=frozenset(("sequential_offline_rl",)),
+    )
+    found: dict[tuple[str, str], PolicyContext] = {}
+    selected_entries = [entry for entry in eligible if entry.run_id in targets]
+    global _PANEL_TARGETS
+    _PANEL_TARGETS = targets
+    with multiprocessing.get_context("fork").Pool(
+        min(workers, len(selected_entries)),
+        initializer=_limit_preflight_worker_threads,
+    ) as pool:
+        for entry, rows_found in zip(
+            selected_entries,
+            pool.imap(_extract_panel_contexts, selected_entries),
+            strict=True,
+        ):
+            for option_id, context in rows_found:
+                key = (entry.run_id, option_id)
+                if key in found:
+                    raise ValueError("frozen decision context is duplicated")
+                found[key] = context
+    contexts = []
+    for identity in identities:
+        key = (str(identity["episode_id"]), str(identity["option_id"]))
+        context = found.get(key)
+        if context is None:
+            raise RuntimeError(f"frozen decision context is absent: {key}")
+        contexts.append(context)
+    return contexts, expected, identities
+
+
 def _portable_choices(
     contexts: list[PolicyContext], candidate: dict[str, object]
 ) -> list[str]:
@@ -173,7 +275,12 @@ def _portable_choices(
             action in factual and distance <= threshold
             for action, distance in zip(legal, distances, strict=True)
         ]
-        scores = [actor.predict(rows) for actor in actors]
+        scores = [
+            actor_centered_float64_scores(
+                actor, rows, baseline_index=legal.index(context.baseline_action)
+            )
+            for actor in actors
+        ]
         mean = [[
             sum(member[index] for member in scores) / len(scores)
             for index in range(len(legal))
@@ -234,19 +341,50 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--linux-library", type=Path, required=True)
     parser.add_argument("--windows-library", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--decision-audit", type=Path,
+        help="bind and replay the exact frozen wide panel instead of a local fixture",
+    )
     parser.add_argument("--contexts", type=int, default=64)
     parser.add_argument("--repetitions", type=int, default=1200)
+    parser.add_argument("--workers", type=int, default=DEFAULT_PREFLIGHT_WORKERS)
+    parser.add_argument(
+        "--context-load-maximum-seconds", type=float,
+        default=DEFAULT_CONTEXT_LOAD_MAXIMUM_SECONDS,
+    )
     parser.add_argument(
         "--windows-python", type=Path,
         default=REPOSITORY / "reference/tools/windows-python-3.11.9-embed-win32/python.exe",
     )
     args = parser.parse_args(argv)
+    if (
+        not 1 <= args.workers <= 32
+        or not math.isfinite(args.context_load_maximum_seconds)
+        or args.context_load_maximum_seconds <= 0.0
+    ):
+        parser.error("worker count and context-load ceiling are invalid")
     if args.output.exists():
         raise FileExistsError(f"refusing to replace online preflight: {args.output}")
+    started = time.perf_counter()
+    affinity = enforce_training_cpu_affinity(32)
     candidate = _object(args.candidate)
     linux_state = _object(args.linux_state)
-    contexts = _factual_contexts(args.contexts)
-    expected = _portable_choices(contexts, candidate)
+    if args.decision_audit is None:
+        contexts = _factual_contexts(args.contexts)
+        audit_expected = None
+        identities = None
+        decision_audit_sha = None
+    else:
+        decision_audit = _object(args.decision_audit)
+        contexts, audit_expected, identities = _frozen_panel_contexts(
+            decision_audit, workers=args.workers
+        )
+        if len(contexts) != args.contexts:
+            raise ValueError("frozen panel count differs from --contexts")
+        decision_audit_sha = _sha256(args.decision_audit)
+    contexts_loaded = time.perf_counter()
+    portable = _portable_choices(contexts, candidate)
+    expected = audit_expected if audit_expected is not None else portable
     linux, linux_timing = _native_choices(
         contexts, linux_state, args.linux_library,
         repetitions=args.repetitions,
@@ -270,28 +408,63 @@ def main(argv: list[str] | None = None) -> int:
         )
     windows = json.loads(completed.stdout.strip().splitlines()[-1])
     gates = {
-        "linux_exact_portable_actions": linux == expected,
-        "windows_exact_portable_actions": windows["choices"] == expected,
+        "portable_exact_frozen_actions": portable == expected,
+        "linux_exact_frozen_actions": linux == expected,
+        "windows_exact_frozen_actions": windows["choices"] == expected,
+        "linux_windows_actions_exact": linux == windows["choices"],
+        "frozen_contexts_loaded_inside_wall_clock_ceiling": (
+            contexts_loaded - started <= args.context_load_maximum_seconds
+        ),
         "linux_p95_below_4_ms": linux_timing["latency_p95_ms"] < 4.0,
         "windows_p95_below_4_ms": windows["latency_p95_ms"] < 4.0,
         "linux_zero_deadline_misses": linux_timing["deadline_misses"] == 0,
         "windows_zero_deadline_misses": windows["deadline_misses"] == 0,
     }
     report = {
-        "schema": "autonomous-generation-6-online-policy-preflight-v1",
+        "schema": (
+            "autonomous-generation-6-decision-panel-preflight-v2"
+            if args.decision_audit is not None
+            else "autonomous-generation-6-online-policy-preflight-v1"
+        ),
         "evidence_eligible": False,
         "candidate_sha256": _sha256(args.candidate),
         "linux_state_sha256": _sha256(args.linux_state),
         "windows_state_sha256": _sha256(args.windows_state),
         "linux_library_sha256": _sha256(args.linux_library),
         "windows_library_sha256": _sha256(args.windows_library),
+        "decision_audit_sha256": decision_audit_sha,
+        "panel_identity_sha256": (
+            hashlib.sha256(json.dumps(
+                identities, sort_keys=True, separators=(",", ":")
+            ).encode()).hexdigest()
+            if identities is not None else None
+        ),
         "factual_contexts": len(contexts),
+        "context_load_seconds": contexts_loaded - started,
+        "context_load_maximum_seconds": args.context_load_maximum_seconds,
+        "resource_contract": affinity.as_dict(),
+        "worker_processes": args.workers,
+        "math_library_threads_per_worker": 1,
         "portable_proposals": sum(
             choice != context.baseline_action
             for choice, context in zip(expected, contexts, strict=True)
         ),
         "linux": linux_timing,
         "windows": {key: value for key, value in windows.items() if key != "choices"},
+        "mismatches": [
+            {
+                **(identities[index] if identities is not None else {"index": index}),
+                "frozen": expected[index],
+                "portable": portable[index],
+                "linux": linux[index],
+                "windows": windows["choices"][index],
+            }
+            for index in range(len(contexts))
+            if not (
+                expected[index] == portable[index] == linux[index]
+                == windows["choices"][index]
+            )
+        ][:20],
         "gates": gates,
         "passed": all(gates.values()),
     }

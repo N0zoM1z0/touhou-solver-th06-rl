@@ -669,3 +669,12 @@ scalar-panel time. Future learner/export variants must use this runner and retai
 reported worker count, exact option identity, deterministic panel selection,
 and serial-equivalent result; reverting to an unbounded pool or the old
 single-process loop is an infrastructure regression.
+
+The Win32 differential must reconstruct the exact 320 identities selected by
+that audit from immutable raw transition shards. A first single-process
+development attempt spent multiple minutes saturating one CPU in gzip/JSON
+decoding and was stopped before producing evidence. Context extraction now
+partitions by immutable episode across 16 single-threaded fork workers under
+the same 32-CPU affinity contract. The preflight reports this stage separately
+and rejects context loading above 120 seconds; later algorithm/export changes
+may not silently restore the serial corpus scan or select an easier fixture.
