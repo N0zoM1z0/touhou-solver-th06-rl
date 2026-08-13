@@ -41,7 +41,9 @@ Read in this order:
    `docs/AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md` for the current frozen
    all-corpus autonomous collection/refit/evidence state machine, and
    `docs/GENERATION6_LATENCY_TAIL_AUDIT.md` for its immutable latency failure,
-   controlled reproducer, and generic successor repair;
+   controlled reproducer, and generic successor repair, followed by
+   `docs/AUTONOMOUS_LEARNER_GENERATION_6_ROUND_2.md` for the separately frozen
+   repaired successor;
 13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
@@ -55,9 +57,11 @@ qualification, native serving, and a six-run original-Wine Stage-6 directional
 pilot: candidate aggregate HIT was 25 versus incumbent 28. The small panel is
 promising but not promotion evidence; a larger confirmation or autonomous
 learning round must be separately frozen before more outcome-facing play.
-Generation-6 autonomous round 1 is that successor: twelve balanced Stage
-4/5/6 natural-RNG collection episodes append to the immutable registry, then
-all old and new sequential corpora are refitted before fresh Wine evidence.
+Generation-6 autonomous round 1 stopped immutably invalid on a reproduced CFS
+scheduler tail. Round 2 keeps the old standard, reuses only round 1's complete
+machine-passing ten-episode prefix, collects the two predeclared missing
+Stage-5/6 episodes under the generic repair, and then refits all old and new
+sequential corpora before fresh Wine evidence.
 
 ## Non-negotiable separation
 
