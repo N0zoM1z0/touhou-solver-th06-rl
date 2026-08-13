@@ -25,6 +25,10 @@ from th06_rl.low_rank_learning import named_feature_roles  # noqa: E402
 from th06_rl.option_cache import load_cached_option_episode  # noqa: E402
 from th06_rl.qualification_corpus import load_qualification_partition  # noqa: E402
 from th06_rl.resource_control import enforce_training_cpu_affinity  # noqa: E402
+from th06_rl.wine_corpus_registry import (  # noqa: E402
+    load_wine_corpus_registry,
+    select_wine_corpora,
+)
 
 
 def _sha256(path: Path) -> str:
@@ -49,6 +53,11 @@ def main(argv: list[str] | None = None) -> int:
         default=REPOSITORY / "config/autonomous_generation6_qualification.json",
     )
     parser.add_argument(
+        "--registry", type=Path,
+        help="use every registered sequential training episode instead",
+    )
+    parser.add_argument("--seed", type=int, default=460_813)
+    parser.add_argument(
         "--cache-dir", type=Path,
         default=REPOSITORY / "artifacts/cache/audited-option-episodes",
     )
@@ -57,10 +66,31 @@ def main(argv: list[str] | None = None) -> int:
         raise FileExistsError(f"refusing to replace development report: {args.output}")
     started = time.perf_counter()
     affinity = enforce_training_cpu_affinity(args.threads)
-    _contract, partition = load_qualification_partition(
-        args.contract, repository=REPOSITORY
-    )
-    development = tuple(row for row in partition if row.role == "development")
+    if args.registry is None:
+        _contract, partition = load_qualification_partition(
+            args.contract, repository=REPOSITORY
+        )
+        development = tuple(row for row in partition if row.role == "development")
+        input_identity = {
+            "kind": "historical-development-partition",
+            "sha256": _sha256(args.contract),
+        }
+    else:
+        _registry, entries = load_wine_corpus_registry(
+            args.registry, repository=REPOSITORY
+        )
+        development = select_wine_corpora(
+            entries,
+            required_capabilities=frozenset({"sequential_offline_rl"}),
+        )
+        if not development:
+            raise ValueError("Generation-6 smoke selected no sequential corpus")
+        input_identity = {
+            "kind": "immutable-capability-registry",
+            "sha256": _sha256(args.registry),
+            "sources": sorted({row.source for row in development}),
+            "manifest_sha256": [row.manifest_sha256 for row in development],
+        }
     loaded = [
         load_cached_option_episode(
             row.path,
@@ -90,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
         actor_epochs=args.actor_epochs,
         actor_batch_size=args.actor_batch_size,
         actor_advantage_folds=args.actor_advantage_folds,
+        seed=args.seed,
         intervention_probability_cap=0.10,
         intervention_density_ratio_cap=2.0,
         fit_representation_on_train=True,
@@ -99,9 +130,9 @@ def main(argv: list[str] | None = None) -> int:
         "schema": "autonomous-generation-6-crossfit-actor-development-v1",
         "evidence_eligible": False,
         "authorization_eligible": False,
-        "qualification_samples_loaded": False,
+        "qualification_samples_loaded": args.registry is not None,
         "representation_fit_scope": "outer-training-episodes-only",
-        "contract_sha256": _sha256(args.contract),
+        "input_identity": input_identity,
         "learner_sha256": _sha256(
             REPOSITORY / "src/th06_rl/iql_actor_learning.py"
         ),
@@ -123,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
             "actor_log_weight_clip": 4.0,
             "intervention_probability_cap": 0.10,
             "intervention_density_ratio_cap": 2.0,
-            "seed": 460813,
+            "seed": args.seed,
         },
         "resource_contract": affinity.as_dict(),
         "cache_hits": sum(hit for _rows, _report, hit in loaded),

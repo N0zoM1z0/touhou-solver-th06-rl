@@ -12,6 +12,10 @@ from .advantage_learning import OptionStep
 from .low_rank_learning import FeatureRoleLayout
 
 
+NATIVE_ACTOR_ABSOLUTE_TOLERANCE = 1e-4
+NATIVE_ACTOR_FLOAT32_RELATIVE_TOLERANCE = 4.0 * 1.1920928955078125e-7
+
+
 @dataclass(frozen=True)
 class ActorArrays:
     states: object
@@ -81,6 +85,54 @@ class IqlActorMember:
     bootstrap: dict[str, int]
     advantage_scale: float
     diagnostics: dict[str, float]
+
+
+def categorical_kl_from_logits(probabilities, logits) -> float:
+    """Finite KL(mu || softmax(logits)) without probability underflow."""
+    import numpy as np
+
+    probabilities = np.asarray(probabilities, dtype=np.float64)
+    logits = np.asarray(logits, dtype=np.float64)
+    if (
+        probabilities.ndim != 1
+        or logits.shape != probabilities.shape
+        or not np.isfinite(probabilities).all()
+        or not np.isfinite(logits).all()
+        or (probabilities <= 0.0).any()
+        or not math.isclose(float(probabilities.sum()), 1.0, rel_tol=1e-9)
+    ):
+        raise ValueError("categorical KL inputs are invalid")
+    shifted = logits - logits.max()
+    log_probabilities = shifted - math.log(float(np.exp(shifted).sum()))
+    return float(np.sum(
+        probabilities * (np.log(probabilities) - log_probabilities)
+    ))
+
+
+def native_actor_prediction_tolerance_ratio(expected, actual) -> float:
+    """Return the worst float32-aware native/portable error ratio.
+
+    Dense float32 accumulation error scales with the magnitude of a logit, so
+    a pure absolute threshold is not closed under otherwise irrelevant actor
+    score scaling.  Action conformance remains a separate exact gate.
+    """
+    import numpy as np
+
+    expected = np.asarray(expected, dtype=np.float64)
+    actual = np.asarray(actual, dtype=np.float64)
+    if (
+        expected.shape != actual.shape
+        or not expected.size
+        or not np.isfinite(expected).all()
+        or not np.isfinite(actual).all()
+    ):
+        raise ValueError("native actor predictions are invalid")
+    scale = np.maximum(np.abs(expected), np.abs(actual))
+    tolerance = (
+        NATIVE_ACTOR_ABSOLUTE_TOLERANCE
+        + NATIVE_ACTOR_FLOAT32_RELATIVE_TOLERANCE * scale
+    )
+    return float(np.max(np.abs(expected - actual) / tolerance))
 
 
 def iql_actor_model_artifact(model: IqlActorModel) -> dict[str, object]:
@@ -1186,14 +1238,9 @@ def evaluate_iql_actor_fold(
         )
         member_kl = []
         for member_scores in scores:
-            shifted = member_scores - member_scores.max()
-            actor_probabilities = np.exp(shifted)
-            actor_probabilities /= actor_probabilities.sum()
-            member_kl.append(float(np.sum(
-                probabilities * (
-                    np.log(probabilities) - np.log(actor_probabilities)
-                )
-            )))
+            member_kl.append(categorical_kl_from_logits(
+                probabilities, member_scores
+            ))
         report["behavior_kl_sum"] += sum(member_kl) / len(member_kl)
     return {
         "fold": fold,

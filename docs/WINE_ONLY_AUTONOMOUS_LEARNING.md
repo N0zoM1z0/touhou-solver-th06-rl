@@ -93,13 +93,14 @@ root; each remains paced by the original 60 Hz executable and passes the same
 per-run audit before merge. Canary and final evaluation remain single-instance,
 alternating, normal-speed jobs. Offline fitting may parallelize.
 
-The implemented entrypoint is `scripts/run_autonomous_learning.py`. Its first
-generation defaults are locked before Wine starts: two five-episode collection
-rounds, two whole-episode validation groups, 0.10 uniform safe-set exploration,
-a 120-frame factual return, clipped propensity 20, a grouped ridge committee,
-two bounded active canaries, and two alternating complete-Stage A/B pairs.
-These are algorithm-generation parameters, not failure-region knobs. The
-runner refuses to resume an existing `generation.json` with different values.
+The current implemented entrypoint is
+`scripts/run_generation6_autonomous_round.py`, bound to a separately committed
+machine contract. It collects a balanced Stage-4/5/6 natural-RNG panel with a
+frozen actor/uniform/inverse-ESS mixture, appends it to the immutable registry,
+refits all compatible old and new corpus, and runs conjunctive offline/native
+smoke before any active Wine canary. The exact current design and stopping rule
+are in `AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md`. Older generation runners
+remain historical audit implementations and are not the current command.
 
 Every active candidate is hash-chained:
 

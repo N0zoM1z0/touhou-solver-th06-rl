@@ -249,8 +249,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--complete-stage-training-corpus-root",
         type=Path,
         help=(
-            "collect one fixed-RNG, patched-life, HIT-continuation Practice "
-            "Stage for factual offline-RL training"
+            "collect one patched-life, HIT-continuation Practice Stage for "
+            "factual offline-RL training; RNG is natural unless an explicit "
+            "diagnostic seed is supplied"
         ),
     )
     parser.add_argument(
@@ -336,10 +337,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         if not args.immutable_policy:
             parser.error(
                 "complete-Stage training corpus requires --immutable-policy"
-            )
-        if args.diagnostic_rng_seed is None:
-            parser.error(
-                "complete-Stage training corpus requires --diagnostic-rng-seed"
             )
     if args.option_smoke_corpus_root is not None:
         if args.start_route:
@@ -460,7 +457,11 @@ def run(args: argparse.Namespace) -> int:
         "immutable_policy": args.immutable_policy,
         "diagnostic_rng_seed": args.diagnostic_rng_seed,
         "evaluation_mode": (
-            "fixed-rng-complete-stage-training"
+            (
+                "fixed-rng-complete-stage-training"
+                if args.diagnostic_rng_seed is not None
+                else "natural-rng-complete-stage-training"
+            )
             if complete_stage_training_corpus_root is not None
             else "fixed-rng-option-smoke-non-evidence"
             if option_smoke_corpus_root is not None

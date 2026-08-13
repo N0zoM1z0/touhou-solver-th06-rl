@@ -42,7 +42,11 @@ def _validate_complete_run(
     _validate_retail_report(
         report,
         mode=(
-            "fixed-rng-complete-stage-training"
+            (
+                "fixed-rng-complete-stage-training"
+                if rng_seed is not None
+                else "natural-rng-complete-stage-training"
+            )
             if corpus_root is not None else "hit-continuation-benchmark"
         ),
         diagnostic_rng_seed=rng_seed,
@@ -136,12 +140,11 @@ def complete_run(
             "--controller-cpu-list", controller_cpu_list,
         ))
     if corpus_root is not None:
-        if rng_seed is None:
-            raise ValueError("fixed-RNG corpus run has no RNG seed")
         command.extend((
             "--complete-stage-training-corpus-root", str(corpus_root),
-            "--diagnostic-rng-seed", hex(rng_seed),
         ))
+        if rng_seed is not None:
+            command.extend(("--diagnostic-rng-seed", hex(rng_seed)))
     last_error: BaseException | None = None
     for attempt in range(1, MAXIMUM_INFRA_ATTEMPTS + 1):
         before = _corpus_runs(corpus_root) if corpus_root is not None else set()

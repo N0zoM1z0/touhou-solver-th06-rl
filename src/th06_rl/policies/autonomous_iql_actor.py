@@ -64,6 +64,7 @@ ALLOWED_CANARY_CONTRACT_SHA256 = frozenset((
     "1008e4b7236fc21bbd7a7fc7053dfd137021adfa70fd710c00e669e31263f510",
     "b3ecb0720fa1ac0fb0f4ab8dbb90b8f286812b6468f3028d00a9f0672e6301cd",
 ))
+ALLOWED_AUTONOMOUS_ROUND_CONTRACT_SHA256: frozenset[str] = frozenset()
 ALLOWED_NATIVE_SCORER_SHA256 = frozenset((
     "8b99074e0d9eeae232d4a79286646b1688004d721ba288c605cde74743ef62ec",
     "0aa7c5a95b90b2df0d032ec02f21fcd3a39be3ba440819d00c0cb025bc641ef0",
@@ -380,15 +381,49 @@ class AutonomousIqlActorPolicy:
         mode = state.get("mode")
         authorization = state.get("authorization")
         intervention = state.get("intervention")
+        round_authorization = (
+            authorization.get("autonomous_round")
+            if isinstance(authorization, dict) else None
+        )
+        legacy_authorization = bool(
+            isinstance(authorization, dict)
+            and authorization.get("offline_qualification_passed") is True
+            and authorization.get("deployable_target_audit_passed") is True
+            and authorization.get("qualification_result_sha256")
+            == EXPECTED_QUALIFICATION_SHA256
+            and authorization.get("deployable_target_audit_sha256")
+            == EXPECTED_DEPLOYABLE_AUDIT_SHA256
+        )
+        round_contract = (
+            str(round_authorization.get("contract_sha256", ""))
+            if isinstance(round_authorization, dict) else ""
+        )
+        autonomous_round_evidence_authorization = bool(
+            isinstance(round_authorization, dict)
+            and round_contract in ALLOWED_AUTONOMOUS_ROUND_CONTRACT_SHA256
+            and round_authorization.get("offline_smoke_passed") is True
+            and len(str(round_authorization.get("offline_smoke_sha256", ""))) == 64
+            and len(str(round_authorization.get("training_registry_sha256", ""))) == 64
+            and len(str(round_authorization.get("candidate_sha256", ""))) == 64
+        )
+        autonomous_round_preflight_authorization = bool(
+            isinstance(round_authorization, dict)
+            and mode == "shadow"
+            and round_contract in ALLOWED_AUTONOMOUS_ROUND_CONTRACT_SHA256
+            and round_authorization.get("preflight_only") is True
+            and len(str(round_authorization.get(
+                "training_registry_sha256", ""
+            ))) == 64
+            and len(str(round_authorization.get("candidate_sha256", ""))) == 64
+        )
+        autonomous_round_authorization = (
+            autonomous_round_evidence_authorization
+            or autonomous_round_preflight_authorization
+        )
         if (
             mode not in ("shadow", "active")
             or not isinstance(authorization, dict)
-            or authorization.get("offline_qualification_passed") is not True
-            or authorization.get("deployable_target_audit_passed") is not True
-            or authorization.get("qualification_result_sha256")
-            != EXPECTED_QUALIFICATION_SHA256
-            or authorization.get("deployable_target_audit_sha256")
-            != EXPECTED_DEPLOYABLE_AUDIT_SHA256
+            or not (legacy_authorization or autonomous_round_authorization)
             or (mode == "active" and not isinstance(
                 authorization.get("frozen_wine_canary"), dict
             ))
@@ -407,16 +442,37 @@ class AutonomousIqlActorPolicy:
         if state.get("candidate_codec") != MODEL_CODEC or not isinstance(payload, str):
             raise ValueError("Generation-6 candidate payload is absent")
         decoded = zlib.decompress(base64.b64decode(payload, validate=True))
+        candidate_sha256 = str(state.get("candidate_sha256", ""))
         if (
-            state.get("candidate_sha256") != EXPECTED_CANDIDATE_SHA256
-            or hashlib.sha256(decoded).hexdigest() != EXPECTED_CANDIDATE_SHA256
+            hashlib.sha256(decoded).hexdigest() != candidate_sha256
+            or (
+                legacy_authorization
+                and candidate_sha256 != EXPECTED_CANDIDATE_SHA256
+            )
+            or (
+                autonomous_round_authorization
+                and candidate_sha256
+                != round_authorization.get("candidate_sha256")
+            )
         ):
             raise ValueError("Generation-6 candidate payload hash differs")
         candidate = json.loads(decoded.decode("utf-8"))
         if (
             candidate.get("schema") != CANDIDATE_SCHEMA
             or candidate.get("passed") is not True
-            or candidate.get("qualification_samples_loaded") is not False
+            or (
+                legacy_authorization
+                and candidate.get("qualification_samples_loaded") is not False
+            )
+            or (
+                autonomous_round_authorization
+                and (
+                    candidate.get("autonomous_round_contract_sha256")
+                    != round_contract
+                    or candidate.get("training_identity", {}).get("sha256")
+                    != round_authorization.get("training_registry_sha256")
+                )
+            )
             or tuple(candidate.get("feature_names", ())) != rich_feature_names()
             or candidate.get("selection", {}).get("physical_safety")
             != "native-safe-set-only"
@@ -470,11 +526,22 @@ class AutonomousIqlActorPolicy:
             raise ValueError("Generation-6 policy seed is invalid")
         if mode == "active":
             canary = authorization["frozen_wine_canary"]
+            legacy_canary = bool(
+                isinstance(canary, dict)
+                and canary.get("schema")
+                == "autonomous-generation-6-wine-canary-authorization-v1"
+                and canary.get("contract_sha256")
+                in ALLOWED_CANARY_CONTRACT_SHA256
+            )
+            round_canary = bool(
+                isinstance(canary, dict)
+                and canary.get("schema")
+                == "autonomous-generation-6-round-evidence-authorization-v1"
+                and canary.get("contract_sha256") == round_contract
+                and canary.get("candidate_sha256") == candidate_sha256
+            )
             if (
-                canary.get("schema")
-                != "autonomous-generation-6-wine-canary-authorization-v1"
-                or canary.get("contract_sha256")
-                not in ALLOWED_CANARY_CONTRACT_SHA256
+                not (legacy_canary or round_canary)
                 or canary.get("normal_speed") is not True
                 or canary.get("natural_rng") is not True
                 or canary.get("complete_stage_hit_continuation") is not True
@@ -592,6 +659,27 @@ class AutonomousIqlActorPolicy:
         self.over_four_ms += elapsed > 4.0
         self.deadline_misses += elapsed > (1000.0 / 60.0)
         return proposal
+
+    def collection_proposal(self, context) -> str:
+        """Return the frozen actor proposal without sampling deployment.
+
+        This is the game-neutral information-policy boundary used by an
+        independently propensity-recorded collection policy.  It has no
+        collision authority and cannot add to the controller's native-safe
+        set.
+        """
+        if not self.loaded or self.mode != "shadow":
+            raise RuntimeError(
+                "Generation-6 collection proposal requires a loaded shadow actor"
+            )
+        legal = tuple(sorted(
+            set(context.locally_admissible_actions),
+            key=_ACTION_INDEX.__getitem__,
+        ))
+        baseline = str(context.baseline_action)
+        if not legal or baseline not in legal:
+            raise ValueError("Generation-6 collection received an invalid safe set")
+        return self._proposal(context, legal, baseline)
 
     def _end_active(self, reason: str) -> str:
         if self.active_id is None:

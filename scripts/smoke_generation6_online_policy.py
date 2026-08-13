@@ -37,7 +37,6 @@ from th06_rl.offline import ACTION_NAMES  # noqa: E402
 from th06_rl.policy_api import PolicyContext  # noqa: E402
 from th06_rl.policies.autonomous_iql_actor import (  # noqa: E402
     AutonomousIqlActorPolicy,
-    EXPECTED_CANDIDATE_SHA256,
 )
 from th06_rl.policies.offline_ranker import (  # noqa: E402
     NATIVE_SCORER_ENV,
@@ -244,8 +243,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.output.exists():
         raise FileExistsError(f"refusing to replace online preflight: {args.output}")
-    if _sha256(args.candidate) != EXPECTED_CANDIDATE_SHA256:
-        raise ValueError("Generation-6 online preflight candidate drifted")
     candidate = _object(args.candidate)
     linux_state = _object(args.linux_state)
     contexts = _factual_contexts(args.contexts)

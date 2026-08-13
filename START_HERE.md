@@ -37,7 +37,9 @@ Read in this order:
 12. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the IQL actor
    development record, followed by its Stage-6 pilot design and
    `docs/AUTONOMOUS_LEARNER_GENERATION_6_RESULT.md` for the completed positive
-   directional result and non-promotion boundary;
+   directional result and non-promotion boundary, then
+   `docs/AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md` for the current frozen
+   all-corpus autonomous collection/refit/evidence state machine;
 13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
@@ -51,6 +53,9 @@ qualification, native serving, and a six-run original-Wine Stage-6 directional
 pilot: candidate aggregate HIT was 25 versus incumbent 28. The small panel is
 promising but not promotion evidence; a larger confirmation or autonomous
 learning round must be separately frozen before more outcome-facing play.
+Generation-6 autonomous round 1 is that successor: twelve balanced Stage
+4/5/6 natural-RNG collection episodes append to the immutable registry, then
+all old and new sequential corpora are refitted before fresh Wine evidence.
 
 ## Non-negotiable separation
 

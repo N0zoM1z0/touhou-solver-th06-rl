@@ -513,3 +513,42 @@ exceeded 4 ms and none missed the 16.67 ms deadline. All runs used the frozen
 Thus the optimized native path is not merely a short Stage-4 canary result: it
 is stable across six normal-speed complete Stage-6 executions without
 distillation or changing the learner.
+
+## 2026-08-13: all-registry Generation-6 round preflight
+
+The autonomous successor now selects all 44 registry entries with
+`sequential_offline_rl` rather than copying a generation-owned partition.
+Existing audited-option cache identities remain unchanged, so 143,078 factual
+options loaded from cache without rebuilding the 7.6 GiB history. Five
+episode-grouped cross-fit folds completed in 369.70 seconds inside CPUs 0--31.
+This is the practical fast loop for learner repairs: no Wine process starts and
+no new gameplay data is required.
+
+The replay exposed a report-only numerical defect: direct softmax probabilities
+underflowed on large finite logits and made behavior KL infinite at JSON write.
+A stable log-softmax calculation now keeps the same diagnostic finite without
+changing fitting, policy choice, or DR estimation. A regression test covers a
+1,000-logit gap.
+
+Production fit then exposed scale dependence in the old pure `1e-4` portable /
+native actor-score tolerance. The refit produced score magnitudes up to about
+1,448; its worst absolute float32 accumulation difference was
+`0.000244140625`, while the relative error at those large scores was below
+`4e-7`, all 64 selected actions were exact, and the smallest action margin was
+`0.06715`. The gate now uses `1e-4 + 4 * float32_epsilon * abs(score)` and still
+requires exact action equality. Checkpoint-resumed smoke passed at tolerance
+ratio 0.532, support error `1.27e-6`, p95 `1.532 ms`, and zero deadline misses.
+
+The independently pinned PyTorch 2.8 CPU dependency was absent from the local
+virtual environment even though it was already declared in
+`requirements-cpu-train.txt`; installing that exact pinned build restored the
+synthetic smoke. This is environment provisioning, not an algorithm or corpus
+change.
+
+A raw synthetic Win32 actor-kernel differential subsequently exceeded the new
+score bound. It is not waived or treated as gameplay evidence. The formal
+round adds a stronger test: the complete fused support/hazard/actor policy must
+produce exact portable, Linux, and Wine/Win32 proposals on 64 immutable
+computational-width factual contexts, with p95 below 4 ms and no deadline miss,
+before an active state can be exported. The state used for this test is
+shadow-only, so native validation cannot accidentally become a canary.

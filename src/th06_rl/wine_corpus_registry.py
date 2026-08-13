@@ -56,6 +56,81 @@ def _clean_complete(manifest: dict[str, object]) -> bool:
     )
 
 
+def build_wine_corpus_source(
+    *,
+    repository: Path,
+    root: Path,
+    source_id: str,
+    access: str,
+    capabilities: tuple[str, ...],
+    transition_schema: str,
+    executable_sha256: str,
+) -> dict[str, object]:
+    """Build the exact immutable registry row for a finished source.
+
+    Every manifest under ``root`` must be a clean complete run. This prevents
+    outcome- or failure-conditioned omission while constructing a new
+    autonomous collection inventory.
+    """
+    repository = repository.resolve()
+    root = root.resolve()
+    if (
+        not source_id
+        or access != "training"
+        or not capabilities
+        or len(set(capabilities)) != len(capabilities)
+        or not transition_schema
+        or len(executable_sha256) != 64
+        or not root.is_dir()
+    ):
+        raise ValueError("new Wine corpus source contract is invalid")
+    manifests = sorted(root.rglob("manifest.json"))
+    if not manifests:
+        raise ValueError("new Wine corpus source has no manifests")
+    inventory = hashlib.sha256()
+    count = 0
+    for manifest_path in manifests:
+        manifest = _object(manifest_path)
+        if not _clean_complete(manifest):
+            raise ValueError(
+                f"new Wine corpus source contains a rejected run: {manifest_path.parent}"
+            )
+        run_path = manifest_path.parent / "run.json"
+        run = _object(run_path)
+        schemas = run.get("schemas")
+        metadata = run.get("metadata")
+        outcome = manifest.get("run_outcome")
+        if (
+            not isinstance(schemas, dict)
+            or schemas.get("transition") != transition_schema
+            or not isinstance(metadata, dict)
+            or metadata.get("executable_sha256") != executable_sha256
+            or not isinstance(metadata.get("stage"), int)
+            or not isinstance(outcome, dict)
+            or not isinstance(outcome.get("physical_hits"), int)
+        ):
+            raise ValueError(
+                f"new Wine corpus source semantics drifted: {manifest_path.parent}"
+            )
+        relative = manifest_path.parent.resolve().relative_to(repository)
+        inventory.update(str(relative).encode())
+        inventory.update(b"\0")
+        inventory.update(_sha256(manifest_path).encode())
+        inventory.update(b"\0")
+        inventory.update(_sha256(run_path).encode())
+        inventory.update(b"\n")
+        count += 1
+    return {
+        "access": access,
+        "capabilities": list(capabilities),
+        "expected_clean_complete_runs": count,
+        "id": source_id,
+        "inventory_sha256": inventory.hexdigest(),
+        "root": str(root.relative_to(repository)),
+        "transition_schema": transition_schema,
+    }
+
+
 def load_wine_corpus_registry(
     registry_path: Path, *, repository: Path
 ) -> tuple[dict[str, object], tuple[WineCorpusEntry, ...]]:

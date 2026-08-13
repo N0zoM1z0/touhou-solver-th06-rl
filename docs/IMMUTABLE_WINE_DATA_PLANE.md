@@ -100,6 +100,16 @@ New data appends a new immutable source inventory or intentionally updates an
 existing inventory with an audit. Learner code must not scan arbitrary artifact
 directories. Registry drift fails closed.
 
+An autonomous collection appends only after every predeclared episode is
+present and individually passes the clean complete-Stage audit. The inventory
+builder rejects, rather than skips, any incomplete or dirty manifest below the
+new source root; this prevents outcome- or failure-conditioned omission. The
+runner then atomically adds exactly one source row and revalidates the complete
+registry. A crash after moving an accepted episode or writing the registry is
+reconciled from hashes and the ledger, never by drawing a replacement gameplay
+outcome. Generation-6 round 1 is the first user of this append protocol; see
+`AUTONOMOUS_LEARNER_GENERATION_6_ROUND_1.md`.
+
 ## Partition is a learner-run property
 
 Capability eligibility and statistical role are separate. The corpus registry

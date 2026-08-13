@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import math
 from pathlib import Path
 
 import numpy as np
@@ -12,12 +13,29 @@ from th06_rl.iql_actor_learning import (
     NativeIqlActorPopulation,
     action_centered_actor_losses,
     actor_arrays,
+    categorical_kl_from_logits,
     cross_fitted_factual_advantages,
     iql_actor_model_artifact,
     iql_actor_model_from_artifact,
+    native_actor_prediction_tolerance_ratio,
     summarize_iql_actor_episodes,
 )
 from th06_rl.low_rank_learning import FeatureRoleLayout
+
+
+def test_categorical_kl_stays_finite_for_extreme_actor_logits() -> None:
+    value = categorical_kl_from_logits([0.5, 0.5], [0.0, -1000.0])
+    assert math.isfinite(value)
+    assert value > 400.0
+
+
+def test_native_actor_prediction_tolerance_scales_with_float32_logits() -> None:
+    assert native_actor_prediction_tolerance_ratio(
+        [0.0, 1390.0], [0.00009, 1390.000244140625]
+    ) <= 1.0
+    assert native_actor_prediction_tolerance_ratio(
+        [0.0, 1390.0], [0.001, 1390.01]
+    ) > 1.0
 
 
 def test_actor_arrays_keep_variable_safe_sets_and_factual_index() -> None:

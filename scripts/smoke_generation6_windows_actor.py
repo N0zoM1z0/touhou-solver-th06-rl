@@ -18,7 +18,12 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 if str(REPOSITORY / "src") not in sys.path:
     sys.path.insert(0, str(REPOSITORY / "src"))
 
-from th06_rl.iql_actor_learning import iql_actor_model_from_artifact  # noqa: E402
+from th06_rl.iql_actor_learning import (  # noqa: E402
+    NATIVE_ACTOR_ABSOLUTE_TOLERANCE,
+    NATIVE_ACTOR_FLOAT32_RELATIVE_TOLERANCE,
+    iql_actor_model_from_artifact,
+    native_actor_prediction_tolerance_ratio,
+)
 
 
 ARRAY_NAMES = (
@@ -107,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     output = json.loads(completed.stdout.strip().splitlines()[-1])
     actual = np.asarray(output["outputs"], dtype=np.float32)
     maximum_error = float(np.max(np.abs(actual - expected)))
+    tolerance_ratio = native_actor_prediction_tolerance_ratio(expected, actual)
     report = {
         "schema": "autonomous-generation-6-windows-native-smoke-v1",
         "evidence_eligible": False,
@@ -120,8 +126,12 @@ def main(argv: list[str] | None = None) -> int:
         "rows": len(actions),
         "outputs": len(actual),
         "maximum_prediction_error": maximum_error,
-        "tolerance": 1e-4,
-        "passed": output["status"] == 0 and maximum_error <= 1e-4,
+        "absolute_tolerance": NATIVE_ACTOR_ABSOLUTE_TOLERANCE,
+        "float32_relative_tolerance": (
+            NATIVE_ACTOR_FLOAT32_RELATIVE_TOLERANCE
+        ),
+        "maximum_prediction_tolerance_ratio": tolerance_ratio,
+        "passed": output["status"] == 0 and tolerance_ratio <= 1.0,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

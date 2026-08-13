@@ -42,15 +42,16 @@ complete original-retail Wine Practice Stages with HIT continuation. Fixed RNG,
 accelerated Wine, first-failure prefixes, shadow replay, and offline metrics may
 reject or select a candidate, but may not promote one.
 
-Run one fully predeclared, resumable generation with:
+Run the current fully predeclared, resumable Generation-6 round with:
 
 ```bash
-PYTHONPATH=.:src .venv/bin/python scripts/run_autonomous_learning.py \
-  --output-root artifacts/autonomous-wine-generation-1
+PYTHONPATH=.:src .venv/bin/python scripts/run_generation6_autonomous_round.py \
+  --contract config/autonomous_generation6_round1.json \
+  --output-root artifacts/autonomous-generation-6-round-1
 ```
 
-The default generation owns two collection/fit rounds, held-out shadow,
-bounded Wine canaries, and (only after those gates pass) alternating complete
-Stage A/B. `generation.json` is the crash/audit ledger. Do not alter generation
-parameters after it has been created; start a new generation for a general
-algorithm change.
+The contract owns twelve balanced collection Stages, an all-registry grouped
+refit, full Linux/Wine native smoke, bounded Wine canaries, and (only after
+those gates pass) twelve alternating complete-Stage-6 A/B trials.
+`generation.json` is the crash/audit ledger. Do not alter the contract after it
+has been allowlisted; start a new round for a general algorithm change.

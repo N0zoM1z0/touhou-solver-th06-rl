@@ -37,6 +37,7 @@ from th06_rl.iql_actor_learning import (  # noqa: E402
     fit_cross_fitted_iql_actor_population,
     iql_actor_model_artifact,
     iql_actor_model_from_artifact,
+    native_actor_prediction_tolerance_ratio,
 )
 from th06_rl.low_rank_learning import named_feature_roles  # noqa: E402
 from th06_rl.option_cache import load_cached_option_episode  # noqa: E402
@@ -49,6 +50,10 @@ from th06_rl.resource_control import enforce_training_cpu_affinity  # noqa: E402
 from th06_rl.sequential_learning import _support  # noqa: E402
 from th06_rl.sequential_learning import OrthogonalOption  # noqa: E402
 from th06_rl.offline import ACTION_NAMES  # noqa: E402
+from th06_rl.wine_corpus_registry import (  # noqa: E402
+    load_wine_corpus_registry,
+    select_wine_corpora,
+)
 
 
 def _sha256(path: Path) -> str:
@@ -70,6 +75,15 @@ def main(argv: list[str] | None = None) -> int:
         default=REPOSITORY / "config/autonomous_generation6_qualification.json",
     )
     parser.add_argument(
+        "--registry", type=Path,
+        help=(
+            "fit every registered training episode with sequential offline-RL "
+            "capability instead of the historical development partition"
+        ),
+    )
+    parser.add_argument("--seed-offset", type=int, default=0)
+    parser.add_argument("--round-contract-sha256")
+    parser.add_argument(
         "--cache-dir", type=Path,
         default=REPOSITORY / "artifacts/cache/audited-option-episodes",
     )
@@ -78,16 +92,48 @@ def main(argv: list[str] | None = None) -> int:
         default=REPOSITORY / "build/native/libth06_rl_ranker.so",
     )
     args = parser.parse_args(argv)
+    if args.round_contract_sha256 is not None and (
+        args.registry is None or len(args.round_contract_sha256) != 64
+    ):
+        parser.error("--round-contract-sha256 requires a registry and one SHA-256")
     if args.output.exists():
         raise FileExistsError(f"refusing to replace candidate: {args.output}")
     if not args.native_scorer.is_file():
         raise FileNotFoundError(f"native actor scorer is absent: {args.native_scorer}")
     started = time.perf_counter()
     affinity = enforce_training_cpu_affinity(args.threads)
-    _contract, partition = load_qualification_partition(
-        args.partition, repository=REPOSITORY
-    )
-    development = tuple(row for row in partition if row.role == "development")
+    if args.registry is None:
+        _contract, partition = load_qualification_partition(
+            args.partition, repository=REPOSITORY
+        )
+        development = tuple(row for row in partition if row.role == "development")
+        training_identity = {
+            "kind": "historical-development-partition",
+            "path": str(args.partition.resolve()),
+            "sha256": _sha256(args.partition),
+            "historical_qualification_reused_as_training": False,
+        }
+    else:
+        _registry, entries = load_wine_corpus_registry(
+            args.registry, repository=REPOSITORY
+        )
+        development = select_wine_corpora(
+            entries,
+            required_capabilities=frozenset({"sequential_offline_rl"}),
+        )
+        if not development:
+            raise ValueError("Generation-6 registry selected no sequential corpus")
+        training_identity = {
+            "kind": "immutable-capability-registry",
+            "path": str(args.registry.resolve()),
+            "sha256": _sha256(args.registry),
+            "sources": sorted({row.source for row in development}),
+            "manifest_sha256": [row.manifest_sha256 for row in development],
+            "historical_qualification_reused_as_training": True,
+        }
+    training_identity_sha256 = hashlib.sha256(json.dumps(
+        training_identity, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest()
     loaded = [
         load_cached_option_episode(
             row.path,
@@ -102,9 +148,17 @@ def main(argv: list[str] | None = None) -> int:
     layout = named_feature_roles(rich_feature_names())
     if args.resume_fit is not None:
         frozen_fit = json.loads(args.resume_fit.read_text(encoding="utf-8"))
+        checkpoint_identity_matches = (
+            frozen_fit.get("training_identity_sha256")
+            == training_identity_sha256
+            or (
+                args.registry is None
+                and frozen_fit.get("partition_sha256") == _sha256(args.partition)
+            )
+        )
         if (
             frozen_fit.get("schema") != "autonomous-generation-6-fit-checkpoint-v1"
-            or frozen_fit.get("partition_sha256") != _sha256(args.partition)
+            or not checkpoint_identity_matches
         ):
             raise ValueError("Generation-6 fit checkpoint is incompatible")
         representation = frozen_fit["representation"]
@@ -127,7 +181,9 @@ def main(argv: list[str] | None = None) -> int:
         ]
         samples = _augment_steps(raw, representation)
     else:
-        representation = fit_hazard_codebook(raw, seed=500_813)
+        representation = fit_hazard_codebook(
+            raw, seed=500_813 + args.seed_offset
+        )
         samples = _augment_steps(raw, representation)
         actors, advantage_crossfit = fit_cross_fitted_iql_actor_population(
             samples,
@@ -137,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
             n_step_options=8,
             q_trees=8,
             value_trees=8,
-            seed=510_813,
+            seed=510_813 + args.seed_offset,
             threads=args.threads,
             hidden=64,
             rank=24,
@@ -151,12 +207,13 @@ def main(argv: list[str] | None = None) -> int:
                 step=sample, n_step_target=0.0, outcome_residual=0.0, fold=0
             )
             for sample in samples
-        ], seed=540_813)
+        ], seed=540_813 + args.seed_offset)
         checkpoint = {
             "schema": "autonomous-generation-6-fit-checkpoint-v1",
             "evidence_eligible": False,
             "qualification_samples_loaded": False,
-            "partition_sha256": _sha256(args.partition),
+            "training_identity": training_identity,
+            "training_identity_sha256": training_identity_sha256,
             "representation": representation,
             "support": support,
             "support_report": support_report,
@@ -206,6 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     action_index = {name: index for index, name in enumerate(ACTION_NAMES)}
     conformance = []
     maximum_prediction_error = 0.0
+    maximum_prediction_tolerance_ratio = 0.0
     maximum_support_error = 0.0
     exact_choices = 0
     indices = [round(index * (len(raw) - 1) / 63) for index in range(64)]
@@ -228,6 +286,10 @@ def main(argv: list[str] | None = None) -> int:
             max(abs(float(left) - float(right))
                 for member_left, member_right in zip(expected, actual, strict=True)
                 for left, right in zip(member_left, member_right, strict=True)),
+        )
+        maximum_prediction_tolerance_ratio = max(
+            maximum_prediction_tolerance_ratio,
+            native_actor_prediction_tolerance_ratio(expected, actual),
         )
         actions = [action_index[action] for action in source.legal_actions]
         expected_distances = portable_support.distances(rows, actions)
@@ -257,10 +319,11 @@ def main(argv: list[str] | None = None) -> int:
             "portable_choice": expected_choice,
             "native_choice": actual_choice,
         })
-    if maximum_prediction_error > 1e-4 or maximum_support_error > 2e-5:
+    if maximum_prediction_tolerance_ratio > 1.0 or maximum_support_error > 2e-5:
         raise RuntimeError(
             "native candidate exceeds equivalence tolerance: "
             f"actor={maximum_prediction_error:.9g}, "
+            f"actor_ratio={maximum_prediction_tolerance_ratio:.9g}, "
             f"support={maximum_support_error:.9g}"
         )
     if exact_choices != len(indices):
@@ -291,14 +354,18 @@ def main(argv: list[str] | None = None) -> int:
         "schema": "autonomous-generation-6-candidate-v1",
         "evidence_eligible": False,
         "authorization_eligible": False,
-        "qualification_samples_loaded": False,
-        "partition_sha256": _sha256(args.partition),
+        "autonomous_round_contract_sha256": args.round_contract_sha256,
+        "qualification_samples_loaded": bool(
+            training_identity["historical_qualification_reused_as_training"]
+        ),
+        "training_identity": training_identity,
+        "training_identity_sha256": training_identity_sha256,
         "development_episode_groups": len(development),
         "development_options": len(samples),
         "parameters": {
-            "representation_seed": 500813,
-            "actor_seed": 510813,
-            "support_seed": 540813,
+            "representation_seed": 500813 + args.seed_offset,
+            "actor_seed": 510813 + args.seed_offset,
+            "support_seed": 540813 + args.seed_offset,
             "advantage_folds": 3,
             "critic_iterations": 2,
             "n_step_options": 8,
@@ -333,6 +400,9 @@ def main(argv: list[str] | None = None) -> int:
             "conformance_cases": len(conformance),
             "exact_choices": exact_choices,
             "maximum_prediction_error": maximum_prediction_error,
+            "maximum_prediction_tolerance_ratio": (
+                maximum_prediction_tolerance_ratio
+            ),
             "maximum_support_distance_error": maximum_support_error,
             "latency_samples": len(latencies),
             "latency_p50_ms": statistics.median(latencies),
@@ -358,8 +428,8 @@ def main(argv: list[str] | None = None) -> int:
             "support_factual_coverage_at_least_99_percent": (
                 support_report["coverage"] >= 0.99
             ),
-            "native_prediction_error_at_most_1e_4": (
-                maximum_prediction_error <= 1e-4
+            "native_prediction_within_float32_scale_bound": (
+                maximum_prediction_tolerance_ratio <= 1.0
             ),
             "native_support_error_at_most_2e_5": maximum_support_error <= 2e-5,
             "native_exact_choices": exact_choices == len(conformance),
