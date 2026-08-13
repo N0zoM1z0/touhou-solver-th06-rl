@@ -99,6 +99,21 @@ options. Its physical-HIT-only policy DR estimates were:
 
 The worst seven-member leave-one-out upper bound remained `-6.3652`, and
 synthetic causal/null smoke passed. These are encouraging offline diagnostics,
-not Wine efficacy. Only 37 of 167,250 options met the complete-population
-proposal rule in cross-fit, so active exposure remains a material uncertainty
-that the native smoke and Wine canary must test.
+not Wine efficacy. The deployed mean-population policy's estimated
+intervention exposure was 1.343%; the separate pessimistic complete-population
+diagnostic proposed on only 37 of 167,250 options. Native smoke and Wine
+canary must still test the actual deployable policy and exposure.
+
+Production fit then failed the frozen raw-score native-equivalence gate:
+maximum actor-score error was `0.0009765625`, tolerance ratio `1.4844`, and
+support error `4.97e-6`. No candidate JSON, active state, canary, or evaluation
+was authorized. Round 3 is therefore operationally `offline-rejected`; its
+historical ledger remains at the crash boundary rather than being rewritten by
+new code. The complete fit checkpoint is retained for learner-only audit and
+has SHA-256
+`e689b9b08902c2ecc761648898d682fca641468ff282aba495da74e1df2dc219`.
+
+A read-only replay found 64/64 exact native/portable actions and minimum
+selected-action margin `0.02292`, so the next step is a separately frozen
+forward-error/decision-conformance repair, not a post-hoc waiver and not more
+Wine collection. See `GENERATION6_NATIVE_EQUIVALENCE_AUDIT.md`.

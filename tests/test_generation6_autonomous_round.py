@@ -10,6 +10,7 @@ import scripts.run_generation6_autonomous_round as autonomous_round
 from scripts.run_generation6_autonomous_round import (
     _materialize_reused_collection,
     _paired_verdict,
+    _fit_report_matches_returncode,
     _priority_passed,
     _startup_smoke_passed,
     _validate_contract_shape,
@@ -40,6 +41,14 @@ def test_paired_round_requires_aggregate_block_and_exposure_gates() -> None:
     assert result["effect_hits"] == 7
     assert result["candidate_no_worse_blocks"] == 5
     assert result["promotion_eligible"] is False
+
+
+def test_fit_rejection_requires_an_explicit_matching_report() -> None:
+    assert _fit_report_matches_returncode(0, {"passed": True})
+    assert _fit_report_matches_returncode(1, {"passed": False})
+    assert not _fit_report_matches_returncode(1, None)
+    assert not _fit_report_matches_returncode(1, {"passed": True})
+    assert not _fit_report_matches_returncode(2, {"passed": False})
 
 
 def test_paired_round_rejects_positive_total_without_block_consistency() -> None:

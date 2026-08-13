@@ -114,6 +114,18 @@ def _run(command: list[str]) -> None:
         )
 
 
+def _fit_report_matches_returncode(
+    returncode: int, report: dict[str, object] | None,
+) -> bool:
+    """Distinguish an explicit gate rejection from a crashed production fit."""
+    return bool(
+        returncode in (0, 1)
+        and isinstance(report, dict)
+        and isinstance(report.get("passed"), bool)
+        and report["passed"] == (returncode == 0)
+    )
+
+
 def _cpu_set(value: object) -> frozenset[int]:
     result: set[int] = set()
     for component in str(value).split(","):
@@ -759,14 +771,21 @@ def _offline(
         ])
     candidate = offline / "candidate.json"
     if not candidate.is_file():
-        _run([
+        fit_command = [
             sys.executable, str(REPOSITORY / "scripts/fit_generation6_candidate.py"),
             "--output", str(candidate), "--registry", str(REGISTRY),
             "--threads", "32", "--seed-offset",
             str(contract["offline"]["seed_offset"]),
             "--round-contract-sha256", contract_sha,
             "--native-scorer", str(HOST_SCORER),
-        ])
+        ]
+        fit_checkpoint = candidate.with_name(candidate.stem + ".fit.json")
+        if fit_checkpoint.is_file():
+            fit_command.extend(("--resume-fit", str(fit_checkpoint)))
+        completed = subprocess.run(fit_command, cwd=REPOSITORY, check=False)
+        report = _object(candidate) if candidate.is_file() else None
+        if not _fit_report_matches_returncode(completed.returncode, report):
+            raise RuntimeError("Generation-6 production fit crashed")
     linux_state = offline / "preflight-linux-state.json"
     windows_state = offline / "preflight-windows-state.json"
     if not linux_state.is_file():
@@ -782,7 +801,16 @@ def _offline(
             policy_seed=int(contract["offline"]["preflight_policy_seed"]),
         ))
     online = offline / "online-preflight.json"
-    if not online.is_file():
+    candidate_passed = _object(candidate).get("passed") is True
+    if not online.is_file() and not candidate_passed:
+        _atomic_json(online, {
+            "schema": "autonomous-generation-6-online-policy-preflight-v1",
+            "evidence_eligible": False,
+            "passed": False,
+            "candidate_sha256": _sha256(candidate),
+            "skipped": "production-candidate-rejected",
+        })
+    elif not online.is_file():
         _run([
             sys.executable,
             str(REPOSITORY / "scripts/smoke_generation6_online_policy.py"),
