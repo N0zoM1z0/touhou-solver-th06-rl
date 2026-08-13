@@ -147,3 +147,17 @@ evidence then starts fresh:
 This remains confirmation evidence rather than automatic promotion. A negative
 result returns to learner/general-infrastructure analysis and autonomous data
 collection, never manual scenario-specific data repair.
+
+## Gameplay outcome
+
+The numeric successor passed, and its original-Wine serving path remained
+clean through two Stage-4 canaries and eight complete Stage-6 evaluations.
+The fitted learner nevertheless failed the confirmation criterion: after four
+blocks the candidate had 42 HIT versus 34 for the incumbent and was no worse
+in only one block. Two remaining blocks could reach at most three of the four
+required no-worse blocks, so the run stopped at that complete-block boundary.
+
+The float64 conformance result remains valid infrastructure. The learner is
+rejected separately. Offline diagnosis found an unbounded empirical actor
+objective; see `GENERATION6_DECISION_GAMEPLAY_RESULT.md` for the immutable
+evidence, proof, and successor requirements.

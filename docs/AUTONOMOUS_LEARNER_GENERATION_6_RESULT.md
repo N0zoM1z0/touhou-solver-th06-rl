@@ -2,6 +2,13 @@
 
 ## Verdict
 
+> **Later confirmation:** this historical three-block pilot remains an exact
+> positive directional observation, but the all-corpus successor did not
+> confirm it. After four clean new blocks the successor candidate had 42 HIT
+> versus 34 for the incumbent and could no longer satisfy the frozen 4/6
+> no-worse rule. The fitted actor is rejected after diagnosis of an unbounded
+> empirical objective. See `GENERATION6_DECISION_GAMEPLAY_RESULT.md`.
+
 Generation 6 produced an `effective-pilot-signal` in its first predeclared
 complete-Stage-6 deployment panel. The frozen IQL actor target recorded 25
 physical HITs over three natural-RNG original-Wine Stages, versus 28 for the

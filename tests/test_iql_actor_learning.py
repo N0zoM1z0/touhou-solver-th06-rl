@@ -90,6 +90,32 @@ def test_action_centered_actor_loss_is_unbiased_without_local_weight_normalizati
     )
 
 
+def test_action_centered_actor_loss_is_not_a_proper_optimization_objective(
+) -> None:
+    """Keep the Generation-6 failure reproducible for successor smokes."""
+    empirical = []
+    proper = []
+    for probability in (1e-2, 1e-6, 1e-12, 1e-30):
+        action_losses = np.asarray([
+            -np.log(probability), -np.log1p(-probability),
+        ])
+        behavior_loss = np.full(2, 0.5 * action_losses.sum())
+        advantage_weights = np.asarray([0.1, 1.0])
+        empirical.append(float(action_centered_actor_losses(
+            action_losses, behavior_loss, advantage_weights,
+        )[0]))
+        proper.append(float(np.sum(
+            np.asarray([0.5, 0.5]) * advantage_weights * action_losses
+        )))
+
+    assert all(left > right for left, right in zip(
+        empirical[:-1], empirical[1:], strict=True
+    ))
+    assert empirical[-1] < -20.0
+    assert all(value >= 0.0 for value in proper)
+    assert proper[-1] > proper[0]
+
+
 def test_actor_advantage_labels_are_cross_fitted_by_complete_episode() -> None:
     samples = delayed_effect_episodes(count=6, options=16, delay=3)
 

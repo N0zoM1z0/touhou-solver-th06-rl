@@ -562,7 +562,7 @@ def _weighted_rms(values, weights) -> float:
 def action_centered_actor_losses(
     factual_losses, behavior_losses, advantage_weights
 ):
-    """Unbiased known-behavior control variate for factual AWR losses.
+    """Historical fixed-model control-variate estimate; never optimize it.
 
     For any state and any fixed action loss ``L``, the factual action is drawn
     from the known behavior distribution ``mu``.  Therefore
@@ -572,6 +572,14 @@ def action_centered_actor_losses(
     has expectation ``E_mu[w(A)L(A)]`` without an inverse propensity.  Do not
     center the entire ``(w - 1)L`` term: ``w`` is not conditionally normalized
     at every state and doing so introduces bias.
+
+    This fixed-model unbiasedness does not make the finite-sample expression a
+    proper ERM loss.  Its coefficient on factual ``L(A)`` may be negative, so
+    a flexible actor can drive the estimate to negative infinity by assigning
+    the factual action vanishing probability.  Generation 6 exhibited exactly
+    that failure as its corpus grew.  The function remains only to reproduce
+    immutable historical artifacts and diagnostics; new fitters must use a
+    bounded proper objective.  See ``GENERATION6_DECISION_GAMEPLAY_RESULT``.
     """
     return behavior_losses + (advantage_weights - 1.0) * factual_losses
 

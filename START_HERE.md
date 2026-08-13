@@ -48,7 +48,10 @@ Read in this order:
    current successor, and `docs/GENERATION6_NATIVE_EQUIVALENCE_AUDIT.md` for
    its offline rejection and the required learner-only successor boundary,
    followed by `docs/GENERATION6_DECISION_NUMERIC_SUCCESSOR.md` for the new
-   baseline-centred decision-level conformance contract;
+   baseline-centred decision-level conformance contract, and
+   `docs/GENERATION6_DECISION_GAMEPLAY_RESULT.md` for its clean but
+   conclusively ineffective Wine result and the discovered unbounded actor
+   objective;
 13. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
 14. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
@@ -68,6 +71,14 @@ PID bug and produced no new corpus. Round 3 keeps the old standard, binds both
 repairs and their smokes, reuses only round 1's complete machine-passing
 ten-episode prefix, collects the two predeclared missing Stage-5/6 episodes,
 and then refits all old and new sequential corpora before fresh Wine evidence.
+Its learner-only float64 serving successor subsequently passed every numeric,
+Win32, latency, and Stage-4 wiring gate. The Stage-6 confirmation was stopped
+after four complete blocks when the candidate had 42 HIT versus the
+incumbent's 34 and was no worse in only one block: even winning both remaining
+blocks could reach only three of the required four. The serving path remains
+valid; the fitted learner is rejected. Offline replay then exposed that its
+action-centered actor ERM objective is unbounded below and had diverged as the
+corpus grew, so another Generation-6 refit with that objective is forbidden.
 
 ## Non-negotiable separation
 
