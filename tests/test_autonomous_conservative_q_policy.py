@@ -7,7 +7,7 @@ import zlib
 
 from th06_rl.conservative_learning import MODEL_CODEC, STATE_SCHEMA
 from th06_rl.learning_features import TREE_FEATURE_SCHEMA, tree_feature_names
-from th06_rl.offline import ACTION_NAMES
+from th06_rl.actions import ACTION_NAMES
 from th06_rl.policies.autonomous_conservative_q import (
     AutonomousConservativeQPolicy,
     _pessimistic_candidate,

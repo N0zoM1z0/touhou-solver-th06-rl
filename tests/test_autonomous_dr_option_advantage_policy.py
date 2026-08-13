@@ -15,7 +15,7 @@ from th06_rl.hazard_representation import (
     HISTORY_FEATURE_NAMES,
 )
 from th06_rl.learning_features import TREE_FEATURE_SCHEMA
-from th06_rl.offline import ACTION_NAMES
+from th06_rl.actions import ACTION_NAMES
 from th06_rl.policies.autonomous_dr_option_advantage import (
     AutonomousDROptionAdvantagePolicy,
 )

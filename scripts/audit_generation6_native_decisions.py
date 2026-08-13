@@ -43,7 +43,7 @@ from th06_rl.native_decision_conformance import (  # noqa: E402
     certify_mean_population_decision,
     native_order_centered_portability_reference,
 )
-from th06_rl.offline import ACTION_NAMES  # noqa: E402
+from th06_rl.actions import ACTION_NAMES  # noqa: E402
 from th06_rl.option_cache import load_cached_option_episode  # noqa: E402
 from th06_rl.policies.offline_ranker import (  # noqa: E402
     NativePrototypeSupport,

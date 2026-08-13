@@ -23,7 +23,7 @@ from ..hazard_representation import (
     NativeHazardCodebookEncoder,
 )
 from ..learning_features import tree_candidate_vector
-from ..offline import ACTION_NAMES
+from ..actions import ACTION_NAMES
 from ..policy_api import POLICY_API_VERSION, PolicyDecision
 from .autonomous_conservative_q import _decode_model
 from .offline_ranker import (

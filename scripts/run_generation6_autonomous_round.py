@@ -39,7 +39,7 @@ from scripts.run_generation6_wine_canary import (  # noqa: E402
 )
 from th06_rl.advantage_learning import _validate_run  # noqa: E402
 from th06_rl.audited_option_loader import load_audited_option_episode  # noqa: E402
-from th06_rl.offline import ACTION_NAMES  # noqa: E402
+from th06_rl.actions import ACTION_NAMES  # noqa: E402
 from th06_rl.process_priority import parse_cpu_list, validate_nice  # noqa: E402
 from th06_rl.policies.autonomous_iql_actor import (  # noqa: E402
     ALLOWED_AUTONOMOUS_ROUND_CONTRACT_SHA256,

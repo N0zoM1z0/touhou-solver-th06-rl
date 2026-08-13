@@ -59,8 +59,9 @@ interfaces should work for TH08 after replacing the game-specific adapter.
 
 1. **Wine is the environment.** Only the original Japanese TH06 1.02h retail
    executable under Wine may create trajectories, rewards, branch outcomes, or
-   promotion evidence. Linux/headless simulation is quarantined history and
-   may not train, label, propose, evaluate, or make compatibility claims.
+   promotion evidence. Linux/headless simulation has been removed from the
+   tracked tree and may not train, label, propose, evaluate, or make
+   compatibility claims.
 2. **The final objective is physical HIT count.** Serious learners use HIT as
    the only cost, `gamma = 1`, and terminal value zero. No survival, phase,
    progress, graze, spell, or route reward shaping is allowed.
@@ -390,18 +391,19 @@ Read in this order:
 1. `HAND_OFF.md` -- this snapshot and next boundary.
 2. `AGENTS.md` -- hard working rules enforced for every change.
 3. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` -- end-to-end scientific contract.
-4. `docs/IMMUTABLE_WINE_DATA_PLANE.md` and
+4. `docs/REPOSITORY_PRUNE.md` -- removed obsolete paths and retained history.
+5. `docs/IMMUTABLE_WINE_DATA_PLANE.md` and
    `config/wine_corpus_registry.json` -- corpus/learner separation.
-5. `docs/GENERATION6_DECISION_GAMEPLAY_RESULT.md` -- current terminal learner
+6. `docs/GENERATION6_DECISION_GAMEPLAY_RESULT.md` -- current terminal learner
    verdict and objective proof.
-6. `docs/GENERATION6_DECISION_NUMERIC_SUCCESSOR.md` and
+7. `docs/GENERATION6_DECISION_NUMERIC_SUCCESSOR.md` and
    `docs/TRAINING_INFRA_PERFORMANCE.md` -- serving and throughput contracts
    that must not regress.
-7. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` and the prior
+8. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` and the prior
    generation result documents -- detailed algorithm trail.
-8. `docs/HARD_EMPTY_SOURCE_AUDIT.md` and
+9. `docs/HARD_EMPTY_SOURCE_AUDIT.md` and
    `docs/WINE_RETAIL_VALIDATION.md` before gameplay-facing changes.
-9. `docs/OFFLINE_RL_REFERENCES.md` for the reproducible ignored paper/repo
+10. `docs/OFFLINE_RL_REFERENCES.md` for the reproducible ignored paper/repo
    cache and source URLs.
 
 Relevant code:

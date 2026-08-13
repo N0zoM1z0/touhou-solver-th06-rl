@@ -25,7 +25,7 @@ from .learning_features import (
     tree_candidate_vector,
     tree_feature_names,
 )
-from .offline import ACTION_NAMES
+from .actions import ACTION_NAMES
 from .policies.offline_ranker import MODEL_SCHEMA
 from .th06.learning_adapter import (
     ACTION_FEATURE_NAMES,

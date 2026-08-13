@@ -11,7 +11,9 @@ Original Japanese TH06 1.02h under Wine is the only environment allowed to
 create trajectories, rewards, exploration outcomes, counterfactual branch
 labels, or promotion evidence. Do not use the reconstructed Linux/headless
 runtime for training, evaluation, action proposals, or compatibility claims.
-Historical headless code and ignored artifacts are quarantined history.
+Tracked headless code has been removed. Historical commits and ignored
+artifacts are quarantine history, not an available backend; do not restore
+them into the active tree.
 
 Offline code may replay observations captured from original-retail Wine,
 recompute native geometry, construct features, fit models, and score candidate

@@ -16,7 +16,7 @@ from th06_rl.hazard_representation import (
     HAZARD_PRIMITIVE_FEATURE_NAMES,
     HISTORY_FEATURE_NAMES,
 )
-from th06_rl.offline import ACTION_NAMES
+from th06_rl.actions import ACTION_NAMES
 from th06_rl.th06.learning_adapter import ACTION_FEATURE_NAMES, OBSERVATION_FEATURE_NAMES
 
 

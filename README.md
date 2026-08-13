@@ -27,11 +27,12 @@ offline RL methods can be compared on the same facts without changing their
 distribution. The normative contract is
 [docs/IMMUTABLE_WINE_DATA_PLANE.md](docs/IMMUTABLE_WINE_DATA_PLANE.md).
 
-The reconstructed Linux/headless simulator is retired from the learning and
-evaluation path. Historical scripts remain only as unreferenced quarantine
-until a separate cleanup removes code proven unused by the Wine-only path.
+The reconstructed Linux/headless simulator and the pre-generation online-UCB
+path have been removed from the tracked tree. Their old implementations remain
+recoverable from Git history, but are not available learning backends.
 
-Start with [START_HERE.md](START_HERE.md). The authoritative method and
+Start with [HAND_OFF.md](HAND_OFF.md), then [START_HERE.md](START_HERE.md).
+The authoritative method and
 evaluation contract is
 [docs/WINE_ONLY_AUTONOMOUS_LEARNING.md](docs/WINE_ONLY_AUTONOMOUS_LEARNING.md).
 The original-retail runner contract is
@@ -42,16 +43,9 @@ complete original-retail Wine Practice Stages with HIT continuation. Fixed RNG,
 accelerated Wine, first-failure prefixes, shadow replay, and offline metrics may
 reject or select a candidate, but may not promote one.
 
-Run the current fully predeclared, resumable Generation-6 round with:
-
-```bash
-PYTHONPATH=.:src .venv/bin/python scripts/run_generation6_autonomous_round.py \
-  --contract config/autonomous_generation6_round1.json \
-  --output-root artifacts/autonomous-generation-6-round-1
-```
-
-The contract owns twelve balanced collection Stages, an all-registry grouped
-refit, full Linux/Wine native smoke, bounded Wine canaries, and (only after
-those gates pass) twelve alternating complete-Stage-6 A/B trials.
-`generation.json` is the crash/audit ledger. Do not alter the contract after it
-has been allowlisted; start a new round for a general algorithm change.
+There is currently no authorized gameplay candidate or current-generation Wine
+command. Generation 6 is a frozen negative result and its runners are retained
+only for reproducibility. The next action is learner-only Generation-7 work on
+the registered corpus; freeze a new contract before any outcome-facing Wine
+run. See [docs/REPOSITORY_PRUNE.md](docs/REPOSITORY_PRUNE.md) for the retired
+paths and the retention boundary.

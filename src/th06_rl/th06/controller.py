@@ -15,7 +15,6 @@ import sys
 import time
 
 from ..corpus import (
-    FRAME_BUDGET_MS,
     CorpusError,
     CorpusRecorder,
     DialogueDeliverySample,
@@ -28,9 +27,8 @@ from ..hazard_representation import (
     project_hazard_primitives,
     project_history_features,
 )
-from ..policy_api import PolicyContext, PolicyFailureEvent, PolicyOutcome
-from ..policy_loader import HotReloadPolicy
-from ..policy_transaction import StagePolicyTransaction
+from ..policy_api import PolicyContext
+from ..policy_loader import ImmutablePolicy
 from .background_activity import BackgroundActivityLease
 from .background_input import BackgroundInputBridge
 from .background_keyboard import BackgroundKeyboard
@@ -60,7 +58,6 @@ from .system_health import GIB, below_commit_reserve, read_system_memory
 
 
 ACTIVE_PLAYER_STATES = (0, 3)
-RELOAD_POLL_SECONDS = 60.0
 HEALTH_SAMPLE_SECONDS = 1.0
 HEALTH_TRACE_SECONDS = 10.0
 DIALOGUE_PROBE_SECONDS = 1.0 / 60.0
@@ -165,15 +162,6 @@ def _anchor_partition(source_context: str) -> str:
     if source_context == "timeline-complete":
         return source_context
     return "timeline"
-
-
-def _reload_poll_window(snapshot) -> bool:
-    """Poll source metadata only outside active physical control."""
-    return bool(
-        snapshot.in_menu
-        or snapshot.time_stopped
-        or snapshot.player_state not in ACTIVE_PLAYER_STATES
-    )
 
 
 def _sha256(path: Path) -> str:
@@ -294,7 +282,6 @@ def run(args: argparse.Namespace) -> int:
     trace = None
     recorder = None
     plugin = None
-    policy_transaction = None
     corpus_path = None
     exit_code = 0
     stage_completed = False
@@ -311,10 +298,6 @@ def run(args: argparse.Namespace) -> int:
     termination_reason = "controller-interrupted"
     minimum_commit_headroom_bytes: int | None = None
     maximum_controller_private_bytes = 0
-    policy_state_recovered = False
-    policy_state_committed = False
-    policy_state_rolled_back = False
-    policy_transaction_failure: str | None = None
     started = time.monotonic()
     try:
         if args.armed:
@@ -375,13 +358,9 @@ def run(args: argparse.Namespace) -> int:
                 return exit_code
 
         kernel = NativeKernel(args.native_library)
-        if not args.immutable_policy:
-            policy_transaction = StagePolicyTransaction(args.policy_state)
-            policy_state_recovered = policy_transaction.begin()
-        plugin = HotReloadPolicy(
+        plugin = ImmutablePolicy(
             args.policy_plugin,
             state_path=args.policy_state,
-            immutable=args.immutable_policy,
         )
         args.trace.parent.mkdir(parents=True, exist_ok=True)
         # Corpus is the durable evidence. Live status may lag by one second;
@@ -419,7 +398,6 @@ def run(args: argparse.Namespace) -> int:
         )
         previous_snapshot = None
         previous_player_state = None
-        pending_learning = None
         learning_history = deque(maxlen=3)
         policy_source_context = None
         policy_source_start_frame = None
@@ -433,7 +411,6 @@ def run(args: argparse.Namespace) -> int:
         dialogue_delivery: list[DialogueDeliverySample] = []
         last_dialogue_delivery = None
         next_dialogue_probe = started
-        next_reload_poll = started + RELOAD_POLL_SECONDS
         next_health_sample = started
         next_health_trace = started
 
@@ -1124,80 +1101,13 @@ def run(args: argparse.Namespace) -> int:
                 )
 
             solve_ms = (time.perf_counter() - solve_started) * 1000.0
-            if pending_learning is not None:
-                learning_elapsed = max(
-                    0, snapshot.frame - pending_learning["frame"]
-                )
-                plugin.observe(PolicyOutcome(
-                    frame=pending_learning["frame"],
-                    scope=pending_learning["scope"],
-                    source_context=pending_learning["source_context"],
-                    action=pending_learning["action"],
-                    published=True,
-                    elapsed_frames=learning_elapsed,
-                    life_lost=hit,
-                    bomb_used=_physical_bomb(snapshot),
-                    control_dead_end=_control_dead_end(reason),
-                    authority_lost=_authority_loss(reason),
-                    phase_changed=(
-                        pending_learning["scope"] != _snapshot_scope(snapshot)
-                        or pending_learning["source_context"] != source_context
-                    ),
-                    next_hard_action_count=(
-                        -1 if reason == "input-lease" else hard_count
-                    ),
-                    next_player_x=snapshot.x,
-                    next_player_y=snapshot.y,
-                    learning_eligible=(
-                        learning_elapsed == 1
-                        and pending_learning["capture_ms"] <= FRAME_BUDGET_MS
-                    ),
-                ))
-                pending_learning = None
-            if hit:
-                # A HIT usually arrives after the controller has already
-                # stopped publishing (death/invulnerability transition), so
-                # it cannot reliably ride on the one-step PolicyOutcome.
-                # Deliver it separately for bounded delayed credit while the
-                # native gate remains the sole action authority.
-                plugin.observe_failure(PolicyFailureEvent(
-                    frame=snapshot.frame,
-                    scope=_snapshot_scope(snapshot),
-                    source_context=source_context,
-                    kind="physical-hit",
-                ))
             if policy is not None and published is None:
-                plugin.observe(PolicyOutcome(
-                    frame=snapshot.frame,
-                    scope=expected_scope,
-                    source_context=source_context,
-                    action=policy.action,
-                    published=False,
-                    elapsed_frames=0,
-                    life_lost=False,
-                    bomb_used=False,
-                    control_dead_end=False,
-                    authority_lost=False,
-                    phase_changed=False,
-                    next_hard_action_count=hard_count,
-                    next_player_x=snapshot.x,
-                    next_player_y=snapshot.y,
-                    learning_eligible=False,
-                ))
                 # Assignment is tentative until the final frame/fresh-Hard
                 # check actually publishes input. Abort it even for immutable
                 # behavior policies so a continuation cannot masquerade as a
                 # factual option start.
                 if current_action_name != policy.action:
                     plugin.reject_publication(policy)
-            if policy is not None and published is not None:
-                pending_learning = {
-                    "frame": snapshot.frame,
-                    "scope": expected_scope,
-                    "source_context": source_context,
-                    "action": published,
-                    "capture_ms": capture_ms,
-                }
             # Policy identity is required in every factual frame, but complete
             # diagnostic counters are not.  Generation-6 metrics sort a rolling
             # latency window and materialize several action dictionaries; doing
@@ -1431,27 +1341,6 @@ def run(args: argparse.Namespace) -> int:
             last_reported_reason = reason
             if reason.startswith("authority-stop:"):
                 break
-            if (
-                time.monotonic() >= next_reload_poll
-                and _reload_poll_window(snapshot)
-            ):
-                poll_started = time.perf_counter()
-                reloaded = False
-                try:
-                    reloaded = plugin.maybe_reload(0)
-                except (OSError, RuntimeError, TypeError, ValueError) as error:
-                    if not retain_continuous_stage("policy-reload-poll", error):
-                        raise
-                emit_trace({
-                    "time": time.time(),
-                    "event": "policy-reload-poll",
-                    "frame": snapshot.frame,
-                    "reloaded": reloaded,
-                    "duration_ms": (
-                        time.perf_counter() - poll_started
-                    ) * 1000.0,
-                })
-                next_reload_poll = time.monotonic() + RELOAD_POLL_SECONDS
         else:
             termination_reason = "time-limit"
     finally:
@@ -1461,38 +1350,6 @@ def run(args: argparse.Namespace) -> int:
                 "event": "policy-final-status",
                 "policy": plugin.status(),
             })
-        if policy_transaction is not None:
-            try:
-                if (
-                    stage_completed
-                    and exit_code == 0
-                    and sys.exc_info()[0] is None
-                    and plugin is not None
-                ):
-                    plugin.checkpoint()
-                    policy_transaction.commit()
-                    policy_state_committed = True
-                else:
-                    policy_transaction.rollback()
-                    policy_state_rolled_back = True
-            except (OSError, RuntimeError, TypeError, ValueError) as error:
-                policy_transaction_failure = f"{type(error).__name__}: {error}"
-                infrastructure_failure_count += 1
-                infrastructure_failures["policy-transaction"] = 1
-                try:
-                    policy_transaction.rollback()
-                    policy_state_rolled_back = True
-                except (OSError, RuntimeError, TypeError, ValueError) as rollback_error:
-                    policy_transaction_failure += (
-                        "; rollback "
-                        f"{type(rollback_error).__name__}: {rollback_error}"
-                    )
-                exit_code = 76
-                print(
-                    "Stage policy transaction failed; batch will stop: "
-                    f"{policy_transaction_failure}",
-                    flush=True,
-                )
         if trace is not None:
             trace.close()
         try:
@@ -1526,12 +1383,6 @@ def run(args: argparse.Namespace) -> int:
                             ),
                             "maximum_controller_private_bytes": (
                                 maximum_controller_private_bytes
-                            ),
-                            "policy_state_recovered": policy_state_recovered,
-                            "policy_state_committed": policy_state_committed,
-                            "policy_state_rolled_back": policy_state_rolled_back,
-                            "policy_transaction_failure": (
-                                policy_transaction_failure
                             ),
                             "background_reactivations": (
                                 activity.reactivations
@@ -1673,7 +1524,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "this low-frequency interval; 0 disables periodic anchors"
         ),
     )
-    parser.add_argument("--exploration-rate", type=float, default=0.03)
+    parser.add_argument("--exploration-rate", type=float, default=0.0)
     parser.add_argument(
         "--diagnostic-rng-seed",
         type=lambda value: int(value, 0),
@@ -1688,19 +1539,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--policy-plugin",
         type=Path,
-        default=repository / "src/th06_rl/policies/adaptive.py",
+        required=True,
     )
     parser.add_argument(
         "--policy-state",
         type=Path,
-        default=None,
+        required=True,
     )
     parser.add_argument(
         "--immutable-policy",
         action="store_true",
+        required=True,
         help=(
-            "disable policy feedback, hot reload, checkpoint writes, and the "
-            "Stage state transaction for a frozen evaluation"
+            "require a frozen policy; online feedback and hot reload are removed"
         ),
     )
     parser.add_argument(
@@ -1743,10 +1594,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--horizon must cover Hard-4")
     if args.full_anchor_frames < 0:
         parser.error("--full-anchor-frames cannot be negative")
-    if not 0.0 <= args.exploration_rate <= 1.0:
-        parser.error("--exploration-rate must be in [0, 1]")
-    if args.immutable_policy and args.exploration_rate != 0.0:
-        parser.error("--immutable-policy requires --exploration-rate 0")
+    if args.exploration_rate != 0.0:
+        parser.error(
+            "controller-level exploration is retired; use the frozen policy state"
+        )
     if args.min_commit_headroom_gib < 0.0:
         parser.error("--min-commit-headroom-gib cannot be negative")
     expected_stage = args.practice_stage or args.expected_stage
@@ -1755,8 +1606,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         if args.start_route
         else f"{args.difficulty}_reimu_a_stage{expected_stage}"
     )
-    if args.policy_state is None:
-        args.policy_state = repository / f"artifacts/policy/{label}.json"
     if args.trace is None:
         args.trace = repository / f"artifacts/live/{label}.jsonl"
     args.repository = repository

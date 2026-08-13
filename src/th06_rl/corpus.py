@@ -734,9 +734,9 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "behavior_probability": before.evidence.behavior_probability,
         "policy_id": before.evidence.policy_id,
         "option": option,
-        # This compact projection is sufficient to reconstruct the exact
-        # online UCB key without decoding the large raw hazard root. Raw
-        # snapshots remain the learner-independent authority evidence.
+        # This compact projection preserves the factual policy context for
+        # replaceable offline learners without decoding the raw hazard root.
+        # Raw snapshots remain the learner-independent authority evidence.
         "policy_context": {
             "current_action": before.evidence.current_action,
             "hard_admissible_actions": [

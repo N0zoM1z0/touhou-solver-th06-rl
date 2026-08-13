@@ -12,31 +12,33 @@ Read in this order:
 2. `AGENTS.md` for safety and product boundaries;
 3. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the data, training, and
    promotion contract;
-4. `docs/IMMUTABLE_WINE_DATA_PLANE.md` for the permanent capability-indexed
+4. `docs/REPOSITORY_PRUNE.md` for the deleted obsolete paths and the retained
+   generation/infra boundary;
+5. `docs/IMMUTABLE_WINE_DATA_PLANE.md` for the permanent capability-indexed
    corpus registry and the separation of data, learner, and fitted artifact;
-5. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the frozen
+6. `docs/AUTONOMOUS_LEARNER_GENERATION_2_DESIGN.md` for the frozen
    generation-2 learner, observation, Hard-empty audit, and evidence contract;
-6. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
+7. `docs/AUTONOMOUS_LEARNER_GENERATION_2_RESULT.md` for its completed Wine
    evidence and ineffective verdict;
-7. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md`, its progress record, and
+8. `docs/AUTONOMOUS_LEARNER_GENERATION_3_DESIGN.md`, its progress record, and
    `docs/AUTONOMOUS_LEARNER_GENERATION_3_RESULT.md` for the frozen superseded
    complete-return learner;
-8. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the frozen sequential
+9. `docs/AUTONOMOUS_LEARNER_GENERATION_4_DESIGN.md` for the frozen sequential
    semi-Markov learner, action-centered critic, exploration, and evidence
    contract;
-9. `docs/AUTONOMOUS_LEARNER_GENERATION_4_PROGRESS.md` for its append-only
+10. `docs/AUTONOMOUS_LEARNER_GENERATION_4_PROGRESS.md` for its append-only
    implementation and execution record, followed by
    `docs/AUTONOMOUS_LEARNER_GENERATION_4_RESULT.md` for its ineffective verdict;
-10. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
+11. `docs/OFFLINE_RL_REFERENCES.md` for the ignored, exactly reproducible paper
    and upstream-repository cache;
-11. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the frozen in-sample
+12. `docs/AUTONOMOUS_LEARNER_GENERATION_5_DESIGN.md` for the frozen in-sample
    implicit-Q learner and its predeclared smoke/evidence gates, followed by
    `docs/AUTONOMOUS_LEARNER_GENERATION_5_PROGRESS.md` and
    `docs/AUTONOMOUS_LEARNER_GENERATION_5_RESULT.md` for its Stage-4 fail-fast
    result and ineffective-for-continuation verdict;
-12. `docs/AUTONOMOUS_LEARNER_QUALIFICATION.md` for the frozen-corpus rejection
+13. `docs/AUTONOMOUS_LEARNER_QUALIFICATION.md` for the frozen-corpus rejection
    funnel that must pass before another Wine collection wave;
-13. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the IQL actor
+14. `docs/AUTONOMOUS_LEARNER_GENERATION_6_DEVELOPMENT.md` for the IQL actor
    development record, followed by its Stage-6 pilot design and
    `docs/AUTONOMOUS_LEARNER_GENERATION_6_RESULT.md` for the completed positive
    directional result and non-promotion boundary, then
@@ -54,13 +56,13 @@ Read in this order:
    `docs/GENERATION6_DECISION_GAMEPLAY_RESULT.md` for its clean but
    conclusively ineffective Wine result and the discovered unbounded actor
    objective;
-14. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
+15. `docs/WINE_EXACT_ACCELERATION.md` for normal-speed isolated collection
    parallelism and the compatibility gate;
-15. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
+16. `docs/TRAINING_INFRA_PERFORMANCE.md` for append-only profiles,
    optimizations, failed attempts, and correctness differentials;
-16. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
+17. `docs/HARD_EMPTY_SOURCE_AUDIT.md` for the source-bound Hard-empty verdict
    and conservative-to-source-exact fallback;
-17. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
+18. `docs/WINE_RETAIL_VALIDATION.md` before launching the game.
 
 Generations 1 through 6 are frozen without a promoted candidate. Generation 6
 did pass frozen-corpus qualification, native serving, and a small directional
@@ -97,9 +99,10 @@ src/th06_rl/corpus.py   lossless Wine trajectory recorder
 native/                 bounded geometry and compact model scorers
 scripts/                Wine runner, offline replay, fitting, and audits
 tests/                  synthetic and recorded contract tests
-docs/                   current contracts only
+docs/                   current contracts and immutable generation history
 ```
 
-Historical headless scripts and ignored artifacts are not an available
-learning backend. Do not use them while implementing or evaluating the active
-method.
+Historical headless scripts, mutable online-UCB policies, and their targeted
+counterfactual tooling have been removed from the tracked tree. Ignored
+artifacts and old Git commits are audit history, not available learning
+backends. Do not restore them while implementing the active method.

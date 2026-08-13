@@ -13,7 +13,7 @@ from collections import Counter
 import math
 import random
 
-from ..offline import ACTION_NAMES
+from ..actions import ACTION_NAMES
 from ..policy_api import POLICY_API_VERSION, PolicyDecision, PolicyOptionTrace
 from .autonomous_iql_actor import (
     AutonomousIqlActorPolicy,

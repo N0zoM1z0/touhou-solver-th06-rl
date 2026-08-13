@@ -308,9 +308,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--policy-plugin",
         type=Path,
-        default=repository / "src/th06_rl/policies/adaptive.py",
+        required=True,
+        help="explicit frozen policy plug-in; there is no implicit gameplay policy",
     )
-    parser.add_argument("--policy-state", type=Path)
+    parser.add_argument(
+        "--policy-state",
+        type=Path,
+        required=True,
+        help="explicit immutable policy-state artifact",
+    )
     parser.add_argument(
         "--policy-scorer-library",
         type=Path,
@@ -319,9 +325,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--immutable-policy",
         action="store_true",
+        required=True,
         help=(
             "copy the declared policy state into the run artifact, disable "
-            "learning/checkpoint writes, and assert before/after SHA equality"
+            "all online learning, and assert before/after SHA equality"
         ),
     )
     parser.add_argument(
@@ -365,10 +372,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--exploration-rate",
         type=float,
-        default=0.03,
+        default=0.0,
         help=(
-            "adaptive-policy exploration probability; use 0 only for an "
-            "explicit frozen-action-selection evaluation"
+            "retired controller-level knob retained for old runner commands; "
+            "must be 0 because exploration belongs to the frozen policy state"
         ),
     )
     parser.add_argument(
@@ -404,19 +411,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.seconds < 0:
         parser.error("--seconds cannot be negative")
-    if not 0.0 <= args.exploration_rate <= 1.0:
-        parser.error("--exploration-rate must be in [0, 1]")
-    if args.immutable_policy and args.exploration_rate != 0.0:
-        parser.error("--immutable-policy requires --exploration-rate 0")
+    if args.exploration_rate != 0.0:
+        parser.error(
+            "controller-level exploration is retired; encode predeclared "
+            "propensities in the immutable policy state"
+        )
     if args.first_failure_corpus_root is not None:
         if args.start_route:
             parser.error("first-failure corpus collection currently requires Practice")
         if args.seconds != 0.0:
             parser.error("first-failure corpus collection requires --seconds 0")
-        if not args.immutable_policy:
-            parser.error(
-                "first-failure corpus collection requires --immutable-policy"
-            )
     corpus_modes = sum(
         value is not None
         for value in (
@@ -432,17 +436,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error("complete-Stage training corpus currently requires Practice")
         if args.seconds != 0.0:
             parser.error("complete-Stage training corpus requires --seconds 0")
-        if not args.immutable_policy:
-            parser.error(
-                "complete-Stage training corpus requires --immutable-policy"
-            )
     if args.option_smoke_corpus_root is not None:
         if args.start_route:
             parser.error("option smoke currently requires Practice")
         if args.seconds <= 0.0:
             parser.error("option smoke requires a positive --seconds limit")
-        if not args.immutable_policy:
-            parser.error("option smoke requires --immutable-policy")
         if args.diagnostic_rng_seed is None:
             parser.error("option smoke requires --diagnostic-rng-seed")
     if (
@@ -506,13 +504,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                 else f"wine-retail-stage{args.practice_stage}-{timestamp}"
             )
         )
-    if args.policy_state is None:
-        label = (
-            f"{args.difficulty}_reimu_a_route"
-            if args.start_route
-            else f"{args.difficulty}_reimu_a_stage{args.practice_stage}"
-        )
-        args.policy_state = repository / f"artifacts/policy/{label}.json"
     args.repository = repository
     return args
 
@@ -630,13 +621,12 @@ def run(args: argparse.Namespace) -> int:
             raise RuntimeError(
                 f"required offline scorer is absent: {policy_scorer_library}"
             )
-        if args.immutable_policy:
-            if not policy_state.is_file():
-                raise RuntimeError(
-                    "immutable Wine evaluation requires an existing policy state"
-                )
-            controller_policy_state = artifact_dir / "policy-state-input.json"
-            shutil.copy2(policy_state, controller_policy_state)
+        if not policy_state.is_file():
+            raise RuntimeError(
+                "immutable Wine evaluation requires an existing policy state"
+            )
+        controller_policy_state = artifact_dir / "policy-state-input.json"
+        shutil.copy2(policy_state, controller_policy_state)
         policy_state_sha256_before = (
             _sha256(policy_state) if policy_state.is_file() else None
         )
@@ -735,7 +725,7 @@ def run(args: argparse.Namespace) -> int:
                 "MESA_GLTHREAD": "false",
                 # TH06 and the embeddable controller do not require .NET or
                 # MSHTML. Disable Wine's interactive Mono/Gecko installers so
-                # a new headless prefix cannot hang on an unseen dialog.
+                # a new isolated retail prefix cannot hang on an unseen dialog.
                 "WINEDLLOVERRIDES": "mscoree,mshtml=",
             }
         )
@@ -778,7 +768,7 @@ def run(args: argparse.Namespace) -> int:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            prefix_marker.write_text("wine-11.0 headless retail\n", encoding="utf-8")
+            prefix_marker.write_text("wine-11.0 isolated retail\n", encoding="utf-8")
 
         game_command = [str(args.wine), f"./{RETAIL_EXECUTABLE}"]
         game_priority_path = artifact_dir / "game-priority.json"
@@ -902,8 +892,7 @@ def run(args: argparse.Namespace) -> int:
         controller.extend(
             ("--policy-state", _windows_path(controller_policy_state))
         )
-        if args.immutable_policy:
-            controller.append("--immutable-policy")
+        controller.append("--immutable-policy")
         report["controller_command"] = controller
         controller_host_command = controller
         if args.controller_nice is not None:
@@ -928,17 +917,16 @@ def run(args: argparse.Namespace) -> int:
             check=False,
         )
         report["controller_returncode"] = result.returncode
-        if args.immutable_policy:
-            source_after = _sha256(policy_state) if policy_state.is_file() else None
-            controller_after = (
-                _sha256(controller_policy_state)
-                if controller_policy_state.is_file()
-                else None
-            )
-            if source_after != policy_state_sha256_before:
-                raise RuntimeError("immutable source policy state changed during run")
-            if controller_after != controller_policy_state_sha256_before:
-                raise RuntimeError("immutable evaluation policy state changed during run")
+        source_after = _sha256(policy_state) if policy_state.is_file() else None
+        controller_after = (
+            _sha256(controller_policy_state)
+            if controller_policy_state.is_file()
+            else None
+        )
+        if source_after != policy_state_sha256_before:
+            raise RuntimeError("immutable source policy state changed during run")
+        if controller_after != controller_policy_state_sha256_before:
+            raise RuntimeError("immutable evaluation policy state changed during run")
         return result.returncode
     except BaseException as error:
         report["error"] = f"{type(error).__name__}: {error}"
@@ -981,8 +969,7 @@ def run(args: argparse.Namespace) -> int:
             else None
         )
         report["immutable_policy_state_equal"] = (
-            args.immutable_policy
-            and report.get("policy_state_sha256_after")
+            report.get("policy_state_sha256_after")
             == policy_state_sha256_before
             and report.get("controller_policy_state_sha256_after")
             == controller_policy_state_sha256_before
