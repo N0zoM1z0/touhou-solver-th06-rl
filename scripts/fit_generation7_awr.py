@@ -35,19 +35,26 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _calibrated(
-    left: dict[str, object],
-    right: dict[str, object],
+def _paired_difference_calibrated(
+    difference: dict[str, object],
     *,
     standard_errors: float,
 ) -> bool:
-    combined_standard_error = math.sqrt(
-        float(left["episode_cluster_standard_error"]) ** 2
-        + float(right["episode_cluster_standard_error"]) ** 2
+    return abs(float(difference["episode_equal_mean"])) <= (
+        standard_errors
+        * float(difference["episode_cluster_standard_error"])
     )
-    return abs(
-        float(left["episode_equal_mean"]) - float(right["episode_equal_mean"])
-    ) <= standard_errors * combined_standard_error
+
+
+def _unit_mean_calibrated(
+    summary: dict[str, object],
+    *,
+    expected: float,
+    standard_errors: float,
+) -> bool:
+    return abs(float(summary["episode_equal_mean"]) - expected) <= (
+        standard_errors * float(summary["episode_cluster_standard_error"])
+    )
 
 
 def main() -> int:
@@ -81,7 +88,13 @@ def main() -> int:
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "16")
     os.environ.setdefault("MKL_NUM_THREADS", "16")
     contract = json.loads(args.contract.read_text(encoding="utf-8"))
-    if contract.get("wine_outcome_facing_authorized") is not False:
+    if (
+        contract.get("wine_outcome_facing_authorized") is not False
+        or contract.get("treatment_unit")
+        != "randomized-proposal-assignment-intention-to-treat"
+        or contract.get("post_assignment_native_revalidation")
+        != "factual-deployment-kernel-not-a-filter"
+    ):
         raise ValueError("proper AWR fit cannot authorize Wine")
     _registry, all_entries = load_wine_corpus_registry(
         args.registry, repository=REPOSITORY
@@ -149,6 +162,8 @@ def main() -> int:
         for fold in crossfit["fold_reports"]
         for values in fold["sequential_dr_cumulative_weights"].values()
     )
+    calibration = crossfit["paired_calibration_differences"]
+    propensity_calibration = crossfit["proposal_propensity_calibration"]
     signs = tuple(
         float(crossfit["estimates"][name]["episode_equal_mean"])
         for name in (
@@ -159,6 +174,22 @@ def main() -> int:
         )
     )
     gates = {
+        "proposal_propensity_calibration": (
+            _unit_mean_calibrated(
+                propensity_calibration["aggregate"],
+                expected=1.0,
+                standard_errors=calibration_standard_errors,
+            )
+            and all(
+                _unit_mean_calibrated(
+                    summary,
+                    expected=1.0,
+                    standard_errors=calibration_standard_errors,
+                )
+                for summary in propensity_calibration["strata"].values()
+            )
+        ),
+        "fixed_physical_time_or_semi_markov_value": False,
         "objective_finite_nonnegative": all(
             all(
                 row["objective"] >= 0.0
@@ -182,19 +213,16 @@ def main() -> int:
             all(value < 0.0 for value in signs)
             or all(value > 0.0 for value in signs)
         ),
-        "one_step_direct_dr_calibration": _calibrated(
-            crossfit["estimates"]["one_step_direct"],
-            crossfit["estimates"]["one_step_dr"],
+        "one_step_direct_dr_calibration": _paired_difference_calibrated(
+            calibration["one_step_direct_minus_dr"],
             standard_errors=calibration_standard_errors,
         ),
-        "one_step_ips_dr_calibration": _calibrated(
-            crossfit["estimates"]["one_step_ips"],
-            crossfit["estimates"]["one_step_dr"],
+        "one_step_ips_dr_calibration": _paired_difference_calibrated(
+            calibration["one_step_ips_minus_dr"],
             standard_errors=calibration_standard_errors,
         ),
-        "one_step_fqe_dr_calibration": _calibrated(
-            crossfit["estimates"]["one_step_fqe"],
-            crossfit["estimates"]["one_step_dr"],
+        "one_step_fqe_dr_calibration": _paired_difference_calibrated(
+            calibration["one_step_fqe_minus_dr"],
             standard_errors=calibration_standard_errors,
         ),
         "exact_sequential_fqe_dr_direction_agreement": (
@@ -207,9 +235,8 @@ def main() -> int:
                 float(crossfit["estimates"]["sequential_dr"]["episode_equal_mean"]),
             )
         ),
-        "exact_sequential_fqe_dr_calibration": _calibrated(
-            crossfit["estimates"]["sequential_fqe"],
-            crossfit["estimates"]["sequential_dr"],
+        "exact_sequential_fqe_dr_calibration": _paired_difference_calibrated(
+            calibration["sequential_fqe_minus_dr"],
             standard_errors=calibration_standard_errors,
         ),
         "exact_sequential_dr_support": (
@@ -229,7 +256,7 @@ def main() -> int:
         ),
     }
     report = {
-        "schema": "generation7-proper-awr-fit-report-v1",
+        "schema": "generation7-proper-awr-fit-report-v2",
         "evidence_eligible": False,
         "wine_outcome_facing_authorized": False,
         "registry_sha256": _sha256(args.registry),

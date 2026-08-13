@@ -1,4 +1,4 @@
-"""Learner-neutral factual semi-Markov options from immutable Wine rows."""
+"""Learner-neutral proposal-level ITT options from immutable Wine rows."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 from typing import Iterable
 
+from ..actions import ACTION_NAMES
 from ..learning_features import tree_candidate_vector
 from ..hazard_representation import (
     HAZARD_PRIMITIVE_FEATURE_NAMES,
@@ -46,7 +47,9 @@ class FactualOption:
     option_index: int
     sequence: int
     frame: int
-    action: str
+    proposal_action: str
+    boundary_executed_action: str
+    complied: bool
     baseline_action: str
     legal_actions: tuple[str, ...]
     behavior_probabilities: tuple[float, ...]
@@ -67,7 +70,10 @@ class FactualOption:
             or self.option_index < 0
             or self.sequence < 0
             or self.frame < 0
-            or self.action not in self.legal_actions
+            or self.proposal_action not in self.legal_actions
+            or self.boundary_executed_action not in ACTION_NAMES
+            or self.complied
+            != (self.proposal_action == self.boundary_executed_action)
             or self.baseline_action not in self.legal_actions
             or len(self.behavior_probabilities) != count
             or len(self.candidate_features) != count
@@ -90,7 +96,9 @@ class FactualOption:
             )
             or not math.isclose(
                 self.factual_probability,
-                self.behavior_probabilities[self.legal_actions.index(self.action)],
+                self.behavior_probabilities[
+                    self.legal_actions.index(self.proposal_action)
+                ],
                 rel_tol=1e-9,
                 abs_tol=1e-12,
             )
@@ -101,7 +109,8 @@ class FactualOption:
 
     @property
     def factual_index(self) -> int:
-        return self.legal_actions.index(self.action)
+        """Index of the randomized proposal, not post-revalidation movement."""
+        return self.legal_actions.index(self.proposal_action)
 
     @property
     def baseline_index(self) -> int:
@@ -151,7 +160,9 @@ class _PendingOption:
     option_id: str
     sequence: int
     frame: int
-    action: str
+    proposal_action: str
+    boundary_executed_action: str
+    complied: bool
     baseline: str
     legal: tuple[str, ...]
     probabilities: tuple[float, ...]
@@ -292,7 +303,13 @@ def aggregate_factual_episode(
     manifest_hits: int,
     reconstructible_propensity: bool,
 ) -> FactualEpisode:
-    """Aggregate only executed option assignments and conserve every HIT."""
+    """Aggregate every randomized proposal and its factual downstream interval.
+
+    The treatment is assignment (intention-to-treat), not post-assignment
+    compliance. Native revalidation/fallback is part of the factual outcome.
+    Filtering on ``executed_action == intent`` would condition on an
+    action-dependent post-treatment event and invalidate the logged propensity.
+    """
     completed: list[_PendingOption] = []
     current: _PendingOption | None = None
     pre_option_hits = 0
@@ -313,25 +330,27 @@ def aggregate_factual_episode(
         physical_hit_rows += hit_cost
         option_id = str(option.get("option_id", "")) if option else ""
         boundary = bool(option and option.get("boundary") is True)
-        action = str(option.get("intent", "")) if option else ""
-        executed = row.get("executed_action")
-        if option is not None and (not option_id or not action):
+        proposal_action = str(option.get("intent", "")) if option else ""
+        executed_action = str(row.get("executed_action", ""))
+        if option is not None and (not option_id or not proposal_action):
             raise ValueError("option trace has no identity/intent")
 
-        if option is not None and executed != action:
+        if option is not None and executed_action != proposal_action:
             if (
                 option.get("termination_reason") not in NONEXECUTED_TERMINATIONS
                 or row.get("learning_eligible") is not False
             ):
                 raise ValueError("unexecuted option is not explicitly rejected")
-            if current is None:
-                pre_option_hits += hit_cost
-            else:
+            if not boundary:
+                if current is None or option_id != current.option_id:
+                    raise ValueError(
+                        "unexecuted continuation escaped its proposal boundary"
+                    )
                 current.hit_cost += hit_cost
                 current.physical_elapsed += int(outcome.get("elapsed_frames", 0))
                 if current.termination is None:
-                    current.termination = "publication-rejected"
-            continue
+                    current.termination = str(option.get("termination_reason"))
+                continue
 
         if boundary:
             if current is not None:
@@ -349,17 +368,18 @@ def aggregate_factual_episode(
             if (
                 not legal
                 or len(set(legal)) != len(legal)
-                or action not in legal
+                or proposal_action not in legal
                 or baseline not in legal
+                or executed_action not in ACTION_NAMES
             ):
-                raise ValueError("factual action/baseline escaped native-safe set")
+                raise ValueError("proposal/fallback action contract is invalid")
             probabilities = _behavior_probabilities(
                 row,
                 option,
                 legal,
                 reconstructible=reconstructible_propensity,
             )
-            factual_probability = probabilities[legal.index(action)]
+            factual_probability = probabilities[legal.index(proposal_action)]
             if (
                 not math.isclose(
                     float(option.get("boundary_probability", 0.0)),
@@ -383,7 +403,9 @@ def aggregate_factual_episode(
                 option_id=option_id,
                 sequence=int(row.get("sequence", -1)),
                 frame=_physical_frame(row.get("snapshot_ref")),
-                action=action,
+                proposal_action=proposal_action,
+                boundary_executed_action=executed_action,
+                complied=executed_action == proposal_action,
                 baseline=baseline,
                 legal=legal,
                 probabilities=probabilities,
@@ -396,8 +418,8 @@ def aggregate_factual_episode(
         elif option is not None:
             if current is None or option_id != current.option_id:
                 raise ValueError("option continuation escaped its factual boundary")
-            if action != current.action:
-                raise ValueError("option intent changed during treatment")
+            if proposal_action != current.proposal_action:
+                raise ValueError("proposal intent changed during treatment")
 
         if current is None:
             pre_option_hits += hit_cost
@@ -437,7 +459,9 @@ def aggregate_factual_episode(
             option_index=index,
             sequence=item.sequence,
             frame=item.frame,
-            action=item.action,
+            proposal_action=item.proposal_action,
+            boundary_executed_action=item.boundary_executed_action,
+            complied=item.complied,
             baseline_action=item.baseline,
             legal_actions=item.legal,
             behavior_probabilities=item.probabilities,

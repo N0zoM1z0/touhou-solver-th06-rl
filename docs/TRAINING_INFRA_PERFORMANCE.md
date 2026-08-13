@@ -609,7 +609,8 @@ and completed in about 18 minutes wall time, with scorer p95 values 3.1006 and
 on both. The scheduler repair therefore removes the observed blocker without
 accelerating game time or consuming more than the 0--31 CPU allocation.
 
-The following all-registry cross-fit loaded 56 episodes / 167,250 options and
+The following historical all-registry cross-fit loaded 56 episodes / 167,250
+publication-compliant options and
 completed in 685.42 seconds. Five folds ran as five processes and used roughly
 12--15 cores in aggregate. The subsequent seven-member production fit is the
 new dominant offline cost: after 40 minutes it was still actively computing,
@@ -620,6 +621,11 @@ the next general performance audit should profile production actor fitting,
 especially repeated full-dataset augmentation/training and thread/memory
 scaling. It must preserve model math and output before any optimization is
 accepted.
+
+Generation 7 later established that this compliance-conditioned view is not a
+valid known-propensity causal dataset. The profile remains valid as a record of
+that retired learner's compute cost, not as a benchmark count for the corrected
+550,684-assignment ITT view.
 
 ## 2026-08-13: decision-level float32 serving
 
@@ -659,7 +665,8 @@ oversubscription after a learner change. A regression test proves panel
 reduction is invariant to completion order and locks the default at 16 workers
 under the repository-wide 32-CPU cap.
 
-On the full 56-episode / 167,250-option / 2,415,808-candidate workload, the
+On that historical 56-episode / 167,250-option / 2,415,808-candidate workload,
+the
 parallel float64 serving smoke completed both the Linux differential and 320
 scalar envelope cases in 106.5 seconds. The main corpus pass finished in about
 83 seconds. The frozen successor allows a 180-second wall-clock ceiling, so

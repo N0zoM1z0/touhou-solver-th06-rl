@@ -72,6 +72,9 @@ def test_factual_options_use_only_decision_features_and_conserve_hits() -> None:
     assert episode.options[1].candidate_features[0][-1] > 0.0
     assert episode.options[0].behavior_probabilities == (0.8, 0.2)
     assert episode.options[0].causal_context_features
+    assert episode.options[0].proposal_action == "up"
+    assert episode.options[0].boundary_executed_action == "up"
+    assert episode.options[0].complied is True
 
 
 def test_v9_propensity_is_reconstructed_from_frozen_behavior_contract() -> None:
@@ -90,3 +93,27 @@ def test_v9_propensity_is_reconstructed_from_frozen_behavior_contract() -> None:
         reconstructible_propensity=True,
     )
     assert episode.options[0].behavior_probabilities == pytest.approx((0.95, 0.05))
+
+
+def test_rejected_randomized_proposal_is_retained_as_intention_to_treat() -> None:
+    rejected = _boundary(0, 100, hit=True)
+    rejected["executed_action"] = "stay"
+    rejected["published_action"] = "stay"
+    rejected["learning_eligible"] = False
+    rejected["option"]["termination_reason"] = "publication-rejected"
+    episode = aggregate_factual_episode(
+        (rejected, _boundary(1, 108)),
+        episode_id="episode",
+        source_id="source",
+        transition_schema="transition-v10",
+        stage=6,
+        manifest_hits=1,
+        reconstructible_propensity=False,
+    )
+    assert len(episode.options) == 2
+    proposal = episode.options[0]
+    assert proposal.proposal_action == "up"
+    assert proposal.boundary_executed_action == "stay"
+    assert proposal.complied is False
+    assert proposal.factual_probability == 0.2
+    assert proposal.hit_cost == 1

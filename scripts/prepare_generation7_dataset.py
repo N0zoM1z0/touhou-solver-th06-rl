@@ -68,7 +68,13 @@ def main() -> int:
     if not 1 <= args.workers <= MAX_WORKERS:
         parser.error("workers must be in 1..16")
     contract = json.loads(args.contract.read_text(encoding="utf-8"))
-    if contract.get("wine_outcome_facing_authorized") is not False:
+    if (
+        contract.get("wine_outcome_facing_authorized") is not False
+        or contract.get("treatment_unit")
+        != "randomized-proposal-assignment-intention-to-treat"
+        or contract.get("post_assignment_native_revalidation")
+        != "factual-deployment-kernel-not-a-filter"
+    ):
         raise ValueError("dataset preparation cannot be outcome-facing")
     _registry, all_entries = load_wine_corpus_registry(
         args.registry, repository=REPOSITORY
@@ -83,10 +89,16 @@ def main() -> int:
             ((entry, args.cache_root) for entry in entries),
         ))
     report = {
-        "schema": "generation7-factual-dataset-report-v2",
+        "schema": "generation7-factual-proposal-itt-dataset-report-v3",
         "evidence_eligible": False,
         "episodes": len(rows),
         "options": sum(int(row[2]["options"]) for row in rows),
+        "proposal_assignments": sum(
+            int(row[2]["proposal_assignments"]) for row in rows
+        ),
+        "complied_assignments": sum(
+            int(row[2]["complied_assignments"]) for row in rows
+        ),
         "candidate_rows": sum(int(row[2]["candidate_rows"]) for row in rows),
         "feature_count": len(load_episode_arrays(
             prepare_episode_arrays(

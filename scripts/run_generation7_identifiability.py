@@ -23,6 +23,7 @@ from th06_rl.actions import ACTION_NAMES  # noqa: E402
 from th06_rl.generation7.effect_diagnostics import (  # noqa: E402
     action_specific_ipw_effect,
     binary_ipw_effect,
+    binary_ipw_exposure_diagnostics,
     bootstrap_sign_stability,
     effect_episode,
     permutation_null,
@@ -41,8 +42,8 @@ from th06_rl.wine_corpus_registry import (  # noqa: E402
 )
 
 
-SCHEMA = "generation7-identifiability-report-v1"
-CACHE_SCHEMA = "generation7-effect-episode-cache-v1"
+SCHEMA = "generation7-identifiability-report-v2"
+CACHE_SCHEMA = "generation7-effect-episode-cache-v2"
 MAX_WORKERS = 16
 
 
@@ -63,6 +64,7 @@ def _cache_identity(registry: Path, contract: Path) -> str:
         registry,
         contract,
         REPOSITORY / "src/th06_rl/generation7/factual_options.py",
+        REPOSITORY / "src/th06_rl/generation7/effect_diagnostics.py",
         REPOSITORY / "src/th06_rl/generation7/feature_contract.py",
         REPOSITORY / "src/th06_rl/hazard_representation.py",
         REPOSITORY / "src/th06_rl/wine_transitions.py",
@@ -169,6 +171,10 @@ def main() -> int:
         contract.get("schema") != "generation7-offline-contract-v1"
         or contract.get("wine_outcome_facing_authorized") is not False
         or contract.get("new_collection_authorized") is not False
+        or contract.get("treatment_unit")
+        != "randomized-proposal-assignment-intention-to-treat"
+        or contract.get("post_assignment_native_revalidation")
+        != "factual-deployment-kernel-not-a-filter"
     ):
         raise ValueError("Generation-7 offline contract drifted")
     _registry, all_entries = load_wine_corpus_registry(
@@ -191,6 +197,7 @@ def main() -> int:
         str(horizon): binary_ipw_effect(episodes, horizon=horizon)
         for horizon in horizons
     }
+    exposure = binary_ipw_exposure_diagnostics(episodes)
     seeds = contract["seeds"]
     bootstrap = bootstrap_sign_stability(
         episodes,
@@ -243,6 +250,7 @@ def main() -> int:
         "factual_action_permutation_null": nulls["action"]["passes"],
         "reward_suffix_permutation_null": nulls["reward-suffix"]["passes"],
         "synthetic_delayed_effect": synthetic["passes"],
+        "fixed_physical_time_or_semi_markov_value": False,
         "episode_bootstrap_sign_stability": (
             float(bootstrap["same_sign_fraction"]) >= 0.80
         ),
@@ -259,6 +267,7 @@ def main() -> int:
         "workers": args.workers,
         "counts": dict(counts),
         "binary_ipw": binary,
+        "proposal_exposure_diagnostics": exposure,
         "bootstrap": bootstrap,
         "permutation_nulls": nulls,
         "synthetic_delayed_effect": synthetic,

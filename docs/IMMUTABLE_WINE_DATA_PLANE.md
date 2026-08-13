@@ -79,8 +79,11 @@ natural-RNG transition-v10 Generation-6-behavior runs. Version 9 has a complete
 propensity distribution reconstructible from its frozen randomized behavior
 contract; version 10 records the complete vector directly. Both have factual
 option successors, native-safe candidate sets, and exact Stage HIT
-conservation. The current sequential view contains 167,250 factual options;
-that measured count is an audit snapshot, not a hard-coded selection rule.
+conservation. The learner-neutral proposal-level ITT view contains 550,684
+randomized assignments; 167,250 (30.37%) passed fresh native revalidation
+without fallback. Both proposal and executed action are factual fields. A
+learner must not condition admission on that post-assignment compliance event.
+These measured counts are an audit snapshot, not a hard-coded selection rule.
 
 The 12 transition-v6 episodes used deterministic behavior and cannot identify
 a randomized treatment effect. They remain valuable for self-supervised hazard

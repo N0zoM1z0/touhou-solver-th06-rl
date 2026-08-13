@@ -202,6 +202,79 @@ def _cluster_summary(values: dict[str, list[float]]) -> dict[str, float | int]:
     }
 
 
+def _paired_cluster_difference(left, right):
+    if set(left) != set(right):
+        raise ValueError("paired estimators cover different episodes")
+    differences = {}
+    for episode_id in left:
+        if len(left[episode_id]) != len(right[episode_id]):
+            raise ValueError("paired estimators cover different option rows")
+        differences[episode_id] = [
+            float(left_value - right_value)
+            for left_value, right_value in zip(
+                left[episode_id], right[episode_id], strict=True
+            )
+        ]
+    return _cluster_summary(differences)
+
+
+def _importance_weight_summary(values) -> dict[str, float | int]:
+    import numpy as np
+
+    rows = np.asarray(values, dtype=np.float64)
+    if not len(rows) or np.any(~np.isfinite(rows)) or np.any(rows < 0.0):
+        raise ValueError("importance weights are invalid")
+    square_sum = float(rows @ rows)
+    total = float(rows.sum())
+    return {
+        "count": len(rows),
+        "mean": float(rows.mean()),
+        "maximum": float(rows.max()),
+        "effective_sample_size": (
+            total * total / square_sum if square_sum > 0.0 else 0.0
+        ),
+    }
+
+
+def proposal_propensity_calibration(
+    episodes: tuple[CompactEpisode, ...],
+    *,
+    reference_epsilon: float,
+) -> dict[str, object]:
+    """Check the randomized proposal law before fitting any outcome model.
+
+    Under a correct logged propensity, the importance ratio from the behavior
+    proposal law to any fixed supported policy has expectation one.  The
+    shared reference is used here because it is defined for every native-safe
+    candidate set.  This gate would expose the old post-assignment compliance
+    filter without looking at rewards.
+    """
+    import numpy as np
+
+    if not episodes or not 0.0 < reference_epsilon <= 1.0:
+        raise ValueError("proposal propensity calibration contract is invalid")
+    values: dict[str, list[float]] = {}
+    for episode in episodes:
+        sizes = np.diff(episode.offsets).astype(np.float64)
+        factual = np.asarray(episode.factual_positions, dtype=np.int64)
+        baseline = np.asarray(episode.baseline_positions, dtype=np.int64)
+        factual_rows = episode.offsets[:-1] + factual
+        reference = (
+            reference_epsilon / sizes
+            + (1.0 - reference_epsilon) * (factual == baseline)
+        )
+        ratios = reference / episode.behavior_probabilities[factual_rows]
+        if np.any(~np.isfinite(ratios)) or np.any(ratios < 0.0):
+            raise ValueError("proposal propensity ratio is invalid")
+        values[episode.episode_id] = ratios.tolist()
+    return {
+        "policy": "incumbent-uniform-reference",
+        "expected_mean": 1.0,
+        "aggregate": _cluster_summary(values),
+        "strata": _stratified_summaries(episodes, values),
+    }
+
+
 def _stratified_summaries(episodes, values):
     result = {}
     strata = {
@@ -243,8 +316,9 @@ def _expected_policy_features(
 ):
     import numpy as np
 
+    q_candidate_rows = effect.q_candidate_rows(episode, compact_state)
     policy_rows = np.empty(
-        (episode.option_count, episode.features.shape[1]), dtype=np.float64
+        (episode.option_count, q_candidate_rows.shape[1]), dtype=np.float64
     )
     reference_rows = np.empty_like(policy_rows)
     policy_probabilities = np.empty(len(episode.features), dtype=np.float64)
@@ -278,8 +352,8 @@ def _expected_policy_features(
             baseline_action,
             epsilon=config.reference_epsilon,
         ))
-        policy_rows[option] = pi @ features
-        reference_rows[option] = reference @ features
+        policy_rows[option] = pi @ q_candidate_rows[start:stop]
+        reference_rows[option] = reference @ q_candidate_rows[start:stop]
         policy_probabilities[start:stop] = pi
         reference_probability_rows[start:stop] = reference
     return (
@@ -290,18 +364,18 @@ def _expected_policy_features(
     )
 
 
-def _behavior_expected_features(episode: CompactEpisode):
+def _expected_candidate_rows(episode: CompactEpisode, candidate_rows):
     import numpy as np
 
     rows = np.empty(
-        (episode.option_count, episode.features.shape[1]), dtype=np.float64
+        (episode.option_count, candidate_rows.shape[1]), dtype=np.float64
     )
     for option in range(episode.option_count):
         start = int(episode.offsets[option])
         stop = int(episode.offsets[option + 1])
         rows[option] = (
             episode.behavior_probabilities[start:stop]
-            @ episode.features[start:stop]
+            @ candidate_rows[start:stop]
         )
     return rows
 
@@ -338,6 +412,17 @@ class ContextualEffectModel:
             ), axis=1)
         return state
 
+    def nuisance_state_rows(self, episode: CompactEpisode, compact_state):
+        import numpy as np
+
+        state = np.asarray(compact_state, dtype=np.float32)
+        if self.representation == "richer_bilinear":
+            state = np.concatenate((
+                state,
+                np.asarray(episode.causal_context_features, dtype=np.float32),
+            ), axis=1)
+        return state
+
     def _rows(self, candidates, state_row):
         import numpy as np
 
@@ -358,6 +443,30 @@ class ContextualEffectModel:
 
     def predict_candidates(self, candidates, state_row):
         return self.estimator.predict(self._rows(candidates, state_row))
+
+    def q_candidate_rows(self, episode: CompactEpisode, compact_state):
+        """Return the Q design corresponding to this causal representation."""
+        import numpy as np
+
+        states = self.state_rows(episode, compact_state)
+        sizes = np.diff(episode.offsets).astype(np.int64)
+        groups = np.repeat(np.arange(episode.option_count), sizes)
+        base = np.asarray(episode.features, dtype=np.float32)
+        if self.representation == "action_only":
+            return base
+        core = base[:, _ACTION_CORE_INDICES]
+        interactions = np.einsum(
+            "ij,ik->ijk", states[groups], core
+        ).reshape(len(base), -1)
+        rows = np.concatenate((base, interactions), axis=1)
+        if self.representation == "richer_bilinear":
+            rows = np.concatenate((
+                rows,
+                np.asarray(
+                    episode.causal_context_features, dtype=np.float32
+                )[groups],
+            ), axis=1)
+        return rows
 
     def factual_baseline_predictions(self, episode: CompactEpisode, compact_state):
         import numpy as np
@@ -457,6 +566,9 @@ def crossfit_orthogonal_policy(
         temperature=config.policy_temperature,
         maximum_log_tilt=config.maximum_log_tilt,
     )
+    representation = ContextualEffectModel(
+        estimator=None, representation=config.effect_representation
+    )
     estimators = {
         name: defaultdict(list)
         for name in (
@@ -488,7 +600,14 @@ def crossfit_orthogonal_policy(
             index for index, fold in enumerate(folds) if fold == held_fold
         )
         train_states = np.concatenate(tuple(
-            _append_nuisance(compact[index][0], episodes[index], sources, stages)
+            _append_nuisance(
+                representation.nuisance_state_rows(
+                    episodes[index], compact[index][0]
+                ),
+                episodes[index],
+                sources,
+                stages,
+            )
             for index in train_indices
         ))
         train_targets = np.concatenate(tuple(
@@ -516,15 +635,27 @@ def crossfit_orthogonal_policy(
             config=config,
         )
         all_indices = (*train_indices, *held_indices)
+        q_candidate_rows = {
+            index: effect.q_candidate_rows(episodes[index], compact[index][0])
+            for index in all_indices
+        }
         factual_rows = {
             index: _append_nuisance(
-                compact[index][2], episodes[index], sources, stages
+                q_candidate_rows[index][
+                    episodes[index].offsets[:-1]
+                    + episodes[index].factual_positions
+                ],
+                episodes[index],
+                sources,
+                stages,
             )
             for index in all_indices
         }
         behavior_expected_rows = {
             index: _append_nuisance(
-                _behavior_expected_features(episodes[index]),
+                _expected_candidate_rows(
+                    episodes[index], q_candidate_rows[index]
+                ),
                 episodes[index],
                 sources,
                 stages,
@@ -573,12 +704,20 @@ def crossfit_orthogonal_policy(
                 estimators[name][episode_id].extend(values_)
         fold_direct = []
         fold_dr = []
+        fold_target_ratios = []
+        fold_reference_ratios = []
+        fold_contrast_weights = []
         maximum_absolute_effect_prediction = 0.0
 
         for index in held_indices:
             episode = episodes[index]
             states, centered, _factual, _actions, _factual_probability = compact[index]
-            state_rows = _append_nuisance(states, episode, sources, stages)
+            state_rows = _append_nuisance(
+                representation.nuisance_state_rows(episode, states),
+                episode,
+                sources,
+                stages,
+            )
             nuisance_prediction = nuisance.predict(state_rows)
             residual = episode.targets - nuisance_prediction
             nuisance_residuals[episode.episode_id] = residual
@@ -633,16 +772,18 @@ def crossfit_orthogonal_policy(
                 ))
                 target = float(episode.targets[option])
                 probability = float(mu[factual_position])
+                target_ratio = float(pi[factual_position] / probability)
+                reference_ratio = float(
+                    reference[factual_position] / probability
+                )
+                contrast_weight = target_ratio - reference_ratio
                 direct = float((pi - reference) @ q_values)
                 ips = float(
-                    (pi[factual_position] - reference[factual_position])
-                    / probability * target
+                    contrast_weight * target
                 )
                 dr = float(
                     direct
-                    + (pi[factual_position] - reference[factual_position])
-                    / probability
-                    * (target - q_values[factual_position])
+                    + contrast_weight * (target - q_values[factual_position])
                 )
                 estimators["one_step_direct"][episode.episode_id].append(direct)
                 estimators["one_step_ips"][episode.episode_id].append(ips)
@@ -655,6 +796,9 @@ def crossfit_orthogonal_policy(
                     ))
                 fold_direct.append(direct)
                 fold_dr.append(dr)
+                fold_target_ratios.append(target_ratio)
+                fold_reference_ratios.append(reference_ratio)
+                fold_contrast_weights.append(abs(contrast_weight))
                 proposal_mass.append(1.0 - pi[baseline_position])
                 for action, probability_value, reference_value in zip(
                     actions, pi, reference, strict=True
@@ -682,11 +826,18 @@ def crossfit_orthogonal_policy(
             "sequential_dr_cumulative_weights": fqe[
                 "cumulative_weight_diagnostics"
             ],
+            "one_step_importance_weights": {
+                "target": _importance_weight_summary(fold_target_ratios),
+                "reference": _importance_weight_summary(fold_reference_ratios),
+                "absolute_contrast": _importance_weight_summary(
+                    fold_contrast_weights
+                ),
+            },
         })
 
     total_mass = sum(distribution_mass.values())
     report = {
-        "schema": "generation7-orthogonal-direct-crossfit-v1",
+        "schema": "generation7-orthogonal-direct-crossfit-v2",
         "episode_groups": len(episodes),
         "options": sum(episode.option_count for episode in episodes),
         "folds": list(folds),
@@ -707,8 +858,26 @@ def crossfit_orthogonal_policy(
                 for action in ACTION_NAMES
             },
         },
+        "proposal_propensity_calibration": proposal_propensity_calibration(
+            episodes,
+            reference_epsilon=config.reference_epsilon,
+        ),
         "estimates": {
             name: _cluster_summary(rows) for name, rows in estimators.items()
+        },
+        "paired_calibration_differences": {
+            "one_step_direct_minus_dr": _paired_cluster_difference(
+                estimators["one_step_direct"], estimators["one_step_dr"]
+            ),
+            "one_step_ips_minus_dr": _paired_cluster_difference(
+                estimators["one_step_ips"], estimators["one_step_dr"]
+            ),
+            "one_step_fqe_minus_dr": _paired_cluster_difference(
+                estimators["one_step_fqe"], estimators["one_step_dr"]
+            ),
+            "sequential_fqe_minus_dr": _paired_cluster_difference(
+                estimators["sequential_fqe"], estimators["sequential_dr"]
+            ),
         },
         "strata": {
             name: _stratified_summaries(episodes, rows)
@@ -754,6 +923,34 @@ def orthogonal_randomization_nulls(
         observed_sum += centered.T @ values
         total += len(values)
     observed_norm = float(np.linalg.norm(observed_sum / total))
+    null_designs = {}
+    for episode in episodes:
+        sizes = np.diff(episode.offsets).astype(np.int64)
+        groups = np.repeat(np.arange(episode.option_count), sizes)
+        probabilities = np.zeros(
+            (episode.option_count, len(ACTION_NAMES)), dtype=np.float64
+        )
+        candidate_indices = np.full(
+            (episode.option_count, len(ACTION_NAMES)), -1, dtype=np.int64
+        )
+        flat = np.arange(len(episode.features), dtype=np.int64)
+        probabilities[groups, episode.action_indices] = (
+            episode.behavior_probabilities
+        )
+        candidate_indices[groups, episode.action_indices] = flat
+        cumulative = np.cumsum(probabilities, axis=1)
+        cumulative[:, -1] = 1.0
+        factual = episode.offsets[:-1] + episode.factual_positions
+        base_width = episode.features.shape[1]
+        base_centered = diagnostics["centered_features"][episode.episode_id][
+            :, :base_width
+        ]
+        expectation = episode.features[factual] - base_centered
+        null_designs[episode.episode_id] = (
+            cumulative,
+            candidate_indices,
+            expectation,
+        )
     action_norms = []
     reward_norms = []
     for _replicate in range(replicates):
@@ -767,23 +964,32 @@ def orthogonal_randomization_nulls(
                 int(generator.integers(1, len(values))) if len(values) > 1 else 0,
             )
             reward_sum += centered.T @ rotated
-            sampled = np.empty_like(centered)
-            for option in range(episode.option_count):
-                start = int(episode.offsets[option])
-                stop = int(episode.offsets[option + 1])
-                probabilities = episode.behavior_probabilities[start:stop]
-                rows = episode.features[start:stop].astype(np.float64, copy=False)
-                selected = int(generator.choice(len(rows), p=probabilities))
-                base = rows[selected] - probabilities @ rows
-                if diagnostics["effect_representation"] == "action_only":
-                    sampled[option] = base
-                else:
-                    state = diagnostics["effect_states"][episode.episode_id][option]
-                    interaction = np.outer(
-                        state, base[list(_ACTION_CORE_INDICES)]
-                    ).reshape(-1)
-                    sampled[option] = np.concatenate((base, interaction))
-            action_sum += sampled.T @ values
+            cumulative, candidate_indices, expectation = null_designs[
+                episode.episode_id
+            ]
+            uniforms = generator.random(episode.option_count)
+            sampled_actions = np.sum(
+                uniforms[:, None] > cumulative, axis=1
+            )
+            selected = candidate_indices[
+                np.arange(episode.option_count), sampled_actions
+            ]
+            if np.any(selected < 0):
+                raise RuntimeError("propensity null selected an unavailable action")
+            sampled_base = (
+                episode.features[selected].astype(np.float64, copy=False)
+                - expectation
+            )
+            base_width = episode.features.shape[1]
+            action_sum[:base_width] += sampled_base.T @ values
+            if diagnostics["effect_representation"] != "action_only":
+                state = diagnostics["effect_states"][episode.episode_id]
+                weighted_core = (
+                    sampled_base[:, list(_ACTION_CORE_INDICES)]
+                    * values[:, None]
+                )
+                interaction = (state.T @ weighted_core).reshape(-1)
+                action_sum[base_width:] += interaction
         action_norms.append(float(np.linalg.norm(action_sum / total)))
         reward_norms.append(float(np.linalg.norm(reward_sum / total)))
     return {

@@ -1,140 +1,147 @@
-# Generation-7 offline progress and stop decision
+# Generation-7 offline progress and corrected stop decision
 
 Date: 2026-08-13
 
-Status: G7-A implemented; G7-B stopped at failed identifiability/OPE gates;
-no Wine outcome-facing work or new collection authorized
+Status: G7-A repaired; G7-B has exploratory short-horizon signal but fails
+matched OPE calibration; no Wine outcome-facing work or new collection
+authorized
 
 ## Outcome
 
-Generation 7 repaired the causal/deployment contract and found reproducible,
-structured action-effect signal in the existing immutable corpus. It did **not**
-establish an identifiable policy improvement. Direct, IPS, matched one-step
-FQE, and DR do not agree closely enough, and 32-option sequential importance
-weights have unusable support. Canonical IQL and G7-C collection therefore do
-not start from this result.
+Generation 7 is not rejected as a research method. Its falsification gates
+found a causal dataset bug inherited from the earlier learner path: the loader
+conditioned on whether a randomized proposal survived fresh native
+revalidation. The corrected unit is the randomized proposal assignment
+(intention-to-treat, ITT). Native revalidation/fallback is part of the factual
+deployed transition, not a row-selection rule.
 
-All numbers below are diagnostics from 56 complete physical episodes (167,250
-factual options, 52,448 factual nonbaseline assignments, and 2,044 manifest
-HITs). They are not gameplay evidence and do not authorize deployment.
+The correction invalidates every earlier Generation-7 numeric result based on
+167,250 accepted options. On 550,684 factual ITT assignments, raw long-horizon
+signal disappears. A cross-fitted horizon-1 action-only learner finds a very
+small structured score, but IPS, FQE, and DR do not calibrate. This exact policy
+has not established improvement and cannot proceed to AWR/IQL promotion, Wine
+evaluation, or new collection.
 
-## What G7-A now enforces
+## Root cause: post-assignment compliance conditioning
 
-- Every feature has decision/after-action/episode-end/privileged availability
-  metadata and allowed-use metadata. Unknown or unavailable actor features
-  fail closed.
-- The three final-episode-length features are absent. The only time-like actor
-  feature is causal `log1p(option_index)`.
-- Physical HIT is the only cost, `gamma=1`, terminal value is zero, and tests
-  conserve HITs across factual option aggregation.
-- The actor objective is nonnegative weighted conditional log likelihood plus
-  reference KL and L2. Extreme factual logits cannot drive the objective to
-  minus infinity.
-- `ResidualStochasticPolicy` is the complete bounded action distribution. It
-  separates native-safe, statistically-supported, and forecast-risk masks.
-  There is no proposal plus second thinning sampler.
-- The common reference is a 0.05 incumbent/uniform mixture over the current
-  native-safe set.
-- Learner-neutral, hash-bound v2 arrays keep the original corpus independent
-  from any learner. They include compact candidate geometry and separately
-  stored decision-time causal history/hazard summaries.
-- All splits and uncertainty summaries use complete physical episodes.
+The behavior policy randomized a proposal from the decision-time native-safe
+set. A fresh publication-time native check could reject it and execute a
+fallback. The old loader retained only rows where proposal and executed action
+matched while continuing to use the proposal propensity. Rejection is strongly
+action-dependent, so this destroyed the randomized treatment law.
 
-## Raw randomized diagnostic
+The corrected v3 learner-neutral arrays preserve proposal, boundary executed
+action, compliance, propensity, decision-time state, and factual downstream
+outcome separately:
 
-The untreated-versus-nonbaseline IPW smoke was negative at every predeclared
-horizon; at 32 options its episode-equal estimate was `-0.14515` with clustered
-SE `0.02560`. Source/stage strata had the same sign. This is not a causal policy
-value result: both raw nulls failed severely (action-null z approximately
-`-27.9`; reward-suffix-null z approximately `-22.4`). State/time imbalance can
-produce almost the same number. The synthetic delayed-effect control passed.
+| behavior source | proposals | complied | compliance | reference/behavior IPW mean |
+| --- | ---: | ---: | ---: | ---: |
+| audited natural | 113,189 | 24,172 | 21.36% | 0.99505 |
+| randomized v10 Stage 4 | 140,973 | 40,669 | 28.85% | 1.00143 |
+| randomized v10 Stage 6 | 169,631 | 54,408 | 32.07% | 0.99636 |
+| randomized v9 | 126,891 | 48,001 | 37.83% | 1.00058 |
+| **total** | **550,684** | **167,250** | **30.37%** | **0.99836** |
 
-This result justified orthogonal residualization; it did not justify a
-candidate.
+The episode-equal reference/behavior ratio is `0.99858` with clustered SE
+`0.00129`; every source and stage stratum is within two clustered SE of one.
+This outcome-free check would have exposed the old filtering before fitting a
+learner.
 
-## Exact-policy cross-fit result
+All 2,044 manifest HITs remain conserved across the 56 complete physical
+episodes. The arrays contain 7,896,535 current native-safe candidate rows and
+67 separately stored causal history/hazard features. The immutable corpus is
+unchanged.
 
-The final conservative action-only baseline used five episode folds and a
-bounded 0.05 residual policy. Negative differences mean fewer expected HITs
-than the shared reference.
+## Other bounded repairs
 
-| Matched estimand / estimator | episode-equal mean | clustered SE |
+- Richer causal state now enters nuisance fitting and FQE as well as effect
+  interactions. The previous richer-state comparison did not do this and is
+  invalidated.
+- Direct/IPS/FQE/DR calibration now uses paired per-episode differences, not
+  the overly conservative sum of independent estimator variances.
+- Factual-action null resampling respects each row's recorded propensity and
+  is vectorized. The orthogonal null keeps the same propensity-aware contract.
+- Predeclared horizons are 1, 2, 4, 8, 16, and 32. One-step and sequential
+  importance support have separate gates.
+- The deployable object is the stochastic proposal distribution composed with
+  the immutable native revalidation/fallback kernel. There is no second learned
+  or stochastic thinning sampler.
+
+## Corrected raw diagnostic
+
+The aggregate nonbaseline-proposal versus baseline-proposal IPW smoke is:
+
+| proposal horizon | episode-equal effect | clustered SE |
+| ---: | ---: | ---: |
+| 1 | -0.000538 | 0.000187 |
+| 2 | -0.000197 | 0.000275 |
+| 4 | +0.000256 | 0.000417 |
+| 8 | +0.000094 | 0.000530 |
+| 16 | +0.000429 | 0.000763 |
+| 32 | -0.000610 | 0.001229 |
+
+At horizon 32, the whole-episode bootstrap keeps the observed sign in only
+65.2% of replicates and its 95% interval crosses zero. The prior large negative
+effect (`-0.145`) was compliance-selection bias, not evidence that deviations
+improved play. Propensity-aware action and reward-suffix null diagnostics now
+remain centered, and the synthetic delayed-effect control passes.
+
+There is also an estimand mismatch at horizon 1. Nonbaseline assignment reduces
+the next-boundary duration by `0.2286` frames (clustered SE `0.0284`) and native
+compliance probability by `0.0624` (SE `0.0036`). Consequently, HIT per proposal
+is not a fixed-exposure gameplay value: a policy can change how soon the next
+proposal occurs. A rough IPW HIT-per-frame ratio remains negative, but a ratio
+diagnostic is not an identified incumbent-continuation Stage value. Future work
+must use a fixed physical-time outcome or a correctly specified semi-Markov
+full-value estimand before treating a short-horizon result as improvement.
+
+## Corrected horizon-1 cross-fit
+
+The action-only learner uses five whole-episode folds and compares its exact
+bounded proposal policy with the shared 0.05 incumbent/uniform reference.
+Negative values mean fewer predicted HITs:
+
+| matched estimator | episode-equal mean | clustered SE |
 | --- | ---: | ---: |
-| one-step direct | -0.0001704 | 0.0000041 |
-| one-step DR | -0.0001769 | 0.0000687 |
-| one-step IPS | -0.0012995 | 0.0001962 |
-| one-step behavior-FQE | -0.0000388 | 0.0000007 |
-| 32-option sequential FQE | -0.0014624 | 0.0000160 |
-| 32-option sequential DR | -4809.94 | 4591.69 |
+| one-step direct | -0.000003313 | 0.000000928 |
+| one-step DR | -0.000003473 | 0.000000997 |
+| one-step IPS | -0.000001835 | 0.000000568 |
+| one-step FQE | -0.000000518 | 0.000000053 |
+| horizon-1 sequential DR | -0.000001505 | 0.000000436 |
+| horizon-1 sequential FQE | -0.000000518 | 0.000000053 |
 
-The one-step direct and DR estimates agree, have the same sign, and pass the
-two-standard-error calibration check. IPS is roughly seven times the DR
-magnitude. Matched behavior-FQE is roughly one fifth of it. Both calibration
-gates fail.
+Direct minus DR is within one paired clustered SE and passes. IPS minus DR is
+about `3.03` SE, FQE minus DR about `3.08` SE, and sequential FQE minus DR
+about `2.47` SE; those gates fail. Horizon-1 overlap itself passes.
 
-Sequential DR is unusable rather than merely noisy. Across folds its minimum
-cumulative-weight ESS is about `32.5`, while the largest cumulative weight is
-about `1.27e9`. Its apparent calibration with sequential FQE is vacuous because
-the DR interval is enormous. The explicit support gate fails.
+Both orthogonal nulls reached the minimum possible exploratory p-value
+`1/21`. This suggests structured residual action signal, but the frozen
+contract requires 100 replicates and the failed OPE gates already prevent a
+positive claim. The direct direction is negative in every source and stage,
+although several action-specific directions still flip by stratum.
 
-The orthogonal action-randomization and reward-suffix nulls both passed at the
-minimum 20-replicate resolution used for exploration (`p=1/21`). The committed
-contract now requires 100 replicates before any future positive claim; the
-exploratory reports cannot satisfy that gate retroactively.
-
-The exact policy's one-step direct direction was negative in all four behavior
-sources and all three stages. All 18 actions had sufficient reporting strata;
-16 kept their aggregate direction in all six eligible source/stage strata.
-`down_left_fast` and `up_left` each flipped in one stratum. Maximum held-out
-effect prediction stayed below `1.41`, within the bound of 10.
-
-## State-sufficiency ablation
-
-Three predeclared effect representations used the same episodes, folds,
-propensities, policy bound, and OPE definitions:
-
-| representation | one-step direct | one-step DR | IPS | behavior-FQE | result |
-| --- | ---: | ---: | ---: | ---: | --- |
-| action-only | -0.000170 | -0.000177 | -0.001299 | -0.0000388 | fail |
-| compact bilinear | -0.000370 | -0.000256 | -0.001446 | -0.0000387 | fail |
-| history + hazard bilinear | -0.000574 | -0.000333 | -0.001606 | -0.0000399 | fail |
-
-The richer state monotonically enlarged direct effects without making the
-estimators converge. It therefore does not demonstrate that the agent learned
-the barrage. A preliminary compact run also revealed near-zero-variance
-standardization extrapolation (`direct` about `-5.28e5`). The shared linear
-model contract now floors training scales at `1e-3`; a regression test prevents
-recurrence. Post-repair values above are the only interpretable ablation.
-
-## Proper AWR challenger
-
-A five-fold proper AWR actor was implemented and tested. It uses only 86
-within-safe-set-varying action/geometry features, optimizes nonnegative weights,
-decreases its objective in every fold, conserves probability, and emits the
-same exact residual policy used by OPE. Its initial one-step estimates were all
-negative (direct `-0.00144`, DR `-0.00154`, IPS `-0.00714`), but IPS again had a
-much larger magnitude. That exploratory report predates the matched-estimand
-and support gates and is not a pass. It remains a challenger implementation,
-not a candidate.
+The learned distribution is also nearly identical to the reference: mean
+reference KL is only `1.34e-6`. Thus the apparently significant per-assignment
+number is not yet a meaningful gameplay-sized policy change.
 
 ## Decision
 
-G7-B stops here. The evidence supports “there is structured randomized action
-signal,” but not “this exact policy improves the reference.” In particular:
-
-1. Do not run canonical IQL as a way around failed identifiability. IQL cannot
-   repair disagreeing nuisance/value estimators or missing sequential support.
-2. Do not authorize shadow, canary, A/B, or natural-RNG Wine evaluation.
-3. Do not start G7-C collection. The current failure is not a localized
-   action/context support gap; repeated-policy support and estimator
-   calibration fail broadly.
-4. The next research design should reduce the estimand before increasing model
-   capacity: predeclare a one-deviation logged target with incumbent
-   continuation, shorter sequential horizons, and calibration/overlap gates.
-   Any new collection still requires a separate frozen contract.
-5. Preserve every immutable corpus fact and the learner-neutral v2 derivation;
-   future algorithms can reuse them without restoring failed generations.
+1. Keep the G7 causal/deployment/data-contract repairs. They are reusable
+   infrastructure and explain why earlier learner results were misleading.
+2. Reject all pre-repair G7 reports and caches as evidence. Hash-bound v3 ITT
+   arrays replace the v2 compliance-conditioned derivation.
+3. Do not promote the current orthogonal learner; do not run IQL or claim that
+   AWR can bypass failed matched-estimator calibration.
+4. Do not run shadow, canary, native Wine evaluation, or G7-C collection.
+5. Do not use 32-step exact sequential OPE with this corpus. Fifty-six
+   independent episodes do not support repeated-policy importance weighting.
+6. If research continues, freeze a new one-deviation proposal-plus-native-
+   fallback estimand with fixed physical-time exposure (or a validated
+   semi-Markov full value) and a training-only rule for a gameplay-meaningful
+   bounded tilt. Then require formal 100-replicate nulls and paired
+   direct/IPS/DR/FQE calibration before any richer model. This is a new
+   falsifiable layer, not a post-hoc parameter tweak to the present result.
 
 Ignored JSON reports under `artifacts/generation7-offline/` are reproducibility
-outputs, not tracked evidence. The tracked configuration, code, tests, and this
-decision record define what those reports mean.
+outputs, not tracked promotion evidence. The tracked contract, code, tests,
+and this decision record define their meaning.

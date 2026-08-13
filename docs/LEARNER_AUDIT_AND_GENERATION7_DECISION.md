@@ -67,29 +67,33 @@ Stage 5, and `-0.502` on Stage 6. Only raw causal information such as the
 current option index may be retained, and only with explicit availability
 metadata.
 
-### The corpus has randomized signal; the inferential unit is the bottleneck
+### Correction: randomized proposals must not be filtered by compliance
 
-The registry-selected sequential corpus contains:
+The original audit accidentally retained only randomized proposals that
+survived a fresh native publication check. Because rejection depends strongly
+on the proposed action, conditioning on `executed_action == intent` invalidates
+the recorded proposal propensity. The registry-selected sequential corpus
+actually contains:
 
 | Quantity | Audited count |
 | --- | ---: |
 | complete episode groups | 56 |
-| factual options | 167,250 |
+| randomized proposal assignments | 550,684 |
+| proposals executed without fallback | 167,250 (30.37%) |
 | manifest physical HITs | 2,044 |
-| HIT-positive factual option intervals | 2,043 |
-| factual nonbaseline assignments | 52,448 (31.36%) |
+| factual nonbaseline proposals | 206,441 |
 
-A diagnostic binary IPW smoke comparing factual nonbaseline assignments with
-baseline assignments found negative next-HIT differences from one through 32
-options (for example `-0.00336` at horizon 1 and `-0.14515` at horizon 32,
-using episode-clustered standard errors). This is not a candidate-policy value
-estimate and mixes behavior policies, but it rejects the claim that the corpus
-contains no action signal. The unresolved question is whether it supports a
-stable contextual ordering among all native-safe actions.
+On the correct proposal-level intention-to-treat data, the previous large
+long-horizon IPW effect disappears. The horizon-32 episode-equal effect is
+`-0.00061` with clustered SE `0.00123`; signs vary across shorter horizons.
+The old `-0.14515` result was selection bias and is not evidence. A later
+cross-fitted horizon-1 diagnostic finds a weak contextual score, but matched
+estimators still fail calibration.
 
 Rows help learn representation and proximal conditional effects. Independent
 episodes determine policy-value uncertainty and generalization. Both scales
-must be reported; neither 167,250 rows nor 56 groups alone describes support.
+must be reported; neither 550,684 assignments nor 56 groups alone describes
+support.
 
 ### There is no single pooled behavior policy
 
@@ -159,10 +163,10 @@ Generation 7 proceeds in three falsifiable layers.
                + epsilon Uniform(A_safe(s)).
    ```
 
-6. The actor emits the complete residual stochastic distribution. Fitting,
-   direct/DR/FQE evaluation, shadow, and native deployment consume the same
-   policy object. There is no deterministic proposal followed by a separate
-   thinning sampler.
+6. The actor emits the complete residual stochastic proposal distribution.
+   Fitting, direct/DR/FQE evaluation, shadow, and native deployment consume the
+   same policy object composed with the same immutable native publication and
+   fallback kernel. There is no additional learned/stochastic thinning sampler.
 7. Physical-safe, statistically-supported, and forecast-risk masks remain
    distinct. Only the first has action-publication authority.
 
@@ -187,6 +191,7 @@ policy extraction.
 
 Required gates:
 
+- proposal propensity calibration before looking at outcomes;
 - factual action-permutation null;
 - reward-suffix-permutation null;
 - synthetic delayed causal effect with known sign;
@@ -194,7 +199,8 @@ Required gates:
 - action-specific direction stability across source/stage strata;
 - compact state versus progressively richer causal state;
 - exact deployed-policy direct, sequential-DR, and FQE cross-checks;
-- exact action distribution, fallback, mask, and teacher/student conformance.
+- exact proposal distribution, native fallback, mask, and teacher/student
+  conformance.
 
 [Sequential doubly robust estimation](https://arxiv.org/abs/1511.03722) can
 reduce error under suitable nuisance/support conditions, but it cannot rescue

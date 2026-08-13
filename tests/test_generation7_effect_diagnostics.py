@@ -1,5 +1,6 @@
 from th06_rl.generation7.effect_diagnostics import (
     binary_ipw_effect,
+    binary_ipw_exposure_diagnostics,
     bootstrap_sign_stability,
     permutation_null,
     synthetic_delayed_effect,
@@ -60,3 +61,24 @@ def test_binary_effect_excludes_singleton_safe_sets_without_positivity() -> None
     ))
     report = binary_ipw_effect((episode,), horizon=1)
     assert report["rows"] == 1
+
+
+def test_exposure_diagnostic_reports_post_assignment_interval_change() -> None:
+    from th06_rl.generation7.effect_diagnostics import EffectEpisode, EffectRow
+
+    rows = (
+        EffectRow(
+            "stay", "stay", ("stay", "up"), (0.5, 0.5), 0,
+            duration_frames=4, complied=True,
+        ),
+        EffectRow(
+            "up", "stay", ("stay", "up"), (0.5, 0.5), 0,
+            duration_frames=1, complied=False,
+        ),
+    )
+    report = binary_ipw_exposure_diagnostics((
+        EffectEpisode("one", "fixture", 6, rows),
+        EffectEpisode("two", "fixture", 6, rows),
+    ))
+    assert report["duration_frames"]["difference"] == -3.0
+    assert report["compliance_probability"]["difference"] == -1.0

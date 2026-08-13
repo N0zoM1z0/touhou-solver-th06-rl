@@ -18,6 +18,8 @@ class EffectRow:
     legal_actions: tuple[str, ...]
     behavior_probabilities: tuple[float, ...]
     hit_cost: int
+    duration_frames: int = 1
+    complied: bool = True
 
     @property
     def treated(self) -> bool:
@@ -46,11 +48,13 @@ def effect_episode(episode: FactualEpisode) -> EffectEpisode:
         stage=episode.stage,
         rows=tuple(
             EffectRow(
-                action=option.action,
+                action=option.proposal_action,
                 baseline_action=option.baseline_action,
                 legal_actions=option.legal_actions,
                 behavior_probabilities=option.behavior_probabilities,
                 hit_cost=option.hit_cost,
+                duration_frames=option.duration_frames,
+                complied=option.complied,
             )
             for option in episode.options
         ),
@@ -115,6 +119,89 @@ def binary_ipw_effect(
         "effect": estimate,
         "episode_equal_effect": mean(episode_means),
         "episode_cluster_standard_error": standard_error,
+    }
+
+
+def binary_ipw_exposure_diagnostics(
+    episodes: tuple[EffectEpisode, ...],
+) -> dict[str, object]:
+    """Expose decision-interval and compliance effects of assignment.
+
+    A hit effect per proposal is not automatically a gameplay effect when the
+    proposal changes native compliance and therefore the time until the next
+    proposal.  These Horvitz-Thompson diagnostics make that mismatch visible;
+    they are not a substitute for a fixed-physical-time or full-Stage value.
+    """
+    if not episodes:
+        raise ValueError("exposure diagnostic needs episode groups")
+    episode_rows = []
+    for episode in episodes:
+        contexts = 0
+        potential = {
+            "hit_nonbaseline": 0.0,
+            "hit_baseline": 0.0,
+            "duration_nonbaseline": 0.0,
+            "duration_baseline": 0.0,
+            "compliance_nonbaseline": 0.0,
+            "compliance_baseline": 0.0,
+        }
+        for row in episode.rows:
+            p1 = row.treatment_probability
+            p0 = 1.0 - p1
+            if not 0.0 < p1 < 1.0:
+                continue
+            contexts += 1
+            arm = "nonbaseline" if row.treated else "baseline"
+            probability = p1 if row.treated else p0
+            potential[f"hit_{arm}"] += row.hit_cost / probability
+            potential[f"duration_{arm}"] += row.duration_frames / probability
+            potential[f"compliance_{arm}"] += float(row.complied) / probability
+        if contexts:
+            episode_rows.append({
+                name: value / contexts for name, value in potential.items()
+            })
+    if not episode_rows:
+        raise ValueError("exposure diagnostic has no randomized opportunities")
+
+    def comparison(name: str) -> dict[str, float | int]:
+        nonbaseline = tuple(row[f"{name}_nonbaseline"] for row in episode_rows)
+        baseline = tuple(row[f"{name}_baseline"] for row in episode_rows)
+        differences = tuple(
+            left - right
+            for left, right in zip(nonbaseline, baseline, strict=True)
+        )
+        return {
+            "episodes": len(episode_rows),
+            "nonbaseline_potential_mean": mean(nonbaseline),
+            "baseline_potential_mean": mean(baseline),
+            "difference": mean(differences),
+            "episode_cluster_standard_error": (
+                stdev(differences) / math.sqrt(len(differences))
+                if len(differences) > 1
+                else math.inf
+            ),
+        }
+
+    rate_differences = tuple(
+        row["hit_nonbaseline"] / row["duration_nonbaseline"]
+        - row["hit_baseline"] / row["duration_baseline"]
+        for row in episode_rows
+    )
+    return {
+        "schema": "generation7-proposal-exposure-diagnostic-v1",
+        "warning": "per-proposal HIT is not a fixed-physical-time value",
+        "duration_frames": comparison("duration"),
+        "compliance_probability": comparison("compliance"),
+        "hit_probability": comparison("hit"),
+        "hit_rate_per_frame_difference": {
+            "episodes": len(rate_differences),
+            "episode_equal_mean": mean(rate_differences),
+            "episode_cluster_standard_error": (
+                stdev(rate_differences) / math.sqrt(len(rate_differences))
+                if len(rate_differences) > 1
+                else math.inf
+            ),
+        },
     }
 
 
@@ -212,13 +299,16 @@ def permutation_null(
 ) -> dict[str, object]:
     if kind not in {"action", "reward-suffix"} or replicates <= 1:
         raise ValueError("permutation null contract is invalid")
-    generator = random.Random(seed)
+    import numpy as np
+
+    generator = np.random.default_rng(seed)
     arrays = []
     total_rows = 0
     for episode in episodes:
         targets = _targets(episode.rows, horizon)
         eligible_targets = []
         multipliers = []
+        treatment_probabilities = []
         for row, target in zip(episode.rows, targets, strict=True):
             p1 = row.treatment_probability
             p0 = 1.0 - p1
@@ -226,26 +316,33 @@ def permutation_null(
                 continue
             eligible_targets.append(target)
             multipliers.append(1.0 / p1 if row.treated else -1.0 / p0)
+            treatment_probabilities.append(p1)
         if eligible_targets:
-            arrays.append((eligible_targets, multipliers))
+            arrays.append((
+                np.asarray(eligible_targets, dtype=np.float64),
+                np.asarray(multipliers, dtype=np.float64),
+                np.asarray(treatment_probabilities, dtype=np.float64),
+            ))
             total_rows += len(eligible_targets)
     effects = []
     for _replicate in range(replicates):
         score = 0.0
-        for targets, multipliers in arrays:
+        for targets, multipliers, treatment_probabilities in arrays:
             if kind == "action":
-                shuffled = list(multipliers)
-                generator.shuffle(shuffled)
-                score += sum(
-                    target * multiplier
-                    for target, multiplier in zip(targets, shuffled, strict=True)
+                treated = generator.random(len(targets)) < treatment_probabilities
+                sampled = np.where(
+                    treated,
+                    1.0 / treatment_probabilities,
+                    -1.0 / (1.0 - treatment_probabilities),
                 )
+                score += float(targets @ sampled)
             else:
-                offset = generator.randrange(1, len(targets)) if len(targets) > 1 else 0
-                score += sum(
-                    multiplier * targets[(index + offset) % len(targets)]
-                    for index, multiplier in enumerate(multipliers)
+                offset = (
+                    int(generator.integers(1, len(targets)))
+                    if len(targets) > 1
+                    else 0
                 )
+                score += float(multipliers @ np.roll(targets, -offset))
         effects.append(score / total_rows)
     center = mean(effects)
     spread = stdev(effects)

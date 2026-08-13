@@ -13,14 +13,17 @@ from .fqe import evaluate_fqe_crosschecks
 from .linear_models import ridge_pipeline
 from .orthogonal_learning import (
     CompactEpisode,
+    ContextualEffectModel,
     OrthogonalConfig,
     _append_nuisance,
-    _behavior_expected_features,
     _cluster_summary,
+    _expected_candidate_rows,
     _fit_effect_model,
     _one_hot_nuisance,
+    _paired_cluster_difference,
     _state_and_centered,
     episode_folds,
+    proposal_propensity_calibration,
 )
 from .policy_distribution import ResidualStochasticPolicy, reference_probabilities
 
@@ -110,11 +113,12 @@ def _expected_actor_policy_features(
     actor: LinearAwrActor,
     supported_actions: frozenset[int],
     policy: ResidualStochasticPolicy,
+    q_candidate_rows,
 ):
     import numpy as np
 
     target_rows = np.empty(
-        (episode.option_count, episode.features.shape[1]), dtype=np.float64
+        (episode.option_count, q_candidate_rows.shape[1]), dtype=np.float64
     )
     reference_rows = np.empty_like(target_rows)
     target_probabilities = np.empty(len(episode.features), dtype=np.float64)
@@ -144,8 +148,8 @@ def _expected_actor_policy_features(
         reference = np.asarray(reference_probabilities(
             actions, actions[baseline_position], epsilon=policy.epsilon
         ))
-        target_rows[option] = target @ features
-        reference_rows[option] = reference @ features
+        target_rows[option] = target @ q_candidate_rows[start:stop]
+        reference_rows[option] = reference @ q_candidate_rows[start:stop]
         target_probabilities[start:stop] = target
         reference_probability_rows[start:stop] = reference
     return (
@@ -310,6 +314,10 @@ def crossfit_proper_awr(
         temperature=orthogonal_config.policy_temperature,
         maximum_log_tilt=orthogonal_config.maximum_log_tilt,
     )
+    representation = ContextualEffectModel(
+        estimator=None,
+        representation=orthogonal_config.effect_representation,
+    )
     estimates = {
         name: defaultdict(list)
         for name in (
@@ -327,7 +335,14 @@ def crossfit_proper_awr(
         train_indices = tuple(index for index, fold in enumerate(folds) if fold != held_fold)
         held_indices = tuple(index for index, fold in enumerate(folds) if fold == held_fold)
         train_states = np.concatenate(tuple(
-            _append_nuisance(compact[index][0], episodes[index], sources, stages)
+            _append_nuisance(
+                representation.nuisance_state_rows(
+                    episodes[index], compact[index][0]
+                ),
+                episodes[index],
+                sources,
+                stages,
+            )
             for index in train_indices
         ))
         train_targets = np.concatenate(tuple(episodes[index].targets for index in train_indices))
@@ -377,15 +392,27 @@ def crossfit_proper_awr(
             config=awr_config,
         )
         all_indices = (*train_indices, *held_indices)
+        q_candidate_rows = {
+            index: effect.q_candidate_rows(episodes[index], compact[index][0])
+            for index in all_indices
+        }
         factual_rows = {
             index: _append_nuisance(
-                compact[index][2], episodes[index], sources, stages
+                q_candidate_rows[index][
+                    episodes[index].offsets[:-1]
+                    + episodes[index].factual_positions
+                ],
+                episodes[index],
+                sources,
+                stages,
             )
             for index in all_indices
         }
         behavior_expected_rows = {
             index: _append_nuisance(
-                _behavior_expected_features(episodes[index]),
+                _expected_candidate_rows(
+                    episodes[index], q_candidate_rows[index]
+                ),
                 episodes[index],
                 sources,
                 stages,
@@ -403,6 +430,7 @@ def crossfit_proper_awr(
                     actor=actor,
                     supported_actions=supported_actions,
                     policy=policy,
+                    q_candidate_rows=q_candidate_rows[index],
                 )
             )
             target_expected_rows[index] = _append_nuisance(
@@ -431,7 +459,14 @@ def crossfit_proper_awr(
                 estimates[name][episode_id].extend(values_)
         for index in held_indices:
             episode = episodes[index]
-            state_rows = _append_nuisance(compact[index][0], episode, sources, stages)
+            state_rows = _append_nuisance(
+                representation.nuisance_state_rows(
+                    episode, compact[index][0]
+                ),
+                episode,
+                sources,
+                stages,
+            )
             state_values = nuisance.predict(state_rows)
             effect_states = effect.state_rows(episode, compact[index][0])
             for option in range(episode.option_count):
@@ -466,9 +501,27 @@ def crossfit_proper_awr(
             ],
         })
     return {
-        "schema": "generation7-proper-awr-crossfit-v1",
+        "schema": "generation7-proper-awr-crossfit-v2",
         "folds": list(folds),
         "fold_reports": fold_reports,
         "heldout_negative_log_likelihood": _cluster_summary(losses),
+        "proposal_propensity_calibration": proposal_propensity_calibration(
+            episodes,
+            reference_epsilon=orthogonal_config.reference_epsilon,
+        ),
         "estimates": {name: _cluster_summary(rows) for name, rows in estimates.items()},
+        "paired_calibration_differences": {
+            "one_step_direct_minus_dr": _paired_cluster_difference(
+                estimates["one_step_direct"], estimates["one_step_dr"]
+            ),
+            "one_step_ips_minus_dr": _paired_cluster_difference(
+                estimates["one_step_ips"], estimates["one_step_dr"]
+            ),
+            "one_step_fqe_minus_dr": _paired_cluster_difference(
+                estimates["one_step_fqe"], estimates["one_step_dr"]
+            ),
+            "sequential_fqe_minus_dr": _paired_cluster_difference(
+                estimates["sequential_fqe"], estimates["sequential_dr"]
+            ),
+        },
     }

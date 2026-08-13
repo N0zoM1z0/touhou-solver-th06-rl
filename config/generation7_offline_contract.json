@@ -8,6 +8,8 @@
     "sequential_offline_rl"
   ],
   "episode_grouping": "physical-run",
+  "treatment_unit": "randomized-proposal-assignment-intention-to-treat",
+  "post_assignment_native_revalidation": "factual-deployment-kernel-not-a-filter",
   "cost": {
     "name": "physical_hit_count",
     "gamma": 1.0,
@@ -50,6 +52,8 @@
   },
   "ope_gates": {
     "calibration_standard_errors": 2.0,
+    "minimum_one_step_effective_sample_size": 10000.0,
+    "maximum_one_step_importance_weight": 100.0,
     "minimum_sequential_dr_effective_sample_size": 500.0,
     "maximum_sequential_dr_cumulative_weight": 1000.0,
     "maximum_absolute_effect_prediction": 10.0
@@ -73,6 +77,8 @@
     "feature-availability-lint",
     "extreme-logit-proper-loss",
     "hit-terminal-conservation",
+    "proposal-propensity-calibration",
+    "fixed-physical-time-or-semi-markov-value",
     "factual-action-permutation-null",
     "reward-suffix-permutation-null",
     "synthetic-delayed-effect",

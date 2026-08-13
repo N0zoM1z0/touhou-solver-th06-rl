@@ -18,7 +18,7 @@ from .feature_contract import (
 )
 
 
-DATASET_SCHEMA = "generation7-factual-option-arrays-v2"
+DATASET_SCHEMA = "generation7-factual-proposal-itt-arrays-v3"
 
 
 @dataclass(frozen=True)
@@ -139,6 +139,16 @@ def prepare_episode_arrays(
         "candidate_action_indices": np.asarray(
             candidate_action_indices, dtype=np.int16
         ),
+        "boundary_executed_action_indices": np.asarray(
+            [
+                ACTION_NAMES.index(option.boundary_executed_action)
+                for option in episode.options
+            ],
+            dtype=np.int16,
+        ),
+        "proposal_complied": np.asarray(
+            [option.complied for option in episode.options], dtype=np.bool_
+        ),
         "causal_context_features": np.asarray(
             [option.causal_context_features for option in episode.options],
             dtype=np.float32,
@@ -175,6 +185,10 @@ def prepare_episode_arrays(
         "arrays_sha256": arrays_sha256,
         "episode_id": episode.episode_id,
         "options": len(episode.options),
+        "proposal_assignments": len(episode.options),
+        "complied_assignments": sum(
+            option.complied for option in episode.options
+        ),
         "candidate_rows": len(candidate_features),
         "feature_count": len(compact_actor_feature_names()),
         "causal_context_feature_count": len(
@@ -216,12 +230,17 @@ def load_episode_arrays(paths: EpisodeArrayPaths) -> dict[str, object]:
     action_indices = result["candidate_action_indices"]
     factual = result["factual_positions"]
     baseline = result["baseline_positions"]
+    executed = result["boundary_executed_action_indices"]
+    complied = result["proposal_complied"]
     option_count = len(offsets) - 1
     if (
         option_count <= 0
         or len(factual) != option_count
         or len(baseline) != option_count
         or len(result["hit_costs"]) != option_count
+        or len(result["boundary_executed_action_indices"]) != option_count
+        or len(result["proposal_complied"]) != option_count
+        or bool(((executed < 0) | (executed >= len(ACTION_NAMES))).any())
         or result["causal_context_features"].shape
         != (option_count, len(richer_causal_context_feature_names()))
         or int(offsets[0]) != 0
@@ -239,6 +258,9 @@ def load_episode_arrays(paths: EpisodeArrayPaths) -> dict[str, object]:
             or not abs(float(probabilities[start:stop].sum()) - 1.0) <= 1e-9
         ):
             raise ValueError("Generation-7 candidate group is invalid")
+    factual_rows = offsets[:-1] + factual
+    if not (complied == (executed == action_indices[factual_rows])).all():
+        raise ValueError("proposal compliance metadata is inconsistent")
     return result
 
 

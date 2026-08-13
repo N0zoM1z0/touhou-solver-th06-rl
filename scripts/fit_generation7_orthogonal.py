@@ -33,19 +33,26 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _calibrated(
-    left: dict[str, object],
-    right: dict[str, object],
+def _paired_difference_calibrated(
+    difference: dict[str, object],
     *,
     standard_errors: float,
 ) -> bool:
-    combined_standard_error = math.sqrt(
-        float(left["episode_cluster_standard_error"]) ** 2
-        + float(right["episode_cluster_standard_error"]) ** 2
+    return abs(float(difference["episode_equal_mean"])) <= (
+        standard_errors
+        * float(difference["episode_cluster_standard_error"])
     )
-    return abs(
-        float(left["episode_equal_mean"]) - float(right["episode_equal_mean"])
-    ) <= standard_errors * combined_standard_error
+
+
+def _unit_mean_calibrated(
+    summary: dict[str, object],
+    *,
+    expected: float,
+    standard_errors: float,
+) -> bool:
+    return abs(float(summary["episode_equal_mean"]) - expected) <= (
+        standard_errors * float(summary["episode_cluster_standard_error"])
+    )
 
 
 def main() -> int:
@@ -71,6 +78,8 @@ def main() -> int:
         default=REPOSITORY / "artifacts/generation7-offline/orthogonal.json",
     )
     parser.add_argument("--null-replicates", type=int)
+    parser.add_argument("--proximal-horizon", type=int)
+    parser.add_argument("--fqe-horizon", type=int)
     parser.add_argument(
         "--effect-representation",
         choices=("action_only", "compact_bilinear", "richer_bilinear"),
@@ -89,6 +98,10 @@ def main() -> int:
         contract.get("schema") != "generation7-offline-contract-v1"
         or contract.get("wine_outcome_facing_authorized") is not False
         or contract.get("new_collection_authorized") is not False
+        or contract.get("treatment_unit")
+        != "randomized-proposal-assignment-intention-to-treat"
+        or contract.get("post_assignment_native_revalidation")
+        != "factual-deployment-kernel-not-a-filter"
     ):
         raise ValueError("Generation-7 offline boundary drifted")
     _registry, all_entries = load_wine_corpus_registry(
@@ -110,10 +123,27 @@ def main() -> int:
     reference = contract["reference_policy"]
     support = contract["statistical_support"]
     fqe = contract["fqe"]
+    allowed_horizons = tuple(map(int, contract["proximal_horizons_options"]))
+    proximal_horizon = (
+        int(args.proximal_horizon)
+        if args.proximal_horizon is not None
+        else int(values["proximal_horizon_options"])
+    )
+    fqe_horizon = (
+        int(args.fqe_horizon)
+        if args.fqe_horizon is not None
+        else (
+            proximal_horizon
+            if args.proximal_horizon is not None
+            else int(fqe["horizon_options"])
+        )
+    )
+    if proximal_horizon not in allowed_horizons or fqe_horizon not in allowed_horizons:
+        parser.error("horizon override was not predeclared in the contract")
     config = OrthogonalConfig(
         folds=int(contract["crossfit_folds"]),
         fold_seed=int(contract["seeds"]["fold"]),
-        horizon=int(values["proximal_horizon_options"]),
+        horizon=proximal_horizon,
         nuisance_ridge_alpha=float(values["nuisance_ridge_alpha"]),
         effect_ridge_alpha=float(values["effect_ridge_alpha"]),
         reference_epsilon=float(reference["epsilon"]),
@@ -125,7 +155,7 @@ def main() -> int:
         minimum_action_episodes=int(
             support["minimum_episode_groups_per_action"]
         ),
-        fqe_horizon=int(fqe["horizon_options"]),
+        fqe_horizon=fqe_horizon,
         fqe_ridge_alpha=float(fqe["ridge_alpha"]),
         effect_representation=(
             args.effect_representation or str(values["effect_representation"])
@@ -149,6 +179,14 @@ def main() -> int:
         for fold in crossfit["fold_reports"]
         for values in fold["sequential_dr_cumulative_weights"].values()
     )
+    one_step_weights = tuple(
+        values
+        for fold in crossfit["fold_reports"]
+        for name, values in fold["one_step_importance_weights"].items()
+        if name in {"target", "reference"}
+    )
+    calibration = crossfit["paired_calibration_differences"]
+    propensity_calibration = crossfit["proposal_propensity_calibration"]
     aggregate_direction = math.copysign(
         1.0, float(estimates["one_step_direct"]["episode_equal_mean"])
     )
@@ -204,6 +242,22 @@ def main() -> int:
         "reward_suffix_permutation_null": (
             float(nulls["reward_suffix"]["null_p_value"]) <= 0.05
         ),
+        "proposal_propensity_calibration": (
+            _unit_mean_calibrated(
+                propensity_calibration["aggregate"],
+                expected=1.0,
+                standard_errors=calibration_standard_errors,
+            )
+            and all(
+                _unit_mean_calibrated(
+                    summary,
+                    expected=1.0,
+                    standard_errors=calibration_standard_errors,
+                )
+                for summary in propensity_calibration["strata"].values()
+            )
+        ),
+        "fixed_physical_time_or_semi_markov_value": False,
         "cross_source_stage_policy_direction": all(
             direction == aggregate_direction
             for direction in stratum_directions.values()
@@ -217,19 +271,22 @@ def main() -> int:
             for fold in crossfit["fold_reports"]
         ) <= float(ope_gates["maximum_absolute_effect_prediction"]),
         "one_step_direction_agreement": direction_agreement,
-        "one_step_direct_dr_calibration": _calibrated(
-            estimates["one_step_direct"],
-            estimates["one_step_dr"],
+        "one_step_support": (
+            min(float(row["effective_sample_size"]) for row in one_step_weights)
+            >= float(ope_gates["minimum_one_step_effective_sample_size"])
+            and max(float(row["maximum"]) for row in one_step_weights)
+            <= float(ope_gates["maximum_one_step_importance_weight"])
+        ),
+        "one_step_direct_dr_calibration": _paired_difference_calibrated(
+            calibration["one_step_direct_minus_dr"],
             standard_errors=calibration_standard_errors,
         ),
-        "one_step_ips_dr_calibration": _calibrated(
-            estimates["one_step_ips"],
-            estimates["one_step_dr"],
+        "one_step_ips_dr_calibration": _paired_difference_calibrated(
+            calibration["one_step_ips_minus_dr"],
             standard_errors=calibration_standard_errors,
         ),
-        "one_step_fqe_dr_calibration": _calibrated(
-            estimates["one_step_fqe"],
-            estimates["one_step_dr"],
+        "one_step_fqe_dr_calibration": _paired_difference_calibrated(
+            calibration["one_step_fqe_minus_dr"],
             standard_errors=calibration_standard_errors,
         ),
         "one_step_dr_episode_sign_stability": (
@@ -245,9 +302,8 @@ def main() -> int:
                 1.0, float(estimates["sequential_dr"]["episode_equal_mean"])
             )
         ),
-        "exact_sequential_fqe_dr_calibration": _calibrated(
-            estimates["sequential_fqe"],
-            estimates["sequential_dr"],
+        "exact_sequential_fqe_dr_calibration": _paired_difference_calibrated(
+            calibration["sequential_fqe_minus_dr"],
             standard_errors=calibration_standard_errors,
         ),
         "exact_sequential_dr_support": (
@@ -258,7 +314,7 @@ def main() -> int:
         ),
     }
     report = {
-        "schema": "generation7-orthogonal-fit-report-v1",
+        "schema": "generation7-orthogonal-fit-report-v2",
         "evidence_eligible": False,
         "wine_outcome_facing_authorized": False,
         "registry_sha256": _sha256(args.registry),
