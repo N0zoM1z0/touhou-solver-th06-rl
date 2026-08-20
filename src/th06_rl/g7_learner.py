@@ -21,9 +21,9 @@ from th06_rl.learning_features import (
     causal_tree_feature_names,
 )
 from th06_rl.offline_options import (
-    OPTION_DATASET_SCHEMA,
     ActorState,
     OfflineOptionTransition,
+    validate_offline_episode,
 )
 from th06_rl.th06.learning_adapter import (
     ACTION_FEATURE_NAMES,
@@ -109,70 +109,7 @@ def _cost_to_go(
 ) -> dict[str, float]:
     if not options:
         raise ValueError("physical episode has no option transitions")
-    episode = options[0].episode_id
-    if any(option.episode_id != episode for option in options):
-        raise ValueError("cost-to-go input mixes physical episodes")
-    if any(option.schema != OPTION_DATASET_SCHEMA for option in options):
-        raise ValueError("physical episode uses an unsupported option schema")
-    if any(option.episode_unit != "complete-route" for option in options):
-        raise ValueError("Generation-7 training requires complete-route episodes")
-    if len({option.behavior_policy_id for option in options}) != 1:
-        raise ValueError("physical episode mixes behavior policies")
-    if len({option.option_id for option in options}) != len(options):
-        raise ValueError("physical episode repeats an option identity")
-    if any(option.terminal for option in options[:-1]) or not options[-1].terminal:
-        raise ValueError("only the last option may terminate the physical episode")
-    if any(
-        option.next_state is None if not option.terminal else option.next_state is not None
-        for option in options
-    ):
-        raise ValueError("option terminal and next-state facts disagree")
-    if any(
-        left.next_state != right.state
-        for left, right in zip(options, options[1:])
-    ):
-        raise ValueError("option next-state linkage is not exact")
-    if any(
-        right.start_sequence <= left.end_sequence
-        for left, right in zip(options, options[1:])
-    ):
-        raise ValueError("physical episode options are not sequence ordered")
-    for option in options:
-        probabilities = dict(option.behavior_probabilities)
-        if (
-            not option.behavior_policy_id
-            or option.end_sequence < option.start_sequence
-            or option.elapsed_frames <= 0
-            or option.interstitial_elapsed_frames < 0
-            or isinstance(option.physical_hit_cost, bool)
-            or isinstance(option.controlled_hit_cost, bool)
-            or isinstance(option.interstitial_hit_cost, bool)
-            or min(
-                option.physical_hit_cost,
-                option.controlled_hit_cost,
-                option.interstitial_hit_cost,
-            ) < 0
-            or option.physical_hit_cost
-            != option.controlled_hit_cost + option.interstitial_hit_cost
-            or len(probabilities) != len(option.behavior_probabilities)
-            or set(probabilities) != set(option.state.legal_actions)
-            or option.action not in probabilities
-            or any(
-                not math.isfinite(probability) or probability < 0.0
-                for probability in probabilities.values()
-            )
-            or not math.isclose(
-                sum(probabilities.values()), 1.0, rel_tol=1e-9, abs_tol=1e-9
-            )
-            or not math.isclose(
-                probabilities[option.action],
-                option.behavior_probability,
-                rel_tol=1e-12,
-                abs_tol=1e-12,
-            )
-            or option.behavior_probability <= 0.0
-        ):
-            raise ValueError("physical option facts violate the causal contract")
+    validate_offline_episode(options)
     result = {}
     cumulative = 0.0
     for option in reversed(options):

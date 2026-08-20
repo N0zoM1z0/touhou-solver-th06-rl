@@ -440,6 +440,79 @@ def iter_offline_options(run_dir: Path) -> Iterator[OfflineOptionTransition]:
         yield _finish(pending, next_state=None, terminal=True)
 
 
+def validate_offline_episode(
+    options: tuple[OfflineOptionTransition, ...],
+) -> None:
+    """Validate the algorithm-independent causal complete-route contract."""
+    if not options:
+        raise OfflineOptionError("physical episode has no option transitions")
+    episode = options[0].episode_id
+    if any(option.episode_id != episode for option in options):
+        raise OfflineOptionError("option sequence mixes physical episodes")
+    if any(option.schema != OPTION_DATASET_SCHEMA for option in options):
+        raise OfflineOptionError("option sequence uses an unsupported schema")
+    if any(option.episode_unit != "complete-route" for option in options):
+        raise OfflineOptionError("option sequence is not one complete route")
+    if len({option.behavior_policy_id for option in options}) != 1:
+        raise OfflineOptionError("option sequence mixes behavior policies")
+    if len({option.option_id for option in options}) != len(options):
+        raise OfflineOptionError("option sequence repeats an option identity")
+    if any(option.terminal for option in options[:-1]) or not options[-1].terminal:
+        raise OfflineOptionError("only the final option may terminate the episode")
+    if any(
+        (not option.terminal and option.next_state is None)
+        or (option.terminal and option.next_state is not None)
+        for option in options
+    ):
+        raise OfflineOptionError("option terminal and next-state facts disagree")
+    if any(
+        left.next_state != right.state
+        for left, right in zip(options, options[1:])
+    ):
+        raise OfflineOptionError("option next-state linkage is not exact")
+    if any(
+        right.start_sequence <= left.end_sequence
+        for left, right in zip(options, options[1:])
+    ):
+        raise OfflineOptionError("option sequence ordering overlaps")
+    for option in options:
+        probabilities = dict(option.behavior_probabilities)
+        if (
+            not option.behavior_policy_id
+            or option.end_sequence < option.start_sequence
+            or option.elapsed_frames <= 0
+            or option.interstitial_elapsed_frames < 0
+            or isinstance(option.physical_hit_cost, bool)
+            or isinstance(option.controlled_hit_cost, bool)
+            or isinstance(option.interstitial_hit_cost, bool)
+            or min(
+                option.physical_hit_cost,
+                option.controlled_hit_cost,
+                option.interstitial_hit_cost,
+            ) < 0
+            or option.physical_hit_cost
+            != option.controlled_hit_cost + option.interstitial_hit_cost
+            or len(probabilities) != len(option.behavior_probabilities)
+            or set(probabilities) != set(option.state.legal_actions)
+            or option.action not in probabilities
+            or any(
+                not math.isfinite(probability) or probability < 0.0
+                for probability in probabilities.values()
+            )
+            or not math.isclose(
+                sum(probabilities.values()), 1.0, rel_tol=1e-9, abs_tol=1e-9
+            )
+            or not math.isclose(
+                probabilities[option.action],
+                option.behavior_probability,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            )
+            or option.behavior_probability <= 0.0
+        ):
+            raise OfflineOptionError("option facts violate the causal contract")
+
+
 def whole_episode_split(
     episode_ids: tuple[str, ...],
     *,

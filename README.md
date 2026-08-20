@@ -46,6 +46,12 @@ solver checkout is needed. Then start with [HAND_OFF.md](HAND_OFF.md) and
 Provision the isolated offline learner environment with
 `scripts/bootstrap_offline_rl.sh`; on Linux it deliberately uses CPU-only
 XGBoost and the official CPU-only Torch wheel instead of CUDA runtimes.
+Complete-route exploration is scheduled by `scripts/collect_route_parallel.py`
+with a distinct immutable policy seed per episode.  Turn its collection
+ledger into an algorithm-independent index with `scripts/build_g7_dataset.py`,
+then fit only that admitted index with `scripts/train_g7.py`.  A training run
+remains explicitly forbidden from Wine canary use until the separate online
+integration, shadow, and latency gates bind the exact portable artifact.
 The authoritative method and
 evaluation contract is
 [docs/WINE_ONLY_AUTONOMOUS_LEARNING.md](docs/WINE_ONLY_AUTONOMOUS_LEARNING.md).
