@@ -189,6 +189,28 @@ def _anchor_partition(source_context: str, *, stage: int | None = None) -> str:
     return f"stage:{stage}:{partition}" if stage is not None else partition
 
 
+def _next_anchor_reason(
+    pending_reason: str | None,
+    *,
+    last_stage: int | None,
+    current_stage: int,
+    last_partition: str | None,
+    current_partition: str,
+    source_program_extended: bool,
+    periodic_due: bool,
+) -> str | None:
+    """Choose one exhaustive-root reason with stage ownership first."""
+    if last_stage is None or current_stage != last_stage:
+        return "stage-root"
+    if last_partition is not None and current_partition != last_partition:
+        return "source-context-change"
+    if source_program_extended:
+        return "source-program-extension"
+    if periodic_due:
+        return "periodic"
+    return pending_reason
+
+
 def _immutable_source_addresses(snapshot) -> frozenset[int]:
     """Fingerprint every immutable instruction retained by a source root."""
     addresses = {
@@ -504,6 +526,7 @@ def run(args: argparse.Namespace) -> int:
         policy_source_start_frame = None
         last_frame = None
         last_anchor_frame = None
+        last_anchor_stage = None
         last_anchor_partition = None
         last_anchor_source_addresses: frozenset[int] = frozenset()
         pending_anchor_reason = "stage-root"
@@ -1348,25 +1371,25 @@ def run(args: argparse.Namespace) -> int:
                         source_context,
                         stage=snapshot.stage,
                     )
-                    if (
-                        last_anchor_partition is not None
-                        and partition != last_anchor_partition
-                    ):
-                        pending_anchor_reason = "source-context-change"
-                    elif (
-                        last_anchor_partition is not None
-                        and not _active_source_addresses(
-                            authority_snapshot
-                        ).issubset(last_anchor_source_addresses)
-                    ):
-                        pending_anchor_reason = "source-program-extension"
-                    elif (
-                        args.full_anchor_frames
-                        and last_anchor_frame is not None
-                        and snapshot.frame - last_anchor_frame
-                        >= args.full_anchor_frames
-                    ):
-                        pending_anchor_reason = "periodic"
+                    pending_anchor_reason = _next_anchor_reason(
+                        pending_anchor_reason,
+                        last_stage=last_anchor_stage,
+                        current_stage=snapshot.stage,
+                        last_partition=last_anchor_partition,
+                        current_partition=partition,
+                        source_program_extended=(
+                            last_anchor_partition is not None
+                            and not _active_source_addresses(
+                                authority_snapshot
+                            ).issubset(last_anchor_source_addresses)
+                        ),
+                        periodic_due=bool(
+                            args.full_anchor_frames
+                            and last_anchor_frame is not None
+                            and snapshot.frame - last_anchor_frame
+                            >= args.full_anchor_frames
+                        ),
+                    )
                     # ``authority_snapshot`` was already decoded in the same
                     # pause before input publication. Queue its immutable root
                     # on the first covered frame; delaying it would leave raw
@@ -1388,6 +1411,7 @@ def run(args: argparse.Namespace) -> int:
                             control_snapshot_ref=snapshot_ref,
                         )
                         last_anchor_frame = anchor.frame
+                        last_anchor_stage = anchor.stage
                         last_anchor_partition = _anchor_partition(
                             anchor_context,
                             stage=anchor.stage,
