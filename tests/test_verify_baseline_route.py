@@ -10,6 +10,8 @@ def _documents(hits: int = 12):
         "error": None,
         "controller_returncode": 0,
         "gdb_normalized": True,
+        "repository_commit": "abc123",
+        "repository_worktree_clean": True,
         "diagnostic_rng_seed": None,
         "immutable_policy_state_equal": True,
         "leftover_prefix_processes": [],
@@ -18,6 +20,7 @@ def _documents(hits: int = 12):
     }
     run = {"metadata": {
         "episode_unit": "route",
+        "code_commit": "abc123",
         "expected_stages": [1, 2, 3, 4, 5, 6],
         "planner": {
             "source_commitment": "source-complete-hard-v1",
@@ -82,6 +85,19 @@ def test_baseline_route_verifier_rejects_hit_disagreement() -> None:
     documents[2]["run_outcome"]["physical_hits"] = 11
 
     with pytest.raises(ValueError, match="hit_conservation"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_dirty_or_misbound_code() -> None:
+    documents = list(_documents())
+    documents[0]["repository_worktree_clean"] = False
+
+    with pytest.raises(ValueError, match="runner_clean"):
+        verify(*documents)
+
+    documents = list(_documents())
+    documents[0]["repository_commit"] = "different"
+    with pytest.raises(ValueError, match="runner_clean"):
         verify(*documents)
 
 

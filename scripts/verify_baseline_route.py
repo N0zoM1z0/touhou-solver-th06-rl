@@ -65,6 +65,8 @@ def verify(
             report.get("error") is None
             and report.get("controller_returncode") == 0
             and report.get("gdb_normalized") is True
+            and report.get("repository_worktree_clean") is True
+            and report.get("repository_commit") == metadata.get("code_commit")
         ),
         "route_completed": completion.get("route_completed") is True,
         "natural_rng": report.get("diagnostic_rng_seed") is None,

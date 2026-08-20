@@ -11,6 +11,7 @@ import pytest
 from scripts.run_wine_retail import (
     _attested_process_pid,
     _bounded_priority_command,
+    _repository_worktree_clean,
     _summarize_controller_completion,
     _summarize_trace,
     _windows_path,
@@ -33,6 +34,33 @@ def test_windows_path_uses_wines_z_drive(tmp_path: Path) -> None:
     assert _windows_path(tmp_path / "hello") == "Z:" + str(
         (tmp_path / "hello").resolve()
     ).replace("/", "\\")
+
+
+def test_repository_evidence_rejects_tracked_or_untracked_drift(tmp_path: Path) -> None:
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=repository,
+        check=True,
+    )
+    tracked = repository / "tracked.txt"
+    tracked.write_text("committed\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repository, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repository, check=True)
+
+    assert _repository_worktree_clean(repository) is True
+    tracked.write_text("dirty\n", encoding="utf-8")
+    assert _repository_worktree_clean(repository) is False
+    subprocess.run(["git", "restore", "tracked.txt"], cwd=repository, check=True)
+    (repository / "untracked.txt").write_text("unbound\n", encoding="utf-8")
+    assert _repository_worktree_clean(repository) is False
 
 
 def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None:

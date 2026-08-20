@@ -73,6 +73,17 @@ def _repository_commit(repository: Path) -> str:
     ).stdout.strip()
 
 
+def _repository_worktree_clean(repository: Path) -> bool:
+    """Return whether evidence can be reproduced from the recorded commit."""
+    status = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=normal"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    ).stdout
+    return not status.strip()
+
+
 def _prefix_processes(prefix: Path) -> list[dict[str, Any]]:
     """Return only live processes explicitly bound to this Wine prefix."""
     wanted = str(prefix.resolve())
@@ -575,6 +586,16 @@ def run(args: argparse.Namespace) -> int:
     policy_state_sha256_before = None
     controller_policy_state_sha256_before = None
     try:
+        repository_commit = _repository_commit(repository)
+        repository_worktree_clean = _repository_worktree_clean(repository)
+        report.update({
+            "repository_commit": repository_commit,
+            "repository_worktree_clean": repository_worktree_clean,
+        })
+        if not repository_worktree_clean:
+            raise RuntimeError(
+                "Wine evidence collection requires a clean repository worktree"
+            )
         for required in (
             executable,
             score_template,
@@ -621,7 +642,6 @@ def run(args: argparse.Namespace) -> int:
                 "config_sha256_before": _sha256(config),
                 "native_sha256": _sha256(native),
                 "windows_python_sha256": _sha256(windows_python),
-                "repository_commit": _repository_commit(repository),
                 "policy_plugin": str(policy_plugin),
                 "policy_plugin_sha256": _sha256(policy_plugin),
                 "policy_state": str(policy_state),
