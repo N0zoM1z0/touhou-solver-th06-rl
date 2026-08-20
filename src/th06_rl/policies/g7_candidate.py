@@ -56,23 +56,6 @@ class G7CandidatePolicy(SafeOptionExplorationPolicy):
         self.forecast_action_total = 0
         self.forced_ineligible_boundaries = 0
         self.abstained_boundaries = 0
-        self.active_learning_eligible: bool | None = None
-
-    def _end_active(self, reason: str) -> str:
-        result = super()._end_active(reason)
-        self.active_learning_eligible = None
-        return result
-
-    def _preceding_termination(
-        self, context, legal: tuple[str, ...]
-    ) -> str | None:
-        if (
-            self.active_id is not None
-            and self.active_learning_eligible is not None
-            and self.active_learning_eligible != context.learning_eligible
-        ):
-            return self._end_active("learning-eligibility-transition")
-        return super()._preceding_termination(context, legal)
 
     def import_state(self, state: dict[str, object]) -> None:
         candidate = state.get("candidate")
@@ -189,20 +172,6 @@ class G7CandidatePolicy(SafeOptionExplorationPolicy):
             tuple(probabilities.items()),
             draw=self.random.random(),
         )[0]
-
-    def decide(self, context):
-        # Eligibility is a causal episode boundary, even when the selected
-        # intent happens to equal the forced post-HIT baseline. Without this
-        # split an eligible option's propensity would leak into unreachable
-        # continuation frames.
-        decision = super().decide(context)
-        if (
-            decision.option is not None
-            and decision.option.boundary
-            and self.active_id is not None
-        ):
-            self.active_learning_eligible = bool(context.learning_eligible)
-        return decision
 
     def metrics(self) -> dict[str, object]:
         base = super().metrics()

@@ -40,6 +40,7 @@ class SafeOptionExplorationPolicy:
         self.active_start_frame = 0
         self.active_last_frame = -1
         self.active_scope: tuple[int, int, int, int] | None = None
+        self.active_learning_eligible: bool | None = None
         self.decisions = 0
         self.boundaries = 0
         self.continuations = 0
@@ -50,9 +51,19 @@ class SafeOptionExplorationPolicy:
     def import_state(self, state: dict[str, object]) -> None:
         if state.get("schema") != STATE_SCHEMA:
             raise ValueError("safe option exploration state schema mismatch")
-        seed = int(state.get("policy_seed", -1))
-        probability = float(state.get("exploration_probability", float("nan")))
-        horizon = int(state.get("option_horizon_frames", -1))
+        seed = state.get("policy_seed")
+        probability_value = state.get("exploration_probability")
+        horizon = state.get("option_horizon_frames")
+        if (
+            not isinstance(seed, int)
+            or isinstance(seed, bool)
+            or not isinstance(probability_value, (int, float))
+            or isinstance(probability_value, bool)
+            or not isinstance(horizon, int)
+            or isinstance(horizon, bool)
+        ):
+            raise ValueError("safe option exploration numeric state is invalid")
+        probability = float(probability_value)
         if not 0 <= seed < 2**64:
             raise ValueError("policy_seed must be an unsigned 64-bit integer")
         if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
@@ -71,12 +82,15 @@ class SafeOptionExplorationPolicy:
         self.active_id = None
         self.active_intent = None
         self.active_scope = None
+        self.active_learning_eligible = None
         self.active_behavior_probabilities = ()
         return reason
 
     def _preceding_termination(self, context, legal: tuple[str, ...]) -> str | None:
         if self.active_id is None:
             return "episode-start" if self.decisions == 0 else None
+        if self.active_learning_eligible != context.learning_eligible:
+            return self._end_active("learning-eligibility-transition")
         if tuple(context.scope) != self.active_scope:
             return self._end_active("stage-transition")
         if context.frame != self.active_last_frame + 1:
@@ -133,6 +147,8 @@ class SafeOptionExplorationPolicy:
     def decide(self, context) -> PolicyDecision:
         if not self.loaded:
             raise RuntimeError("safe option exploration requires a state file")
+        if not isinstance(context.learning_eligible, bool):
+            raise ValueError("learning eligibility must be an explicit boolean")
         legal = tuple(sorted(set(context.locally_admissible_actions)))
         if not legal:
             raise ValueError("option exploration received an empty safe set")
@@ -158,6 +174,7 @@ class SafeOptionExplorationPolicy:
             )
             self.active_start_frame = int(context.frame)
             self.active_scope = tuple(context.scope)
+            self.active_learning_eligible = bool(context.learning_eligible)
             self.boundaries += 1
             self.non_baseline_boundaries += int(chosen != baseline)
         else:

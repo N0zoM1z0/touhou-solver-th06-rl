@@ -31,9 +31,11 @@ At an eligible option boundary the online plugin uses the same support filter,
 forecast consensus, linear actor, and constrained distribution functions used
 by OPE. Between boundaries it only continues the already selected eight-frame
 option. When the controller reports a post-HIT extension as ineligible, the
-plugin refuses to query the actor and requires the legal set to be exactly the
-reactive baseline singleton. This keeps route completion evidence while
-excluding unreachable post-HIT choices from learning and evaluation.
+shared behavior/deployment option lifecycle first terminates the eligible
+option, and the G7 plugin refuses to query the actor and requires the new legal
+set to be exactly the reactive baseline singleton. This keeps route completion
+evidence while excluding unreachable post-HIT choices from learning and
+evaluation.
 
 “Source-complete” includes current bullets, enemy bodies, and lasers; spawn
 animation fallthrough; enemy clamps; and any timeline/ECL birth or body/laser
