@@ -25,7 +25,7 @@ source event.
 
 ## Dense corpus authority
 
-`control-v3` retains three independent layers:
+`control-v4` retains three independent layers:
 
 1. compact decoded values used by the resident controller and learner feature
    adapter;
@@ -39,7 +39,18 @@ so the ANM completion tick can be decoded offline. Every occupied Enemy and
 Laser retains its complete struct, and the dynamic EnemyManager tail retains
 timeline timers, boss pointers, random-item cursors, and spell state. The root
 also records the exact reachable-bullet slot linkage and the collision margin
-used for its Hard set. Authoritative anchors retain immutable stage/ECL graphs.
+used for its Hard set. Every occupied Enemy also retains the pointed-to ANM
+sprite dimensions needed by bounds retirement. Dense facts include the exact
+EX callback dispatch table, current message wait, boss-present byte, timeline
+boss slots, and previous timeline timer; none may be recovered from a dead
+Wine pointer. Authoritative anchors retain immutable stage/ECL graphs.
+
+A stage root is attached to the first dense frame of that stage. A new root is
+attached on the same frame whenever the live authority exposes an immutable
+timeline/ECL address outside the active root. `th06_rl.th06.source_dataset` then
+loads each frame as `(dense raw facts, active immutable anchor)` and fails
+closed on an uncovered live pointer or missing geometry. `control-v3` and
+earlier corpora are not training-compatible with this contract.
 
 The offline layer retains active player-shot geometry/timers, occupied item
 positions/states/timers, item allocation cursors, power, score, graze, deaths,
@@ -82,7 +93,7 @@ latency, and replay parity pass; an observed-only action set must never be
 described or promoted as a complete retail-safe set.
 
 The run audit also performs an offline causal cross-check. For every adjacent
-`control-v3` root within Hard-4, it asks whether the preceding committed frame
+`control-v4` root within Hard-4, it asks whether the preceding committed frame
 contains every retained bullet, lethal enemy body, and laser collision
 geometry that can intersect the player's preceding reachable envelope. This
 is a one-sided falsifier: a retained uncovered hazard rejects the run, while a

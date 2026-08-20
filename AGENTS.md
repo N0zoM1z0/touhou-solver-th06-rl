@@ -26,10 +26,16 @@ Dense physical frames retain the raw state needed to reconstruct collision
 geometry and hazard-producer state plus factual player attacks, items, and
 NMNB resource counters independently of learner features. Any intentional
 omission must be schema-visible and must not be described as a lossless
-full-game state. Low-frequency authoritative anchors retain immutable
-stage/ECL graphs; compact roots retain factual occupied bullet, laser, enemy,
+full-game state. Same-frame stage/program anchors retain immutable stage/ECL
+graphs; compact roots retain factual occupied bullet, laser, enemy,
 manager, player-attack, item, and resource state. Derived, capped, or lossy
 feature tensors are never audit authority.
+
+Training admission requires `control-v4` and a complete pass through
+`th06_rl.th06.source_dataset`: the first dense frame of every stage has its stage
+root, every live ECL/timeline pointer is covered by the active anchor, and all
+pointed Enemy/bullet geometry remains decodable after Wine exits. Older tiers
+stay quarantined even when their physical route completed.
 
 ## Runtime boundary
 

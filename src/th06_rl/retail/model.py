@@ -472,6 +472,10 @@ class Snapshot:
     power_item_count_for_score: int = 0
     bombs_remaining: int = 0
     extra_lives: int = 0
+    # Exact retail EX callback dispatch table.  Raw Enemy ECL contexts retain
+    # function pointers for repeating callbacks; an offline decoder must map
+    # those pointers without consulting a live process or an external solver.
+    ecl_ex_function_addresses: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)

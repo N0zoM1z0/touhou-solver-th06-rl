@@ -557,14 +557,19 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         }
 
 
-def test_control_v3_retains_hazard_source_records() -> None:
+def test_control_v4_retains_hazard_source_records() -> None:
     tail_size = (
         native.ENEMY_MANAGER_SIZE
         - native.ENEMY_ARRAY_OFFSET
         - native.ENEMY_COUNT * native.ENEMY_STRIDE
     )
     spawn = struct.pack("<H", 7) + bytes(native.BULLET_STRIDE)
-    enemy = struct.pack("<H", 3) + bytes(native.ENEMY_STRIDE)
+    enemy_record = bytearray(native.ENEMY_STRIDE)
+    enemy_record[native.ENEMY_FLAGS_OFFSET] = 0x80
+    struct.pack_into(
+        "<I", enemy_record, native.ANM_VM_SPRITE_OFFSET, 0x234567
+    )
+    enemy = struct.pack("<H", 3) + bytes(enemy_record)
     laser = struct.pack("<H", 5) + bytes(native.LASER_STRIDE)
     base = ControlSnapshot(
         capture_tier=CONTROL_CAPTURE_TIER,
@@ -635,6 +640,13 @@ def test_control_v3_retains_hazard_source_records() -> None:
         random_item_table_index=2,
         score=123456,
         graze_in_stage=7,
+        enemy_sprite_dimensions=((0x234567, 32.0, 48.0),),
+        ecl_ex_function_addresses=tuple(
+            0x401000 + index * 4 for index in range(native.ECL_EX_COUNT)
+        ),
+        timeline_boss_slots=(-1,) * 8,
+        timeline_time_previous=0,
+        boss_present=False,
     )
 
     decoded = decode_control_snapshot({
@@ -652,3 +664,11 @@ def test_control_v3_retains_hazard_source_records() -> None:
     assert decoded.item_states == base.item_states
     assert decoded.score == 123456
     assert decoded.graze_in_stage == 7
+    assert decoded.enemy_sprite_dimensions == ((0x234567, 32.0, 48.0),)
+
+    incomplete = replace(base, enemy_sprite_dimensions=())
+    with pytest.raises(ValueError, match="control-v4 source/factual"):
+        decode_control_snapshot({
+            field.name: getattr(incomplete, field.name)
+            for field in __import__("dataclasses").fields(incomplete)
+        })

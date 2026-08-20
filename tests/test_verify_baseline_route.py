@@ -21,7 +21,7 @@ def _documents(hits: int = 12):
         "expected_stages": [1, 2, 3, 4, 5, 6],
         "planner": {
             "source_commitment": "source-complete-hard-v1",
-            "factual_state_schema": "th06-1.02h-offline-facts-v1",
+            "factual_state_schema": "th06-1.02h-offline-facts-v2",
         },
     }}
     manifest = {
@@ -59,6 +59,11 @@ def _documents(hits: int = 12):
         "source_anchor_coverage": {
             "anchored_stages": [1, 2, 3, 4, 5, 6],
             "missing_observed_stages": [],
+        },
+        "source_dataset_admission": {
+            "checked_frames": 100,
+            "passes": True,
+            "error": None,
         },
     }
     return report, run, manifest, audit
@@ -127,4 +132,13 @@ def test_baseline_route_verifier_rejects_legacy_single_stage_anchor_check() -> N
     del documents[3]["source_anchor_coverage"]
 
     with pytest.raises(ValueError, match="source anchor coverage"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_unloadable_source_dataset() -> None:
+    documents = list(_documents())
+    documents[3]["source_dataset_admission"]["passes"] = False
+    documents[3]["source_dataset_admission"]["error"] = "missing geometry"
+
+    with pytest.raises(ValueError, match="self_contained_source_dataset"):
         verify(*documents)

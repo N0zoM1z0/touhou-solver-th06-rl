@@ -33,7 +33,7 @@ FRAME_BUDGET_MS = 1000.0 / 60.0
 # raw bullet tails plus occupied hazard-source records. 512 queued roots bound
 # memory while tolerating one transient UNC shard close/fsync without dropping
 # a physical trajectory; storage preflight remains authoritative for the
-# larger control-v3 records.
+# larger control-v4 records.
 DEFAULT_SHARD_RECORDS = 512
 DEFAULT_QUEUE_RECORDS = 512
 DEFAULT_MAX_RUN_BYTES = 512 * 1024 * 1024
@@ -212,11 +212,11 @@ class FrameEvidence:
         ):
             raise ValueError("source-complete Hard evidence must retain four frames")
         if (
-            self.snapshot_tier == "control-v3"
+            self.snapshot_tier == "control-v4"
             and self.published_action is not None
             and self.source_commitment != "source-complete-hard-v1"
         ):
-            raise ValueError("control-v3 publication lacks source-complete Hard evidence")
+            raise ValueError("control-v4 publication lacks source-complete Hard evidence")
 
 
 @dataclass(frozen=True)
@@ -1103,17 +1103,21 @@ class CorpusRecorder:
         self._raise_error()
         if snapshot.input_mask & BUTTON_BOMB:
             raise CorpusError("Bomb bit observed in corpus root")
-        if getattr(snapshot, "capture_tier", "") == "control-v3":
+        if getattr(snapshot, "capture_tier", "") == "control-v4":
             item_states = getattr(snapshot, "item_states", ())
             if (
                 getattr(snapshot, "factual_state_schema", "")
-                != "th06-1.02h-offline-facts-v1"
+                != "th06-1.02h-offline-facts-v2"
                 or getattr(snapshot, "player_attack", None) is None
                 or getattr(snapshot, "item_active_upper_bound", -1)
                 != len(item_states)
                 or getattr(snapshot, "effect_active_upper_bound", -1) < 0
+                or not getattr(snapshot, "ecl_ex_function_addresses", ())
+                or len(getattr(snapshot, "timeline_boss_slots", ())) != 8
+                or getattr(snapshot, "timeline_time_previous", None) is None
+                or getattr(snapshot, "boss_present", None) is None
             ):
-                raise CorpusError("control-v3 offline factual root is incomplete")
+                raise CorpusError("control-v4 offline factual root is incomplete")
         snapshot_id = f"{self.run_id}:{self.sequence:08d}:f{snapshot.frame}"
         envelope = _Envelope(
             self.sequence,

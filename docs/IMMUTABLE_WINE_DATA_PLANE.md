@@ -40,12 +40,15 @@ fails closed; a compatible-looking transition version is insufficient.
    schemas, `source-complete-hard-v1`, and same-paused-root publication.
 3. Dense roots retain raw bullet, laser, enemy, manager, player-attack, item,
    score/graze, RNG/rank, and NMNB resource state independently of learner
-   features.
+   features. Every dead-process pointer needed for source geometry or dispatch
+   has an exact retained value: bullet/Enemy sprite dimensions, EX callback
+   table, timeline/message state, and same-frame immutable program coverage.
 4. Every published action retains the exact four-frame AABB/laser primitives
    certified online; unknown or incomplete source coverage is absent.
 5. The ordinary run audit has no integrity error, dense native replay agrees,
    and the one-sided retained-next-root audit finds no uncovered factual AABB or
-   laser hazard.
+   laser hazard. The source-dataset loader accepts every dense frame with its
+   same-frame/active anchor after Wine has exited.
 6. Artifacts are immutable and every run path and hash is unique. Partial,
    first-HIT, time-bounded, authority-failed, or cleanup-failed runs are never
    selected for training.

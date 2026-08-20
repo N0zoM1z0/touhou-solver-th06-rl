@@ -32,9 +32,9 @@ from ..retail.model import (
 )
 
 
-CONTROL_CAPTURE_TIER = "control-v3"
-SOURCE_RECORD_SCHEMA = "th06-1.02h-source-records-v1"
-OFFLINE_FACT_SCHEMA = "th06-1.02h-offline-facts-v1"
+CONTROL_CAPTURE_TIER = "control-v4"
+SOURCE_RECORD_SCHEMA = "th06-1.02h-source-records-v2"
+OFFLINE_FACT_SCHEMA = "th06-1.02h-offline-facts-v2"
 MAX_CAPTURE_ATTEMPTS = 8
 DYNAMIC_BULLET_FLAGS = 0xDF1
 
@@ -226,6 +226,18 @@ class ControlSnapshot:
     power_item_count_for_score: int = 0
     bombs_remaining: int = 0
     extra_lives: int = 0
+    # Per-frame visual geometry for every occupied Enemy ANM VM. Enemy bounds
+    # retirement uses this geometry, which cannot be recovered from the raw
+    # record's pointer after Wine exits.
+    enemy_sprite_dimensions: tuple[tuple[int, float, float], ...] = ()
+    # Offline source replay facts copied from the exhaustive root captured in
+    # the exact same process pause. They are not consumed by online Hard.
+    ecl_ex_function_addresses: tuple[int, ...] = ()
+    timeline_current_message_waits: int = 0
+    message_active: bool = False
+    timeline_boss_slots: tuple[int, ...] = ()
+    timeline_time_previous: int | None = None
+    boss_present: bool | None = None
 
 
 def _finite(*values: float) -> bool:
@@ -631,16 +643,26 @@ def _decode_control_once(
     # therefore expose an active slot with a null/transient sprite pointer.
     # It is not a decodable hazard root; resume and retry the entire snapshot.
     sprite_pointers = {item[2] for item in occupied_bullets}
+    enemy_sprite_pointers = {
+        struct.unpack_from(
+            "<I",
+            enemy_pool,
+            slot * native.ENEMY_STRIDE + native.ANM_VM_SPRITE_OFFSET,
+        )[0]
+        for slot in range(native.ENEMY_COUNT)
+        if enemy_pool[slot * native.ENEMY_STRIDE + native.ENEMY_FLAGS_OFFSET]
+        & 0x80
+    }
     if 0 in sprite_pointers:
         raise native._SnapshotReadTorn(
             "active bullet is between state publication and sprite setup"
         )
     try:
-        sprite_dimensions = _control_sprite_dimensions(
+        source_sprite_dimensions = _control_sprite_dimensions(
             process,
             native,
             stage,
-            sprite_pointers,
+            sprite_pointers | enemy_sprite_pointers,
         )
     except RuntimeError as error:
         raise native._SnapshotReadTorn(str(error)) from error
@@ -660,7 +682,7 @@ def _decode_control_once(
         bullet = native._decode_bullet_tail(
             tail,
             slot,
-            sprite_dimensions[sprite_pointer],
+            source_sprite_dimensions[sprite_pointer],
         )
         if bullet is not None:
             bullets.append(bullet)
@@ -828,14 +850,14 @@ def _decode_control_once(
     )
     if len(raw_enemy_manager_tail) != enemy_manager_tail_end - enemy_manager_tail_start:
         raise native._SnapshotReadTorn("truncated EnemyManager source tail")
-    return ControlSnapshot(
+    control = ControlSnapshot(
         CONTROL_CAPTURE_TIER,
         frame, stage, player_state, x, y, half_width, half_height,
         normal_speed, focus_speed, normal_diagonal, focus_diagonal,
         frame_multiplier, input_mask, tuple(bullets), live_bullet_count,
         bytes(raw_bullet_tails), tuple(
-            (pointer, *sprite_dimensions[pointer])
-            for pointer in sorted(sprite_dimensions)
+            (pointer, *source_sprite_dimensions[pointer])
+            for pointer in sorted(sprite_pointers)
         ), True, len(lasers), in_menu,
         time_stopped, bool(replay or demo_mode), tuple(lasers), tuple(enemies),
         difficulty, character, shot_type, bomb_active, spell_active,
@@ -873,6 +895,13 @@ def _decode_control_once(
         power_item_count_for_score,
         bombs_remaining,
         extra_lives,
+    )
+    return replace(
+        control,
+        enemy_sprite_dimensions=tuple(
+            (pointer, *source_sprite_dimensions[pointer])
+            for pointer in sorted(enemy_sprite_pointers)
+        ),
     )
 
 
@@ -989,6 +1018,25 @@ def read_safety_snapshot_pair(
         mismatches.append("live_bullet_count")
     if control.laser_count != authority.laser_count:
         mismatches.append("laser_count")
+    authority_spawners = {spawner.slot: spawner for spawner in authority.spawners}
+    enemy_dimensions = {
+        pointer: (width, height)
+        for pointer, width, height in control.enemy_sprite_dimensions
+    }
+    enemy_record_size = 2 + native.ENEMY_STRIDE
+    for offset in range(0, len(control.raw_enemy_records), enemy_record_size):
+        slot = struct.unpack_from("<H", control.raw_enemy_records, offset)[0]
+        pointer = struct.unpack_from(
+            "<I",
+            control.raw_enemy_records,
+            offset + 2 + native.ANM_VM_SPRITE_OFFSET,
+        )[0]
+        spawner = authority_spawners.get(slot)
+        if spawner is None or enemy_dimensions.get(pointer) != (
+            spawner.sprite_half_width * 2.0,
+            spawner.sprite_half_height * 2.0,
+        ):
+            mismatches.append(f"enemy_sprite_geometry:{slot}")
     if mismatches:
         raise RuntimeError(
             "compact/source safety roots disagree: " + ", ".join(mismatches)
@@ -1004,6 +1052,12 @@ def read_safety_snapshot_pair(
         pending_effect_rng_ids=authority.pending_effect_rng_ids,
         random_item_spawn_index=authority.random_item_spawn_index,
         random_item_table_index=authority.random_item_table_index,
+        ecl_ex_function_addresses=authority.ecl_ex_function_addresses,
+        timeline_current_message_waits=authority.timeline_current_message_waits,
+        message_active=authority.message_active,
+        timeline_boss_slots=authority.timeline_boss_slots,
+        timeline_time_previous=authority.timeline_time_previous,
+        boss_present=authority.boss_present,
     )
     return control, authority
 
@@ -1094,25 +1148,37 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
     values.setdefault("pending_effect_rng_ids", ())
     values.setdefault("random_item_spawn_index", 0)
     values.setdefault("random_item_table_index", 0)
-    dimension_rows = values["bullet_sprite_dimensions"]
-    dimensions = {}
-    for row in dimension_rows:
-        if not isinstance(row, (tuple, list)) or len(row) != 3:
-            raise ValueError("invalid packed control sprite dimensions")
-        pointer, width, height = int(row[0]), float(row[1]), float(row[2])
-        if (
-            pointer in dimensions
-            or not 0x10000 <= pointer < 0x80000000
-            or not math.isfinite(width)
-            or not math.isfinite(height)
-            or not 0.0 < width <= 4096.0
-            or not 0.0 < height <= 4096.0
-        ):
-            raise ValueError("invalid packed control sprite dimensions")
-        dimensions[pointer] = (width, height)
-    values["bullet_sprite_dimensions"] = tuple(
-        (pointer, *dimensions[pointer]) for pointer in sorted(dimensions)
-    )
+    values.setdefault("enemy_sprite_dimensions", ())
+    values.setdefault("ecl_ex_function_addresses", ())
+    values.setdefault("timeline_current_message_waits", 0)
+    values.setdefault("message_active", False)
+    values.setdefault("timeline_boss_slots", ())
+    values.setdefault("timeline_time_previous", None)
+    values.setdefault("boss_present", None)
+
+    def decode_dimensions(name: str) -> dict[int, tuple[float, float]]:
+        dimensions = {}
+        for row in values[name]:
+            if not isinstance(row, (tuple, list)) or len(row) != 3:
+                raise ValueError("invalid packed control sprite dimensions")
+            pointer, width, height = int(row[0]), float(row[1]), float(row[2])
+            if (
+                pointer in dimensions
+                or not 0x10000 <= pointer < 0x80000000
+                or not math.isfinite(width)
+                or not math.isfinite(height)
+                or not 0.0 < width <= 4096.0
+                or not 0.0 < height <= 4096.0
+            ):
+                raise ValueError("invalid packed control sprite dimensions")
+            dimensions[pointer] = (width, height)
+        values[name] = tuple(
+            (pointer, *dimensions[pointer]) for pointer in sorted(dimensions)
+        )
+        return dimensions
+
+    dimensions = decode_dimensions("bullet_sprite_dimensions")
+    enemy_dimensions = decode_dimensions("enemy_sprite_dimensions")
     raw_tails = values.get("raw_bullet_tails", b"")
     if raw_tails:
         tail_size = native.BULLET_STRIDE - native.BULLET_SIZE_OFFSET
@@ -1178,10 +1244,37 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
             - native.ENEMY_ARRAY_OFFSET
             - native.ENEMY_COUNT * native.ENEMY_STRIDE
         )
+        enemy_record_size = 2 + native.ENEMY_STRIDE
+        enemy_sprite_pointers = {
+            struct.unpack_from(
+                "<I",
+                values["raw_enemy_records"],
+                offset + 2 + native.ANM_VM_SPRITE_OFFSET,
+            )[0]
+            for offset in range(
+                0, len(values["raw_enemy_records"]), enemy_record_size
+            )
+        }
+        ex_addresses = tuple(
+            int(address) for address in values["ecl_ex_function_addresses"]
+        )
+        timeline_boss_slots = tuple(
+            int(slot) for slot in values["timeline_boss_slots"]
+        )
+        values["ecl_ex_function_addresses"] = ex_addresses
+        values["timeline_boss_slots"] = timeline_boss_slots
         if (
             values["source_record_schema"] != SOURCE_RECORD_SCHEMA
             or values["factual_state_schema"] != OFFLINE_FACT_SCHEMA
             or len(values["raw_enemy_manager_tail"]) != expected_tail
+            or enemy_sprite_pointers - set(enemy_dimensions)
+            or len(ex_addresses) != native.ECL_EX_COUNT
+            or any(not 0x10000 <= address < 0x80000000 for address in ex_addresses)
+            or len(timeline_boss_slots) != 8
+            or any(not -1 <= slot < native.ENEMY_COUNT for slot in timeline_boss_slots)
+            or int(values["timeline_current_message_waits"]) < 0
+            or values["timeline_time_previous"] is None
+            or values["boss_present"] is None
         ):
-            raise ValueError("control-v3 source/factual records are incomplete")
+            raise ValueError("control-v4 source/factual records are incomplete")
     return ControlSnapshot(**values)

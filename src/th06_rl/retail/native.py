@@ -2466,6 +2466,7 @@ def _read_snapshot_once(
         power_item_count_for_score,
         bombs_remaining,
         extra_lives,
+        tuple(ex_function_addresses),
     )
 
 

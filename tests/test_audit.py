@@ -68,7 +68,7 @@ def test_empty_complete_stage_audit_is_structurally_stable(tmp_path) -> None:
             "test", "exe", "native", "test", 3, 0, 0, 4,
             {
                 "source_commitment": "source-complete-hard-v1",
-                "factual_state_schema": "th06-1.02h-offline-facts-v1",
+                "factual_state_schema": "th06-1.02h-offline-facts-v2",
             },
         ),
     )
@@ -93,7 +93,7 @@ def test_route_audit_accepts_only_declared_complete_stage_coverage(tmp_path) -> 
             "test", "exe", "native", "test", 3, 0, 0, 1,
             {
                 "source_commitment": "source-complete-hard-v1",
-                "factual_state_schema": "th06-1.02h-offline-facts-v1",
+                "factual_state_schema": "th06-1.02h-offline-facts-v2",
             },
             episode_unit="route",
             expected_stages=(1, 2, 3, 4, 5, 6),
@@ -137,7 +137,7 @@ def test_route_audit_rejects_stage_without_source_anchor(tmp_path) -> None:
             "test", "exe", "native", "test", 3, 0, 0, 1,
             {
                 "source_commitment": "source-complete-hard-v1",
-                "factual_state_schema": "th06-1.02h-offline-facts-v1",
+                "factual_state_schema": "th06-1.02h-offline-facts-v2",
             },
             episode_unit="route",
             expected_stages=(1, 2),
@@ -174,7 +174,7 @@ def test_audit_rejects_physical_hit_count_disagreement(tmp_path) -> None:
             "test", "exe", "native", "test", 3, 0, 0, 4,
             {
                 "source_commitment": "source-complete-hard-v1",
-                "factual_state_schema": "th06-1.02h-offline-facts-v1",
+                "factual_state_schema": "th06-1.02h-offline-facts-v2",
             },
         ),
     )

@@ -19,6 +19,7 @@ from th06_rl.retail.hazards.lasers import (
     signed_laser_clearance,
 )
 from th06_rl.th06.control_capture import decode_control_snapshot
+from th06_rl.th06.source_dataset import SourceDatasetError, iter_source_frames
 from th06_rl.th06.observed_bullets import hazard_box
 
 
@@ -312,7 +313,7 @@ def _audit_source_successor_coverage(
     """
     paths = _stream_paths(run_dir, manifest, "frames")
     skipped = {
-        "non_control_v3": 0,
+        "non_control_v4": 0,
         "source_uncommitted": 0,
         "stage_boundary": 0,
         "outside_hard_horizon": 0,
@@ -338,10 +339,10 @@ def _audit_source_successor_coverage(
         after = current_snapshot
         decision = previous_row.get("decision") or {}
         tier = str(getattr(before, "capture_tier", ""))
-        if tier != "control-v3" or str(
+        if tier != "control-v4" or str(
             getattr(after, "capture_tier", "")
-        ) != "control-v3":
-            skipped["non_control_v3"] += 1
+        ) != "control-v4":
+            skipped["non_control_v4"] += 1
         elif decision.get("source_commitment") != "source-complete-hard-v1":
             skipped["source_uncommitted"] += 1
         elif before.stage != after.stage:
@@ -801,7 +802,7 @@ def audit(
         integrity_errors.append("source-authority-incomplete")
     if (
         planner.get("factual_state_schema")
-        != "th06-1.02h-offline-facts-v1"
+        != "th06-1.02h-offline-facts-v2"
     ):
         integrity_errors.append("offline-factual-state-incomplete")
     if manifest.get("dropped_records", 0):
@@ -824,6 +825,20 @@ def audit(
     if dense_hard_parity and dense_hard_parity["unsafe_divergences"]:
         integrity_errors.append("dense-hard-parity-unsafe-divergence")
     frame_records = int((manifest.get("records") or {}).get("frames", 0))
+    source_dataset_admission = {
+        "checked_frames": 0,
+        "passes": frame_records == 0,
+        "error": None,
+    }
+    if frame_records:
+        try:
+            source_dataset_admission["checked_frames"] = sum(
+                1 for _bundle in iter_source_frames(run_dir)
+            )
+            source_dataset_admission["passes"] = True
+        except (SourceDatasetError, OSError, ValueError) as error:
+            source_dataset_admission["error"] = str(error)
+            integrity_errors.append("source-dataset-not-self-contained")
     if frame_records > 1 and not source_successor_coverage["checked_links"]:
         integrity_errors.append("source-successor-coverage-unavailable")
     if (
@@ -857,6 +872,7 @@ def audit(
         },
         "dense_hard_parity": dense_hard_parity,
         "source_successor_coverage": source_successor_coverage,
+        "source_dataset_admission": source_dataset_admission,
         "latency": {
             "capture": summary.get("capture_timing"),
             "solve": summary.get("solve_timing"),

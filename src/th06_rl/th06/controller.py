@@ -189,6 +189,50 @@ def _anchor_partition(source_context: str, *, stage: int | None = None) -> str:
     return f"stage:{stage}:{partition}" if stage is not None else partition
 
 
+def _immutable_source_addresses(snapshot) -> frozenset[int]:
+    """Fingerprint every immutable instruction retained by a source root."""
+    addresses = {
+        instruction.address
+        for instruction in snapshot.timeline_instructions
+    }
+    addresses.update(
+        instruction.address
+        for instruction in snapshot.timeline_ecl_program
+    )
+    for spawner in snapshot.spawners:
+        addresses.update(
+            instruction.address for instruction in spawner.ecl_program
+        )
+    return frozenset(addresses)
+
+
+def _active_source_addresses(snapshot) -> frozenset[int]:
+    """Small dynamic pointer set that each dense frame must reconstruct."""
+    addresses = set()
+    if snapshot.timeline_instructions:
+        addresses.add(snapshot.timeline_instructions[0].address)
+    subroutines = snapshot.ecl_subroutines
+    for spawner in snapshot.spawners:
+        if spawner.next_instruction is not None:
+            addresses.add(spawner.next_instruction.address)
+        addresses.update(
+            context.instruction_address
+            for context in spawner.ecl_stack
+            if context.instruction_address
+        )
+        callback_subs = [spawner.death_callback_sub, *spawner.interrupts]
+        if spawner.life_callback_threshold >= 0:
+            callback_subs.append(spawner.life_callback_sub)
+        if spawner.timer_callback_threshold >= 0:
+            callback_subs.append(spawner.timer_callback_sub)
+        addresses.update(
+            subroutines[sub_id]
+            for sub_id in callback_subs
+            if 0 <= sub_id < len(subroutines)
+        )
+    return frozenset(addresses)
+
+
 def _capture_safety_root_while_paused(process, bridge, *, horizon: int):
     """Resume the exact process between rejected paused-root attempts.
 
@@ -461,8 +505,8 @@ def run(args: argparse.Namespace) -> int:
         last_frame = None
         last_anchor_frame = None
         last_anchor_partition = None
+        last_anchor_source_addresses: frozenset[int] = frozenset()
         pending_anchor_reason = "stage-root"
-        anchor_retry_after = 0
         last_reported_reason = None
         dialogue_active = False
         dialogue_delivery: list[DialogueDeliverySample] = []
@@ -1310,66 +1354,48 @@ def run(args: argparse.Namespace) -> int:
                     ):
                         pending_anchor_reason = "source-context-change"
                     elif (
+                        last_anchor_partition is not None
+                        and not _active_source_addresses(
+                            authority_snapshot
+                        ).issubset(last_anchor_source_addresses)
+                    ):
+                        pending_anchor_reason = "source-program-extension"
+                    elif (
                         args.full_anchor_frames
                         and last_anchor_frame is not None
                         and snapshot.frame - last_anchor_frame
                         >= args.full_anchor_frames
                     ):
                         pending_anchor_reason = "periodic"
-                    # Exhaustive decoding is intentionally admitted only in a
-                    # quiet/passive window.  An anchor may be delayed; it may
-                    # never steal an urgent high-density control frame.
-                    anchor_safe = bool(
-                        snapshot.in_menu
-                        or snapshot.time_stopped
-                        or snapshot.player_state not in ACTIVE_PLAYER_STATES
-                        or (
-                            snapshot.live_bullet_count <= 8
-                            and snapshot.laser_count == 0
+                    # ``authority_snapshot`` was already decoded in the same
+                    # pause before input publication. Queue its immutable root
+                    # on the first covered frame; delaying it would leave raw
+                    # dense rows whose source program cannot be reconstructed.
+                    if pending_anchor_reason is not None:
+                        anchor = authority_snapshot
+                        anchor_context = automatic_source_context(anchor)
+                        if (
+                            anchor.stage != expected_stage
+                            or _snapshot_scope(anchor) != expected_scope
+                        ):
+                            raise RuntimeError(
+                                "authoritative anchor changed learning scope"
+                            )
+                        recorder.record_anchor(
+                            anchor,
+                            phase_id=anchor_context,
+                            reason=pending_anchor_reason,
+                            control_snapshot_ref=snapshot_ref,
                         )
-                    )
-                    if (
-                        pending_anchor_reason is not None
-                        and anchor_safe
-                        and snapshot.frame >= anchor_retry_after
-                    ):
-                        try:
-                            anchor = authority_snapshot
-                            anchor_context = automatic_source_context(anchor)
-                            if (
-                                anchor.stage != expected_stage
-                                or _snapshot_scope(anchor) != expected_scope
-                            ):
-                                raise RuntimeError(
-                                    "authoritative anchor changed learning scope"
-                                )
-                            recorder.record_anchor(
-                                anchor,
-                                phase_id=anchor_context,
-                                reason=pending_anchor_reason,
-                                control_snapshot_ref=snapshot_ref,
-                            )
-                            last_anchor_frame = anchor.frame
-                            last_anchor_partition = _anchor_partition(
-                                anchor_context,
-                                stage=anchor.stage,
-                            )
-                            pending_anchor_reason = None
-                        except (
-                            NativeDecodeError,
-                            OSError,
-                            RuntimeError,
-                            ValueError,
-                        ) as error:
-                            anchor_failure_count += 1
-                            anchor_retry_after = snapshot.frame + 60
-                            emit_trace({
-                                "time": time.time(),
-                                "event": "anchor-capture-missed",
-                                "frame": snapshot.frame,
-                                "count": anchor_failure_count,
-                                "error": str(error),
-                            })
+                        last_anchor_frame = anchor.frame
+                        last_anchor_partition = _anchor_partition(
+                            anchor_context,
+                            stage=anchor.stage,
+                        )
+                        last_anchor_source_addresses = (
+                            _immutable_source_addresses(anchor)
+                        )
+                        pending_anchor_reason = None
                 except CorpusError as error:
                     # A physical frame without its promised dense factual root
                     # is not valid collection. Release input and terminate the
