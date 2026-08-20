@@ -66,26 +66,8 @@ def test_controller_accepts_immutable_policy_evaluation() -> None:
         "--practice-stage",
         "6",
         "--immutable-policy",
-        "--exploration-rate",
-        "0",
     ])
     assert args.immutable_policy
-
-
-def test_controller_rejects_exploration_for_immutable_policy() -> None:
-    with pytest.raises(SystemExit):
-        parse_args([
-            "--practice-stage", "6", "--exploration-rate", "0.01"
-        ])
-
-
-def test_controller_rejects_capture_gap_resume_without_source_authority() -> None:
-    with pytest.raises(SystemExit):
-        parse_args([
-            "--practice-stage",
-            "6",
-            "--resume-after-incoherent-capture",
-        ])
 
 
 def test_controller_accepts_source_u16_diagnostic_rng_seed() -> None:

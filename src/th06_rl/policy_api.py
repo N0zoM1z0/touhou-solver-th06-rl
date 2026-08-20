@@ -22,7 +22,6 @@ class PolicyContext:
     bullet_count: int
     laser_count: int
     hard_action_count: int
-    exploration_rate: float
     current_action: str = "stay"
     hard_admissible_actions: tuple[str, ...] = ()
     phase_elapsed_frames: int = 0

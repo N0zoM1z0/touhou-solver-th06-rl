@@ -345,15 +345,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--first-failure-corpus-root",
-        type=Path,
-        help=(
-            "explicit diagnostic only: collect one lossless physical Practice "
-            "prefix and stop on the first HIT; this incomplete mode is not "
-            "offline-RL training or promotion evidence"
-        ),
-    )
-    parser.add_argument(
         "--complete-stage-training-corpus-root",
         type=Path,
         help=(
@@ -370,14 +361,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "baseline/offline-RL evidence"
         ),
     )
-    parser.add_argument(
-        "--option-smoke-corpus-root",
-        type=Path,
-        help=(
-            "collect a fixed-RNG, time-bounded, patched-life option corpus "
-            "for non-evidence Generation-3 wiring smoke only"
-        ),
-    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--practice-stage", type=int, choices=range(1, 7))
     mode.add_argument("--start-route", action="store_true")
@@ -389,15 +372,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=0.0,
         help="0 lets the Practice stage reach its natural result path",
-    )
-    parser.add_argument(
-        "--exploration-rate",
-        type=float,
-        default=0.0,
-        help=(
-            "retired controller-level knob retained for old runner commands; "
-            "must be 0 because exploration belongs to the frozen policy state"
-        ),
     )
     parser.add_argument(
         "--diagnostic-rng-seed",
@@ -432,23 +406,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.seconds < 0:
         parser.error("--seconds cannot be negative")
-    if args.exploration_rate != 0.0:
-        parser.error(
-            "controller-level exploration is retired; encode predeclared "
-            "propensities in the immutable policy state"
-        )
-    if args.first_failure_corpus_root is not None:
-        if args.start_route:
-            parser.error("first-failure corpus collection currently requires Practice")
-        if args.seconds != 0.0:
-            parser.error("first-failure corpus collection requires --seconds 0")
     corpus_modes = sum(
         value is not None
         for value in (
-            args.first_failure_corpus_root,
             args.complete_stage_training_corpus_root,
             args.complete_route_corpus_root,
-            args.option_smoke_corpus_root,
         )
     )
     if corpus_modes > 1:
@@ -465,19 +427,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error("complete-route corpus requires --seconds 0")
         if args.diagnostic_rng_seed is not None:
             parser.error("complete-route corpus requires natural RNG")
-    if args.option_smoke_corpus_root is not None:
-        if args.start_route:
-            parser.error("option smoke currently requires Practice")
-        if args.seconds <= 0.0:
-            parser.error("option smoke requires a positive --seconds limit")
-        if args.diagnostic_rng_seed is None:
-            parser.error("option smoke requires --diagnostic-rng-seed")
     if (
         args.diagnostic_rng_seed is not None
-        and args.first_failure_corpus_root is None
         and args.complete_stage_training_corpus_root is None
         and args.complete_route_corpus_root is None
-        and args.option_smoke_corpus_root is None
     ):
         parser.error(
             "--diagnostic-rng-seed is training-only and requires "
@@ -555,11 +508,6 @@ def run(args: argparse.Namespace) -> int:
         if args.policy_scorer_library is not None
         else None
     )
-    first_failure_corpus_root = (
-        args.first_failure_corpus_root.resolve()
-        if args.first_failure_corpus_root is not None
-        else None
-    )
     complete_stage_training_corpus_root = (
         args.complete_stage_training_corpus_root.resolve()
         if args.complete_stage_training_corpus_root is not None
@@ -568,11 +516,6 @@ def run(args: argparse.Namespace) -> int:
     complete_route_corpus_root = (
         args.complete_route_corpus_root.resolve()
         if args.complete_route_corpus_root is not None
-        else None
-    )
-    option_smoke_corpus_root = (
-        args.option_smoke_corpus_root.resolve()
-        if args.option_smoke_corpus_root is not None
         else None
     )
     artifact_dir = args.artifact_dir.resolve()
@@ -587,7 +530,6 @@ def run(args: argparse.Namespace) -> int:
         "start_route": args.start_route,
         "difficulty": args.difficulty,
         "seconds": args.seconds,
-        "exploration_rate": args.exploration_rate,
         "immutable_policy": args.immutable_policy,
         "diagnostic_rng_seed": args.diagnostic_rng_seed,
         "evaluation_mode": (
@@ -599,18 +541,7 @@ def run(args: argparse.Namespace) -> int:
             if complete_stage_training_corpus_root is not None
             else "natural-rng-complete-route-collection"
             if complete_route_corpus_root is not None
-            else "fixed-rng-option-smoke-non-evidence"
-            if option_smoke_corpus_root is not None
-            else "fixed-rng-first-failure-diagnostic"
-            if args.diagnostic_rng_seed is not None
-            else "first-failure-diagnostic"
-            if first_failure_corpus_root is not None
             else "hit-continuation-benchmark"
-        ),
-        "first_failure_corpus_root": (
-            str(first_failure_corpus_root)
-            if first_failure_corpus_root is not None
-            else None
         ),
         "complete_stage_training_corpus_root": (
             str(complete_stage_training_corpus_root)
@@ -620,11 +551,6 @@ def run(args: argparse.Namespace) -> int:
         "complete_route_corpus_root": (
             str(complete_route_corpus_root)
             if complete_route_corpus_root is not None
-            else None
-        ),
-        "option_smoke_corpus_root": (
-            str(option_smoke_corpus_root)
-            if option_smoke_corpus_root is not None
             else None
         ),
         "display": args.display,
@@ -892,8 +818,6 @@ def run(args: argparse.Namespace) -> int:
             "--armed",
             "--seconds",
             str(args.seconds),
-            "--exploration-rate",
-            str(args.exploration_rate),
             "--no-post-run-audit",
             "--stop-game",
             "--min-commit-headroom-gib",
@@ -922,23 +846,8 @@ def run(args: argparse.Namespace) -> int:
                 "--corpus-root",
                 _windows_path(complete_stage_training_corpus_root),
             ))
-        elif option_smoke_corpus_root is not None:
-            controller.extend((
-                "--patch-lives",
-                "--continuous-stage",
-                "--corpus-root",
-                _windows_path(option_smoke_corpus_root),
-            ))
-        elif first_failure_corpus_root is None:
-            controller.extend(("--patch-lives", "--continuous-stage", "--no-corpus"))
         else:
-            controller.extend(
-                (
-                    "--stop-on-hit",
-                    "--corpus-root",
-                    _windows_path(first_failure_corpus_root),
-                )
-            )
+            controller.extend(("--patch-lives", "--continuous-stage", "--no-corpus"))
         if args.start_route:
             controller.append("--start-route")
         else:

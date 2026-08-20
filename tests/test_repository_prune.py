@@ -20,6 +20,7 @@ FORBIDDEN_PATH_PATTERNS = (
 )
 
 FORBIDDEN_PATHS = (
+    "config/wine_corpus_registry.json",
     "scripts/authorize_autonomous_canary.py",
     "scripts/authorize_conservative_canary.py",
     "scripts/authorize_option_advantage_canary.py",
@@ -68,6 +69,7 @@ FORBIDDEN_PATHS = (
     "src/th06_rl/qualification_corpus.py",
     "src/th06_rl/sequential_learning.py",
     "src/th06_rl/wine_risk.py",
+    "src/th06_rl/wine_corpus_registry.py",
 )
 
 FORBIDDEN_MODULES = frozenset(

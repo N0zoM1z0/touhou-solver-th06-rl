@@ -28,10 +28,10 @@ for those facts.
 
 Corpus, learner/framework, and fitted result have independent identities and
 lifecycles. A corpus is immutable reusable Wine evidence, not property of the
-algorithm that first used it. Replacing or repairing a learner must replay all
-compatible registered episodes before collecting more gameplay, so different
-offline RL methods can be compared on the same facts without changing their
-distribution. The normative contract is
+algorithm that first used it. Only newly audited source-complete episodes are
+eligible for the next inventory; the old transition-v6/v9/v10 registry was
+removed because it predates the current paused-root safety authority. The
+normative contract is
 [docs/IMMUTABLE_WINE_DATA_PLANE.md](docs/IMMUTABLE_WINE_DATA_PLANE.md).
 
 The reconstructed Linux/headless simulator and the pre-generation online-UCB
@@ -56,10 +56,10 @@ candidate, but may not promote one. Evidence-producing Wine always retains the
 retail clock; collection throughput comes from isolated parallel workers and
 offline computation.
 
-There is currently no authorized gameplay candidate or current-generation Wine
-experiment command. The tracked Wine smoke policy is infrastructure-only and
-cannot create promotion evidence. Generation 1--6 code is pruned; the next
-action is learner-only Generation-7 work on the registered corpus. Freeze a new
-contract before any outcome-facing Wine run. See
+There is currently no authorized gameplay candidate. The tracked Wine smoke
+policy is infrastructure-only and cannot create promotion evidence. Generation
+1--6 code and its active corpus registry are pruned; first establish a complete
+source-audited baseline and eligible inventory, then freeze the new offline
+learner contract before candidate-facing Wine evaluation. See
 [docs/REPOSITORY_PRUNE.md](docs/REPOSITORY_PRUNE.md) for the retired paths and
 the retention boundary.

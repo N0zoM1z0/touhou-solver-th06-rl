@@ -33,17 +33,19 @@ partial or duplicate runs fail closed.
 ## Compatibility gate
 
 Before parallel data becomes eligible, run the same frozen behavior contract
-sequentially and with two isolated workers. This is an infrastructure
-differential, not an outcome comparison: HIT totals may differ by RNG. The gate
-compares executable/native hashes, schema, complete-Stage lifecycle, zero
-drops/failures/Bomb, option/propensity invariants, capture and solve latency,
-stale-observation retries, frame-gap distribution, decision count per physical
-frame, and cleanup.
+once sequentially and simultaneously on two isolated workers. The differential
+uses the same fixed retail RNG and immutable policy state. Physical HIT count
+and a normalized factual digest must match exactly; changing startup or capture
+timing is a semantic failure, not training diversity. The gate also compares
+executable/native hashes, schemas, complete-Stage lifecycle, zero drops/
+failures/Bomb, option/propensity invariants, frame/decision sequence, and exact
+cleanup.
 
-Only if both workers remain inside the predeclared sequential envelope may
-collection expand to four normal-speed workers. Any timing/distribution
-regression returns to sequential collection and is an infra investigation; it
-does not alter the learner or select different gameplay data.
+Only after both concurrent workers reproduce the serial reference exactly may
+ordinary natural-RNG collection use two workers. Expansion beyond two requires
+a separately recorded resource and compatibility gate. Any mismatch disables
+parallel collection and starts an infra investigation; it never relaxes
+equality, alters the learner, or selects different gameplay data.
 
 ## Offline throughput
 

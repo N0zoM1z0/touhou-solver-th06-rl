@@ -85,7 +85,6 @@ def test_runner_accepts_route_as_a_distinct_mode(tmp_path: Path) -> None:
     assert args.score_template.name == "full-unlock-score.dat"
     assert args.policy_plugin.name == "candidate.py"
     assert args.policy_state.name == "candidate.json"
-    assert args.exploration_rate == 0.0
 
 
 def test_runner_uses_only_the_explicit_policy_state(tmp_path: Path) -> None:
@@ -95,41 +94,12 @@ def test_runner_uses_only_the_explicit_policy_state(tmp_path: Path) -> None:
             "4",
             "--difficulty",
             "hard",
-            "--exploration-rate",
-            "0",
             "--artifact-dir",
             str(tmp_path / "run"),
         ]
     )
 
     assert args.policy_state.name == "candidate.json"
-    assert args.exploration_rate == 0.0
-
-
-def test_immutable_runner_requires_zero_exploration(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit):
-        parse_args(
-            [
-                "--practice-stage",
-                "6",
-                "--exploration-rate",
-                "0.01",
-                "--artifact-dir",
-                str(tmp_path / "run"),
-            ]
-        )
-
-    args = parse_args(
-        [
-            "--practice-stage",
-            "6",
-            "--exploration-rate",
-            "0",
-            "--artifact-dir",
-            str(tmp_path / "run"),
-        ]
-    )
-    assert args.immutable_policy
 
 
 def test_runner_accepts_isolated_offline_scorer(tmp_path: Path) -> None:
@@ -206,25 +176,6 @@ def test_attested_child_pid_bypasses_sudo_monitor_pid(tmp_path: Path) -> None:
         process.wait(timeout=5)
 
 
-def test_first_failure_corpus_is_an_explicit_practice_diagnostic(
-    tmp_path: Path,
-) -> None:
-    common = [
-        "--practice-stage",
-        "6",
-        "--first-failure-corpus-root",
-        str(tmp_path / "corpus"),
-        "--artifact-dir",
-        str(tmp_path / "run"),
-    ]
-    args = parse_args([
-        *common,
-        "--exploration-rate",
-        "0",
-    ])
-    assert args.first_failure_corpus_root == tmp_path / "corpus"
-
-
 def test_trace_summary_counts_default_first_hit_stop(tmp_path: Path) -> None:
     trace = tmp_path / "trace.jsonl"
     trace.write_text(
@@ -270,8 +221,6 @@ def test_fixed_rng_is_allowed_only_for_training_corpus(tmp_path: Path) -> None:
         "--practice-stage",
         "6",
         "--immutable-policy",
-        "--exploration-rate",
-        "0",
         "--diagnostic-rng-seed",
         "0x1234",
         "--artifact-dir",
@@ -282,7 +231,7 @@ def test_fixed_rng_is_allowed_only_for_training_corpus(tmp_path: Path) -> None:
 
     args = parse_args([
         *common,
-        "--first-failure-corpus-root",
+        "--complete-stage-training-corpus-root",
         str(tmp_path / "corpus"),
     ])
     assert args.diagnostic_rng_seed == 0x1234
@@ -295,7 +244,6 @@ def test_complete_stage_training_corpus_allows_natural_or_fixed_rng(
     args = parse_args([
         "--practice-stage", "6",
         "--complete-stage-training-corpus-root", root,
-        "--exploration-rate", "0",
     ])
     assert args.complete_stage_training_corpus_root == tmp_path / "complete-corpus"
     assert args.diagnostic_rng_seed is None
@@ -303,7 +251,6 @@ def test_complete_stage_training_corpus_allows_natural_or_fixed_rng(
         "--practice-stage", "6",
         "--complete-stage-training-corpus-root", root,
         "--diagnostic-rng-seed", "123",
-        "--exploration-rate", "0",
     ])
     assert fixed.diagnostic_rng_seed == 123
 
@@ -313,7 +260,6 @@ def test_complete_route_corpus_requires_natural_full_route(tmp_path: Path) -> No
     args = parse_args([
         "--start-route",
         "--complete-route-corpus-root", root,
-        "--exploration-rate", "0",
     ])
     assert args.complete_route_corpus_root == tmp_path / "route-corpus"
 
@@ -326,38 +272,6 @@ def test_complete_route_corpus_requires_natural_full_route(tmp_path: Path) -> No
         parse_args([
             "--start-route",
             "--complete-route-corpus-root", root,
-            "--diagnostic-rng-seed", "1",
-        ])
-
-
-def test_option_smoke_is_time_bounded_fixed_rng_and_non_evidence(
-    tmp_path: Path,
-) -> None:
-    root = str(tmp_path / "smoke-corpus")
-    common = [
-        "--practice-stage", "6",
-        "--option-smoke-corpus-root", root,
-        "--immutable-policy",
-        "--exploration-rate", "0",
-        "--diagnostic-rng-seed", "0xd53c",
-    ]
-    with pytest.raises(SystemExit):
-        parse_args(common)
-    args = parse_args([*common, "--seconds", "45"])
-    assert args.option_smoke_corpus_root == tmp_path / "smoke-corpus"
-    assert args.seconds == 45.0
-
-
-def test_option_smoke_is_exclusive_with_evidence_corpus_modes(
-    tmp_path: Path,
-) -> None:
-    with pytest.raises(SystemExit):
-        parse_args([
-            "--practice-stage", "6",
-            "--option-smoke-corpus-root", str(tmp_path / "smoke"),
-            "--complete-stage-training-corpus-root", str(tmp_path / "training"),
-            "--seconds", "45",
-            "--exploration-rate", "0",
             "--diagnostic-rng-seed", "1",
         ])
 

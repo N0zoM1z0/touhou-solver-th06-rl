@@ -2,88 +2,65 @@
 
 ## Current state
 
-`main` is a pruned infrastructure baseline. It intentionally has no authorized
-learner, candidate, canary, or final-evaluation runner. Generations 1--6 failed
-to demonstrate a repeatable reduction in complete-Stage physical HIT count;
-their algorithm code and scattered experiment contracts were removed. Their
-original-Wine corpora were not changed and remain reusable through
-`config/wine_corpus_registry.json`.
+The repository is a self-contained original-retail Wine adapter with
+source-complete online safety, lossless factual recording, and no authorized
+gameplay learner. It does not import the historical N0zoM1z0 solver at runtime.
 
-The terminal learner diagnosis, independent audit, disputed points, corpus
-statistics, and Generation-7 decisions are consolidated in
-`docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md`.
+The old Generation-1--6 executable learners and corpus registry are removed.
+Their transition-v6/v9/v10 episodes predate the current source-complete,
+same-paused-root publication contract and are not eligible for new offline-RL
+training. Historical failure analysis and performance evidence remain in
+`docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md` and
+`docs/TRAINING_INFRA_PERFORMANCE.md`.
+
+## Immediate objective
+
+1. Finish one natural-RNG Lunatic full-route baseline through Ending, continuing
+   after every HIT and never using Bomb.
+2. Require clean lifecycle/HIT conservation, comprehensive factual roots,
+   dense native parity, and zero uncovered causal successor hazards.
+3. Establish the exact fixed-seed serial/two-worker compatibility gate using
+   isolated normal-speed Wine workers.
+4. Admit only newly collected source-complete episodes, split them by complete
+   episode, and begin the frozen offline learner.
+
+Weak play is data. Only demonstrated capture, source semantics, geometry,
+safety, delivery, lifecycle, accounting, isolation, or artifact defects justify
+online code changes.
 
 ## Product objective
 
-Build an autonomous loop in which original retail Wine generates factual
-experience, a replaceable offline algorithm learns from every compatible
-episode, and a small immutable online policy ranks only the native-safe action
-set. Humans repair infrastructure and specify general algorithms; they do not
-write routes or tune named stages, spells, frames, RNG seeds, or failure sites.
+`Wine facts -> immutable admitted inventory -> grouped offline learner`
 
-```text
-Wine facts -> immutable corpus -> replaceable offline learner
-           -> exact deployable stochastic policy -> Wine shadow/canary/A-B
-           -> append only independently authorized training facts
-```
+`-> small immutable ranker inside native-safe set -> Wine canary/evaluation`
+
+Only original Japanese TH06 1.02h under Wine creates outcomes. Offline work may
+be complex and parallel, but the resident path remains bounded, deterministic
+in runtime cost, source-complete, and fail-closed. Canary and promotion are
+sequential normal-speed natural-RNG complete episodes whose physical HIT count
+is authoritative.
 
 ## Valid retained foundation
 
-- coherent original-Wine capture, delivery, zero-Bomb enforcement, and exact
-  process cleanup;
-- source-grounded native collision geometry, Hard-empty fail-close behavior,
-  and fresh pre-publication revalidation;
-- immutable capability-indexed corpus registration and whole-episode groups;
-- factual eight-frame option metadata, complete behavior propensities, and HIT
-  conservation in recorded transition schemas;
-- adapter-provided observation, action-conditional geometry, bounded hazard
-  primitives, and causal short history;
-- generic native tree/support/hazard-codebook scoring primitives;
-- immutable policy loading, CPU/resource controls, and latency measurement;
-- rejection-only complete-block evidence accounting.
-
-The prior fused actor scorer showed that sub-frame native inference is
-feasible, but no rejected actor artifact or objective is authorized for reuse.
-
-## Corpus snapshot
-
-The registry contains 71 clean complete Stage runs. Fifty-six episodes have
-sequential-offline-RL capabilities: 19 Stage 4, 4 Stage 5, and 33 Stage 6.
-The audited replay snapshot contains 167,250 factual options, 2,044 manifest
-HITs, and 52,448 factual nonbaseline assignments. Counts are diagnostics, not
-hard-coded contracts; code must query capabilities and bind inventory hashes.
-
-The data comes from several behavior policies. A pooled row is therefore not
-automatically a sample from one well-defined behavior policy `mu`. Any value or
-advantage learner must condition nuisance estimation on source/cohort (and
-stage where needed), or explicitly define a shared deployable reference policy.
-
-## Generation-7 order of work
-
-1. Repair the causal feature contract and enforce feature availability.
-2. Define one exact residual stochastic policy distribution shared by fitting,
-   OPE, shadow, and native deployment.
-3. Add bounded proper actor objectives and adversarial extreme-logit tests.
-4. Prove action-effect identifiability on existing randomized assignments with
-   null, delayed-effect, episode-bootstrap, and cross-source/stage gates.
-5. Compare baseline-relative orthogonal/direct advantage, one-step constrained
-   improvement, and repaired IQL plus proper AWR.
-6. Run richer causal-state and hazard-set ablations only after the compact
-   state baseline is measured.
-7. Collect new Wine data only after a specific support gap is demonstrated and
-   a generic one-deviation collection contract is frozen.
-
-Do not run original-Wine outcome-facing experiments merely because an offline
-metric improves. Generation 7 must first pass its frozen learner-only gates,
-then exact policy conformance and latency, then an incumbent-occupancy shadow.
+- portable archive/runtime/bootstrap and fixed executable/source attestations;
+- coherent same-paused-root capture, Hard-4 certification, revalidation, input
+  publication, zero-Bomb enforcement, and exact process cleanup;
+- raw bullet/laser/enemy/manager/player-attack/item/resource facts and exact
+  source Hard primitives independent of learner features;
+- complete Stage/route HIT continuation and four-way HIT conservation;
+- offline dense parity, source motion, and one-sided causal successor audits;
+- immutable policy loading, CPU/resource controls, and isolated Wine worker
+  preparation.
 
 ## Operational discipline
 
-- Keep repository-wide CPU use at or below 32 and do not overlap canonical
-  Wine gameplay with heavy fitting.
-- Concurrent Wine collection is currently scientifically unauthorized: the
-  fixed-seed serial/concurrent differential changed HIT, frame, and digest
-  outcomes. Offline parsing and fitting may parallelize.
-- Never delete or commit ignored corpora, artifacts, game binaries, Wine
-  prefixes, or the ignored source checkout.
-- Commit as `N0zoM1z0 <161784452+N0zoM1z0@users.noreply.github.com>`.
+- Default to two collection workers only after their exact compatibility gate
+  passes; each owns game/prefix/display/CPU/artifact/corpus state.
+- Do not overlap canonical baseline/canary/promotion Wine with heavy fitting or
+  a worker gate.
+- Never accelerate the clock of an evidence-producing Wine process.
+- Do not commit game assets, prefixes, corpora, traces, logs, source checkouts,
+  caches, or generated artifacts.
+- Commit as `N0zoM1z0 <161784452+N0zoM1z0@users.noreply.github.com>` and add
+  the required Gensokyo `Assisted-by` trailers when those skills influence a
+  change.

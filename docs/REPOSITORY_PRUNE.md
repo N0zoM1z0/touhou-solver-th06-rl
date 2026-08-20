@@ -19,7 +19,7 @@ active code.
 
 ## What the prune deliberately kept
 
-- immutable original-Wine corpus directories and the tracked registry binding;
+- current source-complete corpus recording and audit infrastructure;
 - factual recorder, transition integrity validation, and replay tooling;
 - original-retail capture/control and physical HIT accounting;
 - native geometry, collision safety, Hard-empty audit, and fresh issue checks;
@@ -38,10 +38,10 @@ version; ignored old cache files are left untouched.
 
 ## Enforced absence
 
-`tests/test_repository_prune.py` rejects retired backend modules and known
-Generation-1--6 learner/runner/config/document paths. It intentionally does not
-ban immutable corpus source IDs containing historical generation names: source
-identity is provenance, not algorithm ownership.
+`tests/test_repository_prune.py` rejects retired backend modules, the legacy
+corpus registry, and known Generation-1--6 learner/runner/config/document
+paths. Ignored historical artifacts remain quarantined and are not an active
+data source.
 
 ## Recovery rule
 

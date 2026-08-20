@@ -32,9 +32,10 @@ orchestration, and evaluation aggregation unchanged.
 
 Collected facts are not owned by a learner generation. The immutable Wine data
 plane, replaceable algorithm, and fitted model artifact are separate contracts.
-Learners query the capability registry for the minimum semantics they need and
-reuse every compatible episode; they may not recollect data merely because the
-model family changed. See `IMMUTABLE_WINE_DATA_PLANE.md`.
+Learners consume every episode admitted under the current source-complete
+contract; they may not recollect data merely because the model family changed.
+The old schema-only registry is removed and its pre-authority corpora are not
+eligible. See `IMMUTABLE_WINE_DATA_PLANE.md`.
 
 ## No human gameplay tuning
 
@@ -67,8 +68,9 @@ response to weak play is another autonomous data/fit round.
 One resumable orchestrator owns the state below and writes every transition
 atomically:
 
-1. **Collect** sequential original-Wine episodes with a frozen behavior policy
-   and algorithmic propensity-recorded exploration inside the native-safe set.
+1. **Collect** original-Wine episodes with a frozen behavior policy and
+   algorithmic propensity-recorded exploration inside the native-safe set.
+   Collection is sequential until the exact two-worker gate passes.
 2. **Validate** provenance, complete transition windows, propensities, zero
    Bomb, capture/delivery contracts, and exact process cleanup. Contract failure
    stops as `infra_failure`; policy failure does not.
@@ -94,10 +96,10 @@ per-run audit before merge. Canary and final evaluation remain single-instance,
 alternating, normal-speed jobs. Offline fitting may parallelize.
 
 There is currently no authorized learner-generation runner or gameplay
-candidate on `main`. Failed Generation-1--6 executable paths were removed;
-they may not be restored as a fallback. The next learner starts as a separately
-frozen Generation-7 contract on the existing registry and must pass
-learner-only qualification before any outcome-facing Wine run. See
+candidate on `main`. Failed Generation-1--6 executable paths and their active
+registry were removed; they may not be restored as a fallback. The next learner
+starts from newly admitted source-complete episodes and must pass learner-only
+qualification before any candidate-facing Wine run. See
 `LEARNER_AUDIT_AND_GENERATION7_DECISION.md` and `HAND_OFF.md`.
 
 Every active candidate is hash-chained:
@@ -182,8 +184,8 @@ statistics, and valid retained-infrastructure boundary are consolidated in
 `LEARNER_AUDIT_AND_GENERATION7_DECISION.md`; executable historical algorithms
 are intentionally absent.
 
-Generation 7 must first qualify a bounded proper learner on frozen factual Wine
-corpora split by complete episode. These offline checks exist to reject broken
+The next learner must first qualify a bounded proper objective on newly
+admitted factual Wine corpora split by complete episode. These offline checks exist to reject broken
 algorithms quickly and cannot reinterpret historical gameplay as authorization
 or promotion evidence. Only after the learner architecture and its gates are
 frozen may it collect new Wine evidence.

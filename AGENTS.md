@@ -3,7 +3,9 @@
 Read `START_HERE.md` and `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` before
 changing code. The authoritative source clone is the ignored checkout at
 `reference/GensokyoClub-th06/`. Source and shipped-game claims must be
-traceable to it. Do not use REA, REA-provided tools, or LeanToken.
+traceable to it. Do not use REA or REA-provided tools. Prefer LeanToken for
+bounded repository archaeology and use ordinary tools for edits and runtime
+probes.
 
 ## Wine-only environment boundary
 
@@ -61,7 +63,10 @@ never by adjacent frame. A learned policy defaults to the frozen incumbent
 outside supported physical features and abstains on model disagreement.
 
 Failed Generation-1--6 learners and runners have been pruned from the active
-tree. Do not restore them from Git history or ignored artifacts. The terminal
+tree. Do not restore them from Git history or ignored artifacts. Their old
+transition-v6/v9/v10 corpora are also training-ineligible: they predate the
+source-complete paused-root authority and lack the current raw source
+commitments needed to recompute or audit safe-set labels. The terminal
 action-centered actor objective was unbounded below under empirical
 optimization; its proof and the successor boundary are recorded in
 `docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md`. Every successor must use a

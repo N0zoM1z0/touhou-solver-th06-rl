@@ -1,5 +1,11 @@
 # Training infrastructure performance log
 
+This is historical audit evidence, not an executable contract or an authorized
+corpus list. Generation-specific paths, old registry entries, and old learner
+commands mentioned below are quarantined history. Current instructions live in
+`START_HERE.md`, `IMMUTABLE_WINE_DATA_PLANE.md`, and
+`WINE_EXACT_ACCELERATION.md`.
+
 This append-only log separates throughput engineering from learner efficacy.
 Every optimization must preserve factual original-Wine transitions, physical
 HIT cost, native-safe authority, behavior propensities, complete population,

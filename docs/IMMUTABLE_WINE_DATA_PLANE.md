@@ -1,146 +1,64 @@
-# Immutable Wine data plane
+# Source-complete Wine data plane
 
-## Core separation
+## Current admission state
 
-Collected data, learning algorithms, and fitted model artifacts are three
-different objects:
+There is no legacy corpus authorized for current offline-RL training. The old
+transition-v6/v9/v10 registry was removed because a transition schema alone
+does not prove the current online safety and factual-state contract. Those runs
+predate source-complete Hard lowering, same-paused-epoch publication, raw source
+commitments, comprehensive offline facts, and the causal successor audit.
+Historical artifacts remain quarantined evidence and must not be scanned or
+silently admitted by a learner.
 
-`original-Wine facts -> versioned learner consumes declared capabilities -> immutable fitted artifact`
+The first admissible inventory will be built only from newly completed,
+source-complete original-Wine episodes. Until such an inventory is created,
+offline fitting has zero authorized training episodes.
 
-A corpus is not owned by the learner generation that first collected it. It is
-an immutable physical fact set with provenance and semantic capabilities. A
-learner is replaceable code that queries those capabilities. A fit is a derived
-artifact bound to exact corpus, source, parameters, and seeds. Replacing an
-algorithm must reuse every compatible factual corpus rather than replay the
-game merely because the model family changed.
+## Permanent separation
 
-This separation is also the portability boundary. TH06/TH08 adapters emit the
-same generic facts and capability declarations; offline RL consumes them
-without game-specific routes or phase logic.
+Collected data, learning algorithms, and fitted policy artifacts are separate:
 
-This is a permanent repository invariant, not a Generation-6 convenience:
+`original-Wine facts -> admitted immutable inventory -> offline learner -> immutable fit`
 
-1. **Data identity is factual.** An episode is identified by immutable source
-   hashes and declared semantics, never by the learner, fit, or result that
-   happened to consume it.
-2. **Algorithm identity is executable.** A learner version declares the
-   capabilities it requires and its frozen split/target/model contract. It
-   receives a read-only ordered corpus view; it cannot rewrite admission,
-   duplicate favourable rows, or hide unfavourable rows.
-3. **Fit identity is derived.** Every checkpoint/report binds the exact
-   learner source, corpus query result, episode partition, parameters, and
-   random seeds. It never becomes a new factual corpus.
-4. **Evaluation identity is new evidence.** Offline replay can reject or
-   qualify an algorithm, but only newly scheduled original-Wine canaries and
-   complete-Stage trials measure the deployed policy. Evaluation outcomes are
-   appended as facts and are not back-edited into the algorithm that produced
-   them.
+- Data identity binds the exact retail executable, native library, code commit,
+  schemas, episode identity, run/manifest hashes, and per-run audit.
+- Algorithm identity declares the factual capabilities it consumes and never
+  changes or filters the admitted inventory based on observed outcomes.
+- Fit identity binds the exact inventory, whole-episode split, implementation,
+  parameters, and seeds. It cannot become a factual corpus.
+- Evaluation creates new normal-speed original-Wine evidence. Offline replay
+  may reject a candidate but cannot promote it.
 
-The intended reuse relation is many-to-many, not generational ownership:
+## Required admission evidence
 
-`one immutable corpus -> many learner/framework experiments -> many immutable fits`
+Every admitted episode must satisfy all of these conditions. Missing evidence
+fails closed; a compatible-looking transition version is insufficient.
 
-and a learner may consume many compatible corpus inventories through one
-capability query. Episode IDs, factual transitions, propensities, native-safe
-sets, and physical outcomes remain byte-identical across those experiments.
-Only learner preprocessing, targets, parameters, seeds, fit checkpoints, and
-reports differ. A fit directory must not contain a relabelled private corpus,
-and a learner failure must not cause the same game evidence to be collected
-again under a new generation name.
+1. It is a complete declared Practice Stage or full route with HIT continuation,
+   zero Bomb, zero dropped rows, and exact HIT conservation.
+2. Its run metadata declares the current authoritative frame/object/anchor
+   schemas, `source-complete-hard-v1`, and same-paused-root publication.
+3. Dense roots retain raw bullet, laser, enemy, manager, player-attack, item,
+   score/graze, RNG/rank, and NMNB resource state independently of learner
+   features.
+4. Every published action retains the exact four-frame AABB/laser primitives
+   certified online; unknown or incomplete source coverage is absent.
+5. The ordinary run audit has no integrity error, dense native replay agrees,
+   and the one-sided retained-next-root audit finds no uncovered factual AABB or
+   laser hazard.
+6. Artifacts are immutable and every run path and hash is unique. Partial,
+   first-HIT, time-bounded, authority-failed, or cleanup-failed runs are never
+   selected for training.
 
-Consequently, algorithm search is cheap by construction: a corrected or more
-advanced learner must first replay all compatible recorded Wine facts. New
-gameplay collection is reserved for a real capability/coverage gap or the
-next predeclared autonomous round, never for manually repairing an observed
-action, HIT location, Stage, RNG, or model result.
+The admission builder must validate the complete source root rather than skip
+bad outcomes. Training/validation roles are assigned later by whole physical
+episode, never by adjacent frames.
 
-## Machine registry
+## Parallel collection boundary
 
-`config/wine_corpus_registry.json` and
-`src/th06_rl/wine_corpus_registry.py` bind every currently clean, complete
-original-retail Wine Stage by its source inventory, manifest, run metadata,
-transition schema, executable hash, Stage, and physical HIT outcome. Selection
-is by a required semantic capability set, never by model generation or observed
-HIT count.
-
-The current registry contains 71 clean complete Wine Stages. The original
-audit contained 59; Generation-6 round 3 later appended 12 natural-RNG Stages
-as one hash-bound source:
-
-| Access | Episodes | Permitted use |
-| --- | ---: | --- |
-| Training, randomized option semantics | 56 | sequential offline RL, action effect, representation, behavior value |
-| Training, deterministic older semantics | 12 | representation and behavior state/value only |
-| Infrastructure regression only | 3 | serial/concurrent differential; never learner input |
-
-The 56 sequential episodes comprise 13 transition-v9 Stage-6, 16
-transition-v10 Stage-6, 15 transition-v10 Stage-4, and 12 startup-audited
-natural-RNG transition-v10 Generation-6-behavior runs. Version 9 has a complete
-propensity distribution reconstructible from its frozen randomized behavior
-contract; version 10 records the complete vector directly. Both have factual
-option successors, native-safe candidate sets, and exact Stage HIT
-conservation. The current sequential view contains 167,250 factual options;
-that measured count is an audit snapshot, not a hard-coded selection rule.
-
-The 12 transition-v6 episodes used deterministic behavior and cannot identify
-a randomized treatment effect. They remain valuable for self-supervised hazard
-representation, observation normalization, behavior-policy risk/value, and
-schema regression. A learner may not pretend missing propensities exist.
-
-The three clean concurrency-differential Stages deliberately remain
-`infrastructure-regression-only`: their incompatibility was the test outcome,
-and their predeclared contract forbids training admission.
-
-## Admission and exclusion
-
-The registry admits only complete original-Wine Stages with zero dropped rows,
-complete Stage trajectory, complete physical outcome, zero capture/corpus/
-authority/trace failure, and the exact retail executable hash. First-failure,
-short smoke, incomplete, headless, synthetic, authority-failed, and rejected
-attempts remain available for their declared diagnostics but are not silently
-promoted into the training data plane.
-
-New data appends a new immutable source inventory or intentionally updates an
-existing inventory with an audit. Learner code must not scan arbitrary artifact
-directories. Registry drift fails closed.
-
-An autonomous collection appends only after every predeclared episode is
-present and individually passes the clean complete-Stage audit. The inventory
-builder rejects, rather than skips, any incomplete or dirty manifest below the
-new source root; this prevents outcome- or failure-conditioned omission. The
-runner then atomically adds exactly one source row and revalidates the complete
-registry. A crash after moving an accepted episode or writing the registry is
-reconciled from hashes and the ledger, never by drawing a replacement gameplay
-outcome. The first attempted user of this protocol exposed scheduler and
-PID-attestation defects; the repaired round performed the first successful
-audited append. The general repairs remain recorded in
-`TRAINING_INFRA_PERFORMANCE.md` after generation-specific runners were pruned.
-
-## Partition is a learner-run property
-
-Capability eligibility and statistical role are separate. The corpus registry
-says what facts an episode can support. A learner generation separately freezes
-which compatible complete episodes are development, qualification, training,
-canary, or final evaluation. That prevents both data duplication and holdout
-leakage.
-
-Historical qualification can reject an algorithm but cannot authorize new
-gameplay. Final efficacy always requires new normal-speed original-Wine,
-natural-RNG, complete-Stage HIT-continuation trials.
-
-## Reusable experiment rule
-
-Algorithm iteration creates a new derived report; it never creates a private
-copy or silently relabels source data. Two learners compared on the same
-registry query must receive the same ordered factual episodes and immutable
-physical fields. Their preprocessing, representations, targets, fitted
-parameters, policy metrics, and outcomes live under separate source hashes and
-artifact identities. A failed result remains addressable and is never
-overwritten by a repaired learner.
-
-New Wine collection is justified by a declared capability gap or by a policy
-that passed offline qualification and needs causal canary evidence. Merely
-changing neural architecture, critic family, uncertainty estimator, or
-hyperparameters is not a data-collection reason: every compatible historical
-episode must be replayed first. This is the repository's operational meaning
-of keeping data, algorithms/frameworks, and learning results separate.
+Parallel Wine workers may append facts only after the fixed-seed serial versus
+two-worker compatibility gate passes exactly. Each worker owns its game copy,
+Wine prefix, display, CPU partition, artifact root, and corpus root. A worker
+failure cancels and reaps the complete batch; only individually audited,
+immutable complete episodes can enter the next inventory. Canary and promotion
+runs remain sequential and natural-speed.

@@ -13,8 +13,7 @@ Read in this order:
 4. `docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md` for the consolidated
    failure analysis and the frozen Generation-7 research direction;
 5. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the end-to-end contract;
-6. `docs/IMMUTABLE_WINE_DATA_PLANE.md` and
-   `config/wine_corpus_registry.json` for reusable factual data;
+6. `docs/IMMUTABLE_WINE_DATA_PLANE.md` for current source-complete admission;
 7. `docs/REPOSITORY_PRUNE.md` for the removal/retention boundary;
 8. `docs/TRAINING_INFRA_PERFORMANCE.md` for historical performance and the
    failed concurrent-Wine differential;
@@ -41,7 +40,8 @@ Read in this order:
 - Dense corpus roots preserve factual raw hazard-producer state plus player
   attacks, items, and NMNB resource counters separately from capped learner
   features; features never replace authority evidence.
-- Concurrent Wine collection remains disabled until a new differential passes.
+- Concurrent Wine collection remains disabled until the exact fixed-seed
+  serial/two-worker differential passes.
 
 ## Active layout
 

@@ -25,7 +25,6 @@ def _context(**changes) -> PolicyContext:
         bullet_count=300,
         laser_count=0,
         hard_action_count=3,
-        exploration_rate=0.0,
     )
     return replace(base, **changes)
 

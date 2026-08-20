@@ -428,7 +428,6 @@ def run(args: argparse.Namespace) -> int:
                         "factual_state_schema": OFFLINE_FACT_SCHEMA,
                         "observed_horizon": args.horizon,
                         "hard_horizon": 4,
-                        "exploration_rate": args.exploration_rate,
                         "diagnostic_rng_seed": args.diagnostic_rng_seed,
                     },
                     episode_unit=("route" if args.start_route else "practice-stage"),
@@ -982,7 +981,6 @@ def run(args: argparse.Namespace) -> int:
                             bullet_count=snapshot.live_bullet_count,
                             laser_count=snapshot.laser_count,
                             hard_action_count=1,
-                            exploration_rate=args.exploration_rate,
                             current_action=current_action_name,
                             hard_admissible_actions=(desired_core.name,),
                             phase_elapsed_frames=phase_elapsed_frames,
@@ -1097,7 +1095,6 @@ def run(args: argparse.Namespace) -> int:
                             bullet_count=snapshot.live_bullet_count,
                             laser_count=snapshot.laser_count,
                             hard_action_count=len(hard),
-                            exploration_rate=args.exploration_rate,
                             current_action=current_action_name,
                             hard_admissible_actions=tuple(
                                 item.action.name for item in hard
@@ -1602,14 +1599,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "not a training or promotion episode"
         ),
     )
-    parser.add_argument(
-        "--resume-after-incoherent-capture",
-        action="store_true",
-        help=(
-            "retired compatibility flag; source-complete collection never "
-            "resumes after an incoherent capture"
-        ),
-    )
     parser.add_argument("--stop-game", action="store_true")
     parser.add_argument("--seconds", type=float, default=0.0)
     parser.add_argument("--horizon", type=int, default=12)
@@ -1622,7 +1611,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "this low-frequency interval; 0 disables periodic anchors"
         ),
     )
-    parser.add_argument("--exploration-rate", type=float, default=0.0)
     parser.add_argument(
         "--diagnostic-rng-seed",
         type=lambda value: int(value, 0),
@@ -1705,15 +1693,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--horizon must cover Hard-4")
     if args.full_anchor_frames < 0:
         parser.error("--full-anchor-frames cannot be negative")
-    if args.resume_after_incoherent_capture:
-        parser.error(
-            "--resume-after-incoherent-capture is incompatible with "
-            "source-complete online authority"
-        )
-    if args.exploration_rate != 0.0:
-        parser.error(
-            "controller-level exploration is retired; use the frozen policy state"
-        )
     if args.min_commit_headroom_gib < 0.0:
         parser.error("--min-commit-headroom-gib cannot be negative")
     if args.max_corpus_gib <= 0.0:
