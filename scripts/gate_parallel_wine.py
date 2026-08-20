@@ -221,11 +221,12 @@ def validate_gate_run(
     schemas = run.get("schemas")
     successor = audit.get("source_successor_coverage")
     numeric_successor = audit.get("source_numeric_successor_parity")
+    player_successor = audit.get("player_successor_parity")
     parity = audit.get("dense_hard_parity")
     latency = audit.get("latency")
     if not all(isinstance(value, dict) for value in (
         completion, outcome, planner, schemas, successor, numeric_successor,
-        parity, latency,
+        player_successor, parity, latency,
     )):
         raise ValueError("parallel gate run is missing structured evidence")
     checks = {
@@ -305,6 +306,18 @@ def validate_gate_run(
             and numeric_successor.get("transcendental_budget_violations") == 0
             and numeric_successor.get("nonfinite_successors") == 0
             and numeric_successor.get("global_mutation_union_violations") == 0
+        ),
+        "player_successor": (
+            player_successor.get("method")
+            == "contiguous-active-player-center-successor-v1"
+            and player_successor.get("arithmetic_comparison")
+            == "float32-bit-exact"
+            and player_successor.get("input_semantics")
+            == "next-completed-root-sampled-input"
+            and player_successor.get("movement_order")
+            == "Player-before-Enemy-before-Bullet"
+            and player_successor.get("checked_links", 0) > 0
+            and player_successor.get("mismatches") == 0
         ),
         "native_parity": (
             parity.get("checked", 0) > 0

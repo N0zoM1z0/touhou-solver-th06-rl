@@ -123,3 +123,10 @@ recorded source branch union. Release allowance is exactly the source's 0.01
 axis acceleration bound plus explicit binary32 rounding ULPs. Full-route
 admission requires the Stage-2 mutation path to be observed and requires zero
 numeric or branch-union violations.
+
+Player motion has an independent causal audit. The action published during a
+paused root is only a command intent; the following completed-calc root owns
+the sampled input fact. On every contiguous active-player link, that witnessed
+input must reproduce the next player center bit-for-bit under the source's
+float32 movement and clamp order. This also checks the exact chain ordering
+(`Player`, then `EnemyManager`, then `BulletManager`) assumed by Hard-4.

@@ -132,10 +132,14 @@ their frame gap is not one. Completion verifies HIT conservation across the
 controller log, trace, manifest outcome, and lossless event stream.
 
 `--seconds 0` means natural completion, not an infinite or arbitrary timeout.
-HIT continuation is explicitly benchmark-only and training-ineligible. Bomb is
-unrepresentable in the input bridge. Every artifact directory contains the
-controller/game/GDB logs, a frame trace, configuration evidence, and
-`report.json` with process cleanup and provenance.
+This native-baseline run is diagnostic because its behavior policy has no
+randomized option propensities; that, not HIT continuation, makes it
+training-ineligible. Declared exploration collection also continues after HIT
+to retain a complete physical episode, while post-HIT invulnerable choices are
+excluded only by the NMNB learner view. Bomb is unrepresentable in the input
+bridge. Every artifact directory contains the controller/game/GDB logs, a
+frame trace, configuration evidence, and `report.json` with process cleanup
+and provenance.
 
 The runner records the explicit policy plug-in and policy-state paths,
 before/after hashes, and the exact controller command. Learning runs use an

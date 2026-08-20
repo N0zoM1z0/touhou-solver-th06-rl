@@ -86,6 +86,14 @@ def _documents(hits: int = 12):
             "nonfinite_successors": 0,
             "global_mutation_union_violations": 0,
         },
+        "player_successor_parity": {
+            "method": "contiguous-active-player-center-successor-v1",
+            "arithmetic_comparison": "float32-bit-exact",
+            "input_semantics": "next-completed-root-sampled-input",
+            "movement_order": "Player-before-Enemy-before-Bullet",
+            "checked_links": 90,
+            "mismatches": 0,
+        },
         "source_anchor_coverage": {
             "anchored_stages": [1, 2, 3, 4, 5, 6],
             "missing_observed_stages": [],
@@ -175,6 +183,14 @@ def test_baseline_route_verifier_rejects_numeric_successor_error() -> None:
     documents[3]["source_numeric_successor_parity"]["exact_mismatches"] = 1
 
     with pytest.raises(ValueError, match="numeric_source_successors"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_player_successor_error() -> None:
+    documents = list(_documents())
+    documents[3]["player_successor_parity"]["mismatches"] = 1
+
+    with pytest.raises(ValueError, match="player_input_successors"):
         verify(*documents)
 
 

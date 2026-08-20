@@ -123,7 +123,7 @@ first-order bottleneck, although set encoding remains a useful ablation.
   never for movement or the deployable policy.
 - Offline geometry may score every current native-safe action against already
   observed hazards, but it may not invent future births, dynamics, or successor
-  states for actions Wine did not execute.
+  states for command intents that were not actually issued to Wine.
 - A learned forecast may rank or cause abstention; it cannot become collision
   authority.
 - FQE and sequential doubly robust estimation are cross-checks, not oracles.

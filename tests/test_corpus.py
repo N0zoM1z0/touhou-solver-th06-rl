@@ -226,7 +226,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
-    assert frame["schema_version"] == "th06-rl-authoritative-frame-v10"
+    assert frame["schema_version"] == "th06-rl-authoritative-frame-v11"
     assert frame["decision"]["source_bullet_stop_frames"] == []
     assert frame["decision"]["source_bullet_release_frames"] == []
     assert frame["decision"]["dialogue_delivery"] == [
@@ -543,7 +543,9 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "hard_collision_margin": 0.0,
     }
     assert transition["policy_id"] == "safe-option-exploration-v1"
-    assert transition["executed_action"] == "stay"
+    assert transition["commanded_action"] == "stay"
+    assert transition["sampled_action"] == "stay"
+    assert transition["executed_action"] is None
     assert transition["option"] == {
         "option_id": "option-1",
         "boundary": True,

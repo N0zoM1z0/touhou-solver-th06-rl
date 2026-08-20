@@ -285,6 +285,51 @@ def test_successor_laser_accepts_exact_or_conservative_aabb_coverage() -> None:
     assert not _AUDIT._laser_is_covered(actual, (), ())
 
 
+def test_player_successor_uses_next_root_input_and_float32_order() -> None:
+    before = SimpleNamespace(
+        frame=100,
+        stage=1,
+        player_state=0,
+        x=192.0,
+        y=400.0,
+        normal_speed=4.0,
+        focus_speed=2.0,
+        normal_diagonal_speed=2.8,
+        focus_diagonal_speed=1.4,
+    )
+    after = SimpleNamespace(
+        frame=101,
+        stage=1,
+        player_state=0,
+        x=192.0,
+        y=398.0,
+        # Focus + Up at the completed next root, regardless of what the
+        # controller attempted to publish from the preceding pause.
+        input_mask=0x14,
+        time_stopped=False,
+    )
+    parity = _AUDIT._new_player_successor_parity()
+
+    _AUDIT._measure_player_successor(before, after, 9, parity)
+    result = _AUDIT._finish_player_successor_parity(parity)
+
+    assert result["checked_links"] == 1
+    assert result["bit_exact_links"] == 1
+    assert result["mismatches"] == 0
+    assert result["input_semantics"] == "next-completed-root-sampled-input"
+
+    parity = _AUDIT._new_player_successor_parity()
+    _AUDIT._measure_player_successor(
+        before,
+        SimpleNamespace(**{**after.__dict__, "y": 398.001}),
+        10,
+        parity,
+    )
+    result = _AUDIT._finish_player_successor_parity(parity)
+    assert result["mismatches"] == 1
+    assert result["counterexamples"][0]["input_mask"] == 0x14
+
+
 def test_numeric_successor_parity_is_bit_exact_for_linear_bullets() -> None:
     bullet = Bullet(
         x=10.0,

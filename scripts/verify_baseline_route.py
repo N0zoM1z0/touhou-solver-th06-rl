@@ -40,6 +40,7 @@ def verify(
     audit_scope = audit.get("scope")
     successor_coverage = audit.get("source_successor_coverage")
     numeric_successor_parity = audit.get("source_numeric_successor_parity")
+    player_successor_parity = audit.get("player_successor_parity")
     anchor_coverage = audit.get("source_anchor_coverage")
     dataset_admission = audit.get("source_dataset_admission")
     for name, value in (
@@ -53,6 +54,7 @@ def verify(
         ("audit scope", audit_scope),
         ("source successor coverage", successor_coverage),
         ("source numeric successor parity", numeric_successor_parity),
+        ("player successor parity", player_successor_parity),
         ("source anchor coverage", anchor_coverage),
         ("source dataset admission", dataset_admission),
     ):
@@ -188,6 +190,18 @@ def verify(
                 "global_mutation_union_violations"
             ) == 0
         ),
+        "player_input_successors": (
+            player_successor_parity.get("method")
+            == "contiguous-active-player-center-successor-v1"
+            and player_successor_parity.get("arithmetic_comparison")
+            == "float32-bit-exact"
+            and player_successor_parity.get("input_semantics")
+            == "next-completed-root-sampled-input"
+            and player_successor_parity.get("movement_order")
+            == "Player-before-Enemy-before-Bullet"
+            and player_successor_parity.get("checked_links", 0) > 0
+            and player_successor_parity.get("mismatches") == 0
+        ),
     }
     failed = [name for name, passed in checks.items() if not passed]
     if failed:
@@ -204,6 +218,7 @@ def verify(
         "latency": audit.get("latency"),
         "source_successor_coverage": successor_coverage,
         "source_numeric_successor_parity": numeric_successor_parity,
+        "player_successor_parity": player_successor_parity,
         "checks": checks,
     }
 

@@ -22,11 +22,11 @@ def _features(names):
     return [[name, float(index)] for index, name in enumerate(names)]
 
 
-def _bundle(sequence: int) -> SourceFrameBundle:
+def _bundle(sequence: int, *, player_state: int = 0) -> SourceFrameBundle:
     return SourceFrameBundle(
         sequence,
         f"episode-1:{sequence:08d}",
-        SimpleNamespace(stage=1),
+        SimpleNamespace(stage=1, player_state=player_state),
         SimpleNamespace(),
         0,
         "test",
@@ -46,6 +46,7 @@ def _transition(
         "scope": {"stage": 1, "key": "3/0/0/1/test"},
         "legal_actions": ["left", "stay"],
         "baseline_action": "stay",
+        "commanded_action": option["intent"] if option is not None else "stay",
         "executed_action": option["intent"] if option is not None else "stay",
         "behavior_probability": (
             option["conditional_probability"] if option is not None else 1.0
@@ -160,6 +161,46 @@ def test_option_aggregation_stops_at_termination_and_skips_forced_gap(monkeypatc
     assert second.elapsed_frames == 1
     assert second.next_state is None
     assert second.terminal is True
+
+
+def test_option_treatment_is_command_intent_not_pickup_sample(monkeypatch) -> None:
+    frames = (_bundle(0), _bundle(1))
+    transition = _transition(
+        0,
+        option=_option(
+            "a", "left", boundary=True, elapsed=1, termination="horizon"
+        ),
+    )
+    # The next completed-calc root may still witness the old input while the
+    # certified command is in flight. This is latency under the randomized
+    # command treatment, not a different assigned option.
+    transition["executed_action"] = "stay"
+    joined = ((frames[0], frames[1], transition),)
+    monkeypatch.setattr(offline_options, "_joined_steps", lambda _path: iter(joined))
+
+    (option,) = tuple(iter_offline_options(SimpleNamespace(resolve=lambda: None)))
+
+    assert option.action == "left"
+    assert option.eligible is True
+    assert option.exclusion_reasons == ()
+
+
+def test_invulnerable_option_is_retained_but_not_fit_for_nmnb(monkeypatch) -> None:
+    frames = (_bundle(0, player_state=3), _bundle(1, player_state=3))
+    transition = _transition(
+        0,
+        option=_option(
+            "a", "stay", boundary=True, elapsed=1, termination="horizon"
+        ),
+    )
+    joined = ((frames[0], frames[1], transition),)
+    monkeypatch.setattr(offline_options, "_joined_steps", lambda _path: iter(joined))
+
+    (option,) = tuple(iter_offline_options(SimpleNamespace(resolve=lambda: None)))
+
+    assert option.physical_hit_cost == 0
+    assert option.eligible is False
+    assert option.exclusion_reasons == ("player-not-vulnerable",)
 
 
 def test_option_aggregation_requires_full_legal_probability_vector(monkeypatch) -> None:

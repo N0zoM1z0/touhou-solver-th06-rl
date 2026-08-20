@@ -882,7 +882,11 @@ def run(args: argparse.Namespace) -> int:
             hard = ()
             legal = ()
             locally_admissible = ()
-            current_action_name = None
+            # This is a witnessed game input at the completed-calc root, not
+            # the action most recently sent through the Wine input bridge.
+            # Preserve it for passive/dead frames too so the next-root corpus
+            # transition can separate command intent from sampled execution.
+            current_action_name = core_action_from_input(snapshot.input_mask).name
             baseline_action = None
             selected_evaluation = None
             hard_count = 0

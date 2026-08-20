@@ -27,6 +27,7 @@ from th06_rl.retail.hazards.lasers import (
     future_hazards,
     signed_laser_clearance,
 )
+from th06_rl.retail.model import action_from_input
 from th06_rl.th06.control_capture import decode_control_snapshot
 from th06_rl.th06.source_dataset import SourceDatasetError, iter_source_frames
 from th06_rl.th06.observed_bullets import hazard_box
@@ -167,6 +168,110 @@ def _f32_ulp(value: float) -> float:
         return struct.unpack("<f", struct.pack("<I", 1))[0]
     successor = struct.unpack("<f", struct.pack("<I", bits + 1))[0]
     return successor - abs(value)
+
+
+def _new_player_successor_parity() -> dict[str, object]:
+    return {
+        "candidate_links": 0,
+        "checked_links": 0,
+        "bit_exact_links": 0,
+        "mismatches": 0,
+        "max_axis_error": 0.0,
+        "skipped": {
+            "observation_gap": 0,
+            "stage_boundary": 0,
+            "player_not_active": 0,
+            "time_stopped": 0,
+            "sampled_action_missing": 0,
+        },
+        "counterexamples": [],
+    }
+
+
+def _measure_player_successor(
+    before,
+    after,
+    sequence: int,
+    parity: dict[str, object],
+) -> None:
+    """Check one witnessed TH06 player movement against source float32 order."""
+    parity["candidate_links"] += 1
+    elapsed = int(after.frame) - int(before.frame)
+    skipped = parity["skipped"]
+    if elapsed != 1:
+        skipped["observation_gap"] += 1
+        return
+    if before.stage != after.stage:
+        skipped["stage_boundary"] += 1
+        return
+    if before.player_state not in (0, 3):
+        skipped["player_not_active"] += 1
+        return
+    if after.time_stopped:
+        skipped["time_stopped"] += 1
+        return
+    sampled = action_from_input(after.input_mask)
+    if not sampled.name:
+        skipped["sampled_action_missing"] += 1
+        return
+    diagonal = sampled.dx != 0 and sampled.dy != 0
+    if sampled.focused:
+        speed = (
+            before.focus_diagonal_speed if diagonal else before.focus_speed
+        )
+    else:
+        speed = (
+            before.normal_diagonal_speed if diagonal else before.normal_speed
+        )
+    expected_x = min(376.0, max(8.0, _f32(
+        _f32(before.x) + _f32(sampled.dx * speed)
+    )))
+    expected_y = min(432.0, max(16.0, _f32(
+        _f32(before.y) + _f32(sampled.dy * speed)
+    )))
+    actual_x = _f32(after.x)
+    actual_y = _f32(after.y)
+    axis_error = max(
+        abs(expected_x - actual_x),
+        abs(expected_y - actual_y),
+    )
+    parity["checked_links"] += 1
+    parity["max_axis_error"] = max(parity["max_axis_error"], axis_error)
+    if (
+        _f32_bits(expected_x) == _f32_bits(actual_x)
+        and _f32_bits(expected_y) == _f32_bits(actual_y)
+    ):
+        parity["bit_exact_links"] += 1
+        return
+    parity["mismatches"] += 1
+    counterexamples = parity["counterexamples"]
+    if len(counterexamples) < _MAX_SUCCESSOR_COUNTEREXAMPLES:
+        counterexamples.append({
+            "sequence": sequence,
+            "frame": int(before.frame),
+            "next_frame": int(after.frame),
+            "sampled_action": sampled.name,
+            "input_mask": int(after.input_mask),
+            "before": [before.x, before.y],
+            "expected": [expected_x, expected_y],
+            "actual": [actual_x, actual_y],
+            "axis_error": axis_error,
+        })
+
+
+def _finish_player_successor_parity(
+    parity: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "method": "contiguous-active-player-center-successor-v1",
+        "arithmetic_comparison": "float32-bit-exact",
+        "input_semantics": "next-completed-root-sampled-input",
+        "movement_order": "Player-before-Enemy-before-Bullet",
+        **parity,
+        "counterexamples_truncated": (
+            parity["mismatches"] > len(parity["counterexamples"])
+        ),
+    }
 
 
 def _new_bullet_successor_parity() -> dict[str, object]:
@@ -524,7 +629,7 @@ def _audit_source_successor_coverage(
     run_dir: Path,
     manifest: dict,
     objects: dict[str, object],
-) -> tuple[dict[str, object], dict[str, object]]:
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     """Check committed Hard frames against the following factual Wine root.
 
     This is intentionally a one-sided coverage check. It can disprove a
@@ -547,6 +652,7 @@ def _audit_source_successor_coverage(
     uncovered_lasers = 0
     counterexamples = []
     bullet_parity = _new_bullet_successor_parity()
+    player_parity = _new_player_successor_parity()
     previous_row = None
     previous_snapshot = None
 
@@ -570,6 +676,12 @@ def _audit_source_successor_coverage(
         elif before.stage != after.stage:
             skipped["stage_boundary"] += 1
         else:
+            _measure_player_successor(
+                before,
+                after,
+                int(previous_row["sequence"]),
+                player_parity,
+            )
             elapsed = int(after.frame) - int(before.frame)
             if (
                 elapsed == 1
@@ -715,7 +827,11 @@ def _audit_source_successor_coverage(
         ),
         "counterexamples": counterexamples,
     }
-    return coverage, _finish_bullet_successor_parity(bullet_parity)
+    return (
+        coverage,
+        _finish_bullet_successor_parity(bullet_parity),
+        _finish_player_successor_parity(player_parity),
+    )
 
 
 def _audit_dense_hard_parity(
@@ -968,6 +1084,7 @@ def audit(
     (
         source_successor_coverage,
         source_numeric_successor_parity,
+        player_successor_parity,
     ) = _audit_source_successor_coverage(
         run_dir,
         manifest,
@@ -1085,6 +1202,10 @@ def audit(
         or source_numeric_successor_parity["global_mutation_union_violations"]
     ):
         integrity_errors.append("source-numeric-successor-parity-counterexample")
+    if frame_records > 1 and not player_successor_parity["checked_links"]:
+        integrity_errors.append("player-successor-parity-unavailable")
+    if player_successor_parity["mismatches"]:
+        integrity_errors.append("player-successor-parity-counterexample")
     counterexamples = categories.get("safety-counterexample-candidate", 0)
     unresolved = categories.get("unresolved-hit-needs-local-trace", 0)
     return {
@@ -1112,6 +1233,7 @@ def audit(
         "dense_hard_parity": dense_hard_parity,
         "source_successor_coverage": source_successor_coverage,
         "source_numeric_successor_parity": source_numeric_successor_parity,
+        "player_successor_parity": player_successor_parity,
         "source_dataset_admission": source_dataset_admission,
         "latency": {
             "capture": summary.get("capture_timing"),

@@ -414,8 +414,17 @@ def iter_offline_options(run_dir: Path) -> Iterator[OfflineOptionTransition]:
             raise OfflineOptionError("option outcome lacks factual time/HIT state")
         active.elapsed_frames += elapsed
         active.controlled_hit_cost += int(hit)
-        if transition.get("executed_action") != active.action:
-            active.exclusions.add("option-action-not-executed")
+        # The randomized treatment is the command intent. Wine may expose the
+        # old or a sorted-key prefix input for a certified pickup frame; that
+        # factual latency is part of the intervention outcome, not evidence
+        # that a different option was assigned.
+        if transition.get("commanded_action") != active.action:
+            active.exclusions.add("option-action-not-commanded")
+        if before.control.player_state != 0:
+            # NMNB deployment never visits post-HIT invulnerability. Retain
+            # these factual intervals and their HIT costs in the episode, but
+            # do not fit the actor/critic on an unreachable target state.
+            active.exclusions.add("player-not-vulnerable")
         if transition.get("learning_eligible") is not True:
             reasons = transition.get("learning_exclusion_reasons") or (
                 "transition-not-learning-eligible",

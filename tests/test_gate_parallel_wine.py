@@ -36,7 +36,7 @@ def _documents(stage: int = 4):
         "policy_state_sha256_before": "s",
     }
     run = {
-        "schemas": {"frame": "th06-rl-authoritative-frame-v10"},
+        "schemas": {"frame": "th06-rl-authoritative-frame-v11"},
         "metadata": {"planner": {
             "algorithm": "source-hard4-paused-publication-v2",
             "source_commitment": "source-complete-hard-v1",
@@ -92,6 +92,14 @@ def _documents(stage: int = 4):
             "nonfinite_successors": 0,
             "global_mutation_union_violations": 0,
         },
+        "player_successor_parity": {
+            "method": "contiguous-active-player-center-successor-v1",
+            "arithmetic_comparison": "float32-bit-exact",
+            "input_semantics": "next-completed-root-sampled-input",
+            "movement_order": "Player-before-Enemy-before-Bullet",
+            "checked_links": 90,
+            "mismatches": 0,
+        },
         "dense_hard_parity": {
             "checked": 64,
             "unsafe_divergences": [],
@@ -126,6 +134,15 @@ def test_gate_rejects_online_latency_regression() -> None:
     report, run, manifest, audit = _documents()
     audit["latency"]["solve"]["p99_ms"] = 17.0
     with pytest.raises(ValueError, match="online_latency"):
+        validate_gate_run(
+            report=report, run=run, manifest=manifest, audit=audit, stage=4,
+        )
+
+
+def test_gate_rejects_player_successor_mismatch() -> None:
+    report, run, manifest, audit = _documents()
+    audit["player_successor_parity"]["mismatches"] = 1
+    with pytest.raises(ValueError, match="player_successor"):
         validate_gate_run(
             report=report, run=run, manifest=manifest, audit=audit, stage=4,
         )

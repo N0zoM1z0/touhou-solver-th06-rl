@@ -45,14 +45,18 @@ fails closed; a compatible-looking transition version is insufficient.
    table, timeline/message state, and same-frame immutable program coverage.
 4. Every published action retains the exact four-frame AABB/laser primitives
    certified online plus the source-declared global bullet stop/release branch
-   frames. Unknown or incomplete source coverage is absent. The frame schema
-   is versioned when this evidence changes, so an older row cannot masquerade
-   as a complete current row.
+   frames. The transition keeps the commanded intent separate from the input
+   witnessed at the next completed-calc root; only a contiguous active-player
+   link names a physical movement action. Unknown or incomplete source
+   coverage is absent. The frame schema is versioned when this evidence
+   changes, so an older row cannot masquerade as a complete current row.
 5. The ordinary run audit has no integrity error, dense native replay agrees,
    and the one-sided retained-next-root audit finds no uncovered factual AABB or
    laser hazard. A separate numeric successor audit requires bit-exact float32
    linear/acceleration updates, bounded transcendental updates, and a factual
    Stage-2 stop/release successor inside the recorded source branch union. The
+   next-root sampled input must also reproduce the exact float32 player center
+   update with Player-before-Enemy-before-Bullet ordering. The
    source-dataset loader accepts every dense frame with its same-frame/active
    anchor after Wine has exited.
 6. Artifacts are immutable and every run path and hash is unique. Partial,

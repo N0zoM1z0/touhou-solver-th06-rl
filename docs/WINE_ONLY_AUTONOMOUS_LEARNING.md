@@ -122,10 +122,15 @@ opportunity. Later active collection may use model uncertainty only if its
 formula and budget were declared before the generation began.
 
 Every accepted sample records the observation, safe set, incumbent and chosen
-actions, behavior probability, next factual observation, termination/HIT, and
-episode/scope/provenance IDs. An action Wine did not execute has no successor
-label. Fixed RNG can reduce training variance but does not create a
-counterfactual pair; different physical roots remain different episodes.
+command intent, behavior probability, next factual observation, next-root
+sampled input, witnessed physical movement action when identifiable,
+termination/HIT, and episode/scope/provenance IDs. SendInput publication is
+never substituted for a sampled game input. The causal option treatment is the
+command intent issued through the same certified pickup mechanism used online;
+an old/prefix input during that bounded pickup is a factual treatment outcome,
+not a counterfactual successor. Fixed RNG can reduce training variance but does
+not create a counterfactual pair; different physical roots remain different
+episodes.
 
 The sole gameplay cost is the factual physical HIT count, with `gamma = 1` and
 terminal value zero. Survival time, progress, phase, graze, clearance, and
@@ -141,7 +146,10 @@ learning is paused for the normal death/invulnerability lifecycle remain part
 of the preceding factual interval and all earlier returns. Prefix HITs before
 the first factual boundary are reported separately. Transition HITs, factual
 interval HITs, prefix HITs, and manifest HITs must conserve exactly; accounting
-may neither discard a HIT nor assign one to an action Wine did not execute.
+may neither discard a HIT nor assign one to an unpublished command. Options
+whose decision root is already invulnerable remain in the corpus and return
+accounting but are excluded from the NMNB actor/critic fit: that post-HIT state
+is unreachable under the target no-miss policy.
 
 ## Runtime and promotion invariants
 

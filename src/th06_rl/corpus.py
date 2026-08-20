@@ -24,8 +24,8 @@ from .retail.model import BUTTON_BOMB
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v10"
-TRANSITION_SCHEMA = "th06-rl-transition-v10"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v11"
+TRANSITION_SCHEMA = "th06-rl-transition-v11"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
@@ -719,14 +719,25 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         learning_exclusions.append("bomb")
     if authority:
         learning_exclusions.append("authority-loss")
-    executed_action = before.evidence.published_action
-    if executed_action is None and before.evidence.reason in (
+    commanded_action = before.evidence.published_action
+    if commanded_action is None and before.evidence.reason in (
         "stale-retry",
         "stale-retain-source-certified-current",
     ):
         # No new key was sent, so the already-observed physical input remains
-        # active over this transition. Keep execution distinct from delivery.
-        executed_action = before.evidence.current_action
+        # commanded over this transition. Keep command, sampling, and physical
+        # movement distinct instead of treating SendInput publication as proof
+        # that the game sampled it.
+        commanded_action = before.evidence.current_action
+    sampled_action = after.evidence.current_action
+    player_motion_witnessed = (
+        outcome["elapsed_frames"] == 1
+        and before.snapshot.stage == after.snapshot.stage
+        and before.snapshot.player_state in (0, 3)
+        and not after.snapshot.time_stopped
+        and sampled_action is not None
+    )
+    executed_action = sampled_action if player_motion_witnessed else None
     option = None
     trace = before.evidence.option
     if trace is not None:
@@ -742,7 +753,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             termination = "authority-loss"
         elif before.snapshot.stage != after.snapshot.stage:
             termination = "stage-transition"
-        elif executed_action != trace.intent:
+        elif commanded_action != trace.intent:
             termination = "publication-rejected"
         elif termination is None and (
             after_trace is None or after_trace.option_id != trace.option_id
@@ -783,6 +794,11 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "baseline_action": before.evidence.baseline_action,
         "proposed_action": before.evidence.proposed_action,
         "published_action": before.evidence.published_action,
+        # ``commanded_action`` is the policy intervention. ``sampled_action``
+        # is witnessed at the following completed-calc root. Only a contiguous
+        # active-player link can name a physical ``executed_action``.
+        "commanded_action": commanded_action,
+        "sampled_action": sampled_action,
         "executed_action": executed_action,
         "behavior_probability": before.evidence.behavior_probability,
         "policy_id": before.evidence.policy_id,
