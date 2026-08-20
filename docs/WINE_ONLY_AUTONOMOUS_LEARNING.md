@@ -81,19 +81,20 @@ atomically:
    not causal promotion evidence.
 5. **Canary** on disjoint Wine episodes only when predeclared support and
    held-out gates pass. Safety/authority regression rejects automatically.
-6. **Evaluate** promising candidates with alternating, complete normal-speed
-   Wine Stages in HIT-continuation mode.
+6. **Evaluate** promising candidates with alternating, complete real-time Wine
+   Stages in HIT-continuation mode, without debugger suspension.
 7. **Decide**: promote only on the declared HIT aggregate; otherwise collect the
    next round until the evidence budget is exhausted. Never change gameplay
    rules between these states.
 
 The process may be interrupted and resumed without replaying completed work.
 Training collection may use concurrent original-Wine workers only after a
-normal-speed differential compatibility gate. Each worker must have an
+fixed-seed differential compatibility gate. Each worker must have an
 isolated game directory, Wine prefix, display, artifact directory, and corpus
-root; each remains paced by the original 60 Hz executable and passes the same
-per-run audit before merge. Canary and final evaluation remain single-instance,
-alternating, normal-speed jobs. Offline fitting may parallelize.
+root; each uses the same coherent process-suspension contract and passes the
+same per-run audit before merge. This proves per-update semantics, not 60 Hz
+wall-clock control. Canary and final evaluation remain single-instance,
+alternating, non-suspending real-time jobs. Offline fitting may parallelize.
 
 There is currently no authorized learner-generation runner or gameplay
 candidate on `main`. Failed Generation-1--6 executable paths and their active
@@ -155,8 +156,9 @@ may neither discard a HIT nor assign one to an action Wine did not execute.
 - Every Wine worker is resource-isolated and exact cleanup is verified after
   every episode; canary and final-evaluation Wine jobs are sequential.
 
-Final promotion uses original retail Wine at normal timing, without fixed RNG,
-from a natural complete Practice Stage start through termination, with HIT
+Final promotion uses original retail Wine at real-time timing, without fixed RNG
+or debugger suspension, from a natural complete Practice Stage start through
+termination, with HIT
 continuation enabled. Policies are immutable, Bomb remains zero, and incumbent
 and candidate trials alternate. The authoritative measure is each run's total
 physical HIT count followed by the predeclared aggregate. Offline loss,

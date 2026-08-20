@@ -182,6 +182,8 @@ def _required_enemy_addresses(
 def validate_frame_authority(
     control: ControlSnapshot,
     anchor: Snapshot,
+    *,
+    same_pause: bool = True,
 ) -> None:
     """Fail closed unless one dense row is self-contained with its anchor."""
     if control.capture_tier != CONTROL_CAPTURE_TIER:
@@ -210,7 +212,7 @@ def validate_frame_authority(
         anchor.ecl_ex_function_addresses
     ):
         raise SourceDatasetError("EX callback dispatch table disagrees with anchor")
-    if control.repeat_star_state != anchor.repeat_star_state:
+    if same_pause and control.repeat_star_state != anchor.repeat_star_state:
         raise SourceDatasetError(
             "repeating-star globals disagree with the same-pause anchor"
         )
@@ -241,9 +243,14 @@ def iter_source_frames(run_dir: Path) -> Iterator[SourceFrameBundle]:
     if (
         run.get("run_id") != manifest.get("run_id")
         or metadata.get("executable_sha256") != native.TARGET_SHA256
+        or planner.get("algorithm") != "source-hard4-paused-publication-v2"
         or planner.get("source_commitment") != "source-complete-hard-v1"
         or planner.get("publication_epoch") != "source-root-process-suspended-v1"
         or planner.get("factual_state_schema") != OFFLINE_FACT_SCHEMA
+        or planner.get("hard_horizon") != 4
+        or planner.get("learner_feature_horizon") != 4
+        or planner.get("minimum_collision_margin") != 0.35
+        or planner.get("zero_margin_fallback") is not False
     ):
         raise SourceDatasetError("run metadata does not bind the current authority contract")
     objects = {
@@ -284,7 +291,11 @@ def iter_source_frames(run_dir: Path) -> Iterator[SourceFrameBundle]:
                 f"frame {control.frame} has no active stage source root"
             )
         anchor_sequence, anchor_reason, anchor = active
-        validate_frame_authority(control, anchor)
+        validate_frame_authority(
+            control,
+            anchor,
+            same_pause=any(item == active for item in attached),
+        )
         yield SourceFrameBundle(
             int(row["sequence"]),
             snapshot_id,

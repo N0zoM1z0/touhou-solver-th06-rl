@@ -20,9 +20,9 @@ active code.
 ## What the prune deliberately kept
 
 - current source-complete corpus recording and audit infrastructure;
-- factual recorder, transition integrity validation, and replay tooling;
+- factual recorder, transition integrity validation, and source-dataset loaders;
 - original-retail capture/control and physical HIT accounting;
-- native geometry, collision safety, Hard-empty audit, and fresh issue checks;
+- native geometry, collision safety, causal/numeric audits, and fresh issue checks;
 - game-neutral observation/action features, bounded hazard primitives, and
   causal history projection;
 - immutable policy API/loader and generic safe exploration primitives;
@@ -35,6 +35,12 @@ The old derived option cache was removed because its pickle type and cache key
 were coupled to a deleted learner module. It is reproducible derived data, not
 corpus. A successor cache must use a learner-neutral row schema and a new cache
 version; ignored old cache files are left untouched.
+
+On 2026-08-20 the observed-only `replay_corpus.py` and
+`audit_wine_hard_empty.py` diagnostics were removed with their document. The
+latter called an observed projection “source-exact” and recomputed the now
+forbidden zero-margin fallback. Current Hard-empty classification comes only
+from recorded source-complete Hard-4 evidence and `scripts/audit_run.py`.
 
 ## Enforced absence
 

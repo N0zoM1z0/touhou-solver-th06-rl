@@ -16,15 +16,24 @@ def _documents(hits: int = 12):
         "immutable_policy_state_equal": True,
         "leftover_prefix_processes": [],
         "controller_completion": {"route_completed": True, "physical_hits": hits},
-        "trace": {"physical_hits_in_run": hits},
+        "trace": {
+            "physical_hits_in_run": hits,
+            "zero_margin_frames": 0,
+            "invalid_hard_collision_margin_frames": 0,
+        },
     }
     run = {"metadata": {
         "episode_unit": "route",
         "code_commit": "abc123",
         "expected_stages": [1, 2, 3, 4, 5, 6],
         "planner": {
+            "algorithm": "source-hard4-paused-publication-v2",
             "source_commitment": "source-complete-hard-v1",
             "factual_state_schema": "th06-1.02h-offline-facts-v2",
+            "hard_horizon": 4,
+            "learner_feature_horizon": 4,
+            "minimum_collision_margin": 0.35,
+            "zero_margin_fallback": False,
         },
     }}
     manifest = {
@@ -56,8 +65,26 @@ def _documents(hits: int = 12):
         "source_successor_coverage": {
             "method": "retained-next-root-one-sided-coverage-v1",
             "checked_links": 99,
+            "actual_lasers_checked": 25,
             "uncovered_aabbs": 0,
             "uncovered_lasers": 0,
+            "retained_laser_geometry_unavailable": {},
+        },
+        "source_numeric_successor_parity": {
+            "method": "stable-retained-bullet-center-successor-v2",
+            "arithmetic_comparison": "float32-bit-exact",
+            "required_collision_margin": 0.35,
+            "transcendental_axis_error_budget": 0.01,
+            "global_release_acceleration_axis_bound": 0.010000001,
+            "global_mutation_semantics": "source branch union",
+            "linear_exact_checked": 50,
+            "acceleration_exact_checked": 25,
+            "transcendental_checked": 25,
+            "global_stop_union_checked": 10,
+            "exact_mismatches": 0,
+            "transcendental_budget_violations": 0,
+            "nonfinite_successors": 0,
+            "global_mutation_union_violations": 0,
         },
         "source_anchor_coverage": {
             "anchored_stages": [1, 2, 3, 4, 5, 6],
@@ -140,6 +167,14 @@ def test_baseline_route_verifier_rejects_uncovered_successor_hazard() -> None:
     documents[3]["source_successor_coverage"]["uncovered_aabbs"] = 1
 
     with pytest.raises(ValueError, match="causal_source_successors"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_numeric_successor_error() -> None:
+    documents = list(_documents())
+    documents[3]["source_numeric_successor_parity"]["exact_mismatches"] = 1
+
+    with pytest.raises(ValueError, match="numeric_source_successors"):
         verify(*documents)
 
 

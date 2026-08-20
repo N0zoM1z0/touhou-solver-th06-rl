@@ -28,18 +28,6 @@ OBSERVATION_FEATURE_NAMES = (
     "profile_mean_clearance_h4",
     "profile_best_clearance_h4",
     "profile_unbounded_fraction_h4",
-    "profile_mean_clearance_h6",
-    "profile_best_clearance_h6",
-    "profile_unbounded_fraction_h6",
-    "profile_mean_clearance_h8",
-    "profile_best_clearance_h8",
-    "profile_unbounded_fraction_h8",
-    "profile_mean_clearance_h10",
-    "profile_best_clearance_h10",
-    "profile_unbounded_fraction_h10",
-    "profile_mean_clearance_h12",
-    "profile_best_clearance_h12",
-    "profile_unbounded_fraction_h12",
 )
 ACTION_FEATURE_NAMES = (
     "direction_x",
@@ -68,24 +56,8 @@ ACTION_FEATURE_NAMES = (
     "profile_unbounded_h4",
     "profile_rank_h4",
     "profile_viable_h4",
-    "profile_clearance_h6",
-    "profile_unbounded_h6",
-    "profile_rank_h6",
-    "profile_viable_h6",
-    "profile_clearance_h8",
-    "profile_unbounded_h8",
-    "profile_rank_h8",
-    "profile_viable_h8",
-    "profile_clearance_h10",
-    "profile_unbounded_h10",
-    "profile_rank_h10",
-    "profile_viable_h10",
-    "profile_clearance_h12",
-    "profile_unbounded_h12",
-    "profile_rank_h12",
-    "profile_viable_h12",
 )
-PROFILE_CHECKPOINTS = (1, 2, 3, 4, 6, 8, 10, 12)
+PROFILE_CHECKPOINTS = (1, 2, 3, 4)
 LEFT = 8.0
 RIGHT = 376.0
 TOP = 16.0

@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from th06_rl.corpus import CorpusRecorder, RunMetadata
-from th06_rl.retail.model import PlayerAttackState, Snapshot
+from th06_rl.retail.model import Bullet, PlayerAttackState, Snapshot
 
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -248,6 +248,33 @@ def test_post_update_laser_recovers_source_midpoint_bug() -> None:
     assert hazards[0].size_y == 8.0
 
 
+def test_post_update_laser_unions_zero_delay_natural_predecessor() -> None:
+    laser = SimpleNamespace(
+        x=100.0,
+        y=120.0,
+        angle=0.25,
+        start_offset=8.0,
+        end_offset=108.0,
+        width=16.0,
+        start_time=10,
+        hitbox_start_time=3,
+        duration=30,
+        despawn_duration=10,
+        hitbox_end_delay=0,
+        timer=1,
+        timer_float=1.0,
+        flags=0,
+        state=2,
+    )
+
+    hazards, reason = _AUDIT._retained_post_update_laser_hazards(laser)
+
+    assert reason == "checked"
+    assert len(hazards) == 1
+    assert hazards[0].size_x == 100.0
+    assert hazards[0].size_y == 8.0
+
+
 def test_successor_laser_accepts_exact_or_conservative_aabb_coverage() -> None:
     actual = _AUDIT.LaserHazard(100.0, 120.0, 0.4, 60.0, 80.0, 8.0)
     exact = _AUDIT.LaserHazard(100.0, 120.0, 0.4, 60.0, 80.0, 8.0)
@@ -256,3 +283,119 @@ def test_successor_laser_accepts_exact_or_conservative_aabb_coverage() -> None:
     assert _AUDIT._laser_is_covered(actual, (), (exact,))
     assert _AUDIT._laser_is_covered(actual, (enclosing,), ())
     assert not _AUDIT._laser_is_covered(actual, (), ())
+
+
+def test_numeric_successor_parity_is_bit_exact_for_linear_bullets() -> None:
+    bullet = Bullet(
+        x=10.0,
+        y=20.0,
+        vx=0.25,
+        vy=-0.5,
+        half_width=2.0,
+        half_height=2.0,
+        state=1,
+        timer=7,
+        slot=3,
+        sprite=4,
+    )
+    correct = Bullet(
+        **{
+            **bullet.__dict__,
+            "x": _AUDIT._f32(bullet.x + bullet.vx),
+            "y": _AUDIT._f32(bullet.y + bullet.vy),
+            "timer": 8,
+        }
+    )
+    before = SimpleNamespace(frame=100, bullets=(bullet,))
+    after = SimpleNamespace(frame=101, bullets=(correct,))
+    parity = _AUDIT._new_bullet_successor_parity()
+
+    _AUDIT._measure_bullet_successors(before, after, 9, parity)
+    result = _AUDIT._finish_bullet_successor_parity(parity)
+
+    assert result["linear_exact_checked"] == 1
+    assert result["exact_mismatches"] == 0
+
+    wrong = Bullet(**{**correct.__dict__, "x": correct.x + 0.001})
+    parity = _AUDIT._new_bullet_successor_parity()
+    _AUDIT._measure_bullet_successors(
+        before,
+        SimpleNamespace(frame=101, bullets=(wrong,)),
+        9,
+        parity,
+    )
+    result = _AUDIT._finish_bullet_successor_parity(parity)
+    assert result["exact_mismatches"] == 1
+    assert result["counterexamples"][0]["category"] == "linear-exact"
+
+
+def test_numeric_successor_parity_uses_declared_global_mutation_union() -> None:
+    bullet = Bullet(
+        x=100.0,
+        y=120.0,
+        vx=0.5,
+        vy=-0.25,
+        half_width=2.0,
+        half_height=2.0,
+        state=1,
+        timer=20,
+        slot=7,
+        sprite=2,
+    )
+    before = SimpleNamespace(frame=200, bullets=(bullet,))
+
+    stopped = Bullet(**{
+        **bullet.__dict__,
+        "vx": 0.0,
+        "vy": 0.0,
+        "timer": 21,
+    })
+    parity = _AUDIT._new_bullet_successor_parity()
+    _AUDIT._measure_bullet_successors(
+        before,
+        SimpleNamespace(frame=201, bullets=(stopped,)),
+        10,
+        parity,
+        {"source_bullet_stop_frames": [0]},
+    )
+    result = _AUDIT._finish_bullet_successor_parity(parity)
+    assert result["global_stop_union_checked"] == 1
+    assert result["global_mutation_union_violations"] == 0
+    assert result["linear_exact_checked"] == 0
+
+    predicted_x = _AUDIT._f32(bullet.x + bullet.vx)
+    predicted_y = _AUDIT._f32(bullet.y + bullet.vy)
+    released = Bullet(**{
+        **bullet.__dict__,
+        "x": _AUDIT._f32(predicted_x + 0.009),
+        "y": _AUDIT._f32(predicted_y - 0.008),
+        "vx": _AUDIT._f32(bullet.vx + 0.009),
+        "vy": _AUDIT._f32(bullet.vy - 0.008),
+        "timer": 1,
+    })
+    parity = _AUDIT._new_bullet_successor_parity()
+    _AUDIT._measure_bullet_successors(
+        before,
+        SimpleNamespace(frame=201, bullets=(released,)),
+        11,
+        parity,
+        {"source_bullet_release_frames": [0]},
+    )
+    result = _AUDIT._finish_bullet_successor_parity(parity)
+    assert result["global_release_union_checked"] == 1
+    assert result["global_mutation_union_violations"] == 0
+
+    outside = Bullet(**{**released.__dict__, "x": predicted_x + 0.1})
+    parity = _AUDIT._new_bullet_successor_parity()
+    _AUDIT._measure_bullet_successors(
+        before,
+        SimpleNamespace(frame=201, bullets=(outside,)),
+        12,
+        parity,
+        {"source_bullet_release_frames": [0]},
+    )
+    result = _AUDIT._finish_bullet_successor_parity(parity)
+    assert result["global_mutation_union_violations"] == 1
+    assert result["counterexamples"][0]["category"] == (
+        "global-release-or-ordinary-union"
+    )

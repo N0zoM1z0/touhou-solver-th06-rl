@@ -27,6 +27,25 @@ def _f32(value: float) -> float:
     return struct.unpack("<f", struct.pack("<f", value))[0]
 
 
+def _add_normalize_angle(left: float, right: float) -> float:
+    """Mirror source ``utils::AddNormalizeAngle`` at f32 stores."""
+    value = _f32(left + right)
+    pi = _f32(math.pi)
+    tau = _f32(math.tau)
+    iterations = 0
+    while value > pi:
+        value = _f32(value - tau)
+        iterations += 1
+        if iterations > 17:
+            break
+    while value < -pi:
+        value = _f32(value + tau)
+        iterations += 1
+        if iterations > 17:
+            break
+    return value
+
+
 # EnemyEclInstr::ExInsCirnoRainbowBallJank uses float32 0.01 and sincosmul.
 # One ULP outward covers the final float32 component multiply on either axis.
 _RAINBOW_ACCELERATION_BITS = struct.unpack("<I", struct.pack("<f", 0.01))[0]
@@ -70,9 +89,9 @@ def _source_dynamic_positions(
             if timer >= bullet.acceleration_duration:
                 flags &= ~CURVE_ACCELERATION_FLAG
             else:
-                angle = _f32(math.remainder(
-                    _f32(angle + bullet.curve_angular_velocity), math.tau
-                ))
+                angle = _add_normalize_angle(
+                    angle, _f32(bullet.curve_angular_velocity)
+                )
                 speed = _f32(speed + bullet.curve_speed_acceleration)
                 vx = _f32(math.cos(angle) * speed)
                 vy = _f32(math.sin(angle) * speed)
@@ -101,229 +120,8 @@ def _source_dynamic_positions(
     return result
 
 
-def _slowdown_positions(
-    bullet: Bullet,
-    horizon: int,
-) -> list[tuple[float, float]]:
-    """Reproduce source flag 0x01's deterministic first-17-tick speed."""
-    x, y = _f32(bullet.x), _f32(bullet.y)
-    vx, vy = _f32(bullet.vx), _f32(bullet.vy)
-    angle = _f32(bullet.angle)
-    speed = _f32(bullet.speed)
-    timer = bullet.timer
-    timer_float = _f32(bullet.timer_float)
-    active = True
-    cosine = _f32(math.cos(angle))
-    sine = _f32(math.sin(angle))
-    result = []
-    for _ in range(horizon):
-        if active:
-            if timer <= 16:
-                slowdown = _f32(5.0 - _f32(timer_float * 5.0 / 16.0))
-                current_speed = _f32(slowdown + speed)
-                vx = _f32(cosine * current_speed)
-                vy = _f32(sine * current_speed)
-            else:
-                active = False
-        x = _f32(x + vx)
-        y = _f32(y + vy)
-        timer += 1
-        timer_float = _f32(timer_float + 1.0)
-        result.append((x, y))
-    return result
-
-
-def _slowdown_position(bullet: Bullet, frame: int) -> tuple[float, float]:
-    return _slowdown_positions(bullet, frame)[-1]
-
-
-def _slowdown_acceleration_positions(
-    bullet: Bullet,
-    horizon: int,
-) -> list[tuple[float, float]]:
-    """Exact source priority for the common 0x01 then 0x10 chain."""
-    x, y = _f32(bullet.x), _f32(bullet.y)
-    vx, vy = _f32(bullet.vx), _f32(bullet.vy)
-    speed = _f32(bullet.speed)
-    timer = bullet.timer
-    timer_float = _f32(bullet.timer_float)
-    slowdown_active = True
-    acceleration_active = True
-    cosine = _f32(math.cos(_f32(bullet.angle)))
-    sine = _f32(math.sin(_f32(bullet.angle)))
-    result = []
-    for _ in range(horizon):
-        if slowdown_active:
-            if timer <= 16:
-                slowdown = _f32(5.0 - _f32(timer_float * 5.0 / 16.0))
-                current_speed = _f32(slowdown + speed)
-                vx = _f32(cosine * current_speed)
-                vy = _f32(sine * current_speed)
-            else:
-                # Source clears 0x01 on this update; its else-if means 0x10
-                # begins only on the following update.
-                slowdown_active = False
-        elif acceleration_active:
-            if timer >= bullet.acceleration_duration:
-                acceleration_active = False
-            else:
-                vx = _f32(vx + bullet.acceleration_x)
-                vy = _f32(vy + bullet.acceleration_y)
-        x = _f32(x + vx)
-        y = _f32(y + vy)
-        timer += 1
-        timer_float = _f32(timer_float + 1.0)
-        result.append((x, y))
-    return result
-
-
-def _direction_rotation_positions(
-    bullet: Bullet,
-    horizon: int,
-) -> list[tuple[float, float]]:
-    """Reproduce the source's timed 0x40 decelerate-and-rotate update."""
-    x, y = bullet.x, bullet.y
-    vx, vy = bullet.vx, bullet.vy
-    angle = bullet.angle
-    speed = bullet.speed
-    timer = bullet.timer
-    timer_float = bullet.timer_float
-    direction_num_times = bullet.direction_num_times
-    flags = bullet.ex_flags
-    cosine = math.cos(angle)
-    sine = math.sin(angle)
-    result = []
-    for _ in range(horizon):
-        if flags & DIRECTION_ROTATION_FLAG:
-            if timer >= bullet.direction_interval * (direction_num_times + 1):
-                direction_num_times += 1
-                if direction_num_times >= bullet.direction_max_times:
-                    flags &= ~DIRECTION_ROTATION_FLAG
-                angle += bullet.direction_rotation
-                cosine = math.cos(angle)
-                sine = math.sin(angle)
-                speed = bullet.turn_speed
-                bullet_speed = speed
-            else:
-                phase = timer_float - bullet.direction_interval * direction_num_times
-                bullet_speed = speed - phase * speed / bullet.direction_interval
-            vx = cosine * bullet_speed
-            vy = sine * bullet_speed
-        x += vx
-        y += vy
-        timer += 1
-        timer_float += 1.0
-        result.append((x, y))
-    return result
-
-
-def _direction_rotation_position(bullet: Bullet, frame: int) -> tuple[float, float]:
-    return _direction_rotation_positions(bullet, frame)[-1]
-
-
-def _curve_acceleration_positions(
-    bullet: Bullet,
-    horizon: int,
-) -> list[tuple[float, float]]:
-    """Reproduce source flag 0x20 angular and speed acceleration."""
-    x, y = bullet.x, bullet.y
-    vx, vy = bullet.vx, bullet.vy
-    angle = bullet.angle
-    speed = bullet.speed
-    timer = bullet.timer
-    active = True
-    result = []
-    for _ in range(horizon):
-        if active:
-            if timer >= bullet.acceleration_duration:
-                active = False
-            else:
-                angle += bullet.curve_angular_velocity
-                speed += bullet.curve_speed_acceleration
-                vx = math.cos(angle) * speed
-                vy = math.sin(angle) * speed
-        x += vx
-        y += vy
-        timer += 1
-        result.append((x, y))
-    return result
-
-
-def _curve_acceleration_position(bullet: Bullet, frame: int) -> tuple[float, float]:
-    return _curve_acceleration_positions(bullet, frame)[-1]
-
-
 def hazard_box(bullet: Bullet, frame: int) -> tuple[float, float, float, float]:
     dynamic_flags = bullet.ex_flags & DYNAMIC_EX_FLAGS
-    if (
-        bullet.state == 1
-        and dynamic_flags == SLOWDOWN_FLAG
-    ):
-        x, y = _slowdown_position(bullet, frame)
-        return (
-            x - bullet.half_width,
-            y - bullet.half_height,
-            x + bullet.half_width,
-            y + bullet.half_height,
-        )
-    if (
-        bullet.state == 1
-        and dynamic_flags == (SLOWDOWN_FLAG | ACCELERATION_FLAG)
-    ):
-        x, y = _slowdown_acceleration_positions(bullet, frame)[-1]
-        return (
-            x - bullet.half_width,
-            y - bullet.half_height,
-            x + bullet.half_width,
-            y + bullet.half_height,
-        )
-    if (
-        bullet.state == 1
-        and bullet.ex_flags & DIRECTION_ROTATION_FLAG
-        and not bullet.ex_flags & (COMPLEX_MOTION_FLAGS & ~DIRECTION_ROTATION_FLAG)
-    ):
-        x, y = _direction_rotation_position(bullet, frame)
-        return (
-            x - bullet.half_width,
-            y - bullet.half_height,
-            x + bullet.half_width,
-            y + bullet.half_height,
-        )
-    if (
-        bullet.state == 1
-        and bullet.ex_flags & ACCELERATION_FLAG
-        and not bullet.ex_flags & COMPLEX_MOTION_FLAGS
-        and bullet.acceleration_duration > 0
-    ):
-        # BulletManager::OnUpdate applies ex4Acceleration before position only
-        # while timer.current < ex5Int0. Spawn-effect bits are inert once fired.
-        applications = min(
-            frame,
-            max(0, bullet.acceleration_duration - bullet.timer),
-        )
-        acceleration_factor = (
-            applications * frame - applications * (applications - 1) / 2.0
-        )
-        x = bullet.x + bullet.vx * frame + bullet.acceleration_x * acceleration_factor
-        y = bullet.y + bullet.vy * frame + bullet.acceleration_y * acceleration_factor
-        return (
-            x - bullet.half_width,
-            y - bullet.half_height,
-            x + bullet.half_width,
-            y + bullet.half_height,
-        )
-    if (
-        bullet.state == 1
-        and bullet.ex_flags & CURVE_ACCELERATION_FLAG
-        and not bullet.ex_flags & (COMPLEX_MOTION_FLAGS & ~CURVE_ACCELERATION_FLAG)
-    ):
-        x, y = _curve_acceleration_position(bullet, frame)
-        return (
-            x - bullet.half_width,
-            y - bullet.half_height,
-            x + bullet.half_width,
-            y + bullet.half_height,
-        )
     if (
         bullet.state == 1
         and dynamic_flags
@@ -340,7 +138,17 @@ def hazard_box(bullet: Bullet, frame: int) -> tuple[float, float, float, float]:
         # Extended bullets may accelerate, turn, home, or bounce, but do not
         # teleport. Cover every direction using the source-visible speed fields.
         base_speed = max(math.hypot(bullet.vx, bullet.vy), abs(bullet.speed), abs(bullet.turn_speed))
-        reach = (base_speed + 5.0) * frame + 0.5 * abs(bullet.acceleration) * frame * frame
+        acceleration = max(
+            abs(bullet.acceleration),
+            math.hypot(bullet.acceleration_x, bullet.acceleration_y),
+            abs(bullet.curve_speed_acceleration),
+        )
+        spawn_extra = base_speed if bullet.state in (2, 3, 4) else 0.0
+        reach = (
+            (base_speed + 5.0) * frame
+            + spawn_extra
+            + acceleration * frame * (frame + 1) / 2.0
+        )
         return (
             bullet.x - bullet.half_width - reach,
             bullet.y - bullet.half_height - reach,
@@ -356,10 +164,19 @@ def hazard_box(bullet: Bullet, frame: int) -> tuple[float, float, float, float]:
         minimum_factor = 0.4
     else:
         minimum_factor = 1.0 / 3.0
-    x0 = bullet.x + bullet.vx * frame * minimum_factor
-    y0 = bullet.y + bullet.vy * frame * minimum_factor
-    x1 = bullet.x + bullet.vx * frame
-    y1 = bullet.y + bullet.vy * frame
+    if bullet.state == 1:
+        minimum_steps = maximum_steps = float(frame)
+    else:
+        # A still-spawning bullet is not collidable. If its ANM completes on
+        # update k, source first applies k partial steps and then falls through
+        # to the fired case for one full step on that same update. At a future
+        # frame, k ranges from one through frame.
+        minimum_steps = frame * minimum_factor + 1.0
+        maximum_steps = frame + minimum_factor
+    x0 = bullet.x + bullet.vx * minimum_steps
+    y0 = bullet.y + bullet.vy * minimum_steps
+    x1 = bullet.x + bullet.vx * maximum_steps
+    y1 = bullet.y + bullet.vy * maximum_steps
     return (
         min(x0, x1) - bullet.half_width,
         min(y0, y1) - bullet.half_height,
@@ -383,7 +200,10 @@ def radial_hazard_box(
         math.hypot(bullet.acceleration_x, bullet.acceleration_y),
         abs(bullet.curve_speed_acceleration),
     )
-    reach = base_speed * frame + acceleration * frame * (frame + 1) / 2.0
+    reach = (
+        base_speed * (frame + (bullet.state in (2, 3, 4)))
+        + acceleration * frame * (frame + 1) / 2.0
+    )
     if bullet.ex_flags & (DYNAMIC_EX_FLAGS & ~(
         ACCELERATION_FLAG | CURVE_ACCELERATION_FLAG | DIRECTION_ROTATION_FLAG
     )):
@@ -408,63 +228,7 @@ def hazard_boxes(
     dynamic_flags = flags & DYNAMIC_EX_FLAGS
     half_width = bullet.half_width
     half_height = bullet.half_height
-    if (
-        state == 1
-        and dynamic_flags == SLOWDOWN_FLAG
-    ):
-        return [
-            (x - half_width, y - half_height, x + half_width, y + half_height)
-            for x, y in _slowdown_positions(bullet, horizon)
-        ]
-    if (
-        state == 1
-        and dynamic_flags == (SLOWDOWN_FLAG | ACCELERATION_FLAG)
-    ):
-        return [
-            (x - half_width, y - half_height, x + half_width, y + half_height)
-            for x, y in _slowdown_acceleration_positions(bullet, horizon)
-        ]
-    if (
-        state == 1
-        and flags & DIRECTION_ROTATION_FLAG
-        and not flags & (COMPLEX_MOTION_FLAGS & ~DIRECTION_ROTATION_FLAG)
-    ):
-        return [
-            (x - half_width, y - half_height, x + half_width, y + half_height)
-            for x, y in _direction_rotation_positions(bullet, horizon)
-        ]
-    if (
-        state == 1
-        and flags & CURVE_ACCELERATION_FLAG
-        and not flags & (COMPLEX_MOTION_FLAGS & ~CURVE_ACCELERATION_FLAG)
-    ):
-        return [
-            (x - half_width, y - half_height, x + half_width, y + half_height)
-            for x, y in _curve_acceleration_positions(bullet, horizon)
-        ]
     frames = range(1, horizon + 1)
-    if (
-        state == 1
-        and flags & ACCELERATION_FLAG
-        and not flags & COMPLEX_MOTION_FLAGS
-        and bullet.acceleration_duration > 0
-    ):
-        remaining = max(0, bullet.acceleration_duration - bullet.timer)
-        boxes = []
-        for frame in frames:
-            applications = min(frame, remaining)
-            factor = (
-                applications * frame - applications * (applications - 1) / 2.0
-            )
-            x = bullet.x + bullet.vx * frame + bullet.acceleration_x * factor
-            y = bullet.y + bullet.vy * frame + bullet.acceleration_y * factor
-            boxes.append((
-                x - half_width,
-                y - half_height,
-                x + half_width,
-                y + half_height,
-            ))
-        return boxes
     if (
         state == 1
         and dynamic_flags
@@ -480,10 +244,19 @@ def hazard_boxes(
             abs(bullet.speed),
             abs(bullet.turn_speed),
         )
-        acceleration = abs(bullet.acceleration)
+        acceleration = max(
+            abs(bullet.acceleration),
+            math.hypot(bullet.acceleration_x, bullet.acceleration_y),
+            abs(bullet.curve_speed_acceleration),
+        )
+        spawn_extra = base_speed if state in (2, 3, 4) else 0.0
         boxes = []
         for frame in frames:
-            reach = (base_speed + 5.0) * frame + 0.5 * acceleration * frame * frame
+            reach = (
+                (base_speed + 5.0) * frame
+                + spawn_extra
+                + acceleration * frame * (frame + 1) / 2.0
+            )
             boxes.append((
                 bullet.x - half_width - reach,
                 bullet.y - half_height - reach,
@@ -526,10 +299,12 @@ def _linear_hazard_boxes(
         minimum_factor = 1.0 / 3.0
     boxes = []
     for frame in frames:
-        x0 = bullet.x + bullet.vx * frame * minimum_factor
-        y0 = bullet.y + bullet.vy * frame * minimum_factor
-        x1 = bullet.x + bullet.vx * frame
-        y1 = bullet.y + bullet.vy * frame
+        minimum_steps = frame * minimum_factor + 1.0
+        maximum_steps = frame + minimum_factor
+        x0 = bullet.x + bullet.vx * minimum_steps
+        y0 = bullet.y + bullet.vy * minimum_steps
+        x1 = bullet.x + bullet.vx * maximum_steps
+        y1 = bullet.y + bullet.vy * maximum_steps
         boxes.append((
             min(x0, x1) - half_width,
             min(y0, y1) - half_height,

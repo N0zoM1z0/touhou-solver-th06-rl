@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from th06_rl.native import ACTIONS, NativeCertifiedAction
 from th06_rl.th06.controller import (
-    _certify_hard_with_source_fallback,
+    _certify_hard,
     _reactive_baseline,
 )
 
@@ -39,33 +39,30 @@ def test_reactive_fallback_uses_boundary_reserve_only_after_safety() -> None:
 
 
 class _RecordingKernel:
-    def __init__(self, conservative, source_exact):
-        self.results = {0.35: conservative, 0.0: source_exact}
+    def __init__(self, conservative):
+        self.result = conservative
         self.margins = []
 
     def certify_actions(self, **kwargs):
         margin = kwargs["collision_margin"]
         self.margins.append(margin)
-        return self.results[margin]
+        return self.result
 
 
 def test_hard_gate_keeps_conservative_margin_when_nonempty() -> None:
     expected = (certified("left", 1.0, 180.0, 384.0),)
-    kernel = _RecordingKernel(expected, ())
+    kernel = _RecordingKernel(expected)
 
-    result, margin = _certify_hard_with_source_fallback(kernel, token="root")
+    result = _certify_hard(kernel, token="root")
 
     assert result == expected
-    assert margin == 0.35
     assert kernel.margins == [0.35]
 
 
-def test_hard_gate_uses_source_exact_geometry_only_after_margin_closure() -> None:
-    expected = (certified("right", 0.2, 196.0, 384.0),)
-    kernel = _RecordingKernel((), expected)
+def test_hard_gate_never_retries_without_the_uncertainty_margin() -> None:
+    kernel = _RecordingKernel(())
 
-    result, margin = _certify_hard_with_source_fallback(kernel, token="root")
+    result = _certify_hard(kernel, token="root")
 
-    assert result == expected
-    assert margin == 0.0
-    assert kernel.margins == [0.35, 0.0]
+    assert result == ()
+    assert kernel.margins == [0.35]

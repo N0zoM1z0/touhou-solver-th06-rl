@@ -44,11 +44,17 @@ fails closed; a compatible-looking transition version is insufficient.
    has an exact retained value: bullet/Enemy sprite dimensions, EX callback
    table, timeline/message state, and same-frame immutable program coverage.
 4. Every published action retains the exact four-frame AABB/laser primitives
-   certified online; unknown or incomplete source coverage is absent.
+   certified online plus the source-declared global bullet stop/release branch
+   frames. Unknown or incomplete source coverage is absent. The frame schema
+   is versioned when this evidence changes, so an older row cannot masquerade
+   as a complete current row.
 5. The ordinary run audit has no integrity error, dense native replay agrees,
    and the one-sided retained-next-root audit finds no uncovered factual AABB or
-   laser hazard. The source-dataset loader accepts every dense frame with its
-   same-frame/active anchor after Wine has exited.
+   laser hazard. A separate numeric successor audit requires bit-exact float32
+   linear/acceleration updates, bounded transcendental updates, and a factual
+   Stage-2 stop/release successor inside the recorded source branch union. The
+   source-dataset loader accepts every dense frame with its same-frame/active
+   anchor after Wine has exited.
 6. Artifacts are immutable and every run path and hash is unique. Partial,
    first-HIT, time-bounded, authority-failed, or cleanup-failed runs are never
    selected for training.
@@ -57,11 +63,12 @@ The admission builder must validate the complete source root rather than skip
 bad outcomes. Training/validation roles are assigned later by whole physical
 episode, never by adjacent frames.
 
-`scripts/collect_wine_parallel.py` writes the predeclared schedule before any
-episode and publishes `th06-rl-source-complete-parallel-collection-v1` only
+`scripts/collect_route_parallel.py` writes the predeclared schedule before any
+route and publishes `th06-rl-source-complete-parallel-route-collection-v1` only
 after every row is clean. Each row binds run, manifest, audit, normalized
-factual digest, policy, code, and pool hashes. This ledger is the current
-admission boundary; arbitrary directory scans are forbidden.
+factual digest, policy, code, and pool hashes. This ledger is the Generation-7
+admission boundary; arbitrary directory scans and Practice-stage ledgers are
+forbidden.
 
 ## Parallel collection boundary
 
@@ -69,5 +76,7 @@ Parallel Wine workers may append facts only after the fixed-seed serial versus
 two-worker compatibility gate passes exactly. Each worker owns its game copy,
 Wine prefix, display, CPU partition, artifact root, and corpus root. A worker
 failure cancels and reaps the complete batch; only individually audited,
-immutable complete episodes can enter the next inventory. Canary and promotion
-runs remain sequential and natural-speed.
+immutable complete routes can enter the next inventory. Corpus workers use
+coherent debugger suspension and therefore preserve retail update semantics,
+not 60 Hz wall-clock throughput. Canary and promotion require a separate
+sequential, non-suspending real-time gate.

@@ -146,8 +146,46 @@ def test_source_commitment_contains_same_frame_shootnow_birth() -> None:
     assert all(frame for frame in forecast.hazards.aabb_frames)
     first = forecast.hazards.aabb_frames[0][0]
     assert (first.left, first.top, first.right, first.bottom) == pytest.approx(
-        (190.0, 398.0, 194.0, 402.0)
+        (189.0, 397.0, 195.0, 403.0)
     )
+
+
+def test_math_normalize_angle_reads_its_integer_variable_id() -> None:
+    random_angle, raw = _instruction(0x10000, 0, 9, 24)
+    struct.pack_into("<iff", raw, 12, -10005, math.tau, -math.pi)
+    random_angle = _with_raw(random_angle, raw)
+    normalize, raw = _instruction(0x10018, 0, 26, 16)
+    struct.pack_into("<i", raw, 12, -10005)
+    normalize = _with_raw(normalize, raw)
+    shoot, raw = _instruction(0x10028, 0, 68, 44)
+    struct.pack_into("<hh", raw, 12, 0, 0)
+    struct.pack_into("<ii", raw, 16, 1, 1)
+    struct.pack_into("<ffff", raw, 24, 1.0, 0.3, -10005.0, 0.0)
+    struct.pack_into("<I", raw, 40, 0)
+    shoot = _with_raw(shoot, raw)
+    shoot_now, _raw = _instruction(0x10054, 0, 80)
+    end, _raw = _instruction(0x10060, -1, 0)
+    spawner = _spawner(
+        random_angle,
+        end,
+        ecl_program=(random_angle, normalize, shoot, shoot_now, end),
+    )
+
+    forecast = forecast_ecl_births(
+        spawner,
+        ((192.0, 400.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        rng=RngState(0x349E, 0),
+        model_player_damage=False,
+    )
+
+    assert forecast.covered_frames == 1
+    assert forecast.reason == ""
+    assert len(forecast.births[0]) == 1
+    assert forecast.next_spawner is not None
+    assert all(math.isfinite(value) for value in forecast.next_spawner.ecl_floats)
 
 
 def test_source_commitment_contains_same_frame_enemy_teleport() -> None:
@@ -242,6 +280,8 @@ def test_source_commitment_unions_exact_cirno_stop_position() -> None:
     forecast = lower_source_forecast(
         _snapshot(_spawner(ex_call, end), bullets=(bullet,)), 4
     )
+    assert forecast.bullet_stop_frames == (3,)
+    assert forecast.bullet_release_frames == ()
     centers = {
         ((box.left + box.right) / 2.0, (box.top + box.bottom) / 2.0)
         for box in forecast.hazards.aabb_frames[3]
@@ -272,6 +312,8 @@ def test_source_commitment_encloses_random_cirno_release_acceleration() -> None:
     )
 
     assert forecast.source_coverage == 4
+    assert forecast.bullet_stop_frames == ()
+    assert forecast.bullet_release_frames == (0,)
     assert any(
         (box.left, box.top, box.right, box.bottom)
         == pytest.approx((196.9, 392.9, 199.1, 395.1))

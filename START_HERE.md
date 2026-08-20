@@ -17,8 +17,9 @@ Read in this order:
 7. `docs/REPOSITORY_PRUNE.md` for the removal/retention boundary;
 8. `docs/TRAINING_INFRA_PERFORMANCE.md` for historical performance and the
    failed concurrent-Wine differential;
-9. `docs/HARD_EMPTY_SOURCE_AUDIT.md` and `docs/WINE_RETAIL_VALIDATION.md`
-   before gameplay-facing work.
+9. `docs/WINE_RETAIL_VALIDATION.md` before gameplay-facing work; use
+   `scripts/audit_run.py` and `scripts/verify_baseline_route.py` for current
+   causal/source-successor audits.
 
 ## Non-negotiable separation
 

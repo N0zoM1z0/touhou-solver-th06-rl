@@ -8,10 +8,19 @@ import gzip
 import heapq
 import json
 import math
+import struct
 from pathlib import Path
 
 from th06_rl.corpus import expand_compact
 from th06_rl.retail.barrage_lab.corpus import decode_snapshot
+from th06_rl.retail.hazards.bullets import (
+    ACCELERATION_FLAG,
+    DYNAMIC_EX_FLAGS,
+    RAINBOW_ACCELERATION_AXIS_BOUND,
+    SOURCE_EXACT_DYNAMIC_FLAGS,
+    _f32,
+    _source_dynamic_positions,
+)
 from th06_rl.retail.hazards.enemies import future_boxes
 from th06_rl.retail.hazards.lasers import (
     LaserHazard,
@@ -140,7 +149,219 @@ def _decode_frame(row: dict, objects: dict[str, object]):
 # arithmetic and source float32 roots. It is not a collision margin and never
 # enters online certification.
 _SUCCESSOR_FLOAT_TOLERANCE = 1e-3
+_TRANSCENDENTAL_SUCCESSOR_AXIS_BUDGET = 1e-2
 _MAX_SUCCESSOR_COUNTEREXAMPLES = 128
+
+
+def _f32_bits(value: float) -> int:
+    return struct.unpack("<I", struct.pack("<f", value))[0]
+
+
+def _f32_ulp(value: float) -> float:
+    """Return one outward binary32 ULP at a finite value."""
+    value = _f32(value)
+    if not math.isfinite(value):
+        return math.inf
+    bits = _f32_bits(abs(value))
+    if bits == 0:
+        return struct.unpack("<f", struct.pack("<I", 1))[0]
+    successor = struct.unpack("<f", struct.pack("<I", bits + 1))[0]
+    return successor - abs(value)
+
+
+def _new_bullet_successor_parity() -> dict[str, object]:
+    return {
+        "eligible_links": 0,
+        "stable_retained_bullets": 0,
+        "linear_exact_checked": 0,
+        "acceleration_exact_checked": 0,
+        "transcendental_checked": 0,
+        "global_stop_union_checked": 0,
+        "global_release_union_checked": 0,
+        "global_combined_union_checked": 0,
+        "global_mutation_union_violations": 0,
+        "max_global_release_axis_error": 0.0,
+        "unsupported_dynamic_skipped": 0,
+        "unstable_or_reused_skipped": 0,
+        "nonfinite_successors": 0,
+        "exact_mismatches": 0,
+        "transcendental_budget_violations": 0,
+        "max_transcendental_axis_error": 0.0,
+        "counterexamples": [],
+    }
+
+
+def _measure_bullet_successors(
+    before,
+    after,
+    sequence: int,
+    parity: dict[str, object],
+    decision: dict[str, object] | None = None,
+) -> None:
+    """Measure adjacent retained fired bullets against the source stepper."""
+    parity["eligible_links"] += 1
+    decision = decision or {}
+    stop_now = 0 in decision.get("source_bullet_stop_frames", ())
+    release_now = 0 in decision.get("source_bullet_release_frames", ())
+    after_by_slot = {
+        bullet.slot: bullet
+        for bullet in after.bullets
+        if bullet.slot >= 0
+    }
+    for bullet in before.bullets:
+        if bullet.slot < 0 or bullet.state != 1:
+            continue
+        successor = after_by_slot.get(bullet.slot)
+        valid_timers = {bullet.timer + 1}
+        if release_now:
+            # The release callback resets the source timer to zero before the
+            # BulletManager update; the retained post-update root reads one.
+            valid_timers.add(1)
+        if (
+            successor is None
+            or successor.state != 1
+            or successor.sprite != bullet.sprite
+            or successor.timer not in valid_timers
+        ):
+            parity["unstable_or_reused_skipped"] += 1
+            continue
+        dynamic_flags = bullet.ex_flags & DYNAMIC_EX_FLAGS
+        if dynamic_flags & ~SOURCE_EXACT_DYNAMIC_FLAGS:
+            parity["unsupported_dynamic_skipped"] += 1
+            continue
+        predicted_x, predicted_y = _source_dynamic_positions(bullet, 1)[0]
+        actual_x = _f32(successor.x)
+        actual_y = _f32(successor.y)
+        values = (predicted_x, predicted_y, actual_x, actual_y)
+        parity["stable_retained_bullets"] += 1
+        if not all(math.isfinite(value) for value in values):
+            parity["nonfinite_successors"] += 1
+            category = "nonfinite"
+            violated = True
+            error_x = math.inf
+            error_y = math.inf
+        else:
+            error_x = abs(predicted_x - actual_x)
+            error_y = abs(predicted_y - actual_y)
+            if stop_now or release_now:
+                stopped_exact = (
+                    _f32_bits(actual_x) == _f32_bits(_f32(bullet.x))
+                    and _f32_bits(actual_y) == _f32_bits(_f32(bullet.y))
+                )
+                release_budget_x = (
+                    RAINBOW_ACCELERATION_AXIS_BOUND
+                    + _f32_ulp(predicted_x)
+                    + _f32_ulp(actual_x)
+                    + _f32_ulp(successor.vx)
+                )
+                release_budget_y = (
+                    RAINBOW_ACCELERATION_AXIS_BOUND
+                    + _f32_ulp(predicted_y)
+                    + _f32_ulp(actual_y)
+                    + _f32_ulp(successor.vy)
+                )
+                release_union = (
+                    error_x <= release_budget_x
+                    and error_y <= release_budget_y
+                )
+                if release_now:
+                    parity["max_global_release_axis_error"] = max(
+                        float(parity["max_global_release_axis_error"]),
+                        error_x,
+                        error_y,
+                    )
+                if stop_now and release_now:
+                    category = "global-stop-release-union"
+                    parity["global_combined_union_checked"] += 1
+                    violated = not (stopped_exact or release_union)
+                elif stop_now:
+                    category = "global-stop-or-ordinary-union"
+                    parity["global_stop_union_checked"] += 1
+                    ordinary_exact = (
+                        _f32_bits(predicted_x) == _f32_bits(actual_x)
+                        and _f32_bits(predicted_y) == _f32_bits(actual_y)
+                    )
+                    violated = not (stopped_exact or ordinary_exact)
+                else:
+                    category = "global-release-or-ordinary-union"
+                    parity["global_release_union_checked"] += 1
+                    violated = not release_union
+                if violated:
+                    parity["global_mutation_union_violations"] += 1
+            elif dynamic_flags in (0, ACCELERATION_FLAG):
+                category = (
+                    "linear-exact"
+                    if dynamic_flags == 0
+                    else "acceleration-exact"
+                )
+                parity[
+                    "linear_exact_checked"
+                    if dynamic_flags == 0
+                    else "acceleration_exact_checked"
+                ] += 1
+                violated = (
+                    _f32_bits(predicted_x) != _f32_bits(actual_x)
+                    or _f32_bits(predicted_y) != _f32_bits(actual_y)
+                )
+                if violated:
+                    parity["exact_mismatches"] += 1
+            else:
+                category = "transcendental-budget"
+                parity["transcendental_checked"] += 1
+                parity["max_transcendental_axis_error"] = max(
+                    float(parity["max_transcendental_axis_error"]),
+                    error_x,
+                    error_y,
+                )
+                violated = max(error_x, error_y) > (
+                    _TRANSCENDENTAL_SUCCESSOR_AXIS_BUDGET
+                )
+                if violated:
+                    parity["transcendental_budget_violations"] += 1
+        if violated and len(parity["counterexamples"]) < (
+            _MAX_SUCCESSOR_COUNTEREXAMPLES
+        ):
+            parity["counterexamples"].append({
+                "sequence": sequence,
+                "frame": int(before.frame),
+                "next_frame": int(after.frame),
+                "slot": int(bullet.slot),
+                "category": category,
+                "ex_flags": int(bullet.ex_flags),
+                "predicted": [predicted_x, predicted_y],
+                "actual": [actual_x, actual_y],
+                "axis_error": [error_x, error_y],
+            })
+
+
+def _finish_bullet_successor_parity(
+    parity: dict[str, object],
+) -> dict[str, object]:
+    mismatches = int(parity["exact_mismatches"])
+    trig_violations = int(parity["transcendental_budget_violations"])
+    nonfinite = int(parity["nonfinite_successors"])
+    mutation_violations = int(parity["global_mutation_union_violations"])
+    return {
+        "method": "stable-retained-bullet-center-successor-v2",
+        "scope": (
+            "adjacent source-committed active fired bullets with stable slot, "
+            "sprite, and source-permitted timer transition"
+        ),
+        "arithmetic_comparison": "float32-bit-exact",
+        "transcendental_axis_error_budget": (
+            _TRANSCENDENTAL_SUCCESSOR_AXIS_BUDGET
+        ),
+        "required_collision_margin": 0.35,
+        "global_release_acceleration_axis_bound": (
+            RAINBOW_ACCELERATION_AXIS_BOUND
+        ),
+        "global_mutation_semantics": "source branch union",
+        **parity,
+        "counterexamples_truncated": (
+            mismatches + trig_violations + nonfinite + mutation_violations
+            > len(parity["counterexamples"])
+        ),
+    }
 
 
 def _reachable_envelope(snapshot, steps: int, margin: float):
@@ -236,9 +457,11 @@ def _retained_post_update_laser_hazards(laser):
 
     The exact source ticks the timer after collision. Natural state
     transitions reset it before that tick. A forced clear and a natural
-    state-1 -> state-2 transition with zero hitbox delay are indistinguishable
-    in the retained scalar root, so that one case is explicitly unavailable
-    rather than guessed.
+    state-1 -> state-2 transition can be indistinguishable in the retained
+    scalar root. The predecessor-mechanism union is nevertheless exact for a
+    one-sided coverage audit: the natural transition performs the state-1
+    full-length collision before falling through, while forced clear adds no
+    larger geometry.
     """
     if laser.timer <= 0:
         return (), "timer-not-yet-ticked"
@@ -269,10 +492,8 @@ def _retained_post_update_laser_hazards(laser):
         )
     elif laser.state == 2:
         if laser.timer == 1:
-            if laser.hitbox_end_delay <= 0:
-                return (), "ambiguous-zero-delay-state-transition"
-            # The natural transition performed the state-1 full-length test
-            # before falling through to the despawn branch.
+            # Include the natural predecessor even with zero end delay. It
+            # performed the state-1 full-length test before this fallthrough.
             size_x = full_length
         else:
             if prior_timer >= laser.hitbox_end_delay:
@@ -303,7 +524,7 @@ def _audit_source_successor_coverage(
     run_dir: Path,
     manifest: dict,
     objects: dict[str, object],
-) -> dict[str, object]:
+) -> tuple[dict[str, object], dict[str, object]]:
     """Check committed Hard frames against the following factual Wine root.
 
     This is intentionally a one-sided coverage check. It can disprove a
@@ -325,6 +546,7 @@ def _audit_source_successor_coverage(
     uncovered_aabbs = 0
     uncovered_lasers = 0
     counterexamples = []
+    bullet_parity = _new_bullet_successor_parity()
     previous_row = None
     previous_snapshot = None
 
@@ -349,6 +571,17 @@ def _audit_source_successor_coverage(
             skipped["stage_boundary"] += 1
         else:
             elapsed = int(after.frame) - int(before.frame)
+            if (
+                elapsed == 1
+                and decision.get("hard_collision_margin") == 0.35
+            ):
+                _measure_bullet_successors(
+                    before,
+                    after,
+                    int(previous_row["sequence"]),
+                    bullet_parity,
+                    decision,
+                )
             if not 1 <= elapsed <= 4:
                 skipped["outside_hard_horizon"] += 1
             else:
@@ -356,7 +589,7 @@ def _audit_source_successor_coverage(
                 laser_frames = decision.get("source_hard_laser_frames", ())
                 margin = decision.get("hard_collision_margin")
                 if (
-                    margin is None
+                    margin != 0.35
                     or len(aabb_frames) < elapsed
                     or len(laser_frames) < elapsed
                 ):
@@ -365,7 +598,11 @@ def _audit_source_successor_coverage(
                             "sequence": int(previous_row["sequence"]),
                             "frame": int(before.frame),
                             "elapsed": elapsed,
-                            "kind": "committed-primitives-missing",
+                            "kind": (
+                                "invalid-hard-collision-margin"
+                                if margin != 0.35
+                                else "committed-primitives-missing"
+                            ),
                         })
                     uncovered_aabbs += 1
                 else:
@@ -463,7 +700,7 @@ def _audit_source_successor_coverage(
         previous_row = row
         previous_snapshot = current_snapshot
 
-    return {
+    coverage = {
         "method": "retained-next-root-one-sided-coverage-v1",
         "float_comparison_tolerance": _SUCCESSOR_FLOAT_TOLERANCE,
         "checked_links": checked_links,
@@ -478,6 +715,7 @@ def _audit_source_successor_coverage(
         ),
         "counterexamples": counterexamples,
     }
+    return coverage, _finish_bullet_successor_parity(bullet_parity)
 
 
 def _audit_dense_hard_parity(
@@ -527,15 +765,13 @@ def _audit_dense_hard_parity(
     from th06_rl.th06.source import (
         core_action_from_input,
         kinematics_from_snapshot,
-        lower_observed_hazards,
     )
 
     kernel = NativeKernel(native_library)
     unsafe = []
     conservative = []
     checked = 0
-    explicit_margins = 0
-    legacy_inferred_margins = 0
+    uncommitted_samples_skipped = 0
     for sequence in sorted(sequences):
         row = rows.get(sequence)
         if row is None:
@@ -552,39 +788,38 @@ def _audit_dense_hard_parity(
         }
         recorded_margin = row["decision"].get("hard_collision_margin")
         source_commitment = row["decision"].get("source_commitment")
-        committed_hazards = None
-        if source_commitment == "source-complete-hard-v1":
-            aabb_frames = row["decision"].get("source_hard_aabb_frames", ())
-            laser_frames = row["decision"].get("source_hard_laser_frames", ())
-            if len(aabb_frames) < 4 or len(laser_frames) < 4:
-                unsafe.append({
-                    "sequence": sequence,
-                    "frame": snapshot.frame,
-                    "reason": "source-commitment-primitives-missing",
-                })
-                continue
-            committed_hazards = PackedHazards(
-                tuple(
-                    tuple(Aabb(*map(float, hazard)) for hazard in frame)
-                    for frame in aabb_frames[:4]
+        if source_commitment != "source-complete-hard-v1":
+            uncommitted_samples_skipped += 1
+            continue
+        aabb_frames = row["decision"].get("source_hard_aabb_frames", ())
+        laser_frames = row["decision"].get("source_hard_laser_frames", ())
+        if (
+            recorded_margin != 0.35
+            or len(aabb_frames) < 4
+            or len(laser_frames) < 4
+        ):
+            unsafe.append({
+                "sequence": sequence,
+                "frame": snapshot.frame,
+                "reason": (
+                    "invalid-hard-collision-margin"
+                    if recorded_margin != 0.35
+                    else "source-commitment-primitives-missing"
                 ),
-                tuple(
-                    tuple(LaserRect(*map(float, hazard)) for hazard in frame)
-                    for frame in laser_frames[:4]
-                ),
-            )
+            })
+            continue
+        committed_hazards = PackedHazards(
+            tuple(
+                tuple(Aabb(*map(float, hazard)) for hazard in frame)
+                for frame in aabb_frames[:4]
+            ),
+            tuple(
+                tuple(LaserRect(*map(float, hazard)) for hazard in frame)
+                for frame in laser_frames[:4]
+            ),
+        )
 
-        def replay(margin: float) -> set[str]:
-            if committed_hazards is not None:
-                hazards = committed_hazards
-            else:
-                forecast = lower_observed_hazards(
-                    snapshot, 4, collision_margin=margin
-                )
-                hazards = PackedHazards(
-                    forecast.hazards.aabb_frames[:4],
-                    forecast.hazards.laser_frames[:4],
-                )
+        def replay() -> set[str]:
             certified = kernel.certify_actions(
                 x=snapshot.x,
                 y=snapshot.y,
@@ -592,29 +827,13 @@ def _audit_dense_hard_parity(
                 half_height=snapshot.half_height,
                 kinematics=kinematics_from_snapshot(snapshot),
                 current_action=core_action_from_input(snapshot.input_mask),
-                hazards=hazards,
-                collision_margin=margin,
+                hazards=committed_hazards,
+                collision_margin=0.35,
             )
             return {item.action.name for item in certified}
 
-        if recorded_margin is not None:
-            margin = float(recorded_margin)
-            full = replay(margin)
-            explicit_margins += 1
-        else:
-            # control-v1/v2 did not serialize which branch of the documented
-            # 0.35 -> 0.0 fallback produced the Hard set. Reproduce both and
-            # select only an exact match; never report the margin-0 fallback
-            # as an unsafe divergence against the default margin.
-            conservative_full = replay(0.35)
-            exact_full = replay(0.0)
-            if recorded == conservative_full:
-                margin, full = 0.35, conservative_full
-            elif recorded == exact_full:
-                margin, full = 0.0, exact_full
-            else:
-                margin, full = 0.0, exact_full
-            legacy_inferred_margins += 1
+        margin = 0.35
+        full = replay()
         unsafe_extra = sorted(recorded - full)
         missing_safe = sorted(full - recorded)
         if unsafe_extra:
@@ -636,8 +855,8 @@ def _audit_dense_hard_parity(
     return {
         "sample_source": sample_source,
         "checked": checked,
-        "explicit_collision_margins": explicit_margins,
-        "legacy_inferred_collision_margins": legacy_inferred_margins,
+        "required_collision_margin": 0.35,
+        "uncommitted_samples_skipped": uncommitted_samples_skipped,
         "unsafe_divergences": unsafe,
         "conservative_divergences": conservative,
     }
@@ -746,7 +965,10 @@ def audit(
         objects,
         native_library,
     )
-    source_successor_coverage = _audit_source_successor_coverage(
+    (
+        source_successor_coverage,
+        source_numeric_successor_parity,
+    ) = _audit_source_successor_coverage(
         run_dir,
         manifest,
         objects,
@@ -846,6 +1068,23 @@ def audit(
         or source_successor_coverage["uncovered_lasers"]
     ):
         integrity_errors.append("source-successor-coverage-counterexample")
+    if source_successor_coverage[
+        "retained_laser_geometry_unavailable"
+    ].get("invalid-state", 0):
+        integrity_errors.append("source-successor-laser-state-invalid")
+    if frame_records > 1 and not (
+        source_numeric_successor_parity["linear_exact_checked"]
+        + source_numeric_successor_parity["acceleration_exact_checked"]
+        + source_numeric_successor_parity["transcendental_checked"]
+    ):
+        integrity_errors.append("source-numeric-successor-parity-unavailable")
+    if (
+        source_numeric_successor_parity["exact_mismatches"]
+        or source_numeric_successor_parity["transcendental_budget_violations"]
+        or source_numeric_successor_parity["nonfinite_successors"]
+        or source_numeric_successor_parity["global_mutation_union_violations"]
+    ):
+        integrity_errors.append("source-numeric-successor-parity-counterexample")
     counterexamples = categories.get("safety-counterexample-candidate", 0)
     unresolved = categories.get("unresolved-hit-needs-local-trace", 0)
     return {
@@ -872,6 +1111,7 @@ def audit(
         },
         "dense_hard_parity": dense_hard_parity,
         "source_successor_coverage": source_successor_coverage,
+        "source_numeric_successor_parity": source_numeric_successor_parity,
         "source_dataset_admission": source_dataset_admission,
         "latency": {
             "capture": summary.get("capture_timing"),

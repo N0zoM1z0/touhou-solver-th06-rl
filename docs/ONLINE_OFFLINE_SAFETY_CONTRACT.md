@@ -47,6 +47,13 @@ boss slots, previous timeline timer, and shared angle/origin globals used by
 Authoritative anchors retain immutable stage/ECL graphs and the same-pause
 global-state cross-check.
 
+Each published frame also stores the source-relative indices at which a global
+bullet stop or Cirno rainbow release can occur. These are branch-union facts:
+they do not assert that damage takes the branch. The online Hard primitives
+already include the ordinary trajectory and every declared mutation outcome;
+the explicit indices let offline audit and later learners distinguish a real
+source callback from motion-model noise.
+
 A stage root is attached to the first dense frame of that stage. A new root is
 attached on the same frame whenever the live authority exposes an immutable
 timeline/ECL address outside the active root. `th06_rl.th06.source_dataset` then
@@ -100,6 +107,19 @@ contains every retained bullet, lethal enemy body, and laser collision
 geometry that can intersect the player's preceding reachable envelope. This
 is a one-sided falsifier: a retained uncovered hazard rejects the run, while a
 hazard that retired during the source update is not silently counted as
-verified. Ambiguous zero-delay laser retirement is reported separately. The
-small float32 comparison tolerance in this audit never changes the online
-collision margin or certified action set.
+verified. A retained zero-delay state-2 laser is checked against the union of
+its source-permitted predecessors: natural fallthrough performed one final
+full-length state-1 collision, while a forced clear adds no larger geometry.
+The small float32 comparison tolerance in this audit never changes the online
+collision margin or certified action set. Full-route admission also requires
+at least one reachable retained laser comparison and rejects invalid laser
+states.
+
+The numeric successor audit is separate from geometric containment. Stable
+linear and acceleration bullet centers must agree bit-for-bit with source-order
+binary32 arithmetic; trigonometric motion has a fixed axis budget below the
+0.35 collision margin. Global stop/release callbacks are checked against the
+recorded source branch union. Release allowance is exactly the source's 0.01
+axis acceleration bound plus explicit binary32 rounding ULPs. Full-route
+admission requires the Stage-2 mutation path to be observed and requires zero
+numeric or branch-union violations.

@@ -58,19 +58,23 @@ evaluation contract is
 The original-retail runner contract is
 [docs/WINE_RETAIL_VALIDATION.md](docs/WINE_RETAIL_VALIDATION.md).
 
-Final policy evidence is the physical HIT count in alternating, normal-speed,
+Final policy evidence is the physical HIT count in alternating, real-time,
 complete original-retail Wine Practice Stages with HIT continuation. Fixed RNG,
 first-failure prefixes, shadow replay, and offline metrics may reject a
-candidate, but may not promote one. Evidence-producing Wine always retains the
-retail clock; collection throughput comes from isolated parallel workers and
-offline computation.
+candidate, but may not promote one. The current corpus controller suspends the
+process at coherent decision roots: it preserves retail frame multiplier and
+per-update order, but is not proof of 60 Hz wall-clock deployment. Collection
+throughput comes from isolated parallel workers and offline computation; a
+separate non-suspending end-to-end latency gate is required before promotion.
 
 Parallel collection is fail-closed and policy-bound: prepare workers only from
 the attested archive template with `scripts/prepare_wine_workers.py`, then run
 the fixed-seed serial/two-worker differential with
-`scripts/gate_parallel_wine.py`. `scripts/collect_wine_parallel.py` accepts only
+`scripts/gate_parallel_wine.py`. `scripts/collect_route_parallel.py` accepts only
 that exact commit/pool/native/policy gate and publishes an admission ledger only
-after every predeclared natural-RNG episode passes the full source audit.
+after every predeclared complete natural-RNG route passes the full source audit.
+`collect_wine_parallel.py` is a Practice-stage diagnostic collector and cannot
+produce Generation-7 training admission.
 
 There is currently no authorized gameplay candidate. The tracked Wine smoke
 policy is infrastructure-only and cannot create promotion evidence. Generation

@@ -2,16 +2,18 @@
 
 ## Decision
 
-Do not accelerate the clock of evidence-producing TH06 processes. The retail
-timing loop is paced at 60 Hz, while capture, native-safe solving, and input
-delivery consume real host time around that loop. Scaling Wine timers or
-removing the wait can change how many coherent observations and input updates
-fit between physical frames even if the game executable itself is unchanged.
-That semantic risk would train on a different control process.
+Do not accelerate the clock or frame multiplier of evidence-producing TH06
+processes. The corpus controller suspends Wine at a coherent source root while
+it captures, certifies, records, and publishes one action. This preserves the
+retail per-update order and `frame_multiplier == 1.0`, but deliberately makes
+wall-clock playback slower than 60 Hz. Scaling Wine timers or removing waits
+would change the control process and is not admitted.
 
 Training throughput instead scales horizontally: multiple isolated copies of
-the unchanged original executable run concurrently, each at normal timing.
-Canary and final evidence remain single-instance and sequential.
+the unchanged original executable run concurrently under the same coherent
+suspension contract. A final online candidate must additionally pass a
+single-instance, non-suspending, real-time 60 Hz end-to-end gate; paused corpus
+evidence cannot satisfy that gate.
 
 ## Required worker isolation
 
@@ -74,16 +76,15 @@ not overlap it with a canonical baseline, canary, promotion run, or heavy fit:
   --output artifacts/parallel-gate/gate.json
 ```
 
-Only the exact bound policy/commit/pool may then collect a predeclared natural
-RNG schedule. The example covers all Stages twice; changing the policy requires
-a new gate:
+Only the exact bound policy/commit/pool may then collect a predeclared schedule
+of complete natural-RNG routes. Changing the policy requires a new gate:
 
 ```bash
-.venv/bin/python scripts/collect_wine_parallel.py \
+.venv/bin/python scripts/collect_route_parallel.py \
   --gate artifacts/parallel-gate/gate.json \
   --policy-plugin "$TH06_POLICY_PLUGIN" \
   --policy-state "$TH06_POLICY_STATE" \
-  --episodes 12 --stages 1,2,3,4,5,6 \
+  --episodes 12 \
   --artifact-root artifacts/parallel-collection \
   --corpus-root corpus/parallel-collection \
   --output artifacts/parallel-collection/admission.json
@@ -109,5 +110,6 @@ Offline work is semantically exact and can exploit the host aggressively:
 - resume only from hash-bound atomic checkpoints.
 
 Acceleration never changes reward, successor state, RNG eligibility, action
-authority, model population, or promotion criteria. Final measurement remains
-the original Wine process at normal speed over complete natural-RNG Stages.
+authority, model population, or promotion criteria. Final measurement uses the
+original Wine process without debugger suspension at real-time speed over
+complete natural-RNG Stages.

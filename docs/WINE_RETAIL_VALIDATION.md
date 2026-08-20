@@ -2,10 +2,11 @@
 
 This path runs the original Japanese TH06 1.02h executable under Wine. Wine is
 the project's only gameplay, learning, and evaluation environment. Fixed RNG,
-isolated parallel normal-speed workers, and offline replay remain
-diagnostic/training strata. Evidence-producing Wine does not use an accelerated
-game clock; final policy comparison uses sequential normal-speed complete
-original-retail Wine Stages.
+isolated parallel workers, and offline replay remain diagnostic/training
+strata. The corpus path pauses the exact process at coherent decision roots; it
+does not accelerate game time and preserves retail per-update semantics, but it
+is slower than 60 Hz in wall time. Final policy comparison requires sequential,
+non-suspending, real-time complete original-retail Wine Stages.
 
 ## Fixed inputs
 

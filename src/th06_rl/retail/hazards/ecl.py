@@ -1618,15 +1618,25 @@ def _forecast_ecl_births_single(
                     )
             elif instruction.opcode == OPCODE_MATH_NORMALIZE_ANGLE:
                 target = struct.unpack_from("<i", raw, 0x0C)[0]
-                value = _float_var(
-                    raw[0x0C:0x10], integers, floats, difficulty, rank,
-                    life, enemy, variable_player,
-                )
-                value = (
-                    FloatInterval(-math.pi, math.pi)
-                    if isinstance(value, FloatInterval)
-                    else math.remainder(value, math.tau)
-                )
+                if not -10008 <= target <= -10005:
+                    return EclForecast(
+                        tuple(map(tuple, births)), frame_index,
+                        "angle normalization reads an unsupported world variable",
+                    )
+                value = floats[-10005 - target]
+                if isinstance(value, FloatInterval):
+                    value = FloatInterval(-math.pi, math.pi)
+                elif not math.isfinite(value):
+                    return EclForecast(
+                        tuple(map(tuple, births)), frame_index,
+                        "angle normalization reads a non-finite variable",
+                    )
+                else:
+                    # The opcode stores an integer EclVarId, unlike float
+                    # operands whose variable ids are encoded as -10005.0.
+                    # Source calls GetVar on that id and then performs the
+                    # same bounded f32 AddNormalizeAngle loop.
+                    value = _add_normalize_angle(value, 0.0)
                 if not _set_float_var(target, value, floats):
                     return EclForecast(
                         tuple(map(tuple, births)), frame_index, "unsupported angle target"

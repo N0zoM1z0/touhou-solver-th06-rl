@@ -24,7 +24,7 @@ from .retail.model import BUTTON_BOMB
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v9"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v10"
 TRANSITION_SCHEMA = "th06-rl-transition-v10"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
@@ -151,8 +151,8 @@ class FrameEvidence:
     hazard_primitives: tuple[tuple[float, ...], ...] = ()
     history_features: tuple[tuple[str, float], ...] = ()
     option: PolicyOptionTrace | None = None
-    # Exact native collision contract used for the recorded Hard set. This is
-    # 0.35 normally and 0.0 only for the source-geometry fallback.
+    # Exact native collision contract used for the recorded Hard set. A
+    # published control-v5 action always uses the fixed 0.35 margin.
     hard_collision_margin: float | None = None
     source_commitment: str = ""
     source_coverage: int = 0
@@ -164,6 +164,11 @@ class FrameEvidence:
     source_hard_laser_frames: tuple[
         tuple[tuple[float, float, float, float, float, float], ...], ...
     ] = ()
+    # Possible source callback branches relative to this factual root.  The
+    # hard primitives above already union their trajectories; retaining the
+    # event coordinates makes the union independently auditable offline.
+    source_bullet_stop_frames: tuple[int, ...] = ()
+    source_bullet_release_frames: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.phase_id:
@@ -206,6 +211,14 @@ class FrameEvidence:
             raise ValueError("Hard collision margin must be finite and nonnegative")
         if self.source_coverage < 0:
             raise ValueError("source coverage cannot be negative")
+        for label, frames in (
+            ("stop", self.source_bullet_stop_frames),
+            ("release", self.source_bullet_release_frames),
+        ):
+            if tuple(sorted(set(frames))) != frames:
+                raise ValueError(f"source bullet {label} frames must be sorted and unique")
+            if any(frame < 0 or frame >= self.source_coverage for frame in frames):
+                raise ValueError(f"source bullet {label} frame is outside source coverage")
         if self.source_commitment == "source-complete-hard-v1" and (
             self.source_coverage < 4
             or len(self.source_hard_aabb_frames) < 4

@@ -39,6 +39,7 @@ def verify(
     summary = manifest.get("summary")
     audit_scope = audit.get("scope")
     successor_coverage = audit.get("source_successor_coverage")
+    numeric_successor_parity = audit.get("source_numeric_successor_parity")
     anchor_coverage = audit.get("source_anchor_coverage")
     dataset_admission = audit.get("source_dataset_admission")
     for name, value in (
@@ -51,6 +52,7 @@ def verify(
         ("summary", summary),
         ("audit scope", audit_scope),
         ("source successor coverage", successor_coverage),
+        ("source numeric successor parity", numeric_successor_parity),
         ("source anchor coverage", anchor_coverage),
         ("source dataset admission", dataset_admission),
     ):
@@ -79,8 +81,16 @@ def verify(
         ),
         "source_complete_online_authority": (
             isinstance(metadata.get("planner"), dict)
+            and metadata["planner"].get("algorithm")
+            == "source-hard4-paused-publication-v2"
             and metadata["planner"].get("source_commitment")
             == "source-complete-hard-v1"
+            and metadata["planner"].get("hard_horizon") == 4
+            and metadata["planner"].get("learner_feature_horizon") == 4
+            and metadata["planner"].get("minimum_collision_margin") == 0.35
+            and metadata["planner"].get("zero_margin_fallback") is False
+            and trace.get("zero_margin_frames") == 0
+            and trace.get("invalid_hard_collision_margin_frames") == 0
         ),
         "comprehensive_offline_facts": (
             isinstance(metadata.get("planner"), dict)
@@ -132,8 +142,51 @@ def verify(
             == "retained-next-root-one-sided-coverage-v1"
             and isinstance(successor_coverage.get("checked_links"), int)
             and successor_coverage["checked_links"] > 0
+            and successor_coverage.get("actual_lasers_checked", 0) > 0
             and successor_coverage.get("uncovered_aabbs") == 0
             and successor_coverage.get("uncovered_lasers") == 0
+            and (successor_coverage.get(
+                "retained_laser_geometry_unavailable", {}
+            ) or {}).get("invalid-state", 0) == 0
+        ),
+        "numeric_source_successors": (
+            numeric_successor_parity.get("method")
+            == "stable-retained-bullet-center-successor-v2"
+            and numeric_successor_parity.get("arithmetic_comparison")
+            == "float32-bit-exact"
+            and numeric_successor_parity.get("required_collision_margin") == 0.35
+            and isinstance(
+                numeric_successor_parity.get("transcendental_axis_error_budget"),
+                (int, float),
+            )
+            and 0
+            < numeric_successor_parity["transcendental_axis_error_budget"]
+            < numeric_successor_parity["required_collision_margin"]
+            and 0
+            < numeric_successor_parity.get(
+                "global_release_acceleration_axis_bound", 1.0
+            )
+            < numeric_successor_parity["required_collision_margin"]
+            and numeric_successor_parity.get("global_mutation_semantics")
+            == "source branch union"
+            and (
+                numeric_successor_parity.get("linear_exact_checked", 0)
+                + numeric_successor_parity.get("acceleration_exact_checked", 0)
+            ) > 0
+            and numeric_successor_parity.get("transcendental_checked", 0) > 0
+            and (
+                numeric_successor_parity.get("global_stop_union_checked", 0)
+                + numeric_successor_parity.get("global_release_union_checked", 0)
+                + numeric_successor_parity.get("global_combined_union_checked", 0)
+            ) > 0
+            and numeric_successor_parity.get("exact_mismatches") == 0
+            and numeric_successor_parity.get(
+                "transcendental_budget_violations"
+            ) == 0
+            and numeric_successor_parity.get("nonfinite_successors") == 0
+            and numeric_successor_parity.get(
+                "global_mutation_union_violations"
+            ) == 0
         ),
     }
     failed = [name for name, passed in checks.items() if not passed]
@@ -150,6 +203,7 @@ def verify(
         "hit_classifications": audit.get("hit_classifications"),
         "latency": audit.get("latency"),
         "source_successor_coverage": successor_coverage,
+        "source_numeric_successor_parity": numeric_successor_parity,
         "checks": checks,
     }
 

@@ -211,8 +211,13 @@ def _admit_episode(
         and metadata.get("difficulty") == 3
         and metadata.get("episode_unit") == "route"
         and metadata.get("expected_stages") == [1, 2, 3, 4, 5, 6]
+        and planner.get("algorithm") == "source-hard4-paused-publication-v2"
         and planner.get("source_commitment") == "source-complete-hard-v1"
         and planner.get("factual_state_schema") == "th06-1.02h-offline-facts-v2"
+        and planner.get("hard_horizon") == 4
+        and planner.get("learner_feature_horizon") == 4
+        and planner.get("minimum_collision_margin") == 0.35
+        and planner.get("zero_margin_fallback") is False
         and report.get("repository_commit") == collection_commit
         and report.get("repository_worktree_clean") is True
         and report.get("diagnostic_rng_seed") is None

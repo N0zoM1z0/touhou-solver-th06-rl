@@ -167,3 +167,14 @@ def test_source_dataset_rejects_mismatched_repeat_star_globals() -> None:
 
     with pytest.raises(SourceDatasetError, match="repeating-star globals"):
         validate_frame_authority(control, anchor)
+
+
+def test_source_dataset_accepts_dense_repeat_globals_after_anchor_pause() -> None:
+    control, anchor = _pair()
+    assert control.repeat_star_state is not None
+    control = replace(
+        control,
+        repeat_star_state=replace(control.repeat_star_state, enemy_x=193.0),
+    )
+
+    validate_frame_authority(control, anchor, same_pause=False)

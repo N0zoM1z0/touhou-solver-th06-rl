@@ -29,6 +29,10 @@ class SourceForecast:
     requested_horizon: int
     source_coverage: int
     coverage_reason: str
+    # Possible source-level global bullet mutations, indexed from the current
+    # root.  These are branch unions, not claims that the event must occur.
+    bullet_stop_frames: tuple[int, ...] = ()
+    bullet_release_frames: tuple[int, ...] = ()
 
     @property
     def full_horizon(self) -> bool:
@@ -253,6 +257,8 @@ def lower_source_forecast(
             if source_coverage == requested_horizon
             else nominal_births.reason
         ),
+        bullet_stop_frames=hard_births.bullet_stop_frames,
+        bullet_release_frames=hard_births.bullet_release_frames,
     )
 
 

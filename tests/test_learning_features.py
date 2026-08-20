@@ -43,20 +43,17 @@ def _projection():
             final_y=400.0,
         ),
     )
-    checkpoints = (1, 2, 3, 4, 6, 8, 10, 12)
+    checkpoints = (1, 2, 3, 4)
     profiles = (
         SimpleNamespace(
             action=actions["stay"],
             checkpoints=checkpoints,
-            min_clearances=(12.0, 11.0, 10.0, 9.0, 0.1, 5.0, 3.0, -1.0),
+            min_clearances=(12.0, 11.0, 10.0, 9.0),
         ),
         SimpleNamespace(
             action=actions["left"],
             checkpoints=checkpoints,
-            min_clearances=(
-                float("inf"), float("inf"), float("inf"), float("inf"),
-                8.0, 7.0, 6.0, 5.0,
-            ),
+            min_clearances=(float("inf"),) * 4,
         ),
     )
     return project_learning_features(
@@ -73,10 +70,10 @@ def test_th06_adapter_emits_versioned_finite_named_features() -> None:
     left = dict(actions)["left"]
     assert dict(left)["clearance_unbounded"] == 1.0
     assert dict(left)["clearance_log"] == 0.0
-    assert dict(left)["profile_unbounded_h12"] == 0.0
-    assert dict(left)["profile_rank_h12"] == 1.0
-    assert dict(dict(actions)["stay"])["profile_viable_h12"] == 0.0
-    assert dict(dict(actions)["stay"])["profile_viable_h6"] == 0.0
+    assert dict(left)["profile_unbounded_h4"] == 1.0
+    assert dict(left)["profile_rank_h4"] == 1.0
+    assert dict(dict(actions)["stay"])["profile_viable_h4"] == 1.0
+    assert not any(name.endswith("h6") for name, _ in left)
 
 
 def test_generic_vector_is_action_relative_and_has_declared_order() -> None:
