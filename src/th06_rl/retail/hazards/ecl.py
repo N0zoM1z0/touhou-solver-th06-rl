@@ -921,6 +921,8 @@ def _forecast_ecl_births_single(
     record_enemy_kill_all: bool = False,
     laser_world=None,
     spawn_inline: bool = False,
+    record_bullet_stop=None,
+    record_bullet_release=None,
 ) -> EclForecast:
     """Forecast one emitter until the first unsupported source instruction."""
     horizon = len(player_positions)
@@ -2369,6 +2371,20 @@ def _forecast_ecl_births_single(
                     allow_enemy_create_audit=False,
                     record_enemy_kill_all=record_enemy_kill_all,
                     laser_world=laser_world,
+                    record_bullet_stop=(
+                        None
+                        if record_bullet_stop is None
+                        else lambda frame, offset=frame_index: record_bullet_stop(
+                            offset + frame
+                        )
+                    ),
+                    record_bullet_release=(
+                        None
+                        if record_bullet_release is None
+                        else lambda frame, offset=frame_index: record_bullet_release(
+                            offset + frame
+                        )
+                    ),
                 )
                 if newborn.covered_frames < 1:
                     return EclForecast(
@@ -2418,6 +2434,20 @@ def _forecast_ecl_births_single(
                         allow_enemy_create_audit=False,
                         record_enemy_kill_all=record_enemy_kill_all,
                         laser_world=laser_world,
+                        record_bullet_stop=(
+                            None
+                            if record_bullet_stop is None
+                            else lambda frame, offset=frame_index: record_bullet_stop(
+                                offset + frame
+                            )
+                        ),
+                        record_bullet_release=(
+                            None
+                            if record_bullet_release is None
+                            else lambda frame, offset=frame_index: record_bullet_release(
+                                offset + frame
+                            )
+                        ),
                     )
                     if updated.covered_frames < 1:
                         return EclForecast(
@@ -2466,6 +2496,20 @@ def _forecast_ecl_births_single(
                             model_player_damage=True,
                             allow_enemy_create_audit=False,
                             record_enemy_kill_all=record_enemy_kill_all,
+                            record_bullet_stop=(
+                                None
+                                if record_bullet_stop is None
+                                else lambda frame, offset=frame_index + 1: (
+                                    record_bullet_stop(offset + frame)
+                                )
+                            ),
+                            record_bullet_release=(
+                                None
+                                if record_bullet_release is None
+                                else lambda frame, offset=frame_index + 1: (
+                                    record_bullet_release(offset + frame)
+                                )
+                            ),
                         )
                         for offset, frame_births in enumerate(
                             future.births,
@@ -2939,6 +2983,62 @@ def _forecast_ecl_births_single(
                     )
             elif instruction.opcode in HAZARD_NEUTRAL_ECL_OPCODES:
                 pass
+            elif instruction.opcode == OPCODE_EX_CALL:
+                ex_index, ex_param = struct.unpack_from("<Ii", raw, 0x0C)
+                if ex_index == 0 and ex_param == 0 and record_bullet_stop is not None:
+                    # EnemyEclInstr::ExInsCirnoRainbowBallJank first spawns
+                    # one visual-only effect, then writes speed=0 and
+                    # velocity=(0, 0, 0) to every non-unused,
+                    # non-despawning BulletManager slot.  The manager runs
+                    # before BulletManager, so the mutation applies before
+                    # this lead's movement/collision pass.
+                    record_bullet_stop(frame_index)
+                elif (
+                    ex_index == 0
+                    and ex_param == 1
+                    and record_bullet_release is not None
+                ):
+                    # The same exact external instruction sets 0x10, resets
+                    # each live bullet timer, and chooses a fixed random
+                    # acceleration vector of magnitude 0.01.  Hard authority
+                    # records the world mutation; its collision lowering
+                    # encloses every possible acceleration angle.
+                    record_bullet_release(frame_index)
+                elif (
+                    ex_index == 1
+                    and radial_births
+                    and abstract_rng
+                    and pattern is not None
+                    and abs(ex_param) <= 4096
+                ):
+                    # ExInsShootAtRandomArea consumes two shared RNG draws,
+                    # overwrites bulletProps.position (ignoring shootOffset),
+                    # and then calls SpawnBulletPattern.  The hard envelope
+                    # retains the full x +/- p/2 and y +/- 0.375p support.
+                    area_x = abs(float(ex_param)) / 2.0
+                    area_y = abs(float(ex_param)) * 0.375
+                    try:
+                        births[frame_index].extend(emit(
+                            pattern,
+                            (
+                                _float_add(
+                                    enemy[0], FloatInterval(-area_x, area_x)
+                                ),
+                                _float_add(
+                                    enemy[1], FloatInterval(-area_y, area_y)
+                                ),
+                            ),
+                            player,
+                        ))
+                    except UnsupportedBirthModel as error:
+                        return EclForecast(
+                            tuple(map(tuple, births)), frame_index, str(error)
+                        )
+                else:
+                    return EclForecast(
+                        tuple(map(tuple, births)), frame_index,
+                        FAIL_CLOSED_ECL_OPCODES[instruction.opcode],
+                    )
             elif instruction.opcode in FAIL_CLOSED_ECL_OPCODES:
                 return EclForecast(
                     tuple(map(tuple, births)),
@@ -3191,6 +3291,8 @@ def _forecast_ecl_births_with_death_callbacks(
     abstract_rng: bool = False,
     enemy_kill_all_is_noop: bool = False,
     model_player_damage: bool = True,
+    record_bullet_stop=None,
+    record_bullet_release=None,
 ) -> EclForecast:
     """Union every reachable source death-callback pickup frame."""
     horizon = len(player_positions)
@@ -3224,6 +3326,8 @@ def _forecast_ecl_births_with_death_callbacks(
             abstract_rng,
             enemy_kill_all_is_noop,
             model_player_damage=model_player_damage,
+            record_bullet_stop=record_bullet_stop,
+            record_bullet_release=record_bullet_release,
         )
 
     program = _compiled_program(spawner.ecl_program)
@@ -3252,6 +3356,8 @@ def _forecast_ecl_births_with_death_callbacks(
         abstract_rng,
         enemy_kill_all_is_noop,
         model_player_damage=model_player_damage,
+        record_bullet_stop=record_bullet_stop,
+        record_bullet_release=record_bullet_release,
     )
     births = [list(frame) for frame in no_callback.births]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -3277,6 +3383,8 @@ def _forecast_ecl_births_with_death_callbacks(
                 abstract_rng,
                 enemy_kill_all_is_noop,
                 model_player_damage=model_player_damage,
+                record_bullet_stop=record_bullet_stop,
+                record_bullet_release=record_bullet_release,
             )
             if prefix.covered_frames < callback_frame:
                 if prefix.covered_frames < covered_frames:
@@ -3344,6 +3452,20 @@ def _forecast_ecl_births_with_death_callbacks(
             abstract_rng,
             enemy_kill_all_is_noop,
             model_player_damage=model_player_damage,
+            record_bullet_stop=(
+                None
+                if record_bullet_stop is None
+                else lambda frame, offset=callback_frame: record_bullet_stop(
+                    offset + frame
+                )
+            ),
+            record_bullet_release=(
+                None
+                if record_bullet_release is None
+                else lambda frame, offset=callback_frame: record_bullet_release(
+                    offset + frame
+                )
+            ),
         )
         for index, frame_births in enumerate(callback.births, callback_frame):
             births[index].extend(frame_births)
@@ -3377,6 +3499,8 @@ def _forecast_ecl_births_with_life_callbacks(
     abstract_rng: bool = False,
     enemy_kill_all_is_noop: bool = False,
     model_player_damage: bool = True,
+    record_bullet_stop=None,
+    record_bullet_release=None,
 ) -> EclForecast:
     """Forecast an emitter, branching over reachable hard life callbacks."""
     horizon = len(player_positions)
@@ -3411,6 +3535,8 @@ def _forecast_ecl_births_with_life_callbacks(
             abstract_rng,
             enemy_kill_all_is_noop,
             model_player_damage,
+            record_bullet_stop,
+            record_bullet_release,
         )
 
     program = _compiled_program(spawner.ecl_program)
@@ -3440,6 +3566,8 @@ def _forecast_ecl_births_with_life_callbacks(
         abstract_rng,
         enemy_kill_all_is_noop,
         model_player_damage,
+        record_bullet_stop,
+        record_bullet_release,
     )
     births = [list(frame) for frame in no_callback.births]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -3465,6 +3593,8 @@ def _forecast_ecl_births_with_life_callbacks(
                 abstract_rng,
                 enemy_kill_all_is_noop,
                 model_player_damage,
+                record_bullet_stop,
+                record_bullet_release,
             )
             if prefix.covered_frames < callback_frame or prefix.next_spawner is None:
                 branch_coverage = prefix.covered_frames
@@ -3504,6 +3634,20 @@ def _forecast_ecl_births_with_life_callbacks(
             abstract_rng,
             enemy_kill_all_is_noop,
             model_player_damage,
+            (
+                None
+                if record_bullet_stop is None
+                else lambda frame, offset=callback_frame: record_bullet_stop(
+                    offset + frame
+                )
+            ),
+            (
+                None
+                if record_bullet_release is None
+                else lambda frame, offset=callback_frame: record_bullet_release(
+                    offset + frame
+                )
+            ),
         )
         for index, frame_births in enumerate(callback.births, callback_frame):
             births[index].extend(frame_births)
@@ -3576,6 +3720,8 @@ def _forecast_abstract_integer_domains(
     allow_player_variables: bool,
     radial_births: bool,
     enemy_kill_all_is_noop: bool,
+    record_bullet_stop=None,
+    record_bullet_release=None,
 ) -> EclForecast:
     """Union every bounded source integer-RNG control-flow outcome."""
     pending: list[tuple[int, ...]] = [()]
@@ -3603,6 +3749,8 @@ def _forecast_abstract_integer_domains(
             True,
             enemy_kill_all_is_noop,
             choices,
+            record_bullet_stop=record_bullet_stop,
+            record_bullet_release=record_bullet_release,
         )
         extent = forecast.unresolved_int_extent
         if extent:
@@ -3679,6 +3827,8 @@ def forecast_ecl_births(
     record_enemy_kill_all: bool = False,
     laser_world=None,
     spawn_inline: bool = False,
+    record_bullet_stop=None,
+    record_bullet_release=None,
 ) -> EclForecast:
     """Forecast one emitter and preserve every bounded hard uncertainty."""
     if spawn_inline:
@@ -3700,6 +3850,8 @@ def forecast_ecl_births(
             record_enemy_kill_all=record_enemy_kill_all,
             laser_world=laser_world,
             spawn_inline=True,
+            record_bullet_stop=record_bullet_stop,
+            record_bullet_release=record_bullet_release,
         )
     if record_enemy_kill_all:
         if abstract_rng or model_player_damage or rng is None:
@@ -3723,6 +3875,8 @@ def forecast_ecl_births(
             model_player_damage=model_player_damage,
             record_enemy_kill_all=True,
             laser_world=laser_world,
+            record_bullet_stop=record_bullet_stop,
+            record_bullet_release=record_bullet_release,
         )
     if laser_world is not None:
         if len(player_positions) != 1:
@@ -3753,6 +3907,8 @@ def forecast_ecl_births(
             enemy_kill_all_is_noop,
             model_player_damage=model_player_damage,
             laser_world=laser_world,
+            record_bullet_stop=record_bullet_stop,
+            record_bullet_release=record_bullet_release,
         )
     if (
         abstract_rng
@@ -3780,6 +3936,8 @@ def forecast_ecl_births(
             allow_player_variables,
             radial_births,
             enemy_kill_all_is_noop,
+            record_bullet_stop,
+            record_bullet_release,
         )
     return _forecast_ecl_births_with_life_callbacks(
         spawner,
@@ -3794,4 +3952,6 @@ def forecast_ecl_births(
         abstract_rng,
         enemy_kill_all_is_noop,
         model_player_damage,
+        record_bullet_stop,
+        record_bullet_release,
     )

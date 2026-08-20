@@ -56,6 +56,10 @@ def _documents(hits: int = 12):
             "uncovered_aabbs": 0,
             "uncovered_lasers": 0,
         },
+        "source_anchor_coverage": {
+            "anchored_stages": [1, 2, 3, 4, 5, 6],
+            "missing_observed_stages": [],
+        },
     }
     return report, run, manifest, audit
 
@@ -115,4 +119,12 @@ def test_baseline_route_verifier_rejects_uncovered_successor_hazard() -> None:
     documents[3]["source_successor_coverage"]["uncovered_aabbs"] = 1
 
     with pytest.raises(ValueError, match="causal_source_successors"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_legacy_single_stage_anchor_check() -> None:
+    documents = list(_documents())
+    del documents[3]["source_anchor_coverage"]
+
+    with pytest.raises(ValueError, match="source anchor coverage"):
         verify(*documents)

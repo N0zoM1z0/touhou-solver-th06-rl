@@ -139,7 +139,7 @@ def lower_source_forecast(
     """Project live hazards and source ECL births without phase control flow."""
     if requested_horizon < HARD_HORIZON:
         raise ValueError("source forecast must cover Hard-4")
-    from .observed_bullets import reachable_hazards_by_frame
+    from .observed_bullets import DYNAMIC_EX_FLAGS, reachable_hazards_by_frame
     from ..retail.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
     from ..retail.hazards.lasers import hazards_by_frame as laser_hazards_by_frame
     from ..retail.hazards.world import forecast_world_births
@@ -153,6 +153,18 @@ def lower_source_forecast(
         raise AuthorityUnavailable(
             "Hard source birth coverage ended at "
             f"h{hard_births.covered_frames}: {hard_births.reason}"
+        )
+    bullet_mutation_frames = (
+        hard_births.bullet_stop_frames + hard_births.bullet_release_frames
+    )
+    if bullet_mutation_frames and any(
+        bullet.ex_flags & DYNAMIC_EX_FLAGS for bullet in snapshot.bullets
+    ):
+        first_mutation = min(bullet_mutation_frames)
+        raise AuthorityUnavailable(
+            "Hard source birth coverage ended at "
+            f"h{first_mutation}: deterministic global bullet mutation intersects "
+            "a live dynamic bullet"
         )
     nominal_births = (
         forecast_world_births(
@@ -170,6 +182,8 @@ def lower_source_forecast(
         snapshot,
         source_coverage,
         collision_margin,
+        hard_births.bullet_stop_frames,
+        hard_births.bullet_release_frames,
     )[:source_coverage]
     enemy_frames = enemy_hazards_by_frame(
         snapshot.enemies,

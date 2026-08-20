@@ -6,6 +6,7 @@ import struct
 import pytest
 
 from th06_rl.retail.model import (
+    Bullet,
     BulletPattern,
     EclInstruction,
     EnemySpawner,
@@ -87,7 +88,7 @@ def _spawner(first: EclInstruction, end: EclInstruction, **changes) -> EnemySpaw
     return EnemySpawner(**values)
 
 
-def _snapshot(spawner: EnemySpawner, *, lasers=()) -> Snapshot:
+def _snapshot(spawner: EnemySpawner, *, lasers=(), bullets=()) -> Snapshot:
     timeline_end = StageTimelineInstruction(
         0x20000, -1, 0, 0, 8, "00" * 8
     )
@@ -105,7 +106,7 @@ def _snapshot(spawner: EnemySpawner, *, lasers=()) -> Snapshot:
         focus_diagonal_speed=1.4,
         frame_multiplier=1.0,
         input_mask=1,
-        bullets=(),
+        bullets=tuple(bullets),
         laser_count=len(lasers),
         in_menu=False,
         time_stopped=False,
@@ -209,3 +210,102 @@ def test_source_commitment_fails_closed_on_unsupported_ecl() -> None:
 
     with pytest.raises(AuthorityUnavailable, match="coverage ended"):
         lower_source_forecast(_snapshot(_spawner(unsupported, end)), 4)
+
+
+def test_source_commitment_unions_exact_cirno_stop_position() -> None:
+    ex_call, raw = _instruction(0x10000, 3, 121, 20)
+    struct.pack_into("<Ii", raw, 12, 0, 0)
+    ex_call = _with_raw(ex_call, raw)
+    end, _raw = _instruction(0x10014, -1, 0)
+    bullet = Bullet(
+        190.0,
+        390.0,
+        2.0,
+        1.0,
+        1.0,
+        1.0,
+        1,
+        ex_flags=0x4,
+        speed=math.sqrt(5.0),
+        sprite_half_width=8.0,
+        sprite_half_height=8.0,
+    )
+
+    forecast = lower_source_forecast(
+        _snapshot(_spawner(ex_call, end), bullets=(bullet,)), 4
+    )
+    centers = {
+        ((box.left + box.right) / 2.0, (box.top + box.bottom) / 2.0)
+        for box in forecast.hazards.aabb_frames[3]
+    }
+
+    # No-damage and candidate-damage branches are unioned by Hard authority.
+    # Keep both the ordinary fourth update and the exact position after three
+    # updates where EX_CALL 0,param 0 zeros velocity before BulletManager.
+    assert (198.0, 394.0) in centers
+    assert (196.0, 393.0) in centers
+
+
+def test_source_commitment_encloses_random_cirno_release_acceleration() -> None:
+    ex_call, raw = _instruction(0x10000, 0, 121, 20)
+    struct.pack_into("<Ii", raw, 12, 0, 1)
+    ex_call = _with_raw(ex_call, raw)
+    end, _raw = _instruction(0x10014, -1, 0)
+    bullet = Bullet(
+        190.0, 390.0, 2.0, 1.0, 1.0, 1.0, 1,
+        ex_flags=0x4,
+        speed=math.sqrt(5.0),
+        sprite_half_width=8.0,
+        sprite_half_height=8.0,
+    )
+
+    forecast = lower_source_forecast(
+        _snapshot(_spawner(ex_call, end), bullets=(bullet,)), 4
+    )
+
+    assert forecast.source_coverage == 4
+    assert any(
+        (box.left, box.top, box.right, box.bottom)
+        == pytest.approx((196.9, 392.9, 199.1, 395.1))
+        for box in forecast.hazards.aabb_frames[3]
+    )
+
+
+def test_source_commitment_rejects_release_over_dynamic_live_bullet() -> None:
+    ex_call, raw = _instruction(0x10000, 0, 121, 20)
+    struct.pack_into("<Ii", raw, 12, 0, 1)
+    ex_call = _with_raw(ex_call, raw)
+    end, _raw = _instruction(0x10014, -1, 0)
+    bullet = Bullet(
+        190.0, 390.0, 0.0, 0.0, 1.0, 1.0, 1,
+        ex_flags=0x10,
+        acceleration_duration=10,
+    )
+
+    with pytest.raises(AuthorityUnavailable, match="global bullet mutation"):
+        lower_source_forecast(
+            _snapshot(_spawner(ex_call, end), bullets=(bullet,)), 4
+        )
+
+
+def test_source_commitment_encloses_random_area_external_shot() -> None:
+    ex_call, raw = _instruction(0x10000, 0, 121, 20)
+    struct.pack_into("<Ii", raw, 12, 1, 128)
+    ex_call = _with_raw(ex_call, raw)
+    end, _raw = _instruction(0x10014, -1, 0)
+    pattern = BulletPattern(
+        0, 0.0, 0.0, 1.0, 1.0,
+        (0.0,) * 4, (0,) * 4,
+        1, 1, 0, 0x4, 1.0, 1.0,
+    )
+
+    forecast = lower_source_forecast(
+        _snapshot(_spawner(ex_call, end, pattern=pattern)), 4
+    )
+
+    assert forecast.source_coverage == 4
+    first = forecast.hazards.aabb_frames[0][0]
+    assert first.left <= 126.0
+    assert first.right >= 258.0
+    assert first.top <= 350.0
+    assert first.bottom >= 450.0

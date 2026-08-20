@@ -17,6 +17,7 @@ import struct
 from dataclasses import replace
 
 from ..retail.hazards.bullets import (
+    RAINBOW_ACCELERATION_AXIS_BOUND,
     _may_reach_player,
     hazard_boxes as retail_hazard_boxes,
 )
@@ -483,16 +484,67 @@ def hazard_box(bullet, frame: int):
     return hazard_boxes(bullet, frame)[-1]
 
 
-def reachable_hazards_by_frame(snapshot, horizon: int, collision_margin: float):
-    """Keep the retail adapter's broad prefilter, then use exact local boxes."""
+def reachable_hazards_by_frame(
+    snapshot,
+    horizon: int,
+    collision_margin: float,
+    bullet_stop_frames: tuple[int, ...] = (),
+    bullet_release_frames: tuple[int, ...] = (),
+):
+    """Project live bullets plus possible deterministic global-stop branches.
+
+    A stop at lead ``n`` runs before BulletManager update ``n``.  The stopped
+    position is therefore the position after exactly ``n`` prior updates.
+    Hard callback forecasting unions source branches, so the ordinary
+    no-stop trajectory is deliberately retained alongside every recorded
+    stop position.
+    """
+    stop_frames = tuple(sorted({
+        int(frame) for frame in bullet_stop_frames if 0 <= int(frame) < horizon
+    }))
+    release_frames = tuple(sorted({
+        int(frame)
+        for frame in bullet_release_frames
+        if 0 <= int(frame) < horizon
+    }))
     frames: list[list[tuple[float, float, float, float]]] = [
         [] for _ in range(horizon)
     ]
     for bullet in snapshot.bullets:
         if not _may_reach_player(snapshot, bullet, horizon, collision_margin):
             continue
-        for frame, box in zip(frames, hazard_boxes(bullet, horizon)):
+        boxes = hazard_boxes(bullet, horizon)
+        for frame, box in zip(frames, boxes):
             frame.append(box)
+        for stop_frame in stop_frames:
+            stopped_box = (
+                (
+                    bullet.x - bullet.half_width,
+                    bullet.y - bullet.half_height,
+                    bullet.x + bullet.half_width,
+                    bullet.y + bullet.half_height,
+                )
+                if stop_frame == 0
+                else boxes[stop_frame - 1]
+            )
+            for frame in frames[stop_frame:]:
+                frame.append(stopped_box)
+        for release_frame in release_frames:
+            for frame_index in range(release_frame, horizon):
+                updates = frame_index - release_frame + 1
+                radius = (
+                    RAINBOW_ACCELERATION_AXIS_BOUND
+                    * updates
+                    * (updates + 1)
+                    / 2.0
+                )
+                left, top, right, bottom = boxes[frame_index]
+                frames[frame_index].append((
+                    left - radius,
+                    top - radius,
+                    right + radius,
+                    bottom + radius,
+                ))
     return [tuple(frame) for frame in frames]
 
 

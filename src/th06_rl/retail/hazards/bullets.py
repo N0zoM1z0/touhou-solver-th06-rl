@@ -27,6 +27,14 @@ def _f32(value: float) -> float:
     return struct.unpack("<f", struct.pack("<f", value))[0]
 
 
+# EnemyEclInstr::ExInsCirnoRainbowBallJank uses float32 0.01 and sincosmul.
+# One ULP outward covers the final float32 component multiply on either axis.
+_RAINBOW_ACCELERATION_BITS = struct.unpack("<I", struct.pack("<f", 0.01))[0]
+RAINBOW_ACCELERATION_AXIS_BOUND = struct.unpack(
+    "<f", struct.pack("<I", _RAINBOW_ACCELERATION_BITS + 1)
+)[0]
+
+
 def _source_dynamic_positions(
     bullet: Bullet,
     horizon: int,

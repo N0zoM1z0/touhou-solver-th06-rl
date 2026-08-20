@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from th06_rl.corpus import CorpusRecorder, RunMetadata
+from th06_rl.retail.model import PlayerAttackState, Snapshot
 
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -16,6 +17,48 @@ assert _SPEC is not None and _SPEC.loader is not None
 _AUDIT = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_AUDIT)
 audit = _AUDIT.audit
+
+
+def _source_anchor(stage: int) -> Snapshot:
+    return Snapshot(
+        frame=stage,
+        stage=stage,
+        player_state=0,
+        x=192.0,
+        y=400.0,
+        half_width=1.25,
+        half_height=1.25,
+        normal_speed=4.0,
+        focus_speed=2.0,
+        normal_diagonal_speed=2.8,
+        focus_diagonal_speed=1.4,
+        frame_multiplier=1.0,
+        input_mask=1,
+        bullets=(),
+        laser_count=0,
+        in_menu=False,
+        time_stopped=False,
+        replay_or_demo=False,
+        difficulty=3,
+        character=0,
+        player_attack=PlayerAttackState(
+            shots=(),
+            last_enemy_hit_x=0.0,
+            last_enemy_hit_y=0.0,
+            orb_state=0,
+            is_focus=True,
+            focus_timer_previous=0,
+            focus_timer=0,
+            focus_timer_float=0.0,
+            fire_timer_previous=0,
+            fire_timer=0,
+            fire_timer_float=0.0,
+            orb_positions=((0.0, 0.0), (0.0, 0.0)),
+            shot_type=0,
+            bomb_active=False,
+            spell_active=False,
+        ),
+    )
 
 
 def test_empty_complete_stage_audit_is_structurally_stable(tmp_path) -> None:
@@ -56,6 +99,13 @@ def test_route_audit_accepts_only_declared_complete_stage_coverage(tmp_path) -> 
             expected_stages=(1, 2, 3, 4, 5, 6),
         ),
     )
+    for stage in range(1, 7):
+        recorder.record_anchor(
+            _source_anchor(stage),
+            phase_id="source:test",
+            reason="stage-root",
+            control_snapshot_ref=None,
+        )
     run_dir = recorder.close({
         "termination_reason": "route-complete",
         "stage_completed": True,
@@ -74,6 +124,47 @@ def test_route_audit_accepts_only_declared_complete_stage_coverage(tmp_path) -> 
     assert report["integrity_errors"] == []
     assert report["scope"]["episode_unit"] == "route"
     assert report["scope"]["observed_stages"] == [1, 2, 3, 4, 5, 6]
+    assert report["source_anchor_coverage"] == {
+        "anchored_stages": [1, 2, 3, 4, 5, 6],
+        "missing_observed_stages": [],
+    }
+
+
+def test_route_audit_rejects_stage_without_source_anchor(tmp_path) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata(
+            "test", "exe", "native", "test", 3, 0, 0, 1,
+            {
+                "source_commitment": "source-complete-hard-v1",
+                "factual_state_schema": "th06-1.02h-offline-facts-v1",
+            },
+            episode_unit="route",
+            expected_stages=(1, 2),
+        ),
+    )
+    recorder.record_anchor(
+        _source_anchor(1),
+        phase_id="source:test",
+        reason="stage-root",
+        control_snapshot_ref=None,
+    )
+    run_dir = recorder.close({
+        "termination_reason": "route-complete",
+        "stage_completed": True,
+        "physical_hits": 0,
+    })
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["summary"]["phases"] = [
+        {"scope": f"3/0/0/{stage}/source:test"} for stage in (1, 2)
+    ]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = audit(run_dir)
+
+    assert "source-anchor-stage-coverage" in report["integrity_errors"]
+    assert report["source_anchor_coverage"]["missing_observed_stages"] == [2]
 
 
 def test_audit_rejects_physical_hit_count_disagreement(tmp_path) -> None:

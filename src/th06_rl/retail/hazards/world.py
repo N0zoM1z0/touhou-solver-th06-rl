@@ -7,7 +7,11 @@ from typing import Literal
 
 from ..model import Bullet, EnemySpawner, Snapshot, StageTimelineInstruction
 from .births import UnsupportedBirthModel
-from .bullets import hazard_boxes, radial_hazard_box
+from .bullets import (
+    RAINBOW_ACCELERATION_AXIS_BOUND,
+    hazard_boxes,
+    radial_hazard_box,
+)
 from .ecl import HardLaserWorld, forecast_ecl_births, source_enemy_template
 from .lasers import LaserHazard
 from .rng import RngState
@@ -45,6 +49,12 @@ class WorldBirthForecast:
     missing_laser_dereferences: tuple[int, ...] = ()
     retired_future_laser: bool = False
     laser_hazards: tuple[tuple[LaserHazard, ...], ...] = ()
+    # Leads at which a reachable source branch executes deterministic
+    # EX_CALL 0,param 0 before BulletManager's update.  Consumers retain the
+    # ordinary trajectory too: hard damage branches are unioned, so a stop
+    # observed in one branch is not assumed to occur in every branch.
+    bullet_stop_frames: tuple[int, ...] = ()
+    bullet_release_frames: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -84,6 +94,7 @@ class _NoRngState(RngState):
 def _project_hazards(
     births: list[list[Bullet]],
     radial: bool,
+    bullet_release_frames: tuple[int, ...] = (),
 ) -> tuple[tuple[tuple[float, float, float, float], ...], ...]:
     frames: list[list[tuple[float, float, float, float]]] = [
         [] for _ in births
@@ -100,6 +111,22 @@ def _project_hazards(
                 else hazard_boxes(bullet, remaining)
             )
             for frame_index, hazard in enumerate(hazards, birth_frame):
+                release_radius = sum(
+                    RAINBOW_ACCELERATION_AXIS_BOUND
+                    * (frame_index - release_frame + 1)
+                    * (frame_index - release_frame + 2)
+                    / 2.0
+                    for release_frame in bullet_release_frames
+                    if birth_frame <= release_frame <= frame_index
+                )
+                if release_radius:
+                    left, top, right, bottom = hazard
+                    hazard = (
+                        left - release_radius,
+                        top - release_radius,
+                        right + release_radius,
+                        bottom + release_radius,
+                    )
                 frames[frame_index].append(hazard)
     return tuple(tuple(frame) for frame in frames)
 
@@ -176,6 +203,8 @@ def _forecast_hard_emitter_batched(
     bodies: list[list[tuple[float, float, float, float]]] = [
         [] for _ in player_positions
     ]
+    bullet_stop_frames: set[int] = set()
+    bullet_release_frames: set[int] = set()
     events = tuple(
         (lead, event)
         for lead, event in _scheduled_boss_interrupts(snapshot, horizon)
@@ -194,6 +223,8 @@ def _forecast_hard_emitter_batched(
                     boundary,
                     f"timeline interrupt targets a finished boss {emitter.boss_id}",
                     tuple(map(tuple, bodies)),
+                    bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                    bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
             break
         if boundary > cursor:
@@ -209,6 +240,16 @@ def _forecast_hard_emitter_batched(
                     radial_births=True,
                     abstract_rng=True,
                     enemy_kill_all_is_noop=enemy_kill_all_is_noop,
+                    record_bullet_stop=(
+                        lambda frame, offset=cursor: bullet_stop_frames.add(
+                            offset + frame
+                        )
+                    ),
+                    record_bullet_release=(
+                        lambda frame, offset=cursor: bullet_release_frames.add(
+                            offset + frame
+                        )
+                    ),
                 )
             except UnsupportedBirthModel as error:
                 return WorldBirthForecast(
@@ -217,6 +258,8 @@ def _forecast_hard_emitter_batched(
                     cursor,
                     str(error),
                     tuple(map(tuple, bodies)),
+                    bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                    bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
             for offset, frame_births in enumerate(forecast.births, cursor):
                 births[offset].extend(frame_births)
@@ -231,6 +274,8 @@ def _forecast_hard_emitter_batched(
                     cursor + forecast.covered_frames,
                     forecast.reason,
                     tuple(map(tuple, bodies)),
+                    bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                    bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
             state = forecast.next_spawner
             if state is None and not forecast.finished:
@@ -240,6 +285,8 @@ def _forecast_hard_emitter_batched(
                     boundary,
                     forecast.reason or "emitter continuation is unresolved",
                     tuple(map(tuple, bodies)),
+                    bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                    bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
             cursor = boundary
         if event is not None:
@@ -251,6 +298,8 @@ def _forecast_hard_emitter_batched(
         _project_hazards(births, True),
         horizon,
         body_hazards=tuple(map(tuple, bodies)),
+        bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+        bullet_release_frames=tuple(sorted(bullet_release_frames)),
     )
 
 
@@ -270,6 +319,8 @@ def _forecast_hard_emitter_with_lasers(
         [] for _ in player_positions
     ]
     lasers: list[list[LaserHazard]] = [[] for _ in player_positions]
+    bullet_stop_frames: set[int] = set()
+    bullet_release_frames: set[int] = set()
     events_by_lead = {
         lead: event
         for lead, event in _scheduled_boss_interrupts(snapshot, horizon)
@@ -282,7 +333,11 @@ def _forecast_hard_emitter_with_lasers(
     def result(covered: int, reason: str = "") -> WorldBirthForecast:
         return WorldBirthForecast(
             tuple(map(tuple, births)),
-            _project_hazards(births, True),
+            _project_hazards(
+                births,
+                True,
+                tuple(sorted(set(bullet_release_frames))),
+            ),
             covered,
             reason,
             tuple(map(tuple, bodies)),
@@ -295,6 +350,8 @@ def _forecast_hard_emitter_with_lasers(
             )),
             retired_future_laser=laser_world.retired_created,
             laser_hazards=tuple(map(tuple, lasers)),
+            bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+            bullet_release_frames=tuple(sorted(bullet_release_frames)),
         )
 
     for frame_index in range(start_lead, horizon):
@@ -320,6 +377,16 @@ def _forecast_hard_emitter_with_lasers(
                     abstract_rng=True,
                     enemy_kill_all_is_noop=enemy_kill_all_is_noop,
                     laser_world=laser_world,
+                    record_bullet_stop=(
+                        lambda frame, offset=frame_index: bullet_stop_frames.add(
+                            offset + frame
+                        )
+                    ),
+                    record_bullet_release=(
+                        lambda frame, offset=frame_index: bullet_release_frames.add(
+                            offset + frame
+                        )
+                    ),
                 )
             except UnsupportedBirthModel as error:
                 return result(frame_index, str(error))
@@ -390,6 +457,8 @@ def _forecast_hard_timeline_births(
     mutated_initial_lasers: list[int] = []
     missing_laser_dereferences: list[int] = []
     retired_future_laser = False
+    bullet_stop_frames: set[int] = set()
+    bullet_release_frames: set[int] = set()
     known_boss_ids = {
         emitter.boss_id
         for emitter in snapshot.spawners
@@ -427,6 +496,8 @@ def _forecast_hard_timeline_births(
                     "unresolved stage timeline boss interrupt opcode 10 "
                     f"at 0x{instruction.address:08x}",
                     tuple(map(tuple, bodies)),
+                    bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                    bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
             continue
         if lead == 0 and boss_present is True:
@@ -441,6 +512,8 @@ def _forecast_hard_timeline_births(
                     "invalid stage timeline enemy spawn record "
                     f"at 0x{instruction.address:08x}",
                     tuple(map(tuple, bodies)),
+                    bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                    bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
             continue
         child_x = (
@@ -468,6 +541,8 @@ def _forecast_hard_timeline_births(
                 "timeline enemy ECL graph is unavailable "
                 f"for sub {spawn.sub_id}",
                 tuple(map(tuple, bodies)),
+                bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
         child = replace(
             child,
@@ -502,6 +577,14 @@ def _forecast_hard_timeline_births(
             model_player_damage=False,
             laser_world=laser_world,
             spawn_inline=True,
+            record_bullet_stop=(
+                lambda frame, offset=lead: bullet_stop_frames.add(offset + frame)
+            ),
+            record_bullet_release=(
+                lambda frame, offset=lead: bullet_release_frames.add(
+                    offset + frame
+                )
+            ),
         )
         if inline.covered_frames < 1:
             return WorldBirthForecast(
@@ -510,6 +593,8 @@ def _forecast_hard_timeline_births(
                 lead,
                 f"timeline emitter {spawn.sub_id}: {inline.reason}",
                 tuple(map(tuple, bodies)),
+                bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
         births[lead].extend(inline.births[0])
         if inline.next_spawner is None:
@@ -535,6 +620,8 @@ def _forecast_hard_timeline_births(
                 lead + 1,
                 f"timeline emitter {spawn.sub_id}: {inline.reason}",
                 tuple(map(tuple, bodies)),
+                bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
 
         child = replace(
@@ -573,6 +660,8 @@ def _forecast_hard_timeline_births(
             ordinary.missing_laser_dereferences
         )
         retired_future_laser |= ordinary.retired_future_laser
+        bullet_stop_frames.update(ordinary.bullet_stop_frames)
+        bullet_release_frames.update(ordinary.bullet_release_frames)
         if ordinary.covered_frames < horizon:
             return WorldBirthForecast(
                 tuple(map(tuple, births)),
@@ -580,6 +669,8 @@ def _forecast_hard_timeline_births(
                 ordinary.covered_frames,
                 f"timeline emitter {spawn.sub_id}: {ordinary.reason}",
                 tuple(map(tuple, bodies)),
+                bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
     return WorldBirthForecast(
         tuple(map(tuple, births)),
@@ -593,6 +684,8 @@ def _forecast_hard_timeline_births(
         )),
         retired_future_laser=retired_future_laser,
         laser_hazards=tuple(map(tuple, lasers)),
+        bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+        bullet_release_frames=tuple(sorted(bullet_release_frames)),
     )
 
 
@@ -1280,6 +1373,8 @@ def forecast_world_births(
         mutated_initial_lasers: list[int] = []
         missing_laser_dereferences: list[int] = []
         retired_future_laser = False
+        bullet_stop_frames: list[int] = []
+        bullet_release_frames: list[int] = []
         for emitter in emitters:
             forecast = _forecast_hard_emitter(
                 snapshot,
@@ -1304,6 +1399,8 @@ def forecast_world_births(
                 forecast.missing_laser_dereferences
             )
             retired_future_laser |= forecast.retired_future_laser
+            bullet_stop_frames.extend(forecast.bullet_stop_frames)
+            bullet_release_frames.extend(forecast.bullet_release_frames)
             if emitter_coverage < covered_frames:
                 covered_frames = emitter_coverage
                 reason = f"emitter {emitter.slot}: {emitter_reason}"
@@ -1324,6 +1421,8 @@ def forecast_world_births(
             timeline.missing_laser_dereferences
         )
         retired_future_laser |= timeline.retired_future_laser
+        bullet_stop_frames.extend(timeline.bullet_stop_frames)
+        bullet_release_frames.extend(timeline.bullet_release_frames)
         if timeline.covered_frames < covered_frames:
             covered_frames = timeline.covered_frames
             reason = timeline.reason
@@ -1355,7 +1454,11 @@ def forecast_world_births(
             reason = "future laser retirement may change cross-emitter allocation"
         return WorldBirthForecast(
             tuple(tuple(frame) for frame in births),
-            _project_hazards(births, True),
+            _project_hazards(
+                births,
+                True,
+                tuple(sorted(set(bullet_release_frames))),
+            ),
             covered_frames,
             reason,
             tuple(tuple(frame) for frame in bodies),
@@ -1366,6 +1469,8 @@ def forecast_world_births(
             )),
             retired_future_laser=retired_future_laser,
             laser_hazards=tuple(map(tuple, lasers)),
+            bullet_stop_frames=tuple(sorted(set(bullet_stop_frames))),
+            bullet_release_frames=tuple(sorted(set(bullet_release_frames))),
         )
     return _forecast_nominal_from_state(
         snapshot,

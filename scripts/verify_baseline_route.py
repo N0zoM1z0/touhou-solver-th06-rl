@@ -39,6 +39,7 @@ def verify(
     summary = manifest.get("summary")
     audit_scope = audit.get("scope")
     successor_coverage = audit.get("source_successor_coverage")
+    anchor_coverage = audit.get("source_anchor_coverage")
     for name, value in (
         ("controller completion", completion),
         ("trace", trace),
@@ -49,6 +50,7 @@ def verify(
         ("summary", summary),
         ("audit scope", audit_scope),
         ("source successor coverage", successor_coverage),
+        ("source anchor coverage", anchor_coverage),
     ):
         if not isinstance(value, dict):
             raise ValueError(f"baseline route is missing {name}")
@@ -80,6 +82,10 @@ def verify(
             isinstance(metadata.get("planner"), dict)
             and metadata["planner"].get("factual_state_schema")
             == "th06-1.02h-offline-facts-v1"
+        ),
+        "stage_local_source_anchors": (
+            anchor_coverage.get("anchored_stages") == [1, 2, 3, 4, 5, 6]
+            and anchor_coverage.get("missing_observed_stages") == []
         ),
         "durable_complete": (
             manifest.get("complete") is True

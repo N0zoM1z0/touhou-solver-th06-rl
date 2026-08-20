@@ -175,13 +175,18 @@ def _snapshot_scope(snapshot) -> tuple[int, int, int, int | None]:
     )
 
 
-def _anchor_partition(source_context: str) -> str:
+def _anchor_partition(source_context: str, *, stage: int | None = None) -> str:
     """Coarse source boundary for exhaustive roots, never movement control."""
     if source_context.startswith("boss:"):
-        return source_context
-    if source_context == "timeline-complete":
-        return source_context
-    return "timeline"
+        partition = source_context
+    elif source_context == "timeline-complete":
+        partition = source_context
+    else:
+        partition = "timeline"
+    # Heap-backed ECL/timeline bytes have stage-local ownership.  A route
+    # transition must therefore force a new exhaustive source root even when
+    # both sides happen to be the same coarse ``timeline`` partition.
+    return f"stage:{stage}:{partition}" if stage is not None else partition
 
 
 def _capture_safety_root_while_paused(process, bridge, *, horizon: int):
@@ -1295,7 +1300,10 @@ def run(args: argparse.Namespace) -> int:
                     snapshot_ref = recorder.record(snapshot, evidence)
                     dialogue_delivery.clear()
                     last_dialogue_delivery = None
-                    partition = _anchor_partition(source_context)
+                    partition = _anchor_partition(
+                        source_context,
+                        stage=snapshot.stage,
+                    )
                     if (
                         last_anchor_partition is not None
                         and partition != last_anchor_partition
@@ -1343,7 +1351,8 @@ def run(args: argparse.Namespace) -> int:
                             )
                             last_anchor_frame = anchor.frame
                             last_anchor_partition = _anchor_partition(
-                                anchor_context
+                                anchor_context,
+                                stage=anchor.stage,
                             )
                             pending_anchor_reason = None
                         except (

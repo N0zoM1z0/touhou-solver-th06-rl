@@ -655,6 +655,7 @@ def audit(
         for row in _rows(_stream_paths(run_dir, manifest, "objects"))
     }
     events = list(_rows(_stream_paths(run_dir, manifest, "events")))
+    anchors = list(_rows(_stream_paths(run_dir, manifest, "anchors")))
     hit_sequences = {
         int(row["sequence"])
         for row in events
@@ -786,6 +787,14 @@ def audit(
         for item in summary.get("phases", ())
         if str(item.get("scope", "")).startswith(scope_prefixes)
     }
+    anchor_stages = {
+        int(scope["stage"])
+        for row in anchors
+        if isinstance((scope := row.get("scope")), dict)
+        and isinstance(scope.get("stage"), int)
+        and str(scope.get("key", "")).startswith(scope_prefixes)
+    }
+    missing_anchor_stages = observed_stages - anchor_stages
     integrity_errors = []
     planner = (run.get("metadata") or {}).get("planner") or {}
     if planner.get("source_commitment") != "source-complete-hard-v1":
@@ -807,6 +816,8 @@ def audit(
         integrity_errors.append("scope-pollution")
     if episode_unit == "route" and observed_stages != set(expected_stages):
         integrity_errors.append("route-stage-coverage")
+    if missing_anchor_stages:
+        integrity_errors.append("source-anchor-stage-coverage")
     outcome = manifest.get("run_outcome") or {}
     if outcome.get("physical_hits") != len(hit_sequences):
         integrity_errors.append("physical-hit-count-mismatch")
@@ -840,6 +851,10 @@ def audit(
         "integrity_errors": integrity_errors,
         "scope_pollution": scope_pollution,
         "anchor_records": int(manifest.get("records", {}).get("anchors", 0)),
+        "source_anchor_coverage": {
+            "anchored_stages": sorted(anchor_stages),
+            "missing_observed_stages": sorted(missing_anchor_stages),
+        },
         "dense_hard_parity": dense_hard_parity,
         "source_successor_coverage": source_successor_coverage,
         "latency": {

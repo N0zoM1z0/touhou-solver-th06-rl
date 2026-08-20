@@ -1,4 +1,5 @@
 import struct
+from types import SimpleNamespace
 
 import pytest
 
@@ -115,3 +116,45 @@ def test_passive_input_delivery_rejects_repeated_cross_frame_reads(monkeypatch):
 
     with pytest.raises(RuntimeError, match="crossed game clocks"):
         read_passive_input_delivery(Process())
+
+
+def test_rejected_snapshot_attempt_cannot_publish_source_cache(monkeypatch):
+    process = SimpleNamespace(
+        ecl_instruction_cache={1: object()},
+        ecl_program_cache={2: object()},
+        ecl_timeline_instruction_cache={3: object()},
+        ecl_timeline_cache={4: object()},
+        ecl_timeline_program_cache={5: object()},
+        ecl_subroutine_traits={6: object()},
+        message_program_cache={7: object()},
+        ecl_cache_stage=1,
+        ecl_subroutines=(0x1234,),
+    )
+    attempts = 0
+
+    def fake_once(candidate, _capture_epoch, _bullet_read_retries):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            candidate.ecl_cache_stage = 2
+            candidate.ecl_subroutines = (0xDEADBEEF,)
+            candidate.ecl_timeline_instruction_cache[0x40000] = object()
+            raise native._SnapshotPhaseIncomplete(2, 1)
+        assert candidate.ecl_cache_stage is None
+        assert candidate.ecl_subroutines == ()
+        assert all(not getattr(candidate, name) for name in (
+            "ecl_instruction_cache",
+            "ecl_program_cache",
+            "ecl_timeline_instruction_cache",
+            "ecl_timeline_cache",
+            "ecl_timeline_program_cache",
+            "ecl_subroutine_traits",
+            "message_program_cache",
+        ))
+        return SimpleNamespace(frame=2)
+
+    monkeypatch.setattr(native, "read_game_frame", lambda _process: 2)
+    monkeypatch.setattr(native, "_read_snapshot_once", fake_once)
+
+    assert native.read_snapshot(process).frame == 2
+    assert attempts == 2

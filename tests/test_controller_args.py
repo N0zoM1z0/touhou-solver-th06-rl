@@ -6,6 +6,7 @@ import th06_rl.th06.controller as controller
 
 from th06_rl.th06.controller import (
     RouteTrial,
+    _anchor_partition,
     _capture_safety_root_while_paused,
     _control_dead_end,
     _advance_route_scope,
@@ -54,6 +55,13 @@ def test_route_scope_accepts_only_next_stage_in_same_scope() -> None:
         _advance_route_scope((3, 0, 0, 2), (3, 0, 0, 4))
     with pytest.raises(Exception, match="route scope changed unexpectedly"):
         _advance_route_scope((3, 0, 0, 2), (2, 0, 0, 3))
+
+
+def test_source_anchor_partition_has_stage_local_ownership() -> None:
+    assert _anchor_partition("timeline:before-t330:op4:arg0", stage=1) != (
+        _anchor_partition("timeline:before-t330:op4:arg0", stage=2)
+    )
+    assert _anchor_partition("boss:0:sub1", stage=2).startswith("stage:2:")
 
 
 def test_controller_rejects_route_and_practice_together() -> None:

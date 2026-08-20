@@ -850,6 +850,32 @@ class NativeProcess:
         return instruction
 
 
+def _invalidate_source_caches(process) -> None:
+    """Drop source bytes learned by an uncommitted snapshot attempt.
+
+    Stage/ECL allocations are immutable only after a coherent root has been
+    accepted.  In particular, ``currentStage`` changes before every manager
+    involved in the next stage has necessarily completed initialization.  A
+    rejected attempt must therefore not publish address-keyed bytes into the
+    following retry: Wine may reuse the same virtual addresses for the next
+    stage's different ECL records.
+    """
+    for name in (
+        "ecl_instruction_cache",
+        "ecl_program_cache",
+        "ecl_timeline_instruction_cache",
+        "ecl_timeline_cache",
+        "ecl_timeline_program_cache",
+        "ecl_subroutine_traits",
+        "message_program_cache",
+    ):
+        cache = getattr(process, name, None)
+        if cache is not None:
+            cache.clear()
+    process.ecl_cache_stage = None
+    process.ecl_subroutines = ()
+
+
 def _read_ecl_program(
     process: NativeProcess,
     start_address: int,
@@ -1400,13 +1426,7 @@ def _read_snapshot_once(
     frame = struct.unpack_from("<I", game, GAME_FRAMES_OFFSET - GAME_FLAGS_OFFSET)[0]
     stage = struct.unpack_from("<i", game, GAME_STAGE_OFFSET - GAME_FLAGS_OFFSET)[0]
     if process.ecl_cache_stage != stage:
-        process.ecl_instruction_cache.clear()
-        process.ecl_program_cache.clear()
-        process.ecl_timeline_instruction_cache.clear()
-        process.ecl_timeline_cache.clear()
-        process.ecl_timeline_program_cache.clear()
-        process.ecl_subroutine_traits.clear()
-        process.message_program_cache.clear()
+        _invalidate_source_caches(process)
         process.ecl_cache_stage = stage
         process.ecl_subroutines = _read_ecl_subroutines(process)
     # The source layouts place EnemyManager's runtime array, BulletManager's
@@ -2475,12 +2495,15 @@ def read_snapshot(process: NativeProcess) -> Snapshot:
                 bullet_read_retries,
             )
         except _SnapshotEpochChanged:
+            _invalidate_source_caches(process)
             continue
         except _SnapshotPhaseIncomplete as error:
             observed_phases.append((error.game_frame, error.bullet_time))
+            _invalidate_source_caches(process)
             continue
         except _SnapshotReadTorn as error:
             observed_torn_reads.append(str(error))
+            _invalidate_source_caches(process)
             continue
         except NativeDecodeError as error:
             # SpawnSingleBullet publishes state before geometry and velocity.
@@ -2488,12 +2511,14 @@ def read_snapshot(process: NativeProcess) -> Snapshot:
             # into it, then retry from a fresh epoch.
             bullet_read_retries += 1
             last_decode_error = error
+            _invalidate_source_caches(process)
             continue
         if not epoch_checked:
             # Keep the helper independently mockable in focused tests.
             after = read_game_frame(process)
             observed_epochs.append((before, snapshot.frame, after))
             if before != snapshot.frame or snapshot.frame != after:
+                _invalidate_source_caches(process)
                 continue
         return snapshot
     if last_decode_error is not None:
