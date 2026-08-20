@@ -1493,6 +1493,14 @@ def run(args: argparse.Namespace) -> int:
                             "infrastructure_failures": infrastructure_failure_count,
                             "infrastructure_failures_by_kind": infrastructure_failures,
                             "trace_failures": trace_failure_count,
+                            "policy_failures": int(
+                                plugin.status(include_metrics=False)[
+                                    "policy_failures"
+                                ]
+                            ),
+                            "policy_last_error": plugin.status(
+                                include_metrics=False
+                            ).get("last_error"),
                             "corpus_failures": corpus_failure_count,
                             "corpus_failure": corpus_failure,
                             "elapsed_wall_seconds": time.monotonic() - started,

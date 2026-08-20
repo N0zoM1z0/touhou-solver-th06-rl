@@ -199,6 +199,7 @@ def _admit_episode(
         "capture_failures",
         "corpus_failures",
         "infrastructure_failures",
+        "policy_failures",
         "trace_failures",
     )
     if not (

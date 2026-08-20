@@ -50,6 +50,8 @@ def _documents(hits: int = 12):
             "capture_failures": 0,
             "corpus_failures": 0,
             "infrastructure_failures": 0,
+            "policy_failures": 0,
+            "policy_last_error": None,
             "trace_failures": 0,
         },
         "records": {"frames": 100, "transitions": 99, "anchors": 6},

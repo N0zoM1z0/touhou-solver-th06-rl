@@ -238,3 +238,9 @@ understand bullets." The first-order problems are the causal feature contract,
 the undefined mixed-behavior target, and policy extraction. Generation 7 must
 separate and falsify those three before richer set/history models, new Wine
 collection, or renewed concurrent-Wine work.
+
+Policy callback failures are not data. The controller may use the already
+source-certified baseline to keep a physical route running, but manifest v3
+and the strict audit retain and conserve every such fallback. Any nonzero,
+missing, or inconsistent callback-failure record rejects the episode before
+Generation-7 dataset construction.

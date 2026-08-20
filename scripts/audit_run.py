@@ -992,6 +992,13 @@ def audit(
     }
     events = list(_rows(_stream_paths(run_dir, manifest, "events")))
     anchors = list(_rows(_stream_paths(run_dir, manifest, "anchors")))
+    policy_fallback_sequences = [
+        int(row["sequence"])
+        for row in _rows(_stream_paths(run_dir, manifest, "frames"))
+        if isinstance(row.get("decision"), dict)
+        and row["decision"].get("policy_id")
+        == "reactive-baseline-policy-error"
+    ]
     hit_sequences = {
         int(row["sequence"])
         for row in events
@@ -1161,6 +1168,30 @@ def audit(
     outcome = manifest.get("run_outcome") or {}
     if outcome.get("physical_hits") != len(hit_sequences):
         integrity_errors.append("physical-hit-count-mismatch")
+    raw_policy_failures = outcome.get("policy_failures")
+    policy_last_error = outcome.get("policy_last_error")
+    policy_failure_contract_valid = (
+        isinstance(raw_policy_failures, int)
+        and not isinstance(raw_policy_failures, bool)
+        and raw_policy_failures >= 0
+        and (
+            (raw_policy_failures == 0 and policy_last_error is None)
+            or (
+                raw_policy_failures > 0
+                and isinstance(policy_last_error, str)
+                and bool(policy_last_error)
+            )
+        )
+    )
+    if not policy_failure_contract_valid:
+        integrity_errors.append("policy-failure-evidence-invalid")
+    elif raw_policy_failures:
+        integrity_errors.append("policy-callback-failure")
+    if (
+        policy_failure_contract_valid
+        and raw_policy_failures != len(policy_fallback_sequences)
+    ):
+        integrity_errors.append("policy-failure-conservation")
     if dense_hard_parity and dense_hard_parity["unsafe_divergences"]:
         integrity_errors.append("dense-hard-parity-unsafe-divergence")
     frame_records = int((manifest.get("records") or {}).get("frames", 0))
@@ -1234,6 +1265,21 @@ def audit(
         "source_successor_coverage": source_successor_coverage,
         "source_numeric_successor_parity": source_numeric_successor_parity,
         "player_successor_parity": player_successor_parity,
+        "policy_callback_failures": {
+            "count": (
+                raw_policy_failures if policy_failure_contract_valid else None
+            ),
+            "last_error": policy_last_error,
+            "fallback_frames": len(policy_fallback_sequences),
+            "fallback_sequences": policy_fallback_sequences[:128],
+            "fallback_sequences_truncated": max(
+                0, len(policy_fallback_sequences) - 128
+            ),
+            "conserved": bool(
+                policy_failure_contract_valid
+                and raw_policy_failures == len(policy_fallback_sequences)
+            ),
+        },
         "source_dataset_admission": source_dataset_admission,
         "latency": {
             "capture": summary.get("capture_timing"),

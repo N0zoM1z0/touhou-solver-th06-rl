@@ -61,7 +61,13 @@ fails closed; a compatible-looking transition version is insufficient.
    update with Player-before-Enemy-before-Bullet ordering. The
    source-dataset loader accepts every dense frame with its same-frame/active
    anchor after Wine has exited.
-6. Artifacts are immutable and every run path and hash is unique. Partial,
+6. Manifest v3 retains the immutable policy callback-failure count and final
+   error. A failed `decide` or `continue_certified` call may keep the game alive
+   by publishing the already source-certified baseline, but that frame carries
+   `reactive-baseline-policy-error` and the complete episode is rejected from
+   learning. Audit requires exact conservation between those frame markers and
+   the final counter; an absent callback remains distinct from a failed one.
+7. Artifacts are immutable and every run path and hash is unique. Partial,
    first-HIT, time-bounded, authority-failed, or cleanup-failed runs are never
    selected for training.
 

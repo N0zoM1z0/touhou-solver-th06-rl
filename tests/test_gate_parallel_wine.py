@@ -56,6 +56,8 @@ def _documents(stage: int = 4):
         "capture_failures": 0,
         "corpus_failures": 0,
         "infrastructure_failures": 0,
+        "policy_failures": 0,
+        "policy_last_error": None,
         "trace_failures": 0,
     }
     manifest = {

@@ -76,6 +76,8 @@ def test_empty_complete_stage_audit_is_structurally_stable(tmp_path) -> None:
         "termination_reason": "practice-stage-complete",
         "stage_completed": True,
         "physical_hits": 0,
+        "policy_failures": 0,
+        "policy_last_error": None,
     })
 
     report = audit(run_dir)
@@ -110,6 +112,8 @@ def test_route_audit_accepts_only_declared_complete_stage_coverage(tmp_path) -> 
         "termination_reason": "route-complete",
         "stage_completed": True,
         "physical_hits": 0,
+        "policy_failures": 0,
+        "policy_last_error": None,
     })
     manifest_path = run_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -153,6 +157,8 @@ def test_route_audit_rejects_stage_without_source_anchor(tmp_path) -> None:
         "termination_reason": "route-complete",
         "stage_completed": True,
         "physical_hits": 0,
+        "policy_failures": 0,
+        "policy_last_error": None,
     })
     manifest_path = run_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -182,9 +188,68 @@ def test_audit_rejects_physical_hit_count_disagreement(tmp_path) -> None:
         "termination_reason": "practice-stage-complete",
         "stage_completed": True,
         "physical_hits": 1,
+        "policy_failures": 0,
+        "policy_last_error": None,
     })
 
     assert "physical-hit-count-mismatch" in audit(run_dir)["integrity_errors"]
+
+
+def test_audit_rejects_policy_callback_fallback(tmp_path) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata(
+            "test", "exe", "native", "test", 3, 0, 0, 4,
+            {
+                "source_commitment": "source-complete-hard-v1",
+                "factual_state_schema": "th06-1.02h-offline-facts-v2",
+            },
+        ),
+    )
+    run_dir = recorder.close({
+        "termination_reason": "practice-stage-complete",
+        "stage_completed": True,
+        "physical_hits": 0,
+        "policy_failures": 1,
+        "policy_last_error": "RuntimeError: broken actor",
+    })
+
+    report = audit(run_dir)
+
+    assert "policy-callback-failure" in report["integrity_errors"]
+    assert "policy-failure-conservation" in report["integrity_errors"]
+    assert report["policy_callback_failures"] == {
+        "count": 1,
+        "last_error": "RuntimeError: broken actor",
+        "fallback_frames": 0,
+        "fallback_sequences": [],
+        "fallback_sequences_truncated": 0,
+        "conserved": False,
+    }
+
+
+def test_audit_rejects_missing_policy_failure_evidence(tmp_path) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata(
+            "test", "exe", "native", "test", 3, 0, 0, 4,
+            {
+                "source_commitment": "source-complete-hard-v1",
+                "factual_state_schema": "th06-1.02h-offline-facts-v2",
+            },
+        ),
+    )
+    run_dir = recorder.close({
+        "termination_reason": "practice-stage-complete",
+        "stage_completed": True,
+        "physical_hits": 0,
+    })
+
+    report = audit(run_dir)
+
+    assert "policy-failure-evidence-invalid" in report["integrity_errors"]
+    assert report["policy_callback_failures"]["count"] is None
+    assert report["policy_callback_failures"]["conserved"] is False
 
 
 def test_collision_evidence_identifies_new_enemy_body() -> None:

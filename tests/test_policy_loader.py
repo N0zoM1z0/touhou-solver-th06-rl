@@ -77,3 +77,42 @@ def test_identity_status_does_not_materialize_metrics(tmp_path) -> None:
     identity = loader.status(include_metrics=False)
 
     assert "metrics" not in identity
+
+
+def test_failed_decision_is_explicit_and_counted(tmp_path) -> None:
+    loader = _loader(tmp_path)
+
+    def fail(_context):
+        raise RuntimeError("broken decision")
+
+    loader.policy.decide = fail
+
+    decision = loader.decide(_context())
+
+    assert decision.action == "stay"
+    assert decision.policy_id == "reactive-baseline-policy-error"
+    assert loader.status(include_metrics=False)["policy_failures"] == 1
+    assert loader.status(include_metrics=False)["last_error"] == (
+        "RuntimeError: broken decision"
+    )
+
+
+def test_failed_option_continuation_is_not_hidden_as_absent_callback(
+    tmp_path,
+) -> None:
+    loader = _loader(tmp_path)
+
+    def fail(_context):
+        raise RuntimeError("broken continuation")
+
+    loader.policy.continue_certified = fail
+
+    decision = loader.continue_certified(_context())
+
+    assert decision is not None
+    assert decision.action == "stay"
+    assert decision.policy_id == "reactive-baseline-policy-error"
+    assert loader.status(include_metrics=False)["policy_failures"] == 1
+    assert loader.status(include_metrics=False)["last_error"] == (
+        "continue_certified RuntimeError: broken continuation"
+    )

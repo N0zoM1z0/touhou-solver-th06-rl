@@ -83,7 +83,14 @@ class ImmutablePolicy:
             self.last_error = (
                 f"continue_certified {type(error).__name__}: {error}"
             )
-            return None
+            # Absence of the optional callback is represented by None above.
+            # A callback failure is different: keep the current certified
+            # action, but preserve an explicit factual marker so collection
+            # admission can never mistake the fallback for policy output.
+            return PolicyDecision(
+                context.baseline_action,
+                "reactive-baseline-policy-error",
+            )
 
     def reject_publication(self, decision: PolicyDecision) -> None:
         """Abort tentative option bookkeeping after input was not published."""

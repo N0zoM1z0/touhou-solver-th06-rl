@@ -22,7 +22,7 @@ from .retail.model import BUTTON_BOMB
 
 
 RUN_SCHEMA = "th06-rl-run-v1"
-MANIFEST_SCHEMA = "th06-rl-manifest-v2"
+MANIFEST_SCHEMA = "th06-rl-manifest-v3"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
 FRAME_SCHEMA = "th06-rl-authoritative-frame-v11"
 TRANSITION_SCHEMA = "th06-rl-transition-v11"
