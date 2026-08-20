@@ -40,6 +40,20 @@ The original archive and extracted game are never added to Git. The accepted
 executable and full-unlock save hashes are documented in
 `WINE_RETAIL_VALIDATION.md`.
 
+For parallel training collection, provision the ordinary runtime first, then
+create the independent worker pool from the original archive:
+
+```bash
+.venv/bin/python scripts/prepare_wine_workers.py
+```
+
+This extracts a separate never-executed template, verifies the archive and
+retail executable hashes, freezes its inventory, and creates two independent
+game directories, Wine prefixes, displays, and CPU partitions. It initializes
+both Wine prefixes without starting TH06, so the later serial/concurrent
+differential compares equally warm prefixes. See `WINE_EXACT_ACCELERATION.md` for the required compatibility
+gate and collector; canary/final runs never use the parallel collector.
+
 ## End-to-end verification
 
 The following launches Lunatic Practice Stage 1 for a short bounded window:

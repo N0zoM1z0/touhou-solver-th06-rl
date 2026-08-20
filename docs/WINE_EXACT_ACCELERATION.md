@@ -22,7 +22,13 @@ Every collection worker owns a distinct:
 - X display;
 - controller/runner artifact directory;
 - corpus spool and finalized corpus root;
-- fixed-RNG and policy seed assignment.
+- predeclared RNG mode and policy-state assignment.
+
+Worker game directories are copied only from a never-executed template
+extracted from the attested RAR. Copying the canonical gameplay directory is
+forbidden because TH06 mutates its score and configuration files. The template
+marker binds the archive, executable, and full file inventory; any drift fails
+closed.
 
 No process, file, prefix, display, or run-discovery root is shared. A completed
 worker is accepted only after the existing retail and transition audits pass,
@@ -47,6 +53,48 @@ a separately recorded resource and compatibility gate. Any mismatch disables
 parallel collection and starts an infra investigation; it never relaxes
 equality, alters the learner, or selects different gameplay data.
 
+## Implemented commands
+
+Prepare the bounded two-worker pool (16 CPUs by default, hard ceiling 32):
+
+```bash
+.venv/bin/python scripts/prepare_wine_workers.py
+```
+
+After freezing a collection policy, run the non-evidence fixed-seed gate. Do
+not overlap it with a canonical baseline, canary, promotion run, or heavy fit:
+
+```bash
+.venv/bin/python scripts/gate_parallel_wine.py \
+  --policy-plugin "$TH06_POLICY_PLUGIN" \
+  --policy-state "$TH06_POLICY_STATE" \
+  --diagnostic-rng-seed 0x1234 \
+  --artifact-root artifacts/parallel-gate \
+  --corpus-root corpus/parallel-gate \
+  --output artifacts/parallel-gate/gate.json
+```
+
+Only the exact bound policy/commit/pool may then collect a predeclared natural
+RNG schedule. The example covers all Stages twice; changing the policy requires
+a new gate:
+
+```bash
+.venv/bin/python scripts/collect_wine_parallel.py \
+  --gate artifacts/parallel-gate/gate.json \
+  --policy-plugin "$TH06_POLICY_PLUGIN" \
+  --policy-state "$TH06_POLICY_STATE" \
+  --episodes 12 --stages 1,2,3,4,5,6 \
+  --artifact-root artifacts/parallel-collection \
+  --corpus-root corpus/parallel-collection \
+  --output artifacts/parallel-collection/admission.json
+```
+
+The collector writes the immutable schedule before gameplay and is resumable
+only at already clean scheduled episodes. It never redraws or skips an episode
+because of HIT count. The admission ledger appears only when the full schedule
+has passed lifecycle, HIT, source-successor, native-parity, latency, shard-hash,
+and cleanup checks.
+
 ## Offline throughput
 
 Offline work is semantically exact and can exploit the host aggressively:
@@ -63,10 +111,3 @@ Offline work is semantically exact and can exploit the host aggressively:
 Acceleration never changes reward, successor state, RNG eligibility, action
 authority, model population, or promotion criteria. Final measurement remains
 the original Wine process at normal speed over complete natural-RNG Stages.
-
-The implemented factual-option cache lives under ignored
-`artifacts/cache/audited-option-episodes/`. Its key contains the complete
-manifest SHA-256 and loader-source contract SHA-256; its metadata also binds the
-absolute run identity and payload SHA-256. It never accepts a partial pair or
-mismatched digest. Cache creation calls the ordinary full loader first, so the
-first use still verifies every transition shard and factual/HIT invariant.

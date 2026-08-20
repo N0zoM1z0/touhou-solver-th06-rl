@@ -56,6 +56,13 @@ candidate, but may not promote one. Evidence-producing Wine always retains the
 retail clock; collection throughput comes from isolated parallel workers and
 offline computation.
 
+Parallel collection is fail-closed and policy-bound: prepare workers only from
+the attested archive template with `scripts/prepare_wine_workers.py`, then run
+the fixed-seed serial/two-worker differential with
+`scripts/gate_parallel_wine.py`. `scripts/collect_wine_parallel.py` accepts only
+that exact commit/pool/native/policy gate and publishes an admission ledger only
+after every predeclared natural-RNG episode passes the full source audit.
+
 There is currently no authorized gameplay candidate. The tracked Wine smoke
 policy is infrastructure-only and cannot create promotion evidence. Generation
 1--6 code and its active corpus registry are pruned; first establish a complete

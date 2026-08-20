@@ -54,6 +54,12 @@ The admission builder must validate the complete source root rather than skip
 bad outcomes. Training/validation roles are assigned later by whole physical
 episode, never by adjacent frames.
 
+`scripts/collect_wine_parallel.py` writes the predeclared schedule before any
+episode and publishes `th06-rl-source-complete-parallel-collection-v1` only
+after every row is clean. Each row binds run, manifest, audit, normalized
+factual digest, policy, code, and pool hashes. This ledger is the current
+admission boundary; arbitrary directory scans are forbidden.
+
 ## Parallel collection boundary
 
 Parallel Wine workers may append facts only after the fixed-seed serial versus

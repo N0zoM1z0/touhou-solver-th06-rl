@@ -49,8 +49,9 @@ is authoritative.
   source Hard primitives independent of learner features;
 - complete Stage/route HIT continuation and four-way HIT conservation;
 - offline dense parity, source motion, and one-sided causal successor audits;
-- immutable policy loading, CPU/resource controls, and isolated Wine worker
-  preparation.
+- immutable policy loading, CPU/resource controls, isolated Wine worker
+  preparation, fixed-seed compatibility gate, and resumable natural-RNG
+  admission ledger.
 
 ## Operational discipline
 

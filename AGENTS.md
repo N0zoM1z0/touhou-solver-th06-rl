@@ -102,6 +102,12 @@ Do not accelerate the game clock for any evidence-producing corpus. Final
 comparison uses normal-speed original Wine, natural full Practice Stages, HIT
 continuation, zero Bomb, immutable policies, and alternating
 incumbent/candidate trials. The per-run physical HIT count is authoritative.
+Parallel collection currently has a two-worker/32-CPU ceiling. Workers must be
+copied from the immutable archive-derived template, never from a game directory
+that Wine has executed. Natural-RNG collection requires an exact fixed-seed
+serial/two-worker gate bound to the same commit, native build, policy, and pool.
+One worker failure rejects and reaps the whole active wave; partial schedules
+remain quarantined and are never outcome-conditionally replaced.
 
 ## No scripted play
 
