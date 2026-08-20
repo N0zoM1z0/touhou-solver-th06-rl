@@ -74,13 +74,13 @@ def test_controller_rejects_exploration_for_immutable_policy() -> None:
         ])
 
 
-def test_controller_accepts_fail_closed_capture_gap_resume() -> None:
-    args = parse_args([
-        "--practice-stage",
-        "6",
-        "--resume-after-incoherent-capture",
-    ])
-    assert args.resume_after_incoherent_capture
+def test_controller_rejects_capture_gap_resume_without_source_authority() -> None:
+    with pytest.raises(SystemExit):
+        parse_args([
+            "--practice-stage",
+            "6",
+            "--resume-after-incoherent-capture",
+        ])
 
 
 def test_controller_accepts_source_u16_diagnostic_rng_seed() -> None:

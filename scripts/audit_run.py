@@ -176,7 +176,7 @@ def _audit_dense_hard_parity(
                 heapq.heappushpop(densest, entry)
         rows = {sequence: row for _count, sequence, row in densest}
         sequences = set(rows)
-    from th06_rl.native import NativeKernel, PackedHazards
+    from th06_rl.native import Aabb, LaserRect, NativeKernel, PackedHazards
     from th06_rl.th06.source import (
         core_action_from_input,
         kinematics_from_snapshot,
@@ -187,6 +187,8 @@ def _audit_dense_hard_parity(
     unsafe = []
     conservative = []
     checked = 0
+    explicit_margins = 0
+    legacy_inferred_margins = 0
     for sequence in sorted(sequences):
         row = rows.get(sequence)
         if row is None:
@@ -198,24 +200,74 @@ def _audit_dense_hard_parity(
         snapshot = _decode_frame(row, objects)
         if snapshot.player_state not in (0, 3) or snapshot.in_menu:
             continue
-        forecast = lower_observed_hazards(snapshot, 4)
-        hazards = PackedHazards(
-            forecast.hazards.aabb_frames[:4],
-            forecast.hazards.laser_frames[:4],
-        )
-        certified = kernel.certify_actions(
-            x=snapshot.x,
-            y=snapshot.y,
-            half_width=snapshot.half_width,
-            half_height=snapshot.half_height,
-            kinematics=kinematics_from_snapshot(snapshot),
-            current_action=core_action_from_input(snapshot.input_mask),
-            hazards=hazards,
-        )
-        full = {item.action.name for item in certified}
         recorded = {
             item[0] for item in row["decision"].get("hard_actions", ())
         }
+        recorded_margin = row["decision"].get("hard_collision_margin")
+        source_commitment = row["decision"].get("source_commitment")
+        committed_hazards = None
+        if source_commitment == "source-complete-hard-v1":
+            aabb_frames = row["decision"].get("source_hard_aabb_frames", ())
+            laser_frames = row["decision"].get("source_hard_laser_frames", ())
+            if len(aabb_frames) < 4 or len(laser_frames) < 4:
+                unsafe.append({
+                    "sequence": sequence,
+                    "frame": snapshot.frame,
+                    "reason": "source-commitment-primitives-missing",
+                })
+                continue
+            committed_hazards = PackedHazards(
+                tuple(
+                    tuple(Aabb(*map(float, hazard)) for hazard in frame)
+                    for frame in aabb_frames[:4]
+                ),
+                tuple(
+                    tuple(LaserRect(*map(float, hazard)) for hazard in frame)
+                    for frame in laser_frames[:4]
+                ),
+            )
+
+        def replay(margin: float) -> set[str]:
+            if committed_hazards is not None:
+                hazards = committed_hazards
+            else:
+                forecast = lower_observed_hazards(
+                    snapshot, 4, collision_margin=margin
+                )
+                hazards = PackedHazards(
+                    forecast.hazards.aabb_frames[:4],
+                    forecast.hazards.laser_frames[:4],
+                )
+            certified = kernel.certify_actions(
+                x=snapshot.x,
+                y=snapshot.y,
+                half_width=snapshot.half_width,
+                half_height=snapshot.half_height,
+                kinematics=kinematics_from_snapshot(snapshot),
+                current_action=core_action_from_input(snapshot.input_mask),
+                hazards=hazards,
+                collision_margin=margin,
+            )
+            return {item.action.name for item in certified}
+
+        if recorded_margin is not None:
+            margin = float(recorded_margin)
+            full = replay(margin)
+            explicit_margins += 1
+        else:
+            # control-v1/v2 did not serialize which branch of the documented
+            # 0.35 -> 0.0 fallback produced the Hard set. Reproduce both and
+            # select only an exact match; never report the margin-0 fallback
+            # as an unsafe divergence against the default margin.
+            conservative_full = replay(0.35)
+            exact_full = replay(0.0)
+            if recorded == conservative_full:
+                margin, full = 0.35, conservative_full
+            elif recorded == exact_full:
+                margin, full = 0.0, exact_full
+            else:
+                margin, full = 0.0, exact_full
+            legacy_inferred_margins += 1
         unsafe_extra = sorted(recorded - full)
         missing_safe = sorted(full - recorded)
         if unsafe_extra:
@@ -223,18 +275,22 @@ def _audit_dense_hard_parity(
                 "sequence": sequence,
                 "frame": snapshot.frame,
                 "bullets": snapshot.live_bullet_count,
+                "collision_margin": margin,
                 "recorded_but_not_full_safe": unsafe_extra,
             })
         if missing_safe:
             conservative.append({
                 "sequence": sequence,
                 "frame": snapshot.frame,
+                "collision_margin": margin,
                 "full_safe_but_not_recorded": missing_safe,
             })
         checked += 1
     return {
         "sample_source": sample_source,
         "checked": checked,
+        "explicit_collision_margins": explicit_margins,
+        "legacy_inferred_collision_margins": legacy_inferred_margins,
         "unsafe_divergences": unsafe,
         "conservative_divergences": conservative,
     }
@@ -380,6 +436,14 @@ def audit(
         if str(item.get("scope", "")).startswith(scope_prefixes)
     }
     integrity_errors = []
+    planner = (run.get("metadata") or {}).get("planner") or {}
+    if planner.get("source_commitment") != "source-complete-hard-v1":
+        integrity_errors.append("source-authority-incomplete")
+    if (
+        planner.get("factual_state_schema")
+        != "th06-1.02h-offline-facts-v1"
+    ):
+        integrity_errors.append("offline-factual-state-incomplete")
     if manifest.get("dropped_records", 0):
         integrity_errors.append("dropped-records")
     if manifest.get("complete") is not True:

@@ -21,7 +21,7 @@ from ..corpus import (
     FrameEvidence,
     RunMetadata,
 )
-from ..native import NativeKernel
+from ..native import NativeKernel, PackedHazards
 from ..hazard_representation import (
     make_history_observation,
     project_hazard_primitives,
@@ -34,8 +34,9 @@ from .background_input import BackgroundInputBridge
 from .background_keyboard import BackgroundKeyboard
 from .control_capture import (
     CONTROL_CAPTURE_TIER,
+    OFFLINE_FACT_SCHEMA,
     observe_passive_control_clock,
-    read_control_snapshot,
+    read_safety_snapshot_pair,
     read_passive_input_delivery,
 )
 from ..retail import native as retail_native
@@ -53,7 +54,6 @@ from ..retail.native import (
     attach_exact,
     read_dialogue_state,
     read_game_frame,
-    read_snapshot as read_authoritative_snapshot,
     read_supervisor_state,
 )
 from ..retail.trial import PracticeTrial, physical_hit
@@ -71,6 +71,7 @@ from .source import (
     retail_action,
     kinematics_from_snapshot,
     lower_observed_hazards,
+    lower_source_forecast,
 )
 from .system_health import GIB, below_commit_reserve, read_system_memory
 
@@ -292,10 +293,20 @@ def run(args: argparse.Namespace) -> int:
     corpus_failure_count = 0
     anchor_failure_count = 0
     corpus_failure: str | None = None
+    decision_pause = None
     termination_reason = "controller-interrupted"
     minimum_commit_headroom_bytes: int | None = None
     maximum_controller_private_bytes = 0
     started = time.monotonic()
+
+    def resume_decision_pause() -> None:
+        """Resume an exact process paused across root capture and publication."""
+        nonlocal decision_pause
+        pause = decision_pause
+        decision_pause = None
+        if pause is not None:
+            pause.__exit__(None, None, None)
+
     try:
         if args.armed:
             bridge = BackgroundInputBridge(process)
@@ -376,7 +387,10 @@ def run(args: argparse.Namespace) -> int:
                     shot_type=expected_scope[2],
                     stage=expected_scope[3],
                     planner={
-                        "algorithm": "observed-native-gate-v1",
+                        "algorithm": "source-hard-paused-publication-v1",
+                        "source_commitment": "source-complete-hard-v1",
+                        "publication_epoch": "source-root-process-suspended-v1",
+                        "factual_state_schema": OFFLINE_FACT_SCHEMA,
                         "observed_horizon": args.horizon,
                         "hard_horizon": 4,
                         "exploration_rate": args.exploration_rate,
@@ -462,24 +476,9 @@ def run(args: argparse.Namespace) -> int:
                 last_dialogue_delivery = sample
 
         def retain_continuous_stage(kind: str, error: BaseException) -> bool:
-            """Fail closed on transient infra faults without ending the episode."""
+            """Release input and force exact-trial cleanup on authority loss."""
             nonlocal infrastructure_failure_count
-            capture_gap_resume = (
-                args.resume_after_incoherent_capture
-                and kind == "coherent-snapshot"
-            )
-            if not args.continuous_stage and not capture_gap_resume:
-                return False
-            # WAIT_TIMEOUT (258) proves the exact process handle is still live.
-            if (
-                not process.handle
-                or process.kernel32.WaitForSingleObject(process.handle, 0) != 258
-            ):
-                return False
             if keyboard is not None:
-                # Failure to publish this release is intentionally not caught:
-                # an input backend that cannot fail-close is a real authority
-                # loss and must reach exact-process cleanup.
                 keyboard.release_all()
             lease.cleared()
             infrastructure_failure_count += 1
@@ -487,24 +486,18 @@ def run(args: argparse.Namespace) -> int:
             infrastructure_failures[kind] = count
             emit_trace({
                 "time": time.time(),
-                "event": (
-                    "capture-gap-fail-close"
-                    if capture_gap_resume and not args.continuous_stage
-                    else "continuous-fail-close"
-                ),
+                "event": "authority-fail-stop",
                 "kind": kind,
                 "count": count,
                 "error_type": type(error).__name__,
                 "error": str(error),
             })
-            if count == 1 or count % 60 == 0:
-                print(
-                    f"{kind} unavailable; input released and Stage retained "
-                    f"(count={count}): {type(error).__name__}: {error}",
-                    flush=True,
-                )
-            time.sleep(0.001)
-            return True
+            print(
+                f"{kind} unavailable; input released and exact trial will stop: "
+                f"{type(error).__name__}: {error}",
+                flush=True,
+            )
+            return False
 
         print(
             f"attached pid={process.pid} sha256={TARGET_SHA256}; "
@@ -674,11 +667,17 @@ def run(args: argparse.Namespace) -> int:
                     raise
             capture_started = time.perf_counter()
             try:
-                snapshot = read_control_snapshot(
+                if bridge is not None:
+                    pause = bridge.suspended()
+                    pause.__enter__()
+                    decision_pause = pause
+                snapshot, authority_snapshot = read_safety_snapshot_pair(
                     process,
                     horizon=args.horizon,
-                    suspend=(bridge.suspended if bridge is not None else None),
+                    suspend=None,
                 )
+                if snapshot.factual_state_schema != OFFLINE_FACT_SCHEMA:
+                    raise RuntimeError("dense offline factual root is incomplete")
             except (NativeDecodeError, OSError, RuntimeError) as error:
                 # A compact control root is still epoch/manager-phase strict.
                 # A torn observation can never reach the Hard gate.
@@ -699,6 +698,7 @@ def run(args: argparse.Namespace) -> int:
                         "error": str(error),
                     })
                     print(termination_reason, flush=True)
+                    resume_decision_pause()
                     break
                 capture_failure_count += 1
                 emit_trace({
@@ -707,10 +707,12 @@ def run(args: argparse.Namespace) -> int:
                     "count": capture_failure_count,
                     "error": str(error),
                 })
+                resume_decision_pause()
                 continue
             capture_ms = (time.perf_counter() - capture_started) * 1000.0
             prior_frame = last_frame
             if snapshot.frame == prior_frame:
+                resume_decision_pause()
                 time.sleep(0.001)
                 continue
             observed_scope = _snapshot_scope(snapshot)
@@ -739,9 +741,17 @@ def run(args: argparse.Namespace) -> int:
                         ),
                     )
                 source_context = automatic_source_context(snapshot)
+                authority_context = automatic_source_context(authority_snapshot)
+                if authority_context != source_context:
+                    raise RuntimeError(
+                        "compact/source context disagreement: "
+                        f"{source_context!r} != {authority_context!r}"
+                    )
             except (OSError, RuntimeError, ValueError) as error:
                 if retain_continuous_stage("source-context", error):
+                    resume_decision_pause()
                     continue
+                resume_decision_pause()
                 raise
             if source_context != policy_source_context:
                 policy_source_context = source_context
@@ -779,6 +789,10 @@ def run(args: argparse.Namespace) -> int:
             hazard_primitives = ()
             history_features = ()
             history_observation = None
+            source_commitment = ""
+            source_coverage = 0
+            source_hard_aabb_frames = ()
+            source_hard_laser_frames = ()
             solve_started = time.perf_counter()
             try:
                 if hit:
@@ -820,7 +834,7 @@ def run(args: argparse.Namespace) -> int:
                     if keyboard is not None:
                         keyboard.release_all()
                         lease.cleared()
-                elif not 0.99 <= snapshot.frame_multiplier <= 1.01:
+                elif snapshot.frame_multiplier != 1.0:
                     raise AuthorityUnavailable("unsupported frame multiplier")
                 elif snapshot.laser_count != len(snapshot.lasers):
                     raise AuthorityUnavailable("incoherent laser decode")
@@ -841,6 +855,39 @@ def run(args: argparse.Namespace) -> int:
                         snapshot, current_action_name
                     )
                     kinematics = kinematics_from_snapshot(snapshot)
+                    source_forecast = lower_source_forecast(
+                        authority_snapshot,
+                        4,
+                    )
+                    if source_forecast.source_coverage != 4:
+                        raise AuthorityUnavailable(
+                            "source commitment did not cover Hard-4"
+                        )
+                    source_commitment = "source-complete-hard-v1"
+                    source_coverage = source_forecast.source_coverage
+                    source_hard_aabb_frames = tuple(
+                        tuple((
+                            hazard.left,
+                            hazard.top,
+                            hazard.right,
+                            hazard.bottom,
+                        ) for hazard in frame)
+                        for frame in source_forecast.hazards.aabb_frames[:4]
+                    )
+                    source_hard_laser_frames = tuple(
+                        tuple((
+                            hazard.origin_x,
+                            hazard.origin_y,
+                            hazard.angle,
+                            hazard.center_offset,
+                            hazard.size_x,
+                            hazard.size_y,
+                        ) for hazard in frame)
+                        for frame in source_forecast.hazards.laser_frames[:4]
+                    )
+                    prepared_source_hard = kernel.prepare_hazards(
+                        source_forecast.hazards
+                    )
                     lease_status = (
                         lease.status(snapshot.input_mask, snapshot.frame)
                         if keyboard is not None
@@ -854,7 +901,6 @@ def run(args: argparse.Namespace) -> int:
                             # own exact conversion path.
                             _retail_action_mask(lease_status.action)
                         )
-                        hard_forecast = lower_observed_hazards(snapshot, 4)
                         retained, hard_collision_margin = (
                             _certify_hard_with_source_fallback(
                                 kernel,
@@ -864,7 +910,7 @@ def run(args: argparse.Namespace) -> int:
                                 half_height=snapshot.half_height,
                                 kinematics=kinematics,
                                 current_action=current_core,
-                                hazards=hard_forecast.hazards,
+                                hazards=prepared_source_hard,
                                 candidates=(desired_core,),
                                 delivery_delays=lease_status.delivery_delays,
                             )
@@ -910,15 +956,25 @@ def run(args: argparse.Namespace) -> int:
                             effort_horizon=4,
                         ))
                     else:
-                        forecast = lower_observed_hazards(
+                        observed_advisory = lower_observed_hazards(
                             snapshot,
                             args.horizon,
                         )
+                        forecast_hazards = PackedHazards(
+                            aabb_frames=(
+                                source_forecast.hazards.aabb_frames[:4]
+                                + observed_advisory.hazards.aabb_frames[4:]
+                            ),
+                            laser_frames=(
+                                source_forecast.hazards.laser_frames[:4]
+                                + observed_advisory.hazards.laser_frames[4:]
+                            ),
+                        )
                         prepared_forecast = kernel.prepare_hazards(
-                            forecast.hazards
+                            forecast_hazards
                         )
                         prepared_hard = prepared_forecast.prefix(
-                            forecast.hard_horizon,
+                            4,
                         )
                         hard, hard_collision_margin = (
                             _certify_hard_with_source_fallback(
@@ -954,7 +1010,7 @@ def run(args: argparse.Namespace) -> int:
                         # requiring an online combinatorial search.
                         legal = lookahead or hard
                         effort_horizon = (
-                            forecast.source_coverage if lookahead else 4
+                            args.horizon if lookahead else 4
                         )
                         action_profiles = kernel.profile_actions(
                             x=snapshot.x,
@@ -1045,9 +1101,19 @@ def run(args: argparse.Namespace) -> int:
                             raise AuthorityUnavailable(
                                 "selected action lost fresh Hard"
                             )
-                        if read_game_frame(process) != snapshot.frame:
-                            selected = None
-                            reason = "stale-retry"
+                        issue_frame = read_game_frame(process)
+                        if issue_frame != snapshot.frame:
+                            stale_delta = issue_frame - snapshot.frame
+                            current_is_source_safe = any(
+                                item.action == current_core for item in hard
+                            )
+                            if 0 < stale_delta <= 3 and current_is_source_safe:
+                                selected = None
+                                reason = "stale-retain-source-certified-current"
+                            else:
+                                raise AuthorityUnavailable(
+                                    "stale source authority"
+                                )
                         elif keyboard is not None:
                             events = keyboard.apply(retail_action(selected))
                             published = selected.name
@@ -1064,10 +1130,10 @@ def run(args: argparse.Namespace) -> int:
                         "Hard safe set empty",
                         "local forecast has no safe continuation",
                 )
-                recoverable = (
-                    args.continuous_stage
-                    and error_text != "physical Bomb state/input"
-                )
+                # HIT-continuation may cross a geometry dead end so its
+                # factual outcome can be recorded. It never converts missing
+                # source/infra authority into a recoverable gameplay frame.
+                recoverable = args.continuous_stage and dead_end
                 if recoverable and dead_end:
                     reason = f"control-dead-end:{error_text}"
                     control_dead_end_count += 1
@@ -1097,13 +1163,15 @@ def run(args: argparse.Namespace) -> int:
                     keyboard.release_all()
                     lease.cleared()
             except (OSError, RuntimeError, ValueError) as error:
-                if not retain_continuous_stage("control-infrastructure", error):
-                    raise
-                reason = (
-                    "infrastructure-retry:"
-                    f"{type(error).__name__}:{str(error)[:160]}"
-                )
+                raise RuntimeError(
+                    "control infrastructure lost source authority"
+                ) from error
 
+            # The exact process remains suspended from the coherent source
+            # root through the final fresh-Hard check and bridge publication.
+            # This makes the publication epoch equal to the certified root;
+            # it does not lengthen the four-frame input-pickup envelope.
+            resume_decision_pause()
             solve_ms = (time.perf_counter() - solve_started) * 1000.0
             if policy is not None and published is None:
                 # Assignment is tentative until the final frame/fresh-Hard
@@ -1177,6 +1245,11 @@ def run(args: argparse.Namespace) -> int:
                     hazard_primitives=hazard_primitives,
                     history_features=history_features,
                     option=policy.option if policy is not None else None,
+                    hard_collision_margin=hard_collision_margin,
+                    source_commitment=source_commitment,
+                    source_coverage=source_coverage,
+                    source_hard_aabb_frames=source_hard_aabb_frames,
+                    source_hard_laser_frames=source_hard_laser_frames,
                 )
                 try:
                     snapshot_ref = recorder.record(snapshot, evidence)
@@ -1213,7 +1286,7 @@ def run(args: argparse.Namespace) -> int:
                         and snapshot.frame >= anchor_retry_after
                     ):
                         try:
-                            anchor = read_authoritative_snapshot(process)
+                            anchor = authority_snapshot
                             anchor_context = automatic_source_context(anchor)
                             if (
                                 anchor.stage != expected_stage
@@ -1249,56 +1322,21 @@ def run(args: argparse.Namespace) -> int:
                                 "error": str(error),
                             })
                 except CorpusError as error:
-                    # Durable evidence failure is not input authority. Preserve
-                    # the same physical Stage, stop claiming this corpus is a
-                    # complete trajectory, and let the next full Stage start a
-                    # fresh recorder instead of killing the game here.
+                    # A physical frame without its promised dense factual root
+                    # is not valid collection. Release input and terminate the
+                    # exact trial; never continue a route with a silent hole.
                     corpus_failure_count += 1
                     corpus_failure = f"{type(error).__name__}: {error}"
-                    failed_recorder = recorder
-                    recorder = None
-                    dialogue_delivery.clear()
-                    last_dialogue_delivery = None
                     if keyboard is not None:
                         keyboard.release_all()
                         lease.cleared()
                     emit_trace({
                         "time": time.time(),
-                        "event": "corpus-disabled",
+                        "event": "corpus-fail-stop",
                         "error": corpus_failure,
-                        "run_dir": str(failed_recorder.run_dir),
+                        "run_dir": str(recorder.run_dir),
                     })
-                    print(
-                        "corpus writer disabled for this Stage; physical loop "
-                        f"retained: {corpus_failure}",
-                        flush=True,
-                    )
-                    corpus_path = failed_recorder.run_dir
-                    try:
-                        failed_recorder.close({
-                            "termination_reason": "corpus-failure",
-                            "stage_completed": False,
-                            "controller_exit_code": 0,
-                            "physical_hits": hit_count,
-                            "control_dead_ends": control_dead_end_count,
-                            "source_exact_hard_fallbacks": (
-                                source_exact_fallback_count
-                            ),
-                            "capture_failures": capture_failure_count,
-                            "anchor_failures": anchor_failure_count,
-                            "corpus_failure": corpus_failure,
-                            "elapsed_wall_seconds": time.monotonic() - started,
-                            "minimum_commit_headroom_bytes": (
-                                minimum_commit_headroom_bytes
-                            ),
-                            "maximum_controller_private_bytes": (
-                                maximum_controller_private_bytes
-                            ),
-                        })
-                    except CorpusError:
-                        # The run directory and its last atomic manifest remain
-                        # as explicit partial evidence. Cleanup must continue.
-                        pass
+                    raise
             if history_observation is not None:
                 learning_history.append(history_observation)
             record = {
@@ -1327,6 +1365,7 @@ def run(args: argparse.Namespace) -> int:
                 reason not in (
                     "ok",
                     "stale-retry",
+                    "stale-retain-source-certified-current",
                     "input-lease",
                     "passive",
                     "player-not-active",
@@ -1348,6 +1387,7 @@ def run(args: argparse.Namespace) -> int:
         else:
             termination_reason = "time-limit"
     finally:
+        resume_decision_pause()
         if trace is not None and plugin is not None:
             emit_trace({
                 "time": time.time(),
@@ -1511,9 +1551,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--resume-after-incoherent-capture",
         action="store_true",
         help=(
-            "release every input on a torn compact snapshot and resume only "
-            "after a later coherent capture; HIT and geometry authority "
-            "failures still stop the run"
+            "retired compatibility flag; source-complete collection never "
+            "resumes after an incoherent capture"
         ),
     )
     parser.add_argument("--stop-game", action="store_true")
@@ -1604,6 +1643,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--horizon must cover Hard-4")
     if args.full_anchor_frames < 0:
         parser.error("--full-anchor-frames cannot be negative")
+    if args.resume_after_incoherent_capture:
+        parser.error(
+            "--resume-after-incoherent-capture is incompatible with "
+            "source-complete online authority"
+        )
     if args.exploration_rate != 0.0:
         parser.error(
             "controller-level exploration is retired; use the frozen policy state"

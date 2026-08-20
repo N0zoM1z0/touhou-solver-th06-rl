@@ -248,12 +248,12 @@ def lower_observed_hazards(
     *,
     collision_margin: float = COLLISION_MARGIN,
 ) -> SourceForecast:
-    """Project only already-observed physical hazards for the online gate.
+    """Project only already-observed physical hazards for soft advisory use.
 
     This deliberately performs no timeline/ECL interpretation and predicts no
-    future births. Long-horizon birth/route reasoning belongs to learned policy
-    data and offline training; the resident loop only needs a small, bounded
-    native legality frontier over live bullets, enemy bodies, and lasers.
+    future births. The controller may use frames beyond the source-complete
+    Hard prefix to rank already-safe actions, but this projection can never
+    add an action to the publishable set.
     """
     if requested_horizon < HARD_HORIZON:
         raise ValueError("observed hazard gate must cover Hard-4")

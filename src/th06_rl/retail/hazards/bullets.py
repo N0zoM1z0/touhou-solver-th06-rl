@@ -592,8 +592,11 @@ def _may_reach_player(
             + acceleration * horizon * (horizon + 1) / 2.0
         )
     else:
-        reach_x = abs(bullet.vx) * horizon
-        reach_y = abs(bullet.vy) * horizon
+        # On a spawn-animation completion update, BulletManager applies the
+        # partial spawn step and then falls through to one full fired step.
+        reach_frames = horizon + (bullet.state in (2, 3, 4))
+        reach_x = abs(bullet.vx) * reach_frames
+        reach_y = abs(bullet.vy) * reach_frames
     bullet_left = bullet.x - bullet.half_width - reach_x
     bullet_right = bullet.x + bullet.half_width + reach_x
     bullet_top = bullet.y - bullet.half_height - reach_y

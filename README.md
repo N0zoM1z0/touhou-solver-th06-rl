@@ -2,11 +2,12 @@
 
 A Wine-only learning agent for original Japanese TH06 1.02h.
 
-Original-retail Wine is the sole gameplay environment. The online loop captures
-one coherent physical state, lets a native kernel certify the Bomb-free safe
-first-action set, ranks only that set with an immutable lightweight policy,
-freshly revalidates the selected action, and publishes it through an exact-PID
-background input bridge.
+Original-retail Wine is the sole gameplay environment. The online contract is
+to pause the exact process, capture one coherent physical state, build a
+source-complete Hard-horizon collision envelope, let a native kernel certify
+the Bomb-free safe first-action set, rank only that set with an immutable
+lightweight policy, and publish through an exact-PID background input bridge
+before resuming that same source epoch. Unknown source coverage fails closed.
 
 The learning loop is deliberately asymmetric:
 
@@ -18,6 +19,12 @@ residuals, and shadow-score candidates. The resident policy performs no
 learning and defaults to the frozen incumbent outside independently supported
 regions. Policy quality is improved by unattended data rounds, never by
 hand-tuning a failure location.
+
+Dense roots keep collision authority separate from learning data: exact raw
+hazard-producer records support safety audits, while same-epoch player attacks,
+items, score/graze, rank/RNG, and NMNB resource counters support offline
+training. Capped learner features are neither source evidence nor a substitute
+for those facts.
 
 Corpus, learner/framework, and fitted result have independent identities and
 lifecycles. A corpus is immutable reusable Wine evidence, not property of the

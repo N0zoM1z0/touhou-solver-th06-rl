@@ -204,6 +204,13 @@ class EnemyBody:
     move_timer: int
     move_timer_float: float
     move_start_time: int
+    # EnemyManager calls Enemy::ClampPos after the leading Move and again
+    # after RunEcl. These source fields are collision state.
+    should_clamp_position: bool = False
+    lower_move_x: float = 0.0
+    lower_move_y: float = 0.0
+    upper_move_x: float = 0.0
+    upper_move_y: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -447,6 +454,24 @@ class Snapshot:
     # leaves this empty; its existing pool remains in the conservative upper
     # bound because the compact snapshot does not retain every ANM VM.
     simulated_effect_expiry_updates: tuple[int, ...] = ()
+    # Factual run/resource counters. These are learning data, never collision
+    # authority; retaining them keeps NMNB progress and item-route rewards
+    # source-observed instead of reconstructed from deltas.
+    gui_score: int = 0
+    score: int = 0
+    next_score_increment: int = 0
+    high_score: int = 0
+    graze_in_stage: int = 0
+    graze_total: int = 0
+    deaths: int = 0
+    bombs_used: int = 0
+    spellcards_captured: int = 0
+    point_items_collected_in_stage: int = 0
+    point_items_collected: int = 0
+    retries: int = 0
+    power_item_count_for_score: int = 0
+    bombs_remaining: int = 0
+    extra_lives: int = 0
 
 
 @dataclass(frozen=True)

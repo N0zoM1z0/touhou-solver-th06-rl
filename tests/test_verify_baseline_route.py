@@ -19,6 +19,10 @@ def _documents(hits: int = 12):
     run = {"metadata": {
         "episode_unit": "route",
         "expected_stages": [1, 2, 3, 4, 5, 6],
+        "planner": {
+            "source_commitment": "source-complete-hard-v1",
+            "factual_state_schema": "th06-1.02h-offline-facts-v1",
+        },
     }}
     manifest = {
         "complete": True,
@@ -71,4 +75,22 @@ def test_baseline_route_verifier_rejects_missing_stage() -> None:
     documents[3]["scope"]["observed_stages"] = [1, 2, 3, 4, 5]
 
     with pytest.raises(ValueError, match="route_scope"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_observed_only_authority() -> None:
+    documents = list(_documents())
+    documents[1]["metadata"]["planner"]["source_commitment"] = (
+        "observed-only-unqualified"
+    )
+
+    with pytest.raises(ValueError, match="source_complete_online_authority"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_incomplete_offline_facts() -> None:
+    documents = list(_documents())
+    del documents[1]["metadata"]["planner"]["factual_state_schema"]
+
+    with pytest.raises(ValueError, match="comprehensive_offline_facts"):
         verify(*documents)

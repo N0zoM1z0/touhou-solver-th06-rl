@@ -20,6 +20,11 @@ import sys
 
 from th06_rl.retail import native
 from th06_rl.retail.model import Bullet, Laser
+from th06_rl.th06.control_capture import (
+    CONTROL_CAPTURE_TIER,
+    OFFLINE_FACT_SCHEMA,
+    SOURCE_RECORD_SCHEMA,
+)
 from th06_rl.th06.observed_bullets import classify_ex_flags
 
 try:
@@ -79,6 +84,15 @@ def _counter_rows(counter: Counter, contexts: dict) -> list[dict[str, object]]:
     return rows
 
 
+def _bytes_field(snapshot: dict, name: str) -> bytes:
+    value = snapshot.get(name, b"")
+    if value in (None, ""):
+        return b""
+    if not isinstance(value, dict) or value.get("codec") != "bytes-base64-v1":
+        raise RuntimeError(f"invalid {name} byte codec")
+    return base64.b64decode(value["data"], validate=True)
+
+
 def audit(root: Path) -> dict[str, object]:
     bullet_layout = [field.name for field in fields(Bullet)]
     laser_layout = [field.name for field in fields(Laser)]
@@ -95,6 +109,14 @@ def audit(root: Path) -> dict[str, object]:
     laser_counts: Counter = Counter()
     run_names = []
     total_frames = 0
+    reachable_linkage_frames = 0
+    reachable_linkage_unavailable_frames = 0
+    source_record_frames = 0
+    source_record_counts: Counter = Counter()
+    source_record_errors: list[dict[str, object]] = []
+    factual_record_frames = 0
+    factual_record_counts: Counter = Counter()
+    factual_record_errors: list[dict[str, object]] = []
     raw_record_size = 6 + native.BULLET_STRIDE - native.BULLET_SIZE_OFFSET
     tail_flag_offset = native.BULLET_EX_FLAGS_OFFSET - native.BULLET_SIZE_OFFSET
     tail_state_offset = native.BULLET_STATE_OFFSET - native.BULLET_SIZE_OFFSET
@@ -124,6 +146,7 @@ def audit(root: Path) -> dict[str, object]:
                             reachable_counts[key] += 1
                             reachable_contexts[key][phase_id] += 1
 
+                    raw_slot_keys = {}
                     raw = snapshot.get("raw_bullet_tails")
                     if isinstance(raw, dict) and raw.get("codec") == "bytes-base64-v1":
                         payload = base64.b64decode(raw["data"], validate=True)
@@ -140,8 +163,132 @@ def audit(root: Path) -> dict[str, object]:
                                 "<H", payload, tail + tail_state_offset
                             )[0]
                             key = (flags, state)
+                            slot = struct.unpack_from("<H", payload, offset)[0]
+                            raw_slot_keys[slot] = key
                             raw_counts[key] += 1
                             raw_contexts[key][phase_id] += 1
+
+                    reachable_slots = snapshot.get("reachable_bullet_slots")
+                    if isinstance(reachable_slots, list):
+                        reachable_linkage_frames += 1
+                        for raw_slot in reachable_slots:
+                            slot = int(raw_slot)
+                            key = raw_slot_keys.get(slot)
+                            if key is None:
+                                raise RuntimeError(
+                                    f"reachable bullet slot {slot} lacks raw tail in {path}"
+                                )
+                            reachable_counts[key] += 1
+                            reachable_contexts[key][phase_id] += 1
+                    elif not (
+                        isinstance(bullets, dict)
+                        and bullets.get("codec") == "dataclass-rows-v1"
+                    ):
+                        reachable_linkage_unavailable_frames += 1
+
+                    if snapshot.get("capture_tier") == CONTROL_CAPTURE_TIER:
+                        source_record_frames += 1
+                        try:
+                            packed = {
+                                name: _bytes_field(snapshot, name)
+                                for name in (
+                                    "raw_spawn_bullet_records",
+                                    "raw_enemy_records",
+                                    "raw_laser_records",
+                                    "raw_enemy_manager_tail",
+                                )
+                            }
+                            record_sizes = {
+                                "raw_spawn_bullet_records": 2 + native.BULLET_STRIDE,
+                                "raw_enemy_records": 2 + native.ENEMY_STRIDE,
+                                "raw_laser_records": 2 + native.LASER_STRIDE,
+                            }
+                            for name, record_size in record_sizes.items():
+                                if len(packed[name]) % record_size:
+                                    raise RuntimeError(f"misaligned {name}")
+                                source_record_counts[name] += (
+                                    len(packed[name]) // record_size
+                                )
+                            expected_tail = (
+                                native.ENEMY_MANAGER_SIZE
+                                - native.ENEMY_ARRAY_OFFSET
+                                - native.ENEMY_COUNT * native.ENEMY_STRIDE
+                            )
+                            if (
+                                snapshot.get("source_record_schema")
+                                != SOURCE_RECORD_SCHEMA
+                                or len(packed["raw_enemy_manager_tail"])
+                                != expected_tail
+                            ):
+                                raise RuntimeError("incomplete EnemyManager source tail")
+                            source_record_counts["manager_tail_bytes"] += len(
+                                packed["raw_enemy_manager_tail"]
+                            )
+                        except (KeyError, RuntimeError, TypeError, ValueError) as error:
+                            if len(source_record_errors) < 128:
+                                source_record_errors.append({
+                                    "path": str(path),
+                                    "frame": snapshot.get("frame"),
+                                    "error": str(error),
+                                })
+                        factual_record_frames += 1
+                        try:
+                            if (
+                                snapshot.get("factual_state_schema")
+                                != OFFLINE_FACT_SCHEMA
+                            ):
+                                raise RuntimeError(
+                                    "missing offline factual state schema"
+                                )
+                            attack = snapshot.get("player_attack")
+                            if (
+                                not isinstance(attack, dict)
+                                or attack.get("codec") != "dataclass-record-v1"
+                            ):
+                                raise RuntimeError("missing PlayerAttack root")
+                            items = snapshot.get("item_states")
+                            if items == []:
+                                item_rows = []
+                            elif (
+                                isinstance(items, dict)
+                                and items.get("codec") == "dataclass-rows-v1"
+                                and isinstance(items.get("rows"), list)
+                            ):
+                                item_rows = items["rows"]
+                            else:
+                                raise RuntimeError("missing ItemState rows")
+                            if snapshot.get("item_active_upper_bound") != len(item_rows):
+                                raise RuntimeError(
+                                    "ItemState count disagrees with source count"
+                                )
+                            resource_fields = (
+                                "score",
+                                "graze_in_stage",
+                                "graze_total",
+                                "deaths",
+                                "bombs_used",
+                                "spellcards_captured",
+                                "point_items_collected_in_stage",
+                                "point_items_collected",
+                                "bombs_remaining",
+                            )
+                            if any(
+                                not isinstance(snapshot.get(name), int)
+                                for name in resource_fields
+                            ):
+                                raise RuntimeError(
+                                    "missing factual run/resource counters"
+                                )
+                            factual_record_counts["player_attack_frames"] += 1
+                            factual_record_counts["item_rows"] += len(item_rows)
+                            factual_record_counts["resource_counter_frames"] += 1
+                        except (RuntimeError, TypeError, ValueError) as error:
+                            if len(factual_record_errors) < 128:
+                                factual_record_errors.append({
+                                    "path": str(path),
+                                    "frame": snapshot.get("frame"),
+                                    "error": str(error),
+                                })
 
                     lasers = snapshot.get("lasers")
                     if isinstance(lasers, dict) and lasers.get("codec") == "dataclass-rows-v1":
@@ -162,6 +309,24 @@ def audit(root: Path) -> dict[str, object]:
         },
         "runs": run_names,
         "frame_records": total_frames,
+        "online_reachable_slot_linkage": {
+            "available_frames": reachable_linkage_frames,
+            "unavailable_legacy_frames": reachable_linkage_unavailable_frames,
+        },
+        "source_record_coverage": {
+            "schema": SOURCE_RECORD_SCHEMA,
+            "control_v3_frames": source_record_frames,
+            "record_counts": dict(sorted(source_record_counts.items())),
+            "errors": source_record_errors,
+            "complete": bool(source_record_frames) and not source_record_errors,
+        },
+        "offline_factual_coverage": {
+            "schema": OFFLINE_FACT_SCHEMA,
+            "control_v3_frames": factual_record_frames,
+            "record_counts": dict(sorted(factual_record_counts.items())),
+            "errors": factual_record_errors,
+            "complete": bool(factual_record_frames) and not factual_record_errors,
+        },
         "all_occupied_bullet_slots": _counter_rows(raw_counts, raw_contexts),
         "online_reachable_bullet_slots": _counter_rows(
             reachable_counts, reachable_contexts

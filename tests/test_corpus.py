@@ -17,8 +17,19 @@ from th06_rl.corpus import (
 )
 from th06_rl.policy_api import PolicyOptionTrace
 from th06_rl.retail import native
-from th06_rl.retail.model import Bullet, Snapshot
-from th06_rl.th06.control_capture import ControlSnapshot, decode_control_snapshot
+from th06_rl.retail.model import (
+    Bullet,
+    ItemState,
+    PlayerAttackState,
+    Snapshot,
+)
+from th06_rl.th06.control_capture import (
+    CONTROL_CAPTURE_TIER,
+    OFFLINE_FACT_SCHEMA,
+    SOURCE_RECORD_SCHEMA,
+    ControlSnapshot,
+    decode_control_snapshot,
+)
 from th06_rl.th06.source import automatic_source_context
 
 
@@ -379,6 +390,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
             boundary_probability=1.0,
             elapsed_frames=1,
         ),
+        hard_collision_margin=0.0,
     )
     root_ref = recorder.record(control, evidence)
     recorder.record_anchor(
@@ -450,6 +462,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
                 row = json.loads(line)
                 objects[row["object_id"]] = row["payload"]
     hydrated = expand_compact(frame["snapshot"], objects)
+    assert frame["decision"]["hard_collision_margin"] == 0.0
     assert hydrated["bullets"] == []
     assert hydrated["raw_bullet_tails"] == _packed_control_bullet()
     decoded = decode_control_snapshot(hydrated)
@@ -492,6 +505,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "hazard_primitives": [],
         "history_features": [],
         "hard_action_count": 1,
+        "hard_collision_margin": 0.0,
     }
     assert transition["policy_id"] == "safe-option-exploration-v1"
     assert transition["executed_action"] == "stay"
@@ -509,3 +523,100 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
             "information_weights": [],
             "propensity_ess": [],
         }
+
+
+def test_control_v3_retains_hazard_source_records() -> None:
+    tail_size = (
+        native.ENEMY_MANAGER_SIZE
+        - native.ENEMY_ARRAY_OFFSET
+        - native.ENEMY_COUNT * native.ENEMY_STRIDE
+    )
+    spawn = struct.pack("<H", 7) + bytes(native.BULLET_STRIDE)
+    enemy = struct.pack("<H", 3) + bytes(native.ENEMY_STRIDE)
+    laser = struct.pack("<H", 5) + bytes(native.LASER_STRIDE)
+    base = ControlSnapshot(
+        capture_tier=CONTROL_CAPTURE_TIER,
+        frame=1,
+        stage=1,
+        player_state=0,
+        x=192.0,
+        y=400.0,
+        half_width=1.25,
+        half_height=1.25,
+        normal_speed=4.0,
+        focus_speed=2.0,
+        normal_diagonal_speed=2.8,
+        focus_diagonal_speed=1.4,
+        frame_multiplier=1.0,
+        input_mask=1,
+        bullets=(),
+        live_bullet_count=0,
+        raw_bullet_tails=b"",
+        bullet_sprite_dimensions=(),
+        bullets_are_reachable_subset=True,
+        laser_count=0,
+        in_menu=False,
+        time_stopped=False,
+        replay_or_demo=False,
+        lasers=(),
+        enemies=(),
+        difficulty=3,
+        character=0,
+        shot_type=0,
+        bomb_active=False,
+        spell_active=False,
+        rank=0,
+        subrank=0,
+        max_rank=32,
+        min_rank=0,
+        rng_seed=1,
+        rng_generation=2,
+        current_power=0,
+        lives_remaining=2,
+        source_context="timeline-complete",
+        boss_life=None,
+        timeline_time=0,
+        timeline_time_float=0.0,
+        capture_attempts=1,
+        bullet_read_retries=0,
+        reachable_bullet_slots=(7,),
+        raw_spawn_bullet_records=spawn,
+        raw_enemy_records=enemy,
+        raw_laser_records=laser,
+        raw_enemy_manager_tail=bytes(tail_size),
+        source_record_schema=SOURCE_RECORD_SCHEMA,
+        factual_state_schema=OFFLINE_FACT_SCHEMA,
+        player_attack=PlayerAttackState(
+            (), 10.0, 20.0, 0, False,
+            0, 1, 1.0, 2, 3, 3.0,
+            ((190.0, 400.0), (194.0, 400.0)), 0, False, False,
+        ),
+        item_states=(ItemState(
+            9, 100.0, 120.0, 90.0, 100.0, 192.0, 400.0,
+            3, 4, 4.0, 1, 2,
+        ),),
+        item_next_index=10,
+        effect_active_upper_bound=2,
+        item_active_upper_bound=1,
+        pending_effect_rng_ids=(4,),
+        random_item_spawn_index=3,
+        random_item_table_index=2,
+        score=123456,
+        graze_in_stage=7,
+    )
+
+    decoded = decode_control_snapshot({
+        field.name: getattr(base, field.name)
+        for field in __import__("dataclasses").fields(base)
+    })
+
+    assert decoded.reachable_bullet_slots == (7,)
+    assert decoded.raw_spawn_bullet_records == spawn
+    assert decoded.raw_enemy_records == enemy
+    assert decoded.raw_laser_records == laser
+    assert len(decoded.raw_enemy_manager_tail) == tail_size
+    assert decoded.factual_state_schema == OFFLINE_FACT_SCHEMA
+    assert decoded.player_attack == base.player_attack
+    assert decoded.item_states == base.item_states
+    assert decoded.score == 123456
+    assert decoded.graze_in_stage == 7

@@ -69,6 +69,16 @@ def verify(
             and metadata.get("expected_stages") == [1, 2, 3, 4, 5, 6]
             and audit_scope.get("observed_stages") == [1, 2, 3, 4, 5, 6]
         ),
+        "source_complete_online_authority": (
+            isinstance(metadata.get("planner"), dict)
+            and metadata["planner"].get("source_commitment")
+            == "source-complete-hard-v1"
+        ),
+        "comprehensive_offline_facts": (
+            isinstance(metadata.get("planner"), dict)
+            and metadata["planner"].get("factual_state_schema")
+            == "th06-1.02h-offline-facts-v1"
+        ),
         "durable_complete": (
             manifest.get("complete") is True
             and manifest.get("stage_trajectory_complete") is True

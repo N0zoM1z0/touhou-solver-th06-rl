@@ -30,9 +30,10 @@ EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
 # Match one shard of burst tolerance.  A dense control root is bounded by 640
-# raw 122-byte bullet-tail records, so 512 queued roots remain tens of MiB,
-# while tolerating one transient UNC shard close/fsync without dropping a
-# physical trajectory.
+# raw bullet tails plus occupied hazard-source records. 512 queued roots bound
+# memory while tolerating one transient UNC shard close/fsync without dropping
+# a physical trajectory; storage preflight remains authoritative for the
+# larger control-v3 records.
 DEFAULT_SHARD_RECORDS = 512
 DEFAULT_QUEUE_RECORDS = 512
 DEFAULT_MAX_RUN_BYTES = 512 * 1024 * 1024
@@ -147,6 +148,19 @@ class FrameEvidence:
     hazard_primitives: tuple[tuple[float, ...], ...] = ()
     history_features: tuple[tuple[str, float], ...] = ()
     option: PolicyOptionTrace | None = None
+    # Exact native collision contract used for the recorded Hard set. This is
+    # 0.35 normally and 0.0 only for the source-geometry fallback.
+    hard_collision_margin: float | None = None
+    source_commitment: str = ""
+    source_coverage: int = 0
+    # Exact four-frame primitives handed to the native kernel. They are kept
+    # separately from capped learner features and can be replayed directly.
+    source_hard_aabb_frames: tuple[
+        tuple[tuple[float, float, float, float], ...], ...
+    ] = ()
+    source_hard_laser_frames: tuple[
+        tuple[tuple[float, float, float, float, float, float], ...], ...
+    ] = ()
 
     def __post_init__(self) -> None:
         if not self.phase_id:
@@ -181,6 +195,25 @@ class FrameEvidence:
             for left, right in zip(self.dialogue_delivery, self.dialogue_delivery[1:])
         ):
             raise ValueError("dialogue delivery samples must be frame ordered")
+        if self.hard_collision_margin is not None and (
+            not math.isfinite(self.hard_collision_margin)
+            or self.hard_collision_margin < 0.0
+        ):
+            raise ValueError("Hard collision margin must be finite and nonnegative")
+        if self.source_coverage < 0:
+            raise ValueError("source coverage cannot be negative")
+        if self.source_commitment == "source-complete-hard-v1" and (
+            self.source_coverage < 4
+            or len(self.source_hard_aabb_frames) < 4
+            or len(self.source_hard_laser_frames) < 4
+        ):
+            raise ValueError("source-complete Hard evidence must retain four frames")
+        if (
+            self.snapshot_tier == "control-v3"
+            and self.published_action is not None
+            and self.source_commitment != "source-complete-hard-v1"
+        ):
+            raise ValueError("control-v3 publication lacks source-complete Hard evidence")
 
 
 @dataclass(frozen=True)
@@ -494,7 +527,7 @@ def _serialize_snapshot(snapshot, objects: _ObjectStore) -> dict[str, object]:
         value = getattr(snapshot, field.name)
         if (
             field.name == "bullets"
-            and getattr(snapshot, "capture_tier", None) == "control-v2"
+            and str(getattr(snapshot, "capture_tier", "")).startswith("control-v")
             and getattr(snapshot, "raw_bullet_tails", b"")
         ):
             # The packed source tail for every occupied slot plus the compact
@@ -668,7 +701,10 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
     if authority:
         learning_exclusions.append("authority-loss")
     executed_action = before.evidence.published_action
-    if executed_action is None and before.evidence.reason == "stale-retry":
+    if executed_action is None and before.evidence.reason in (
+        "stale-retry",
+        "stale-retain-source-certified-current",
+    ):
         # No new key was sent, so the already-observed physical input remains
         # active over this transition. Keep execution distinct from delivery.
         executed_action = before.evidence.current_action
@@ -747,6 +783,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             "bullet_count": before.snapshot.live_bullet_count,
             "laser_count": before.snapshot.laser_count,
             "hard_action_count": len(before.evidence.hard_actions),
+            "hard_collision_margin": before.evidence.hard_collision_margin,
             "effort_horizon": before.evidence.effort_horizon,
             "observation_features": _jsonable(
                 before.evidence.observation_features
@@ -1063,6 +1100,17 @@ class CorpusRecorder:
         self._raise_error()
         if snapshot.input_mask & BUTTON_BOMB:
             raise CorpusError("Bomb bit observed in corpus root")
+        if getattr(snapshot, "capture_tier", "") == "control-v3":
+            item_states = getattr(snapshot, "item_states", ())
+            if (
+                getattr(snapshot, "factual_state_schema", "")
+                != "th06-1.02h-offline-facts-v1"
+                or getattr(snapshot, "player_attack", None) is None
+                or getattr(snapshot, "item_active_upper_bound", -1)
+                != len(item_states)
+                or getattr(snapshot, "effect_active_upper_bound", -1) < 0
+            ):
+                raise CorpusError("control-v3 offline factual root is incomplete")
         snapshot_id = f"{self.run_id}:{self.sequence:08d}:f{snapshot.frame}"
         envelope = _Envelope(
             self.sequence,

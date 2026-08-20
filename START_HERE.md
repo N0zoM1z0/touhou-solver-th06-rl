@@ -27,13 +27,20 @@ Read in this order:
   or evaluation outcomes.
 - Offline replay may recompute features from observed facts but may not invent
   an unexecuted action's successor.
-- Native geometry owns collision authority and the publishable safe set.
+- Source-complete bounded hazard lowering plus native geometry own collision
+  authority and the publishable safe set; observed-only projection is not a
+  complete safety certificate.
+- Coherent capture, Hard certification, and input publication share one paused
+  physical source epoch; this does not extend the four-frame pickup envelope.
 - The learner ranks or abstains inside that safe set; Bomb is forbidden.
 - Corpus, learner implementation, fitted artifact, and evaluation evidence
   remain separate.
 - Training/validation splits use complete physical episodes.
 - Offline training may be complex; the immutable online policy must be small,
   bounded, deterministic in runtime cost, and fast.
+- Dense corpus roots preserve factual raw hazard-producer state plus player
+  attacks, items, and NMNB resource counters separately from capped learner
+  features; features never replace authority evidence.
 - Concurrent Wine collection remains disabled until a new differential passes.
 
 ## Active layout

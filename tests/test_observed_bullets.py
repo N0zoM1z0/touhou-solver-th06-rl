@@ -187,6 +187,27 @@ def test_spawn_completion_uncertainty_uses_source_motion_not_radial_growth() -> 
     assert second == pytest.approx((103.0, 98.0, 109.0, 102.0), abs=2e-5)
 
 
+def test_pure_spawn_effect_includes_partial_and_fired_motion_same_frame() -> None:
+    bullet = _bullet(
+        x=100.0,
+        y=200.0,
+        vx=3.0,
+        vy=0.0,
+        half_width=0.5,
+        half_height=0.5,
+        state=3,
+        ex_flags=0x4,
+        speed=3.0,
+        turn_speed=3.0,
+    )
+
+    first = hazard_boxes(bullet, 1)[0]
+
+    # State 3 moves by velocity/2.5 before ANM completion, then the source
+    # falls through and applies one full fired translation in the same pass.
+    assert first == pytest.approx((103.7, 199.5, 104.7, 200.5), abs=2e-5)
+
+
 def test_spawn_slowdown_batch_preserves_each_completion_branch() -> None:
     bullet = _bullet(
         x=208.43280029296875,

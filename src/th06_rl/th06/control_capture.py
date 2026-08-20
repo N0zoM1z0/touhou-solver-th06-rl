@@ -5,11 +5,10 @@ player attacks, items, effects, immutable ECL graphs, sprite geometry, and
 callback state for source replay.  Decoding all of that before every input
 publication made capture, rather than the native Hard gate, the hot path.
 
-This module reads the same source layouts and applies the same epoch/manager
-phase witnesses, but decodes only state required by observed-hazard authority
-and the dense learning stream.  Exhaustive snapshots remain corpus anchors;
-the omission is explicit in ``capture_tier`` rather than silently inventing
-state.
+This module keeps a compact collision decode and, in the same paused epoch,
+pairs it with the exhaustive source root. Hazard authority consumes only the
+bounded source projection; offline-only attacks, items, effects, and resource
+counters are attached to the dense root without entering the Hard gate.
 """
 
 from __future__ import annotations
@@ -22,10 +21,20 @@ import struct
 import time
 
 from ..retail import native
-from ..retail.model import Bullet, EnemyBody, Laser, StageTimelineInstruction
+from ..retail.model import (
+    Bullet,
+    EnemyBody,
+    ItemState,
+    Laser,
+    PlayerAttackState,
+    PlayerShot,
+    StageTimelineInstruction,
+)
 
 
-CONTROL_CAPTURE_TIER = "control-v2"
+CONTROL_CAPTURE_TIER = "control-v3"
+SOURCE_RECORD_SCHEMA = "th06-1.02h-source-records-v1"
+OFFLINE_FACT_SCHEMA = "th06-1.02h-offline-facts-v1"
 MAX_CAPTURE_ATTEMPTS = 8
 DYNAMIC_BULLET_FLAGS = 0xDF1
 
@@ -140,8 +149,9 @@ class ControlSnapshot:
     frame_multiplier: float
     input_mask: int
     # Resident roots retain only the conservative reachable subset as Python
-    # objects. ``raw_bullet_tails`` losslessly retains every occupied source
-    # slot for the asynchronous corpus worker/offline decoder.
+    # objects. ``raw_bullet_tails`` retains every occupied slot's collision
+    # and motion tail; source records appended below retain the dynamic state
+    # intentionally omitted from the low-latency Python decode.
     bullets: tuple[object, ...]
     live_bullet_count: int
     raw_bullet_tails: bytes
@@ -175,6 +185,47 @@ class ControlSnapshot:
     timeline_time_float: float
     capture_attempts: int
     bullet_read_retries: int
+    # Cheap factual linkage for auditing the resident prefilter.  The corpus
+    # intentionally avoids duplicating full Bullet rows.
+    reachable_bullet_slots: tuple[int, ...] = ()
+    # Packed records are ``u16 slot`` followed by the exact retail struct.
+    # Spawn bullets retain their complete ANM VM because its completion tick
+    # controls the state-2/3/4 -> fired fallthrough. Every occupied Enemy and
+    # Laser is retained so offline source analysis has ECL stacks, callbacks,
+    # shooter state, laser ownership, bounds, and raw animation state.
+    raw_spawn_bullet_records: bytes = b""
+    raw_enemy_records: bytes = b""
+    raw_laser_records: bytes = b""
+    # Exact EnemyManager bytes after the 256-slot pool: timeline instruction,
+    # timers, boss pointer table, random-item cursors, and spell state.
+    raw_enemy_manager_tail: bytes = b""
+    source_record_schema: str = ""
+    # Offline-only factual state hydrated from the exhaustive root captured in
+    # the same pause. None of these fields participates in online Hard.
+    factual_state_schema: str = ""
+    player_attack: PlayerAttackState | None = None
+    item_states: tuple[ItemState, ...] = ()
+    item_next_index: int = 0
+    effect_active_upper_bound: int = -1
+    item_active_upper_bound: int = -1
+    pending_effect_rng_ids: tuple[int, ...] = ()
+    random_item_spawn_index: int = 0
+    random_item_table_index: int = 0
+    gui_score: int = 0
+    score: int = 0
+    next_score_increment: int = 0
+    high_score: int = 0
+    graze_in_stage: int = 0
+    graze_total: int = 0
+    deaths: int = 0
+    bombs_used: int = 0
+    spellcards_captured: int = 0
+    point_items_collected_in_stage: int = 0
+    point_items_collected: int = 0
+    retries: int = 0
+    power_item_count_for_score: int = 0
+    bombs_remaining: int = 0
+    extra_lives: int = 0
 
 
 def _finite(*values: float) -> bool:
@@ -213,6 +264,9 @@ def _tail_may_reach_player(
     flags = struct.unpack_from(
         "<H", tail, relative(native.BULLET_EX_FLAGS_OFFSET)
     )[0]
+    state = struct.unpack_from(
+        "<H", tail, relative(native.BULLET_STATE_OFFSET)
+    )[0]
     if flags & DYNAMIC_BULLET_FLAGS:
         ax, ay = struct.unpack_from(
             "<ff", tail, relative(native.BULLET_ACCELERATION_OFFSET)
@@ -229,8 +283,9 @@ def _tail_may_reach_player(
             + acceleration * horizon * (horizon + 1) / 2.0
         )
     else:
-        reach_x = abs(vx) * horizon
-        reach_y = abs(vy) * horizon
+        reach_frames = horizon + (state in (2, 3, 4))
+        reach_x = abs(vx) * reach_frames
+        reach_y = abs(vy) * reach_frames
     margin = max(0.0, collision_margin)
     player_left = (
         max(8.0, player_x - player_speed * horizon)
@@ -416,7 +471,7 @@ def _decode_control_once(
             "bullet-manager phase changed during control pool copy"
         )
 
-    game_start = native.GAME_DIFFICULTY_OFFSET
+    game_start = native.GAME_GUI_SCORE_OFFSET
     game_end = native.GAME_SUBRANK_OFFSET + 4
     game = process.read(
         native.ADDR_GAME_MANAGER + game_start,
@@ -439,6 +494,23 @@ def _decode_control_once(
     )[0]
     character = game[relative_game(native.GAME_CHARACTER_OFFSET)]
     shot_type = game[relative_game(native.GAME_SHOT_TYPE_OFFSET)]
+    gui_score, score, next_score_increment, high_score = struct.unpack_from(
+        "<IIII", game, relative_game(native.GAME_GUI_SCORE_OFFSET)
+    )
+    graze_in_stage, graze_total = struct.unpack_from(
+        "<ii", game, relative_game(native.GAME_GRAZE_IN_STAGE_OFFSET)
+    )
+    deaths, bombs_used, spellcards_captured = struct.unpack_from(
+        "<iii", game, relative_game(native.GAME_DEATHS_OFFSET)
+    )
+    point_items_collected_in_stage, point_items_collected = struct.unpack_from(
+        "<HH", game, relative_game(native.GAME_POINT_ITEMS_STAGE_OFFSET)
+    )
+    retries, power_item_count_for_score, bombs_remaining, extra_lives = (
+        struct.unpack_from(
+            "<Bbbb", game, relative_game(native.GAME_RETRIES_OFFSET)
+        )
+    )
     flags = relative_game(native.GAME_FLAGS_OFFSET)
     game_menu, retry_menu, gameplay_active, _complete, _practice, demo_mode = (
         game[flags : flags + 6]
@@ -518,6 +590,7 @@ def _decode_control_once(
     bullets = []
     live_bullet_count = 0
     raw_bullet_tails = bytearray()
+    raw_spawn_bullet_records = bytearray()
     occupied_bullets = []
     player_speed = max(
         abs(normal_speed),
@@ -545,6 +618,11 @@ def _decode_control_once(
         )[0]
         raw_bullet_tails.extend(struct.pack("<HI", slot, sprite_pointer))
         raw_bullet_tails.extend(tail)
+        if state in (2, 3, 4):
+            raw_spawn_bullet_records.extend(struct.pack("<H", slot))
+            raw_spawn_bullet_records.extend(
+                bullet_pool[base : base + native.BULLET_STRIDE]
+            )
         occupied_bullets.append((slot, state, sprite_pointer, tail))
 
     # BulletManager::SpawnBullet sets state=FIRED before copying the template
@@ -588,6 +666,7 @@ def _decode_control_once(
             bullets.append(bullet)
 
     lasers = []
+    raw_laser_records = bytearray()
     laser_base = native.ADDR_LASER_ARRAY - native.ADDR_BULLET_ARRAY
     for slot in range(native.LASER_COUNT):
         base = laser_base + slot * native.LASER_STRIDE
@@ -595,6 +674,10 @@ def _decode_control_once(
             "<i", bullet_pool, base + native.LASER_IN_USE_OFFSET
         )[0]:
             continue
+        raw_laser_records.extend(struct.pack("<H", slot))
+        raw_laser_records.extend(
+            bullet_pool[base : base + native.LASER_STRIDE]
+        )
         lx, ly = struct.unpack_from(
             "<ff", bullet_pool, base + native.LASER_POSITION_OFFSET
         )
@@ -631,11 +714,17 @@ def _decode_control_once(
         ))
 
     enemies = []
+    raw_enemy_records = bytearray()
     for slot in range(native.ENEMY_COUNT):
         base = slot * native.ENEMY_STRIDE
         flags0, flags1, flags2 = struct.unpack_from(
             "<BBB", enemy_pool, base + native.ENEMY_FLAGS_OFFSET
         )
+        if flags0 & 0x80:
+            raw_enemy_records.extend(struct.pack("<H", slot))
+            raw_enemy_records.extend(
+                enemy_pool[base : base + native.ENEMY_STRIDE]
+            )
         lethal = (
             flags0 & 0x80
             and flags1 & 0x01
@@ -672,18 +761,29 @@ def _decode_control_once(
         hitbox_x, hitbox_y = struct.unpack_from(
             "<ff", enemy_pool, base + native.ENEMY_HITBOX_OFFSET
         )
+        lower_move_x, lower_move_y = struct.unpack_from(
+            "<ff", enemy_pool, base + native.ENEMY_LOWER_MOVE_LIMIT_OFFSET
+        )
+        upper_move_x, upper_move_y = struct.unpack_from(
+            "<ff", enemy_pool, base + native.ENEMY_UPPER_MOVE_LIMIT_OFFSET
+        )
+        should_clamp_position = bool(flags2 & 0x01)
         movement_mode = flags0 & 0x03
         movement_ease = (flags0 >> 2) & 0x07
         if (
             not _finite(
                 ex, ey, vx, vy, angle, angular_velocity, speed, acceleration,
                 interp_x, interp_y, start_x, start_y, move_subframe,
-                hitbox_x, hitbox_y,
+                hitbox_x, hitbox_y, lower_move_x, lower_move_y,
+                upper_move_x, upper_move_y,
             )
             or not 0.0 <= hitbox_x <= 1024.0
             or not 0.0 <= hitbox_y <= 1024.0
             or movement_mode == 2
             and (movement_ease > 4 or move_start_time <= 0 or move_timer < 0)
+            or should_clamp_position and (
+                lower_move_x > upper_move_x or lower_move_y > upper_move_y
+            )
         ):
             raise RuntimeError(f"invalid compact enemy state at slot {slot}")
         enemies.append(EnemyBody(
@@ -692,6 +792,8 @@ def _decode_control_once(
             movement_mode, movement_ease, bool(flags0 & 0x40),
             interp_x, interp_y, start_x, start_y,
             move_timer, move_timer + move_subframe, move_start_time,
+            should_clamp_position,
+            lower_move_x, lower_move_y, upper_move_x, upper_move_y,
         ))
 
     source_context, boss_life = _source_context(
@@ -706,15 +808,26 @@ def _decode_control_once(
     after = native.read_game_frame(process)
     if after != frame:
         raise native._SnapshotEpochChanged
-    if 0.99 <= frame_multiplier <= 1.01:
-        _accept_completed_calc_phase(
-            process,
-            native,
-            stage=stage,
-            game_frame=frame,
-            bullet_time=bullet_time,
-            passive=bool(in_menu or time_stopped),
+    if frame_multiplier != 1.0:
+        raise RuntimeError(
+            "online safety requires exact normal-speed frame multiplier 1.0; "
+            f"observed {frame_multiplier!r}"
         )
+    _accept_completed_calc_phase(
+        process,
+        native,
+        stage=stage,
+        game_frame=frame,
+        bullet_time=bullet_time,
+        passive=bool(in_menu or time_stopped),
+    )
+    enemy_manager_tail_start = native.ENEMY_COUNT * native.ENEMY_STRIDE
+    enemy_manager_tail_end = native.ENEMY_MANAGER_SIZE - native.ENEMY_ARRAY_OFFSET
+    raw_enemy_manager_tail = bytes(
+        manager_bytes[enemy_manager_tail_start:enemy_manager_tail_end]
+    )
+    if len(raw_enemy_manager_tail) != enemy_manager_tail_end - enemy_manager_tail_start:
+        raise native._SnapshotReadTorn("truncated EnemyManager source tail")
     return ControlSnapshot(
         CONTROL_CAPTURE_TIER,
         frame, stage, player_state, x, y, half_width, half_height,
@@ -730,6 +843,36 @@ def _decode_control_once(
         current_power, lives_remaining, source_context, boss_life,
         timeline_time, timeline_time + timeline_subframe,
         attempt, 0,
+        tuple(bullet.slot for bullet in bullets),
+        bytes(raw_spawn_bullet_records),
+        bytes(raw_enemy_records),
+        bytes(raw_laser_records),
+        raw_enemy_manager_tail,
+        SOURCE_RECORD_SCHEMA,
+        "",
+        None,
+        (),
+        0,
+        -1,
+        -1,
+        (),
+        0,
+        0,
+        gui_score,
+        score,
+        next_score_increment,
+        high_score,
+        graze_in_stage,
+        graze_total,
+        deaths,
+        bombs_used,
+        spellcards_captured,
+        point_items_collected_in_stage,
+        point_items_collected,
+        retries,
+        power_item_count_for_score,
+        bombs_remaining,
+        extra_lives,
     )
 
 
@@ -778,6 +921,86 @@ def read_control_snapshot(
         "compact coherent capture exhausted retries; "
         f"epochs={observed_epochs}; last={last_error}"
     ) from last_error
+
+
+def read_safety_snapshot_pair(
+    process,
+    *,
+    horizon: int = 12,
+    collision_margin: float = 0.35,
+    suspend=None,
+):
+    """Capture compact data and exhaustive source authority in one pause.
+
+    The compact root keeps the resident/data-plane representation. The
+    exhaustive root supplies immutable ECL graphs and every dynamic source
+    field consumed by the bounded Hard forecast. Both reads occur while the
+    exact process is suspended and are cross-checked before either is used.
+    """
+    with suspend() if suspend is not None else nullcontext():
+        control = read_control_snapshot(
+            process,
+            horizon=horizon,
+            collision_margin=collision_margin,
+            suspend=None,
+        )
+        authority = native.read_snapshot(process)
+    mismatches = []
+    for name in (
+        "frame",
+        "stage",
+        "player_state",
+        "input_mask",
+        "difficulty",
+        "character",
+        "rank",
+        "subrank",
+        "rng_seed",
+        "rng_generation",
+        "current_power",
+        "lives_remaining",
+        "gui_score",
+        "score",
+        "next_score_increment",
+        "high_score",
+        "graze_in_stage",
+        "graze_total",
+        "deaths",
+        "bombs_used",
+        "spellcards_captured",
+        "point_items_collected_in_stage",
+        "point_items_collected",
+        "retries",
+        "power_item_count_for_score",
+        "bombs_remaining",
+        "extra_lives",
+    ):
+        if getattr(control, name) != getattr(authority, name):
+            mismatches.append(name)
+    for name in ("x", "y", "half_width", "half_height", "frame_multiplier"):
+        if getattr(control, name) != getattr(authority, name):
+            mismatches.append(name)
+    if control.live_bullet_count != len(authority.bullets):
+        mismatches.append("live_bullet_count")
+    if control.laser_count != authority.laser_count:
+        mismatches.append("laser_count")
+    if mismatches:
+        raise RuntimeError(
+            "compact/source safety roots disagree: " + ", ".join(mismatches)
+        )
+    control = replace(
+        control,
+        factual_state_schema=OFFLINE_FACT_SCHEMA,
+        player_attack=authority.player_attack,
+        item_states=authority.item_states,
+        item_next_index=authority.item_next_index,
+        effect_active_upper_bound=authority.effect_active_upper_bound,
+        item_active_upper_bound=authority.item_active_upper_bound,
+        pending_effect_rng_ids=authority.pending_effect_rng_ids,
+        random_item_spawn_index=authority.random_item_spawn_index,
+        random_item_table_index=authority.random_item_table_index,
+    )
+    return control, authority
 
 
 def observe_passive_control_clock(process) -> bool:
@@ -850,6 +1073,21 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
     values.setdefault("raw_bullet_tails", b"")
     values.setdefault("bullet_sprite_dimensions", ())
     values.setdefault("bullets_are_reachable_subset", False)
+    values.setdefault("reachable_bullet_slots", ())
+    values.setdefault("raw_spawn_bullet_records", b"")
+    values.setdefault("raw_enemy_records", b"")
+    values.setdefault("raw_laser_records", b"")
+    values.setdefault("raw_enemy_manager_tail", b"")
+    values.setdefault("source_record_schema", "")
+    values.setdefault("factual_state_schema", "")
+    values.setdefault("player_attack", None)
+    values.setdefault("item_states", ())
+    values.setdefault("item_next_index", 0)
+    values.setdefault("effect_active_upper_bound", -1)
+    values.setdefault("item_active_upper_bound", -1)
+    values.setdefault("pending_effect_rng_ids", ())
+    values.setdefault("random_item_spawn_index", 0)
+    values.setdefault("random_item_table_index", 0)
     dimension_rows = values["bullet_sprite_dimensions"]
     dimensions = {}
     for row in dimension_rows:
@@ -880,9 +1118,9 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
             slot, sprite_pointer = struct.unpack_from("<HI", raw_tails, offset)
             tail = raw_tails[offset + 6 : offset + record_size]
             sprite_size = dimensions.get(sprite_pointer)
-            if values.get("capture_tier") == CONTROL_CAPTURE_TIER and sprite_size is None:
+            if str(values.get("capture_tier", "")).startswith("control-v") and sprite_size is None:
                 raise ValueError(
-                    f"control-v2 bullet slot {slot} lacks visual sprite geometry"
+                    f"control bullet slot {slot} lacks visual sprite geometry"
                 )
             bullet = native._decode_bullet_tail(tail, slot, sprite_size)
             if bullet is not None and bullet.state != 5:
@@ -893,4 +1131,51 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
         values["bullets"] = tuple(Bullet(**item) for item in values["bullets"])
     values["lasers"] = tuple(Laser(**item) for item in values["lasers"])
     values["enemies"] = tuple(EnemyBody(**item) for item in values["enemies"])
+    player_attack = values["player_attack"]
+    if isinstance(player_attack, dict):
+        player_attack = dict(player_attack)
+        player_attack["shots"] = tuple(
+            PlayerShot(**shot) if isinstance(shot, dict) else shot
+            for shot in player_attack.get("shots", ())
+        )
+        values["player_attack"] = PlayerAttackState(**player_attack)
+    values["item_states"] = tuple(
+        ItemState(**item) if isinstance(item, dict) else item
+        for item in values["item_states"]
+    )
+    values["pending_effect_rng_ids"] = tuple(
+        int(effect_id) for effect_id in values["pending_effect_rng_ids"]
+    )
+    values["reachable_bullet_slots"] = tuple(
+        int(slot) for slot in values["reachable_bullet_slots"]
+    )
+
+    def validate_records(name: str, stride: int, count: int) -> None:
+        payload = values[name]
+        if not isinstance(payload, bytes) or len(payload) % (2 + stride):
+            raise ValueError(f"invalid packed {name}")
+        slots = [
+            struct.unpack_from("<H", payload, offset)[0]
+            for offset in range(0, len(payload), 2 + stride)
+        ]
+        if len(slots) != len(set(slots)) or any(slot >= count for slot in slots):
+            raise ValueError(f"invalid packed {name} slots")
+
+    validate_records(
+        "raw_spawn_bullet_records", native.BULLET_STRIDE, native.BULLET_COUNT
+    )
+    validate_records("raw_enemy_records", native.ENEMY_STRIDE, native.ENEMY_COUNT)
+    validate_records("raw_laser_records", native.LASER_STRIDE, native.LASER_COUNT)
+    if values["capture_tier"] == CONTROL_CAPTURE_TIER:
+        expected_tail = (
+            native.ENEMY_MANAGER_SIZE
+            - native.ENEMY_ARRAY_OFFSET
+            - native.ENEMY_COUNT * native.ENEMY_STRIDE
+        )
+        if (
+            values["source_record_schema"] != SOURCE_RECORD_SCHEMA
+            or values["factual_state_schema"] != OFFLINE_FACT_SCHEMA
+            or len(values["raw_enemy_manager_tail"]) != expected_tail
+        ):
+            raise ValueError("control-v3 source/factual records are incomplete")
     return ControlSnapshot(**values)

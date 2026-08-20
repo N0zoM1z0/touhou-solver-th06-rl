@@ -243,7 +243,6 @@ def hazard_boxes(bullet, horizon: int):
     dynamic = int(bullet.ex_flags) & DYNAMIC_EX_FLAGS
     if (
         bullet.state in (2, 3, 4)
-        and dynamic
         and not dynamic & PLAYER_AIM_TURN_FLAG
         and not int(bullet.ex_flags) & ~KNOWN_EX_FLAGS
     ):

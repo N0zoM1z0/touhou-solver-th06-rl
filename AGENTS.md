@@ -20,18 +20,32 @@ recompute native geometry, construct features, fit models, and score candidate
 policies. Such replay must not invent a successor state for an action that Wine
 did not execute.
 
+Dense physical frames retain the raw state needed to reconstruct collision
+geometry and hazard-producer state plus factual player attacks, items, and
+NMNB resource counters independently of learner features. Any intentional
+omission must be schema-visible and must not be described as a lossless
+full-game state. Low-frequency authoritative anchors retain immutable
+stage/ECL graphs; compact roots retain factual occupied bullet, laser, enemy,
+manager, player-attack, item, and resource state. Derived, capped, or lossy
+feature tensors are never audit authority.
+
 ## Runtime boundary
 
-1. capture one coherent physical Wine snapshot;
-2. project already-observed hazards and construct a native safe first-action
-   set with fixed bounded work;
+1. pause the exact Wine process and capture one coherent physical snapshot;
+2. construct a source-complete Hard-horizon collision envelope and a native
+   safe first-action set with fixed bounded work;
 3. let an immutable policy rank only that set;
-4. recapture and revalidate immediately before input publication;
-5. publish one action, with Bomb bit `0x02` forbidden in every mode.
+4. revalidate and publish against that same paused source epoch;
+5. resume only after publishing one action, with Bomb bit `0x02` forbidden in
+   every mode.
 
 Learning never owns collision authority, uncertainty margins, delivery
-coverage, fail-close behavior, or the fresh issue check. Unknown or incoherent
-hazards fail closed. Do not interpret ECL births or run tree/beam search in the
+coverage, fail-close behavior, source commitments, or the fresh issue check.
+The envelope must include already-observed hazards plus every retail birth,
+body mutation, clamp, and laser mutation possible before the input lease
+expires. Unknown, incoherent, or uncovered source state fails closed. A small,
+bounded, source-verified commitment evaluator belongs to the environment
+adapter; unbounded ECL interpretation and tree/beam search do not belong in the
 resident hot path.
 
 ## Learning boundary

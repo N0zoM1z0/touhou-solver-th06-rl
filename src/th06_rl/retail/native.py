@@ -68,7 +68,17 @@ RESULT_SCREEN_ON_UPDATE = 0x42D98E
 RESULT_SCREEN_STATE_SIZE = 0x34
 
 GAME_TIME_STOPPED_OFFSET = 0x2C
+GAME_GUI_SCORE_OFFSET = 0x00
+GAME_SCORE_OFFSET = 0x04
+GAME_NEXT_SCORE_INCREMENT_OFFSET = 0x08
+GAME_HIGH_SCORE_OFFSET = 0x0C
 GAME_DIFFICULTY_OFFSET = 0x10
+GAME_GRAZE_IN_STAGE_OFFSET = 0x14
+GAME_GRAZE_TOTAL_OFFSET = 0x18
+GAME_REPLAY_OFFSET = 0x1C
+GAME_DEATHS_OFFSET = 0x20
+GAME_BOMBS_USED_OFFSET = 0x24
+GAME_SPELLCARDS_CAPTURED_OFFSET = 0x28
 GAME_FLAGS_OFFSET = 0x181F
 GAME_FRAMES_OFFSET = 0x1A30
 GAME_STAGE_OFFSET = 0x1A34
@@ -77,7 +87,13 @@ GAME_MAX_RANK_OFFSET = 0x1A74
 GAME_MIN_RANK_OFFSET = 0x1A78
 GAME_SUBRANK_OFFSET = 0x1A7C
 GAME_CURRENT_POWER_OFFSET = 0x1810
+GAME_POINT_ITEMS_STAGE_OFFSET = 0x1814
+GAME_POINT_ITEMS_TOTAL_OFFSET = 0x1816
+GAME_RETRIES_OFFSET = 0x1818
+GAME_POWER_ITEM_SCORE_COUNT_OFFSET = 0x1819
 GAME_LIVES_REMAINING_OFFSET = 0x181A
+GAME_BOMBS_REMAINING_OFFSET = 0x181B
+GAME_EXTRA_LIVES_OFFSET = 0x181C
 GAME_CHARACTER_OFFSET = 0x181D
 GAME_SHOT_TYPE_OFFSET = 0x181E
 PLAYER_POSITION_OFFSET = 0x440
@@ -1467,16 +1483,15 @@ def _read_snapshot_once(
             f"{bullet_time_before_pool}->{bullet_time}"
         )
 
-    game = process.read(
-        ADDR_GAME_MANAGER + GAME_FLAGS_OFFSET,
-        GAME_STAGE_OFFSET + 4 - GAME_FLAGS_OFFSET,
+    game = process.read(ADDR_GAME_MANAGER, GAME_SUBRANK_OFFSET + 4)
+    game_menu, retry_menu, gameplay_active, _completed, _practice, demo_mode = (
+        game[GAME_FLAGS_OFFSET:GAME_FLAGS_OFFSET + 6]
     )
-    game_menu, retry_menu, gameplay_active, _completed, _practice, demo_mode = game[0:6]
     captured_frame = struct.unpack_from(
-        "<I", game, GAME_FRAMES_OFFSET - GAME_FLAGS_OFFSET
+        "<I", game, GAME_FRAMES_OFFSET
     )[0]
     captured_stage = struct.unpack_from(
-        "<i", game, GAME_STAGE_OFFSET - GAME_FLAGS_OFFSET
+        "<i", game, GAME_STAGE_OFFSET
     )[0]
     if captured_frame != frame or captured_stage != stage:
         raise _SnapshotEpochChanged
@@ -1487,26 +1502,36 @@ def _read_snapshot_once(
     # Read separately stored dynamic state only after the bulk hazard capture.
     # If the next calc update begins during these reads, capture_epoch observes
     # the GameManager increment and discards the snapshot.
-    difficulty = struct.unpack(
-        "<i", process.read(ADDR_GAME_MANAGER + GAME_DIFFICULTY_OFFSET, 4)
-    )[0]
-    rank, max_rank, min_rank, subrank = struct.unpack(
-        "<iiii",
-        process.read(ADDR_GAME_MANAGER + GAME_RANK_OFFSET, 16),
+    difficulty = struct.unpack_from("<i", game, GAME_DIFFICULTY_OFFSET)[0]
+    rank, max_rank, min_rank, subrank = struct.unpack_from(
+        "<iiii", game, GAME_RANK_OFFSET
     )
     rng_seed, rng_generation = struct.unpack(
         "<HxxI", process.read(ADDR_RNG, 8)
     )
-    time_stopped = bool(process.read(ADDR_GAME_MANAGER + GAME_TIME_STOPPED_OFFSET, 1)[0])
-    is_replay = bool(struct.unpack("<I", process.read(ADDR_GAME_MANAGER + 0x1C, 4))[0])
+    time_stopped = bool(game[GAME_TIME_STOPPED_OFFSET])
+    is_replay = bool(struct.unpack_from("<I", game, GAME_REPLAY_OFFSET)[0])
     frame_multiplier = struct.unpack("<f", process.read(ADDR_FRAME_MULTIPLIER, 4))[0]
     input_mask = struct.unpack("<H", process.read(ADDR_CURRENT_INPUT, 2))[0]
-    current_power = struct.unpack(
-        "<H", process.read(ADDR_GAME_MANAGER + GAME_CURRENT_POWER_OFFSET, 2)
+    current_power = struct.unpack_from("<H", game, GAME_CURRENT_POWER_OFFSET)[0]
+    lives_remaining = struct.unpack_from(
+        "<b", game, GAME_LIVES_REMAINING_OFFSET
     )[0]
-    lives_remaining = struct.unpack(
-        "<b", process.read(ADDR_GAME_MANAGER + GAME_LIVES_REMAINING_OFFSET, 1)
-    )[0]
+    gui_score, score, next_score_increment, high_score = struct.unpack_from(
+        "<IIII", game, GAME_GUI_SCORE_OFFSET
+    )
+    graze_in_stage, graze_total = struct.unpack_from(
+        "<ii", game, GAME_GRAZE_IN_STAGE_OFFSET
+    )
+    deaths, bombs_used, spellcards_captured = struct.unpack_from(
+        "<iii", game, GAME_DEATHS_OFFSET
+    )
+    point_items_collected_in_stage, point_items_collected = struct.unpack_from(
+        "<HH", game, GAME_POINT_ITEMS_STAGE_OFFSET
+    )
+    retries, power_item_count_for_score, bombs_remaining, extra_lives = (
+        struct.unpack_from("<Bbbb", game, GAME_RETRIES_OFFSET)
+    )
     if not 0 <= lives_remaining <= 8:
         raise RuntimeError("invalid source remaining-life count")
     reported_effect_count = struct.unpack(
@@ -1599,9 +1624,7 @@ def _read_snapshot_once(
         raise RuntimeError("invalid source rank state")
     if not 0 <= reported_item_count <= 512:
         raise RuntimeError("invalid source item active count")
-    character, shot_type = process.read(
-        ADDR_GAME_MANAGER + GAME_CHARACTER_OFFSET, 2
-    )
+    character, shot_type = game[GAME_CHARACTER_OFFSET:GAME_SHOT_TYPE_OFFSET + 1]
     if character not in (0, 1):
         raise RuntimeError(f"invalid player character {character}")
     if shot_type not in (0, 1):
@@ -2030,6 +2053,11 @@ def _read_snapshot_once(
                 hitbox_x / 3.0,
                 hitbox_y / 3.0,
                 *motion[2:],
+                bool(flags2 & 0x01),
+                lower_move_x,
+                lower_move_y,
+                upper_move_x,
+                upper_move_y,
             ))
 
         life = struct.unpack_from("<i", enemy_pool, base + ENEMY_LIFE_OFFSET)[0]
@@ -2402,6 +2430,22 @@ def _read_snapshot_once(
         lives_remaining,
         timeline_previous,
         bool(boss_present_raw),
+        (),
+        gui_score,
+        score,
+        next_score_increment,
+        high_score,
+        graze_in_stage,
+        graze_total,
+        deaths,
+        bombs_used,
+        spellcards_captured,
+        point_items_collected_in_stage,
+        point_items_collected,
+        retries,
+        power_item_count_for_score,
+        bombs_remaining,
+        extra_lives,
     )
 
 

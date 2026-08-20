@@ -174,9 +174,19 @@ def future_positions(
     move_timer = enemy.move_timer
     move_timer_float = enemy.move_timer_float
     result: list[tuple[float, float]] = []
+
+    def clamp_position(current_x: float, current_y: float) -> tuple[float, float]:
+        if not enemy.should_clamp_position:
+            return current_x, current_y
+        return (
+            min(max(current_x, enemy.lower_move_x), enemy.upper_move_x),
+            min(max(current_y, enemy.lower_move_y), enemy.upper_move_y),
+        )
+
     for _frame in range(horizon):
         x += -velocity_x if enemy.invert_x else velocity_x
         y += velocity_y
+        x, y = clamp_position(x, y)
         advanced = finish_motion_values(
             x,
             y,
@@ -205,6 +215,7 @@ def future_positions(
         movement_mode = advanced.movement_mode
         move_timer = advanced.move_timer
         move_timer_float = advanced.move_timer_float
+        x, y = clamp_position(x, y)
         result.append((x, y))
     return result
 
