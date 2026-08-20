@@ -15,10 +15,39 @@ import tempfile
 CONFIG_SIZE = 0x38
 CANONICAL_CONFIG_NAME = "東方紅魔郷.cfg"
 # ControllerMapping is 18 bytes; MSVC aligns the following i32 at 0x14.
+CONTROLLER_MAPPING = (0, 1, 2, 4, -1, -1, -1, -1, 3)
 VERSION_OFFSET = 0x14
 VERSION_102H = 0x102
+LIFE_COUNT_OFFSET = 0x18
+BOMB_COUNT_OFFSET = 0x19
 COLOR_MODE_16BIT_OFFSET = 0x1A
+MUSIC_MODE_OFFSET = 0x1B
+PLAY_SOUNDS_OFFSET = 0x1C
+DEFAULT_DIFFICULTY_OFFSET = 0x1D
 WINDOWED_OFFSET = 0x1E
+FRAMESKIP_OFFSET = 0x1F
+PAD_X_AXIS_OFFSET = 0x20
+PAD_Y_AXIS_OFFSET = 0x22
+OPTIONS_OFFSET = 0x34
+
+
+def source_default_config() -> bytes:
+    """Reconstruct LoadConfig's 1.02h defaults before custom.exe resolves them."""
+    payload = bytearray(CONFIG_SIZE)
+    struct.pack_into("<9h", payload, 0, *CONTROLLER_MAPPING)
+    struct.pack_into("<I", payload, VERSION_OFFSET, VERSION_102H)
+    payload[LIFE_COUNT_OFFSET] = 2
+    payload[BOMB_COUNT_OFFSET] = 3
+    payload[COLOR_MODE_16BIT_OFFSET] = 0xFF
+    payload[MUSIC_MODE_OFFSET] = 1  # WAV; the shipped archive includes BGM WAVs.
+    payload[PLAY_SOUNDS_OFFSET] = 1
+    payload[DEFAULT_DIFFICULTY_OFFSET] = 1
+    payload[WINDOWED_OFFSET] = 0
+    payload[FRAMESKIP_OFFSET] = 0
+    struct.pack_into("<hh", payload, PAD_X_AXIS_OFFSET, 600, 600)
+    # GCOS_USE_D3D_HW_TEXTURE_BLENDING is the source default option bit.
+    struct.pack_into("<I", payload, OPTIONS_OFFSET, 1)
+    return bytes(payload)
 
 
 def configure_windowed(payload: bytes) -> bytes:
@@ -44,10 +73,30 @@ def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _atomic_write(path: Path, payload: bytes) -> None:
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("game_directory", type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument(
+        "--initialize",
+        action="store_true",
+        help="create a missing canonical cfg from source-defined 1.02h defaults",
+    )
     args = parser.parse_args()
 
     game_directory = args.game_directory.resolve()
@@ -55,29 +104,25 @@ def main() -> int:
     candidates = sorted(game_directory.glob("*.cfg"))
     if canonical.is_file():
         path = canonical
+        initialized = False
     elif len(candidates) == 1:
         path = candidates[0]
+        initialized = False
+    elif not candidates and args.initialize:
+        path = canonical
+        before = source_default_config()
+        initialized = True
     else:
         parser.error(
             "canonical TH06 cfg is absent and fallback is ambiguous; "
             f"found {len(candidates)} cfg files"
         )
-    before = path.read_bytes()
+    if not initialized:
+        before = path.read_bytes()
     after = configure_windowed(before)
-    changed = after != before
+    changed = initialized or after != before
     if changed:
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-        )
-        try:
-            with os.fdopen(descriptor, "wb") as output:
-                output.write(after)
-                output.flush()
-                os.fsync(output.fileno())
-            os.replace(temporary, path)
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+        _atomic_write(path, after)
 
     report = {
         "schema": "th06-rl-wine-retail-config-v1",
@@ -88,6 +133,7 @@ def main() -> int:
         "color_mode_16bit_after": int(after[COLOR_MODE_16BIT_OFFSET]),
         "windowed_before": int(before[WINDOWED_OFFSET]),
         "windowed_after": int(after[WINDOWED_OFFSET]),
+        "initialized": initialized,
         "changed": changed,
         "sha256_before": _sha256(before),
         "sha256_after": _sha256(after),

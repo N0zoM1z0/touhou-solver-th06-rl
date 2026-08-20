@@ -9,15 +9,16 @@ Read in this order:
 
 1. `HAND_OFF.md` for the current boundary and exact next work;
 2. `AGENTS.md` for safety and scientific rules;
-3. `docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md` for the consolidated
+3. `docs/PORTABLE_WINE_RUNTIME.md` to provision and smoke-test a new host;
+4. `docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md` for the consolidated
    failure analysis and the frozen Generation-7 research direction;
-4. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the end-to-end contract;
-5. `docs/IMMUTABLE_WINE_DATA_PLANE.md` and
+5. `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` for the end-to-end contract;
+6. `docs/IMMUTABLE_WINE_DATA_PLANE.md` and
    `config/wine_corpus_registry.json` for reusable factual data;
-6. `docs/REPOSITORY_PRUNE.md` for the removal/retention boundary;
-7. `docs/TRAINING_INFRA_PERFORMANCE.md` for historical performance and the
+7. `docs/REPOSITORY_PRUNE.md` for the removal/retention boundary;
+8. `docs/TRAINING_INFRA_PERFORMANCE.md` for historical performance and the
    failed concurrent-Wine differential;
-8. `docs/HARD_EMPTY_SOURCE_AUDIT.md` and `docs/WINE_RETAIL_VALIDATION.md`
+9. `docs/HARD_EMPTY_SOURCE_AUDIT.md` and `docs/WINE_RETAIL_VALIDATION.md`
    before gameplay-facing work.
 
 ## Non-negotiable separation
@@ -39,6 +40,7 @@ Read in this order:
 
 ```text
 src/th06_rl/core/       native-safe movement value objects and planning
+src/th06_rl/retail/     self-contained TH06 process/source-semantics package
 src/th06_rl/th06/       original-retail Wine capture/control adapter
 src/th06_rl/corpus.py   lossless factual recorder
 src/th06_rl/wine_*.py   immutable registry, validation, and worker infra

@@ -180,3 +180,28 @@ def test_retail_runtime_has_no_external_solver_import_boundary() -> None:
 
     assert not (REPOSITORY / "src/th06_rl/th06/donor.py").exists()
     assert violations == []
+
+
+def test_portable_runtime_infra_has_no_home_directory_literals() -> None:
+    roots = (
+        REPOSITORY / "scripts",
+        REPOSITORY / "src",
+        REPOSITORY / "cmake",
+        REPOSITORY / "config",
+    )
+    violations: list[str] = []
+    for root in roots:
+        for path in root.rglob("*"):
+            if not path.is_file() or "__pycache__" in path.parts:
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for literal in ("/home/", "/Users/"):
+                if literal in content:
+                    violations.append(
+                        f"{path.relative_to(REPOSITORY)} contains {literal!r}"
+                    )
+
+    assert violations == []

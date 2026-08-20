@@ -31,7 +31,11 @@ The reconstructed Linux/headless simulator and the pre-generation online-UCB
 path have been removed from the tracked tree. Their old implementations remain
 recoverable from Git history, but are not available learning backends.
 
-Start with [HAND_OFF.md](HAND_OFF.md), then [START_HERE.md](START_HERE.md).
+For a new machine, provision and verify the self-contained original-retail
+runtime with
+[docs/PORTABLE_WINE_RUNTIME.md](docs/PORTABLE_WINE_RUNTIME.md). No historical
+solver checkout is needed. Then start with [HAND_OFF.md](HAND_OFF.md) and
+[START_HERE.md](START_HERE.md).
 The authoritative method and
 evaluation contract is
 [docs/WINE_ONLY_AUTONOMOUS_LEARNING.md](docs/WINE_ONLY_AUTONOMOUS_LEARNING.md).
@@ -44,8 +48,9 @@ accelerated Wine, first-failure prefixes, shadow replay, and offline metrics may
 reject or select a candidate, but may not promote one.
 
 There is currently no authorized gameplay candidate or current-generation Wine
-command. Generation 6 is a frozen negative result and its runners are retained
-only for reproducibility. The next action is learner-only Generation-7 work on
-the registered corpus; freeze a new contract before any outcome-facing Wine
-run. See [docs/REPOSITORY_PRUNE.md](docs/REPOSITORY_PRUNE.md) for the retired
-paths and the retention boundary.
+experiment command. The tracked Wine smoke policy is infrastructure-only and
+cannot create promotion evidence. Generation 1--6 code is pruned; the next
+action is learner-only Generation-7 work on the registered corpus. Freeze a new
+contract before any outcome-facing Wine run. See
+[docs/REPOSITORY_PRUNE.md](docs/REPOSITORY_PRUNE.md) for the retired paths and
+the retention boundary.

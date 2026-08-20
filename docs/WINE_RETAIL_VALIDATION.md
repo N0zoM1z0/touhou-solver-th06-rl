@@ -18,6 +18,7 @@ The canonical local layout is:
 reference/th06-game-original/th06/                 original game directory
 reference/th06-game-original/full-unlock-score.dat ignored unlock template
 reference/tools/windows-python-3.11.9-embed-win32/ ignored 32-bit Python
+reference/wine-prefixes/th06-retail/                ignored 32-bit Wine prefix
 build/native-win32-fully-static/                    ignored native DLL build
 ```
 
@@ -28,8 +29,10 @@ save file.
 
 ## Source grounding
 
-Every shipped-game assumption used by the adapter is traceable to the ignored
-authoritative checkout at `reference/GensokyoClub-th06/`:
+Every shipped-game assumption used by the adapter is traceable to the exact
+GensokyoClub/th06 commit recorded in `RETAIL_ADAPTER_PROVENANCE.md`. The source
+checkout may live anywhere and is read-only; setup can attest it with
+`--exact-source` but runtime does not depend on it:
 
 - `src/Supervisor.hpp` defines the 1.02 configuration layout, the windowed
   byte, and the Supervisor gameplay/ending states.
@@ -50,15 +53,27 @@ and windowed configuration bytes. The GDB startup helper verifies the exact
 required marker, and detaches before menu or battle control begins. It does not
 patch bullet, laser, enemy, player-collision, or movement physics.
 
-## Build the controller DLL
+## Provision from a fresh checkout
+
+The portable, idempotent path installs the host requirements, materializes all
+ignored inputs, creates the source-derived windowed config, and builds the
+controller DLL:
+
+```bash
+scripts/bootstrap_wine_runtime.sh
+scripts/smoke_wine_runtime.sh
+```
+
+See `PORTABLE_WINE_RUNTIME.md` for inputs, overrides, and exact smoke gates.
+
+## Build the controller DLL manually
 
 The shipped executable and the embedded controller are 32-bit processes. Build
 the native gate with MinGW and static compiler runtimes:
 
 ```bash
 cmake -S native -B build/native-win32-fully-static \
-  -DCMAKE_SYSTEM_NAME=Windows \
-  -DCMAKE_CXX_COMPILER=i686-w64-mingw32-g++ \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw32.cmake \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build/native-win32-fully-static -j4
 ```
@@ -69,24 +84,36 @@ historical DLL identity.
 ## Run
 
 Wine, Xvfb, GDB, a Japanese UTF-8 locale, and the ignored inputs above are
-required. The runner uses ordinary pipes, never a PTY. It refuses a busy Wine
-prefix or display, verifies every fixed hash, restores the unlock save,
-normalizes startup, starts the Bomb-free controller, and cleans only its exact
-dedicated prefix and processes.
+required. The game never runs through a PTY. The separate Windows console
+controller uses a PTY bridge where Wine requires valid console handles, with
+all output forwarded to its artifact log. The runner refuses a busy Wine prefix
+or display, verifies every fixed hash, restores the unlock save, normalizes
+startup, starts the Bomb-free controller, and cleans only its exact dedicated
+prefix and processes.
 
 Run a natural Practice Stage 6 continuation benchmark:
 
 ```bash
-PYTHONPATH=.:src .venv/bin/python scripts/run_wine_retail.py \
+POLICY_PLUGIN=path/to/frozen_candidate.py \
+POLICY_STATE=path/to/frozen_candidate.json \
+.venv/bin/python scripts/run_wine_retail.py \
   --practice-stage 6 \
+  --policy-plugin "$POLICY_PLUGIN" \
+  --policy-state "$POLICY_STATE" \
+  --immutable-policy \
   --artifact-dir artifacts/wine-retail-stage6-example
 ```
 
 Run the ordinary Reimu-A Lunatic route from Start through Ending:
 
 ```bash
-PYTHONPATH=.:src .venv/bin/python scripts/run_wine_retail.py \
+POLICY_PLUGIN=path/to/frozen_candidate.py \
+POLICY_STATE=path/to/frozen_candidate.json \
+.venv/bin/python scripts/run_wine_retail.py \
   --start-route \
+  --policy-plugin "$POLICY_PLUGIN" \
+  --policy-state "$POLICY_STATE" \
+  --immutable-policy \
   --artifact-dir artifacts/wine-retail-route-example
 ```
 

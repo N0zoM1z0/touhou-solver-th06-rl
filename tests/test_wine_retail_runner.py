@@ -78,7 +78,10 @@ def test_runner_accepts_route_as_a_distinct_mode(tmp_path: Path) -> None:
     args = parse_args(["--start-route", "--artifact-dir", str(tmp_path / "run")])
     assert args.start_route
     assert args.practice_stage is None
-    assert args.wine_prefix == Path("/home/c/.wine-th06-rl-retail")
+    assert args.wine_prefix == (
+        Path(__file__).resolve().parents[1]
+        / "reference/wine-prefixes/th06-retail"
+    )
     assert args.score_template.name == "full-unlock-score.dat"
     assert args.policy_plugin.name == "candidate.py"
     assert args.policy_state.name == "candidate.json"
@@ -178,7 +181,8 @@ def test_bounded_priority_wrapper_is_explicit_and_attested(tmp_path: Path) -> No
     assert command[:3] == [
         "sudo", "-n",
         "--preserve-env=DISPLAY,LANG,LC_ALL,LP_NUM_THREADS,MESA_GLTHREAD,"
-        "TH06_RL_OFFLINE_SCORER_LIBRARY,WINEDEBUG,WINEDLLOVERRIDES,WINEPREFIX",
+        "PYTHONDONTWRITEBYTECODE,PYTHONPATH,TH06_RL_OFFLINE_SCORER_LIBRARY,"
+        "WINEARCH,WINEDEBUG,WINEDLLOVERRIDES,WINEPREFIX",
     ]
     assert command[command.index("--nice") + 1] == "-10"
     assert command[command.index("--cpu-list") + 1] == "8-31"

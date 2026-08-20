@@ -37,7 +37,10 @@ _PRIORITY_ENVIRONMENT = (
     "LC_ALL",
     "LP_NUM_THREADS",
     "MESA_GLTHREAD",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONPATH",
     "TH06_RL_OFFLINE_SCORER_LIBRARY",
+    "WINEARCH",
     "WINEDEBUG",
     "WINEDLLOVERRIDES",
     "WINEPREFIX",
@@ -280,9 +283,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--wine-prefix",
         type=Path,
-        default=Path("/home/c/.wine-th06-rl-retail"),
+        default=repository / "reference/wine-prefixes/th06-retail",
     )
-    parser.add_argument("--wine", type=Path, default=Path("/usr/bin/wine"))
+    parser.add_argument(
+        "--wine", type=Path, default=Path(shutil.which("wine") or "wine")
+    )
     parser.add_argument(
         "--windows-python",
         type=Path,
@@ -723,6 +728,14 @@ def run(args: argparse.Namespace) -> int:
                 "WINEDEBUG": "-all",
                 "LP_NUM_THREADS": "1",
                 "MESA_GLTHREAD": "false",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                # Normal Python honors this directly. The pinned embeddable
+                # runtime also carries equivalent repo-relative entries in its
+                # _pth file, provisioned by bootstrap_wine_runtime.sh.
+                "PYTHONPATH": ";".join(
+                    (_windows_path(repository), _windows_path(repository / "src"))
+                ),
+                "WINEARCH": "win32",
                 # TH06 and the embeddable controller do not require .NET or
                 # MSHTML. Disable Wine's interactive Mono/Gecko installers so
                 # a new isolated retail prefix cannot hang on an unseen dialog.
@@ -768,7 +781,9 @@ def run(args: argparse.Namespace) -> int:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            prefix_marker.write_text("wine-11.0 isolated retail\n", encoding="utf-8")
+            prefix_marker.write_text(
+                f"{version} isolated win32 retail\n", encoding="utf-8"
+            )
 
         game_command = [str(args.wine), f"./{RETAIL_EXECUTABLE}"]
         game_priority_path = artifact_dir / "game-priority.json"
@@ -894,17 +909,25 @@ def run(args: argparse.Namespace) -> int:
         )
         controller.append("--immutable-policy")
         report["controller_command"] = controller
-        controller_host_command = controller
+        # Windows console-subsystem CPython needs valid console handles under
+        # Wine 8. The controller alone receives a PTY; the game process above
+        # remains explicitly detached from every PTY as required.
+        controller_host_command = [
+            sys.executable,
+            str(repository / "scripts/exec_with_pty.py"),
+            "--",
+            *controller,
+        ]
         if args.controller_nice is not None:
             controller_host_command = _bounded_priority_command(
-                controller,
+                controller_host_command,
                 cpu_list=args.controller_cpu_list,
                 nice=args.controller_nice,
                 attestation=controller_priority_path,
             )
         elif args.controller_cpu_list:
             controller_host_command = [
-                "taskset", "-c", args.controller_cpu_list, *controller
+                "taskset", "-c", args.controller_cpu_list, *controller_host_command
             ]
         report["controller_host_command"] = controller_host_command
         result = subprocess.run(

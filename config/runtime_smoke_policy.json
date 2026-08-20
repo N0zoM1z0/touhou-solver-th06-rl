@@ -1,0 +1,5 @@
+{
+  "frozen": true,
+  "policy_id": "runtime-smoke-reactive-baseline-v1",
+  "schema": "th06-rl-runtime-smoke-policy-v1"
+}
