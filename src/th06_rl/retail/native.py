@@ -2522,11 +2522,17 @@ def read_snapshot(process: NativeProcess) -> Snapshot:
     )
 
 
+def read_game_clock(process: NativeProcess) -> tuple[int, int]:
+    """Read source-defined stage frame and stage from one manager block."""
+    frame, stage = struct.unpack(
+        "<Ii", process.read(ADDR_GAME_MANAGER + GAME_FRAMES_OFFSET, 8)
+    )
+    return frame, stage
+
+
 def read_game_frame(process: NativeProcess) -> int:
     """Read the source-defined stage frame at the physical command boundary."""
-    return struct.unpack(
-        "<I", process.read(ADDR_GAME_MANAGER + GAME_FRAMES_OFFSET, 4)
-    )[0]
+    return read_game_clock(process)[0]
 
 
 def read_menu_state(process: NativeProcess) -> tuple[int, int, int]:

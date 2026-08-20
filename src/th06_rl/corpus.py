@@ -24,7 +24,7 @@ from .retail.model import BUTTON_BOMB
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v2"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v7"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v8"
 TRANSITION_SCHEMA = "th06-rl-transition-v10"
 EVENT_SCHEMA = "th06-rl-event-v1"
 ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
@@ -86,6 +86,7 @@ class RunMetadata:
 class DialogueDeliverySample:
     """Tiny retail input evidence retained while battle capture is paused."""
 
+    stage: int
     game_frame: int
     current_input_mask: int
     previous_input_mask: int
@@ -98,6 +99,8 @@ class DialogueDeliverySample:
 
     def __post_init__(self) -> None:
         allowed = 0x01 | 0x04 | 0x10 | 0x20 | 0x40 | 0x80 | 0x100
+        if not 1 <= self.stage <= 6:
+            raise ValueError("dialogue delivery stage is outside TH06 route scope")
         if self.game_frame < 0:
             raise ValueError("dialogue delivery frame must be nonnegative")
         for name in (
@@ -191,7 +194,7 @@ class FrameEvidence:
             ):
                 raise ValueError("frame propensity disagrees with option trace")
         if any(
-            right.game_frame < left.game_frame
+            (right.stage, right.game_frame) < (left.stage, left.game_frame)
             for left, right in zip(self.dialogue_delivery, self.dialogue_delivery[1:])
         ):
             raise ValueError("dialogue delivery samples must be frame ordered")

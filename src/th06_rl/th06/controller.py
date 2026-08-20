@@ -491,10 +491,11 @@ def run(args: argparse.Namespace) -> int:
             nonlocal last_dialogue_delivery
             if recorder is None or keyboard is None:
                 return
-            frame, current, previous, held_repeat, held_frames = (
+            stage, frame, current, previous, held_repeat, held_frames = (
                 read_passive_input_delivery(process)
             )
             sample = DialogueDeliverySample(
+                stage=stage,
                 game_frame=frame,
                 current_input_mask=current,
                 previous_input_mask=previous,

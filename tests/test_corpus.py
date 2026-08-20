@@ -187,6 +187,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
         reason="ok",
         dialogue_delivery=(
             DialogueDeliverySample(
+                stage=1,
                 game_frame=7,
                 current_input_mask=0x101,
                 previous_input_mask=0x001,
@@ -198,6 +199,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
                 pulsed_shoot=False,
             ),
             DialogueDeliverySample(
+                stage=1,
                 game_frame=8,
                 current_input_mask=0x001,
                 previous_input_mask=0x101,
@@ -223,9 +225,10 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
-    assert frame["schema_version"] == "th06-rl-authoritative-frame-v7"
+    assert frame["schema_version"] == "th06-rl-authoritative-frame-v8"
     assert frame["decision"]["dialogue_delivery"] == [
         {
+            "stage": 1,
             "game_frame": 7,
             "current_input_mask": 0x101,
             "previous_input_mask": 0x001,
@@ -237,6 +240,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
             "pulsed_shoot": False,
         },
         {
+            "stage": 1,
             "game_frame": 8,
             "current_input_mask": 0x001,
             "previous_input_mask": 0x101,
@@ -259,6 +263,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
 def test_dialogue_delivery_rejects_bomb_and_out_of_order_samples() -> None:
     with pytest.raises(ValueError, match="Bomb-bearing"):
         DialogueDeliverySample(
+            stage=1,
             game_frame=1,
             current_input_mask=0x02,
             previous_input_mask=0,
@@ -271,6 +276,7 @@ def test_dialogue_delivery_rejects_bomb_and_out_of_order_samples() -> None:
         )
 
     later = DialogueDeliverySample(
+        stage=1,
         game_frame=2,
         current_input_mask=1,
         previous_input_mask=0,
@@ -307,6 +313,32 @@ def test_dialogue_delivery_rejects_bomb_and_out_of_order_samples() -> None:
             reason="ok",
             dialogue_delivery=(later, earlier),
         )
+
+    stage_reset = replace(later, stage=2, game_frame=0)
+    FrameEvidence(
+        phase_id="timeline:test",
+        current_action="stay",
+        hard_actions=(("stay", 10.0, 192.0, 400.0),),
+        baseline_action="stay",
+        locally_admissible_actions=("stay",),
+        proposed_action="stay",
+        published_action="stay",
+        behavior_probability=1.0,
+        policy_id="test",
+        policy_generation=1,
+        policy_sha256="abc",
+        effort_horizon=4,
+        plan_min_clearance=10.0,
+        cumulative_risk=None,
+        terminal_x=192.0,
+        terminal_y=400.0,
+        endpoint_count=1,
+        continuation_action_count=1,
+        capture_ms=1.0,
+        solve_ms=0.1,
+        reason="ok",
+        dialogue_delivery=(later, stage_reset),
+    )
 
 
 def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) -> None:

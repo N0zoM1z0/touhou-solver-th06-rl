@@ -87,8 +87,8 @@ def test_stage_change_does_not_reuse_prior_lag():
 
 
 def test_passive_input_delivery_reads_one_coherent_game_frame(monkeypatch):
-    frames = iter((123, 123))
-    monkeypatch.setattr(native, "read_game_frame", lambda _process: next(frames))
+    clocks = iter(((123, 2), (123, 2)))
+    monkeypatch.setattr(native, "read_game_clock", lambda _process: next(clocks))
 
     block = bytearray(14)
     for offset, value in ((0, 0x101), (4, 0x001), (8, 3), (12, 7)):
@@ -101,17 +101,17 @@ def test_passive_input_delivery_reads_one_coherent_game_frame(monkeypatch):
             assert size == 14
             return bytes(block)
 
-    assert read_passive_input_delivery(Process()) == (123, 0x101, 1, 3, 7)
+    assert read_passive_input_delivery(Process()) == (2, 123, 0x101, 1, 3, 7)
 
 
 def test_passive_input_delivery_rejects_repeated_cross_frame_reads(monkeypatch):
-    frames = iter(range(16))
-    monkeypatch.setattr(native, "read_game_frame", lambda _process: next(frames))
+    clocks = iter((value, 2) for value in range(16))
+    monkeypatch.setattr(native, "read_game_clock", lambda _process: next(clocks))
 
     class Process:
         @staticmethod
         def read(_address, size):
             return bytes(size)
 
-    with pytest.raises(RuntimeError, match="crossed game frames"):
+    with pytest.raises(RuntimeError, match="crossed game clocks"):
         read_passive_input_delivery(Process())
