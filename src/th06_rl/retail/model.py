@@ -277,6 +277,25 @@ class EnemyEclContext:
 
 
 @dataclass(frozen=True)
+class RepeatStarState:
+    """Shared globals consumed by ``ExInsShootStarPattern``.
+
+    These values live beside ``EclManager`` in retail memory, not inside an
+    Enemy.  Keeping them as one object prevents source replay from silently
+    treating a cross-emitter write as emitter-private state.
+    """
+
+    angles: tuple[float, float, float, float, float, float]
+    enemy_x: float
+    enemy_y: float
+    player_x: float
+    player_y: float
+    angles_known: bool = True
+    enemy_uncertainty_x: float = 0.0
+    enemy_uncertainty_y: float = 0.0
+
+
+@dataclass(frozen=True)
 class EnemySpawner:
     """An occupied enemy's observable periodic and ECL emission state."""
 
@@ -476,6 +495,10 @@ class Snapshot:
     # function pointers for repeating callbacks; an offline decoder must map
     # those pointers without consulting a live process or an external solver.
     ecl_ex_function_addresses: tuple[int, ...] = ()
+    # Exact process-global state used by repeating external instruction 2.
+    # ``None`` means the capture predates this authority field and must fail
+    # closed if the callback becomes reachable.
+    repeat_star_state: RepeatStarState | None = None
 
 
 @dataclass(frozen=True)

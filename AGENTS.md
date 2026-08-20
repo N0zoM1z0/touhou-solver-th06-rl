@@ -31,11 +31,14 @@ graphs; compact roots retain factual occupied bullet, laser, enemy,
 manager, player-attack, item, and resource state. Derived, capped, or lossy
 feature tensors are never audit authority.
 
-Training admission requires `control-v4` and a complete pass through
+Training admission requires `control-v5` and a complete pass through
 `th06_rl.th06.source_dataset`: the first dense frame of every stage has its stage
 root, every live ECL/timeline pointer is covered by the active anchor, and all
 pointed Enemy/bullet geometry remains decodable after Wine exits. Older tiers
 stay quarantined even when their physical route completed.
+The dense root and its same-pause anchor must also agree on the exact shared
+angle and stored enemy/player origins used by retail `EXINSREPEAT(2)`; these
+globals are data, never a learner assumption.
 
 ## Runtime boundary
 

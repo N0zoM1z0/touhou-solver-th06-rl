@@ -25,7 +25,7 @@ source event.
 
 ## Dense corpus authority
 
-`control-v4` retains three independent layers:
+`control-v5` retains three independent layers:
 
 1. compact decoded values used by the resident controller and learner feature
    adapter;
@@ -42,14 +42,16 @@ also records the exact reachable-bullet slot linkage and the collision margin
 used for its Hard set. Every occupied Enemy also retains the pointed-to ANM
 sprite dimensions needed by bounds retirement. Dense facts include the exact
 EX callback dispatch table, current message wait, boss-present byte, timeline
-boss slots, and previous timeline timer; none may be recovered from a dead
-Wine pointer. Authoritative anchors retain immutable stage/ECL graphs.
+boss slots, previous timeline timer, and shared angle/origin globals used by
+`EXINSREPEAT(2)`; none may be recovered from a dead Wine pointer.
+Authoritative anchors retain immutable stage/ECL graphs and the same-pause
+global-state cross-check.
 
 A stage root is attached to the first dense frame of that stage. A new root is
 attached on the same frame whenever the live authority exposes an immutable
 timeline/ECL address outside the active root. `th06_rl.th06.source_dataset` then
 loads each frame as `(dense raw facts, active immutable anchor)` and fails
-closed on an uncovered live pointer or missing geometry. `control-v3` and
+closed on an uncovered live pointer or missing geometry. `control-v4` and
 earlier corpora are not training-compatible with this contract.
 
 The offline layer retains active player-shot geometry/timers, occupied item
@@ -93,7 +95,7 @@ latency, and replay parity pass; an observed-only action set must never be
 described or promoted as a complete retail-safe set.
 
 The run audit also performs an offline causal cross-check. For every adjacent
-`control-v4` root within Hard-4, it asks whether the preceding committed frame
+`control-v5` root within Hard-4, it asks whether the preceding committed frame
 contains every retained bullet, lethal enemy body, and laser collision
 geometry that can intersect the player's preceding reachable envelope. This
 is a one-sided falsifier: a retained uncovered hazard rejects the run, while a

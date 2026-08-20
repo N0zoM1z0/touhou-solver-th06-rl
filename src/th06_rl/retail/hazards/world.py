@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from ..model import Bullet, EnemySpawner, Snapshot, StageTimelineInstruction
+from ..model import (
+    Bullet,
+    EnemySpawner,
+    RepeatStarState,
+    Snapshot,
+    StageTimelineInstruction,
+)
 from .births import UnsupportedBirthModel
 from .bullets import (
     RAINBOW_ACCELERATION_AXIS_BOUND,
@@ -34,6 +40,20 @@ SOURCE_RANDOM_TIMELINE_HEIGHT = 416.0
 
 def _program_can_create_enemy(emitter: EnemySpawner) -> bool:
     return any(instruction.opcode == 95 for instruction in emitter.ecl_program)
+
+
+def _program_can_repeat_star(emitter: EnemySpawner) -> bool:
+    if emitter.repeat_ex_index == 2:
+        return True
+    for instruction in emitter.ecl_program:
+        if instruction.opcode != 122:
+            continue
+        raw = bytes.fromhex(instruction.raw_hex)
+        if len(raw) >= 16 and int.from_bytes(
+            raw[12:16], "little", signed=True
+        ) == 2:
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -65,6 +85,7 @@ class WorldForecastContinuation:
     framewise: bool
     elapsed_frames: int = 0
     boss_present: bool | None = None
+    repeat_star_state: RepeatStarState | None = None
 
 
 def _boss_present_after_emitter(
@@ -196,6 +217,7 @@ def _forecast_hard_emitter_batched(
     *,
     start_lead: int = 0,
     enemy_kill_all_is_noop: bool,
+    allow_repeat_star: bool,
 ) -> WorldBirthForecast:
     """Advance one emitter across source timeline interrupt boundaries."""
     horizon = len(player_positions)
@@ -214,6 +236,9 @@ def _forecast_hard_emitter_batched(
     )
     cursor = start_lead
     state: EnemySpawner | None = emitter
+    repeat_star_state = (
+        snapshot.repeat_star_state if allow_repeat_star else None
+    )
     for boundary, event in (*events, (horizon, None)):
         if state is None:
             if event is not None:
@@ -250,6 +275,7 @@ def _forecast_hard_emitter_batched(
                             offset + frame
                         )
                     ),
+                    repeat_star_state=repeat_star_state,
                 )
             except UnsupportedBirthModel as error:
                 return WorldBirthForecast(
@@ -278,6 +304,7 @@ def _forecast_hard_emitter_batched(
                     bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
             state = forecast.next_spawner
+            repeat_star_state = forecast.repeat_star_state
             if state is None and not forecast.finished:
                 return WorldBirthForecast(
                     tuple(map(tuple, births)),
@@ -311,6 +338,7 @@ def _forecast_hard_emitter_with_lasers(
     start_lead: int,
     enemy_kill_all_is_noop: bool,
     laser_world: HardLaserWorld,
+    allow_repeat_star: bool,
 ) -> WorldBirthForecast:
     """Advance ECL then the shared BulletManager phase one frame at a time."""
     horizon = len(player_positions)
@@ -329,6 +357,9 @@ def _forecast_hard_emitter_with_lasers(
         and lead >= start_lead
     }
     state: EnemySpawner | None = emitter
+    repeat_star_state = (
+        snapshot.repeat_star_state if allow_repeat_star else None
+    )
 
     def result(covered: int, reason: str = "") -> WorldBirthForecast:
         return WorldBirthForecast(
@@ -387,6 +418,7 @@ def _forecast_hard_emitter_with_lasers(
                             offset + frame
                         )
                     ),
+                    repeat_star_state=repeat_star_state,
                 )
             except UnsupportedBirthModel as error:
                 return result(frame_index, str(error))
@@ -396,6 +428,7 @@ def _forecast_hard_emitter_with_lasers(
             if forecast.covered_frames < 1:
                 return result(frame_index, forecast.reason)
             state = forecast.next_spawner
+            repeat_star_state = forecast.repeat_star_state
             if state is None and not forecast.finished:
                 return result(
                     frame_index + 1,
@@ -416,6 +449,7 @@ def _forecast_hard_emitter(
     start_lead: int = 0,
     enemy_kill_all_is_noop: bool,
     laser_world: HardLaserWorld | None = None,
+    allow_repeat_star: bool = True,
 ) -> WorldBirthForecast:
     """Use the compact mutable world only when a reachable laser op needs it."""
     if laser_world is None:
@@ -425,6 +459,7 @@ def _forecast_hard_emitter(
             player_positions,
             start_lead=start_lead,
             enemy_kill_all_is_noop=enemy_kill_all_is_noop,
+            allow_repeat_star=allow_repeat_star,
         )
         if (
             batched.covered_frames == len(player_positions)
@@ -439,6 +474,7 @@ def _forecast_hard_emitter(
         start_lead=start_lead,
         enemy_kill_all_is_noop=enemy_kill_all_is_noop,
         laser_world=laser_world,
+        allow_repeat_star=allow_repeat_star,
     )
 
 
@@ -585,6 +621,12 @@ def _forecast_hard_timeline_births(
                     offset + frame
                 )
             ),
+            # Timeline children are forecast in a compact world separate from
+            # the live slot loop.  Letting either world mutate the same retail
+            # globals would invent an ordering, so Hard stops if the child
+            # activates EXINSREPEAT(2).  Nominal replay owns the exact shared
+            # state and models the real frame-first/slot-second order.
+            repeat_star_state=None,
         )
         if inline.covered_frames < 1:
             return WorldBirthForecast(
@@ -647,6 +689,7 @@ def _forecast_hard_timeline_births(
             start_lead=lead,
             enemy_kill_all_is_noop=False,
             laser_world=laser_world,
+            allow_repeat_star=False,
         )
         for offset, frame_births in enumerate(ordinary.births):
             births[offset].extend(frame_births)
@@ -695,6 +738,7 @@ def _forecast_nominal_without_shared_rng(
     emitters: tuple[EnemySpawner, ...],
     rng: RngState,
     boss_present: bool | None,
+    repeat_star_state: RepeatStarState | None,
 ) -> WorldBirthForecast | None:
     """Batch independent emitters only after proving that none reads RNG.
 
@@ -708,7 +752,11 @@ def _forecast_nominal_without_shared_rng(
     bodies: list[list[tuple[float, float, float, float]]] = [
         [] for _ in player_positions
     ]
-    if any(_program_can_create_enemy(emitter) for emitter in emitters):
+    if any(
+        _program_can_create_enemy(emitter)
+        or _program_can_repeat_star(emitter)
+        for emitter in emitters
+    ):
         # A child must join the manager's slot-ordered loop immediately; a
         # whole-emitter batch cannot preserve that interleaving.
         return None
@@ -725,6 +773,7 @@ def _forecast_nominal_without_shared_rng(
                 _NoRngState(rng.seed, rng.generation_count),
                 allow_player_variables=True,
                 radial_births=False,
+                repeat_star_state=repeat_star_state,
             )
         except (_NominalRngConsumed, UnsupportedBirthModel):
             return None
@@ -757,6 +806,7 @@ def _forecast_nominal_without_shared_rng(
             True,
             len(player_positions),
             boss_present,
+            repeat_star_state,
         ),
     )
 
@@ -812,6 +862,7 @@ def _forecast_nominal_from_state(
     start_lead: int = 0,
     combat=None,
     boss_present: bool | None = None,
+    repeat_star_state: RepeatStarState | None = None,
 ) -> WorldBirthForecast:
     births: list[list[Bullet]] = [[] for _ in player_positions]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -822,6 +873,8 @@ def _forecast_nominal_from_state(
     )
     if boss_present is None:
         boss_present = snapshot.boss_present
+    if repeat_star_state is None:
+        repeat_star_state = snapshot.repeat_star_state
     if timeline_transitions:
         framewise = True
     if combat is not None:
@@ -847,6 +900,7 @@ def _forecast_nominal_from_state(
                 framewise=framewise,
                 start_lead=start_lead,
                 boss_present=boss_present,
+                repeat_star_state=repeat_star_state,
             )
             if (
                 prefix.covered_frames == transition_prefix_start
@@ -871,6 +925,7 @@ def _forecast_nominal_from_state(
                 framewise=True,
                 start_lead=start_lead,
                 boss_present=boss_present,
+                repeat_star_state=repeat_star_state,
             )
             if (
                 prefix.covered_frames == transition_prefix_frames
@@ -892,6 +947,7 @@ def _forecast_nominal_from_state(
                     (), rng.seed, rng.generation_count, False,
                     start_lead + len(player_positions),
                     boss_present,
+                    repeat_star_state,
                 ),
             )
         if len(emitters) != 1:
@@ -912,6 +968,7 @@ def _forecast_nominal_from_state(
                 # unknown future player damage. Preserve that exact contract
                 # when an already-started forecast is extended.
                 model_player_damage=False,
+                repeat_star_state=repeat_star_state,
             )
         except UnsupportedBirthModel as error:
             return WorldBirthForecast(
@@ -939,6 +996,7 @@ def _forecast_nominal_from_state(
                 _boss_present_after_emitter(
                     boss_present, emitter, forecast.next_spawner
                 ),
+                forecast.repeat_star_state,
             )
             if (
                 forecast.covered_frames == len(player_positions)
@@ -960,7 +1018,12 @@ def _forecast_nominal_from_state(
 
     if not timeline_transitions and combat is None:
         batched = _forecast_nominal_without_shared_rng(
-            snapshot, player_positions, emitters, rng, boss_present
+            snapshot,
+            player_positions,
+            emitters,
+            rng,
+            boss_present,
+            repeat_star_state,
         )
         if batched is not None:
             return replace(
@@ -1077,6 +1140,7 @@ def _forecast_nominal_from_state(
                 record_enemy_kill_all=combat is not None,
                 laser_world=combat,
                 spawn_inline=True,
+                repeat_star_state=repeat_star_state,
             )
             if inline.covered_frames < 1:
                 return WorldBirthForecast(
@@ -1088,6 +1152,7 @@ def _forecast_nominal_from_state(
                     tuple(tuple(frame) for frame in bodies),
                 )
             births[frame_index].extend(inline.births[0])
+            repeat_star_state = inline.repeat_star_state
             if combat is not None and inline.effect_spawns:
                 combat.observe_effect_spawns(inline.effect_spawns[0])
             if combat is not None and inline.item_spawns:
@@ -1162,6 +1227,7 @@ def _forecast_nominal_from_state(
                     model_player_damage=combat is None,
                     record_enemy_kill_all=combat is not None,
                     laser_world=combat,
+                    repeat_star_state=repeat_star_state,
                 )
             except UnsupportedBirthModel as error:
                 return WorldBirthForecast(
@@ -1178,6 +1244,7 @@ def _forecast_nominal_from_state(
                     f"emitter {emitter.slot}: {forecast.reason}",
                 )
             births[frame_index].extend(forecast.births[0])
+            repeat_star_state = forecast.repeat_star_state
             if combat is not None and forecast.effect_spawns:
                 combat.observe_effect_spawns(forecast.effect_spawns[0])
             if combat is not None and forecast.item_spawns:
@@ -1258,6 +1325,7 @@ def _forecast_nominal_from_state(
             True,
             start_lead + len(player_positions),
             boss_present,
+            repeat_star_state,
         ),
     )
 
@@ -1284,6 +1352,7 @@ def extend_nominal_world_births(
         framewise=continuation.framewise,
         start_lead=continuation.elapsed_frames,
         boss_present=continuation.boss_present,
+        repeat_star_state=continuation.repeat_star_state,
     )
     births = prefix.births + tail.births
     # An empty body_hazards tuple is the compact representation for "no body
@@ -1362,6 +1431,18 @@ def forecast_world_births(
     lasers: list[list[LaserHazard]] = [[] for _ in player_positions]
     emitters = tuple(sorted(snapshot.spawners, key=lambda item: item.slot))
     if rng_mode == "fail-closed":
+        star_emitters = tuple(
+            emitter for emitter in emitters
+            if _program_can_repeat_star(emitter)
+        )
+        if len(star_emitters) > 1:
+            return WorldBirthForecast(
+                tuple(tuple(frame) for frame in births),
+                _project_hazards(births, True),
+                0,
+                "multiple emitters can overwrite shared repeating-star globals",
+                tuple(tuple(frame) for frame in bodies),
+            )
         enemy_kill_all_is_noop = not any(
             not emitter.is_boss and emitter.death_callback_sub >= 0
             for emitter in emitters

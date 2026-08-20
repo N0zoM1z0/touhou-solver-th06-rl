@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import struct
+from dataclasses import replace
 
 import pytest
 
@@ -11,9 +12,13 @@ from th06_rl.retail.model import (
     EclInstruction,
     EnemySpawner,
     Laser,
+    RepeatStarState,
     Snapshot,
     StageTimelineInstruction,
 )
+from th06_rl.retail.hazards.ecl import forecast_ecl_births
+from th06_rl.retail.hazards.rng import RngState
+from th06_rl.retail.hazards.world import forecast_world_births
 from th06_rl.th06.source import AuthorityUnavailable, lower_source_forecast
 
 
@@ -118,6 +123,9 @@ def _snapshot(spawner: EnemySpawner, *, lasers=(), bullets=()) -> Snapshot:
         bullet_sizes=((1.0, 1.0),),
         timeline_instructions=(timeline_end,),
         timeline_complete=True,
+        repeat_star_state=RepeatStarState(
+            (0.0,) * 6, 192.0, 128.0, 192.0, 400.0
+        ),
     )
 
 
@@ -309,3 +317,210 @@ def test_source_commitment_encloses_random_area_external_shot() -> None:
     assert first.right >= 258.0
     assert first.top <= 350.0
     assert first.bottom >= 450.0
+
+
+def _repeat_star_instruction(address: int, time: int) -> EclInstruction:
+    instruction, raw = _instruction(address, time, 122, 16)
+    struct.pack_into("<i", raw, 0x0C, 2)
+    return _with_raw(instruction, raw)
+
+
+def _repeat_star_pattern() -> BulletPattern:
+    return BulletPattern(
+        0, 0.0, 0.0, 1.0, 2.0,
+        (0.0,) * 4, (0,) * 4,
+        1, 1, 1, 0, 1.0, 1.0,
+    )
+
+
+def test_future_repeat_star_instruction_covers_the_full_hard_horizon() -> None:
+    repeat = _repeat_star_instruction(0x12000, 3)
+    end, _raw = _instruction(0x12010, -1, 0)
+    spawner = _spawner(
+        repeat,
+        end,
+        pattern=_repeat_star_pattern(),
+        ecl_ints=(0, 0, 0, 12, 0, 0, 0, 0),
+        ecl_floats=(0.0, 0.0, 0.0, 10.0),
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 400.0),) * 4
+    )
+
+    assert forecast.covered_frames == 4
+    assert not forecast.reason
+    assert len(forecast.births[3]) == 5
+
+
+def test_repeat_star_hard_envelope_keeps_full_origin_and_speed_support() -> None:
+    repeat = _repeat_star_instruction(0x13000, 0)
+    end, _raw = _instruction(0x13010, -1, 0)
+    star_state = RepeatStarState(
+        (0.0,) * 6, 192.0, 128.0, 192.0, 400.0
+    )
+    spawner = _spawner(
+        repeat,
+        end,
+        pattern=_repeat_star_pattern(),
+        ecl_ints=(0, 0, 0, 12, 0, 0, 0, 0),
+        ecl_floats=(0.0, 0.0, 0.0, 10.0),
+    )
+
+    forecast = forecast_ecl_births(
+        spawner,
+        ((192.0, 400.0),) * 4,
+        3,
+        0,
+        ((1.0, 1.0),),
+        radial_births=True,
+        abstract_rng=True,
+        model_player_damage=False,
+        repeat_star_state=star_state,
+    )
+
+    assert forecast.covered_frames == 4
+    assert len(forecast.births[0]) == 5
+    assert all(bullet.half_width == 11.0 for bullet in forecast.births[0])
+    assert all(bullet.half_height == 11.0 for bullet in forecast.births[0])
+    assert all(bullet.speed == 3.0 for bullet in forecast.births[0])
+    assert forecast.next_spawner is not None
+    assert forecast.next_spawner.repeat_ex_index == 2
+    assert forecast.next_spawner.ecl_ints[2] == 4
+    assert forecast.repeat_star_state is not None
+    assert forecast.repeat_star_state.angles_known is False
+
+
+def test_repeat_star_nominal_replay_consumes_exact_shared_rng_order() -> None:
+    repeat = _repeat_star_instruction(0x14000, 0)
+    end, _raw = _instruction(0x14010, -1, 0)
+    star_state = RepeatStarState(
+        (0.0,) * 6, 0.0, 0.0, 0.0, 0.0
+    )
+    spawner = _spawner(
+        repeat,
+        end,
+        pattern=_repeat_star_pattern(),
+        ecl_ints=(0, 0, 0, 12, 0, 0, 0, 0),
+        ecl_floats=(0.0, 0.0, 0.0, 10.0),
+    )
+    rng = RngState(1234, 20)
+
+    forecast = forecast_ecl_births(
+        spawner,
+        ((192.0, 400.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        rng=rng,
+        model_player_damage=False,
+        repeat_star_state=star_state,
+    )
+
+    assert forecast.covered_frames == 1
+    assert len(forecast.births[0]) == 5
+    # Six f32 draws, each sourced from two GetRandomU16 calls.
+    assert rng.generation_count == 32
+    assert all(1.0 <= bullet.speed <= 3.0 for bullet in forecast.births[0])
+    assert all(
+        math.isclose(
+            math.hypot(bullet.x - 192.0, bullet.y - 400.0),
+            10.0,
+            rel_tol=1e-5,
+        )
+        for bullet in forecast.births[0]
+    )
+    assert forecast.repeat_star_state is not None
+    assert forecast.repeat_star_state.angles_known is True
+
+
+def test_nominal_repeat_star_globals_flow_in_enemy_slot_order() -> None:
+    end, _raw = _instruction(0x15000, -1, 0)
+    first = _spawner(
+        end,
+        end,
+        x=100.0,
+        y=100.0,
+        repeat_ex_index=2,
+        pattern=_repeat_star_pattern(),
+        ecl_ints=(0, 0, 0, 12, 0, 0, 0, 0),
+        ecl_floats=(0.0, 0.0, 0.0, 10.0),
+    )
+    second = _spawner(
+        end,
+        end,
+        slot=1,
+        x=300.0,
+        y=200.0,
+        repeat_ex_index=2,
+        pattern=_repeat_star_pattern(),
+        ecl_ints=(0, 0, 6, 12, 0, 0, 0, 0),
+        ecl_floats=(0.0, 0.0, 0.0, 0.0),
+    )
+    snapshot = replace(
+        _snapshot(first),
+        spawners=(first, second),
+        rng_seed=1234,
+        rng_generation=20,
+    )
+
+    forecast = forecast_world_births(
+        snapshot,
+        ((192.0, 400.0),),
+        rng_mode="nominal",
+    )
+
+    assert forecast.covered_frames == 1
+    assert len(forecast.births[0]) == 10
+    assert all(
+        bullet.x == pytest.approx(104.6, abs=1e-4)
+        and bullet.y == pytest.approx(115.0, abs=1e-4)
+        for bullet in forecast.births[0][5:]
+    )
+    assert forecast.continuation is not None
+    assert forecast.continuation.rng_generation == 42
+    assert forecast.continuation.repeat_star_state is not None
+    assert forecast.continuation.repeat_star_state.enemy_x == 100.0
+    assert forecast.continuation.repeat_star_state.enemy_y == 100.0
+
+
+def test_hard_rejects_two_shared_repeat_star_writers() -> None:
+    end, _raw = _instruction(0x16000, -1, 0)
+    first = _spawner(end, end, repeat_ex_index=2)
+    second = _spawner(end, end, slot=1, repeat_ex_index=2)
+    snapshot = replace(_snapshot(first), spawners=(first, second))
+
+    forecast = forecast_world_births(
+        snapshot, ((192.0, 400.0),) * 4
+    )
+
+    assert forecast.covered_frames == 0
+    assert "shared repeating-star globals" in forecast.reason
+
+
+def test_hard_timeline_child_cannot_own_shared_repeat_star_globals() -> None:
+    live_end, _raw = _instruction(0x17000, -1, 0)
+    repeat = _repeat_star_instruction(0x17100, 0)
+    child_end, _raw = _instruction(0x17110, -1, 0)
+    spawn_raw = bytearray(24)
+    struct.pack_into("<fffhh", spawn_raw, 8, 192.0, 128.0, 0.0, 100, -1)
+    spawn = StageTimelineInstruction(
+        0x20000, 0, 0, 0, len(spawn_raw), spawn_raw.hex()
+    )
+    timeline_end = StageTimelineInstruction(
+        0x20018, -1, 0, 0, 8, "00" * 8
+    )
+    snapshot = replace(
+        _snapshot(_spawner(live_end, live_end)),
+        boss_present=False,
+        timeline_instructions=(spawn, timeline_end),
+        timeline_ecl_program=(repeat, child_end),
+        ecl_subroutines=(repeat.address,),
+    )
+
+    forecast = forecast_world_births(
+        snapshot, ((192.0, 400.0),) * 4
+    )
+
+    assert forecast.covered_frames == 0
+    assert "captured shared globals" in forecast.reason

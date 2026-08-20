@@ -21,6 +21,7 @@ from th06_rl.retail.model import (
     Bullet,
     ItemState,
     PlayerAttackState,
+    RepeatStarState,
     Snapshot,
 )
 from th06_rl.th06.control_capture import (
@@ -225,7 +226,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
-    assert frame["schema_version"] == "th06-rl-authoritative-frame-v8"
+    assert frame["schema_version"] == "th06-rl-authoritative-frame-v9"
     assert frame["decision"]["dialogue_delivery"] == [
         {
             "stage": 1,
@@ -557,7 +558,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         }
 
 
-def test_control_v4_retains_hazard_source_records() -> None:
+def test_control_v5_retains_hazard_source_records() -> None:
     tail_size = (
         native.ENEMY_MANAGER_SIZE
         - native.ENEMY_ARRAY_OFFSET
@@ -647,6 +648,9 @@ def test_control_v4_retains_hazard_source_records() -> None:
         timeline_boss_slots=(-1,) * 8,
         timeline_time_previous=0,
         boss_present=False,
+        repeat_star_state=RepeatStarState(
+            (0.0,) * 6, 192.0, 128.0, 192.0, 400.0
+        ),
     )
 
     decoded = decode_control_snapshot({
@@ -665,10 +669,18 @@ def test_control_v4_retains_hazard_source_records() -> None:
     assert decoded.score == 123456
     assert decoded.graze_in_stage == 7
     assert decoded.enemy_sprite_dimensions == ((0x234567, 32.0, 48.0),)
+    assert decoded.repeat_star_state == base.repeat_star_state
 
     incomplete = replace(base, enemy_sprite_dimensions=())
-    with pytest.raises(ValueError, match="control-v4 source/factual"):
+    with pytest.raises(ValueError, match="control-v5 source/factual"):
         decode_control_snapshot({
             field.name: getattr(incomplete, field.name)
             for field in __import__("dataclasses").fields(incomplete)
+        })
+
+    missing_star_state = replace(base, repeat_star_state=None)
+    with pytest.raises(ValueError, match="control-v5 source/factual"):
+        decode_control_snapshot({
+            field.name: getattr(missing_star_state, field.name)
+            for field in __import__("dataclasses").fields(missing_star_state)
         })

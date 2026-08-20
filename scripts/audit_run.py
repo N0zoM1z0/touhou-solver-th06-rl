@@ -313,7 +313,7 @@ def _audit_source_successor_coverage(
     """
     paths = _stream_paths(run_dir, manifest, "frames")
     skipped = {
-        "non_control_v4": 0,
+        "non_control_v5": 0,
         "source_uncommitted": 0,
         "stage_boundary": 0,
         "outside_hard_horizon": 0,
@@ -339,10 +339,10 @@ def _audit_source_successor_coverage(
         after = current_snapshot
         decision = previous_row.get("decision") or {}
         tier = str(getattr(before, "capture_tier", ""))
-        if tier != "control-v4" or str(
+        if tier != "control-v5" or str(
             getattr(after, "capture_tier", "")
-        ) != "control-v4":
-            skipped["non_control_v4"] += 1
+        ) != "control-v5":
+            skipped["non_control_v5"] += 1
         elif decision.get("source_commitment") != "source-complete-hard-v1":
             skipped["source_uncommitted"] += 1
         elif before.stage != after.stage:

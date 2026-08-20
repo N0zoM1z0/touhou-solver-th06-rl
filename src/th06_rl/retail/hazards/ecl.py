@@ -21,6 +21,7 @@ from ..model import (
     EnemySpawner,
     EclInstruction,
     Laser,
+    RepeatStarState,
 )
 from .births import UnsupportedBirthModel, spawn_pattern, spawn_pattern_envelope
 from .enemies import finish_motion_values, interpolation_progress
@@ -443,12 +444,50 @@ class EclForecast:
     item_spawns: tuple[int, ...] = ()
     item_births: tuple[tuple[EclItemBirth, ...], ...] = ()
     enemy_kill_all: tuple[bool, ...] = ()
+    repeat_star_state: RepeatStarState | None = None
 
 
 @dataclass(frozen=True)
 class FloatInterval:
     low: float
     high: float
+
+
+def _add_normalize_angle(left: float, right: float) -> float:
+    """Mirror source ``utils::AddNormalizeAngle`` at f32 stores."""
+    value = _f32(left + right)
+    pi = _f32(math.pi)
+    tau = _f32(math.tau)
+    iterations = 0
+    while value > pi:
+        value = _f32(value - tau)
+        iterations += 1
+        if iterations > 17:
+            break
+    while value < -pi:
+        value = _f32(value + tau)
+        iterations += 1
+        if iterations > 17:
+            break
+    return value
+
+
+def _valid_repeat_star_state(state: RepeatStarState | None) -> bool:
+    return bool(
+        state is not None
+        and len(state.angles) == 6
+        and all(math.isfinite(value) for value in (
+            *state.angles,
+            state.enemy_x,
+            state.enemy_y,
+            state.player_x,
+            state.player_y,
+            state.enemy_uncertainty_x,
+            state.enemy_uncertainty_y,
+        ))
+        and state.enemy_uncertainty_x >= 0.0
+        and state.enemy_uncertainty_y >= 0.0
+    )
 
 
 @lru_cache(maxsize=256)
@@ -923,6 +962,7 @@ def _forecast_ecl_births_single(
     spawn_inline: bool = False,
     record_bullet_stop=None,
     record_bullet_release=None,
+    repeat_star_state: RepeatStarState | None = None,
 ) -> EclForecast:
     """Forecast one emitter until the first unsupported source instruction."""
     horizon = len(player_positions)
@@ -938,8 +978,21 @@ def _forecast_ecl_births_single(
     enemy_kill_all = [False for _ in player_positions]
     if not spawner.ecl_program or spawner.next_instruction is None:
         return EclForecast(tuple(map(tuple, births)), 0, "missing ECL instruction graph")
-    if spawner.repeat_ex_index is not None:
-        return EclForecast(tuple(map(tuple, births)), 0, "unsupported repeating ECL callback")
+    repeat_ex_index = spawner.repeat_ex_index
+    if repeat_ex_index not in (None, 2):
+        return EclForecast(
+            tuple(map(tuple, births)),
+            0,
+            f"unsupported repeating ECL external instruction {repeat_ex_index}",
+        )
+    if repeat_ex_index == 2 and not _valid_repeat_star_state(
+        repeat_star_state
+    ):
+        return EclForecast(
+            tuple(map(tuple, births)),
+            0,
+            "repeating-star callback lacks captured shared globals",
+        )
     program = _compiled_program(spawner.ecl_program)
     instruction_address = spawner.next_instruction.address
     current_time = spawner.ecl_time
@@ -1625,11 +1678,11 @@ def _forecast_ecl_births_single(
                         "ECL return has no captured caller context",
                     )
                 caller = call_stack.pop()
-                if caller.repeat_ex_index is not None:
+                if caller.repeat_ex_index not in (None, 2):
                     return EclForecast(
                         tuple(map(tuple, births)),
                         frame_index,
-                        "ECL caller has a repeating callback",
+                        "ECL caller has an unsupported repeating callback",
                     )
                 instruction_address = caller.instruction_address
                 current_time = caller.time
@@ -1637,6 +1690,7 @@ def _forecast_ecl_births_single(
                 integers = list(caller.ints)
                 floats = list(caller.floats)
                 compare_register = caller.compare
+                repeat_ex_index = caller.repeat_ex_index
                 continue
             elif OPCODE_CALL <= instruction.opcode <= OPCODE_CALL_NOT_EQUAL:
                 take_call = instruction.opcode == OPCODE_CALL
@@ -1692,7 +1746,7 @@ def _forecast_ecl_births_single(
                             tuple(integers),
                             tuple(floats),
                             compare_register,
-                            None,
+                            repeat_ex_index,
                         ))
                     integers[0] = var0
                     floats[0] = struct.unpack_from("<f", raw, 0x14)[0]
@@ -2232,11 +2286,21 @@ def _forecast_ecl_births_single(
                 item_spawns[frame_index] += 1
             elif instruction.opcode == OPCODE_EX_REPEAT:
                 index = struct.unpack_from("<i", raw, 0x0C)[0]
-                if index >= 0:
+                if index < 0:
+                    repeat_ex_index = None
+                elif index == 2:
+                    if not _valid_repeat_star_state(repeat_star_state):
+                        return EclForecast(
+                            tuple(map(tuple, births)),
+                            frame_index,
+                            "repeating-star callback lacks captured shared globals",
+                        )
+                    repeat_ex_index = 2
+                else:
                     return EclForecast(
                         tuple(map(tuple, births)),
                         frame_index,
-                        f"repeating ECL external instruction {index} can mutate hazards",
+                        f"unsupported repeating ECL external instruction {index}",
                     )
             elif instruction.opcode == OPCODE_TIME_SET:
                 variable = struct.unpack_from("<i", raw, 0x0C)[0]
@@ -2385,6 +2449,7 @@ def _forecast_ecl_births_single(
                             offset + frame
                         )
                     ),
+                    repeat_star_state=repeat_star_state,
                 )
                 if newborn.covered_frames < 1:
                     return EclForecast(
@@ -2411,8 +2476,15 @@ def _forecast_ecl_births_single(
                         )
                     if newborn.next_spawner is not None:
                         created_emitters.append(newborn.next_spawner)
+                    repeat_star_state = newborn.repeat_star_state
                     instruction_address = next_address
                     continue
+                if newborn.repeat_star_state != repeat_star_state:
+                    return EclForecast(
+                        tuple(map(tuple, births)),
+                        frame_index,
+                        "spawned repeating-star callback needs exact world globals",
+                    )
                 child_states = []
                 if newborn.next_spawner is not None:
                     # If SpawnEnemy chose an already-passed slot, this inline
@@ -2448,12 +2520,19 @@ def _forecast_ecl_births_single(
                                 offset + frame
                             )
                         ),
+                        repeat_star_state=repeat_star_state,
                     )
                     if updated.covered_frames < 1:
                         return EclForecast(
                             tuple(map(tuple, births)),
                             frame_index,
                             f"spawned emitter {sub_id}: {updated.reason}",
+                        )
+                    if updated.repeat_star_state != repeat_star_state:
+                        return EclForecast(
+                            tuple(map(tuple, births)),
+                            frame_index,
+                            "spawned repeating-star update needs exact slot order",
                         )
                     births[frame_index].extend(updated.births[0])
                     if updated.effect_spawns:
@@ -2510,7 +2589,14 @@ def _forecast_ecl_births_single(
                                     record_bullet_release(offset + frame)
                                 )
                             ),
+                            repeat_star_state=repeat_star_state,
                         )
+                        if future.repeat_star_state != repeat_star_state:
+                            return EclForecast(
+                                tuple(map(tuple, births)),
+                                frame_index,
+                                "future child repeating-star update needs a world model",
+                            )
                         for offset, frame_births in enumerate(
                             future.births,
                             frame_index + 1,
@@ -3165,6 +3251,222 @@ def _forecast_ecl_births_single(
                     interval_timer_high = min(interval_timer_high, interval - 1)
                 interval_timer = interval_timer_low
                 interval_subframe = 0.0
+        if life > 0 and repeat_ex_index is not None:
+            # EclManager invokes funcSetFunc after motion and the ordinary
+            # periodic shooter, but before player damage and the ECL timer
+            # tick. External instruction 2 owns currentContext.var2/var3 and
+            # float3, and mutates one process-global star state.
+            if repeat_ex_index != 2 or not _valid_repeat_star_state(
+                repeat_star_state
+            ):
+                return EclForecast(
+                    tuple(map(tuple, births)),
+                    frame_index,
+                    "unsupported or incomplete repeating ECL callback",
+                )
+            assert repeat_star_state is not None
+            counter = integers[2]
+            limit = integers[3]
+            if counter >= limit:
+                repeat_ex_index = None
+            else:
+                if counter < 0 or limit <= 0 or counter >= 0x7FFFFFFF:
+                    return EclForecast(
+                        tuple(map(tuple, births)),
+                        frame_index,
+                        "invalid repeating-star counter domain",
+                    )
+                state = repeat_star_state
+                if counter == 0:
+                    current_enemy_x, current_enemy_uncertainty_x = (
+                        _interval_center(enemy[0])
+                    )
+                    current_enemy_y, current_enemy_uncertainty_y = (
+                        _interval_center(enemy[1])
+                    )
+                    if abstract_rng:
+                        angles = state.angles
+                        angles_known = False
+                    else:
+                        if rng is None:
+                            return EclForecast(
+                                tuple(map(tuple, births)),
+                                frame_index,
+                                "repeating-star callback requires exact RNG state",
+                            )
+                        angle0 = _f32(
+                            rng.f32_zero_to_one() * _f32(math.tau)
+                            - _f32(math.pi)
+                        )
+                        angles = (
+                            angle0,
+                            _add_normalize_angle(
+                                angle0, _f32(4.0 * math.pi / 5.0)
+                            ),
+                            *state.angles[2:],
+                        )
+                        angles_known = True
+                    state = RepeatStarState(
+                        tuple(angles),
+                        _f32(current_enemy_x),
+                        _f32(current_enemy_y),
+                        _f32(player[0]),
+                        _f32(player[1]),
+                        angles_known,
+                        current_enemy_uncertainty_x,
+                        current_enemy_uncertainty_y,
+                    )
+                if counter % 30 == 0 and state.angles_known:
+                    angle0 = state.angles[1]
+                    generated = [angle0]
+                    for _index in range(5):
+                        generated.append(_add_normalize_angle(
+                            generated[-1], _f32(4.0 * math.pi / 5.0)
+                        ))
+                    state = replace(state, angles=tuple(generated))
+                if counter % 6 == 0:
+                    if pattern is None:
+                        return EclForecast(
+                            tuple(map(tuple, births)),
+                            frame_index,
+                            "repeating-star callback has no resolved bullet pattern",
+                        )
+                    radius = floats[3]
+                    if (
+                        isinstance(radius, FloatInterval)
+                        and not radial_births
+                    ) or not all(math.isfinite(value) for value in (
+                        (radius.low if isinstance(radius, FloatInterval) else radius),
+                        (radius.high if isinstance(radius, FloatInterval) else radius),
+                    )):
+                        return EclForecast(
+                            tuple(map(tuple, births)),
+                            frame_index,
+                            "invalid repeating-star radius",
+                        )
+                    pattern_position = _f32(float(counter) / float(limit))
+                    target_distance = _f32(pattern_position * _f32(0.1))
+                    stored_enemy_x: float | FloatInterval = state.enemy_x
+                    stored_enemy_y: float | FloatInterval = state.enemy_y
+                    if state.enemy_uncertainty_x:
+                        stored_enemy_x = FloatInterval(
+                            state.enemy_x - state.enemy_uncertainty_x,
+                            state.enemy_x + state.enemy_uncertainty_x,
+                        )
+                    if state.enemy_uncertainty_y:
+                        stored_enemy_y = FloatInterval(
+                            state.enemy_y - state.enemy_uncertainty_y,
+                            state.enemy_y + state.enemy_uncertainty_y,
+                        )
+                    base_x = _float_add(
+                        stored_enemy_x,
+                        _float_multiply(
+                            _float_subtract(state.player_x, stored_enemy_x),
+                            target_distance,
+                        ),
+                    )
+                    base_y = _float_add(
+                        stored_enemy_y,
+                        _float_multiply(
+                            _float_subtract(state.player_y, stored_enemy_y),
+                            target_distance,
+                        ),
+                    )
+                    pattern_position = _f32(pattern_position + _f32(0.5))
+                    working_pattern = replace(
+                        pattern,
+                        angle1=_f32(_f32(math.pi / 3.0) * pattern_position),
+                    )
+                    edge_position = _f32(float(counter % 30) / 30.0)
+                    radius_bound = _maximum_magnitude(radius)
+                    for star_index in range(5):
+                        if state.angles_known:
+                            offset0_x = _float_multiply(
+                                _f32(math.cos(state.angles[star_index])), radius
+                            )
+                            offset0_y = _float_multiply(
+                                _f32(math.sin(state.angles[star_index])), radius
+                            )
+                            offset1_x = _float_multiply(
+                                _f32(math.cos(state.angles[star_index + 1])), radius
+                            )
+                            offset1_y = _float_multiply(
+                                _f32(math.sin(state.angles[star_index + 1])), radius
+                            )
+                            offset_x = _float_add(
+                                offset0_x,
+                                _float_multiply(
+                                    _float_subtract(offset1_x, offset0_x),
+                                    edge_position,
+                                ),
+                            )
+                            offset_y = _float_add(
+                                offset0_y,
+                                _float_multiply(
+                                    _float_subtract(offset1_y, offset0_y),
+                                    edge_position,
+                                ),
+                            )
+                            origin = (
+                                _float_add(base_x, offset_x),
+                                _float_add(base_y, offset_y),
+                            )
+                        else:
+                            origin = (
+                                _float_add(
+                                    base_x,
+                                    FloatInterval(-radius_bound, radius_bound),
+                                ),
+                                _float_add(
+                                    base_y,
+                                    FloatInterval(-radius_bound, radius_bound),
+                                ),
+                            )
+                        if radial_births:
+                            speed_candidates = (
+                                working_pattern.speed1,
+                                _f32(
+                                    working_pattern.speed1
+                                    + working_pattern.speed2
+                                ),
+                            )
+                            randomized_speed1 = max(
+                                speed_candidates, key=abs
+                            )
+                        else:
+                            if rng is None:
+                                return EclForecast(
+                                    tuple(map(tuple, births)),
+                                    frame_index,
+                                    "repeating-star shot requires exact RNG state",
+                                )
+                            randomized_speed1 = _f32(
+                                rng.f32_in_range(working_pattern.speed2)
+                                + working_pattern.speed1
+                            )
+                        try:
+                            births[frame_index].extend(emit(
+                                replace(
+                                    working_pattern,
+                                    speed1=randomized_speed1,
+                                ),
+                                origin,
+                                player,
+                            ))
+                        except UnsupportedBirthModel as error:
+                            return EclForecast(
+                                tuple(map(tuple, births)), frame_index, str(error)
+                            )
+                        working_pattern = replace(
+                            working_pattern,
+                            angle1=_f32(
+                                working_pattern.angle1
+                                - _f32(_f32(math.pi / 6.0) * pattern_position)
+                            ),
+                        )
+                    pattern = working_pattern
+                repeat_star_state = state
+                integers[2] = counter + 1
         if not spawn_inline and interactable and model_player_damage:
             # EnemyManager caps player-shot damage at 70 per update. A
             # collidable non-boss can additionally lose 10 from kill-box
@@ -3221,6 +3523,7 @@ def _forecast_ecl_births_single(
             ecl_ints=tuple(integers),
             ecl_floats=tuple(floats),
             ecl_compare=compare_register,
+            repeat_ex_index=repeat_ex_index,
             next_instruction=next_instruction,
             ecl_stack=tuple(call_stack),
             interactable=interactable,
@@ -3275,6 +3578,7 @@ def _forecast_ecl_births_single(
         item_spawns=tuple(item_spawns),
         item_births=tuple(tuple(frame) for frame in item_births),
         enemy_kill_all=tuple(enemy_kill_all),
+        repeat_star_state=repeat_star_state,
     )
 
 
@@ -3293,6 +3597,7 @@ def _forecast_ecl_births_with_death_callbacks(
     model_player_damage: bool = True,
     record_bullet_stop=None,
     record_bullet_release=None,
+    repeat_star_state: RepeatStarState | None = None,
 ) -> EclForecast:
     """Union every reachable source death-callback pickup frame."""
     horizon = len(player_positions)
@@ -3328,6 +3633,7 @@ def _forecast_ecl_births_with_death_callbacks(
             model_player_damage=model_player_damage,
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
+            repeat_star_state=repeat_star_state,
         )
 
     program = _compiled_program(spawner.ecl_program)
@@ -3358,6 +3664,7 @@ def _forecast_ecl_births_with_death_callbacks(
         model_player_damage=model_player_damage,
         record_bullet_stop=record_bullet_stop,
         record_bullet_release=record_bullet_release,
+        repeat_star_state=repeat_star_state,
     )
     births = [list(frame) for frame in no_callback.births]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -3369,6 +3676,7 @@ def _forecast_ecl_births_with_death_callbacks(
     reason = no_callback.reason
 
     for callback_frame in range(earliest_callback, horizon):
+        callback_star_state = repeat_star_state
         if callback_frame:
             prefix = _forecast_ecl_births_single(
                 no_callback_spawner,
@@ -3385,6 +3693,7 @@ def _forecast_ecl_births_with_death_callbacks(
                 model_player_damage=model_player_damage,
                 record_bullet_stop=record_bullet_stop,
                 record_bullet_release=record_bullet_release,
+                repeat_star_state=repeat_star_state,
             )
             if prefix.covered_frames < callback_frame:
                 if prefix.covered_frames < covered_frames:
@@ -3392,6 +3701,7 @@ def _forecast_ecl_births_with_death_callbacks(
                     reason = prefix.reason
                 continue
             callback_source = prefix.next_spawner
+            callback_star_state = prefix.repeat_star_state
             if callback_source is None:
                 # The main ECL already despawned this branch before damage
                 # could invoke its callback.
@@ -3466,6 +3776,7 @@ def _forecast_ecl_births_with_death_callbacks(
                     offset + frame
                 )
             ),
+            repeat_star_state=callback_star_state,
         )
         for index, frame_births in enumerate(callback.births, callback_frame):
             births[index].extend(frame_births)
@@ -3501,6 +3812,7 @@ def _forecast_ecl_births_with_life_callbacks(
     model_player_damage: bool = True,
     record_bullet_stop=None,
     record_bullet_release=None,
+    repeat_star_state: RepeatStarState | None = None,
 ) -> EclForecast:
     """Forecast an emitter, branching over reachable hard life callbacks."""
     horizon = len(player_positions)
@@ -3537,6 +3849,7 @@ def _forecast_ecl_births_with_life_callbacks(
             model_player_damage,
             record_bullet_stop,
             record_bullet_release,
+            repeat_star_state,
         )
 
     program = _compiled_program(spawner.ecl_program)
@@ -3568,6 +3881,7 @@ def _forecast_ecl_births_with_life_callbacks(
         model_player_damage,
         record_bullet_stop,
         record_bullet_release,
+        repeat_star_state,
     )
     births = [list(frame) for frame in no_callback.births]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -3595,6 +3909,7 @@ def _forecast_ecl_births_with_life_callbacks(
                 model_player_damage,
                 record_bullet_stop,
                 record_bullet_release,
+                repeat_star_state,
             )
             if prefix.covered_frames < callback_frame or prefix.next_spawner is None:
                 branch_coverage = prefix.covered_frames
@@ -3647,6 +3962,11 @@ def _forecast_ecl_births_with_life_callbacks(
                 else lambda frame, offset=callback_frame: record_bullet_release(
                     offset + frame
                 )
+            ),
+            (
+                prefix.repeat_star_state
+                if callback_frame
+                else repeat_star_state
             ),
         )
         for index, frame_births in enumerate(callback.births, callback_frame):
@@ -3722,6 +4042,7 @@ def _forecast_abstract_integer_domains(
     enemy_kill_all_is_noop: bool,
     record_bullet_stop=None,
     record_bullet_release=None,
+    repeat_star_state: RepeatStarState | None = None,
 ) -> EclForecast:
     """Union every bounded source integer-RNG control-flow outcome."""
     pending: list[tuple[int, ...]] = [()]
@@ -3751,6 +4072,7 @@ def _forecast_abstract_integer_domains(
             choices,
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
+            repeat_star_state=repeat_star_state,
         )
         extent = forecast.unresolved_int_extent
         if extent:
@@ -3801,6 +4123,15 @@ def _forecast_abstract_integer_domains(
         if all(forecast.next_spawner == first_next for forecast in leaves)
         else None
     )
+    first_star_state = leaves[0].repeat_star_state if leaves else None
+    common_star_state = (
+        first_star_state
+        if all(
+            forecast.repeat_star_state == first_star_state
+            for forecast in leaves
+        )
+        else None
+    )
     return EclForecast(
         tuple(tuple(frame) for frame in births),
         covered_frames,
@@ -3808,6 +4139,7 @@ def _forecast_abstract_integer_domains(
         next_spawner=common_next,
         body_hazards=tuple(tuple(frame) for frame in bodies),
         finished=bool(leaves) and all(forecast.finished for forecast in leaves),
+        repeat_star_state=common_star_state,
     )
 
 
@@ -3829,6 +4161,7 @@ def forecast_ecl_births(
     spawn_inline: bool = False,
     record_bullet_stop=None,
     record_bullet_release=None,
+    repeat_star_state: RepeatStarState | None = None,
 ) -> EclForecast:
     """Forecast one emitter and preserve every bounded hard uncertainty."""
     if spawn_inline:
@@ -3852,6 +4185,7 @@ def forecast_ecl_births(
             spawn_inline=True,
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
+            repeat_star_state=repeat_star_state,
         )
     if record_enemy_kill_all:
         if abstract_rng or model_player_damage or rng is None:
@@ -3877,6 +4211,7 @@ def forecast_ecl_births(
             laser_world=laser_world,
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
+            repeat_star_state=repeat_star_state,
         )
     if laser_world is not None:
         if len(player_positions) != 1:
@@ -3909,6 +4244,7 @@ def forecast_ecl_births(
             laser_world=laser_world,
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
+            repeat_star_state=repeat_star_state,
         )
     if (
         abstract_rng
@@ -3938,6 +4274,7 @@ def forecast_ecl_births(
             enemy_kill_all_is_noop,
             record_bullet_stop,
             record_bullet_release,
+            repeat_star_state,
         )
     return _forecast_ecl_births_with_life_callbacks(
         spawner,
@@ -3954,4 +4291,5 @@ def forecast_ecl_births(
         model_player_damage,
         record_bullet_stop,
         record_bullet_release,
+        repeat_star_state,
     )

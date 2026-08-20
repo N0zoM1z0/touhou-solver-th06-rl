@@ -6,7 +6,7 @@ import struct
 import pytest
 
 from th06_rl.retail import native
-from th06_rl.retail.model import PlayerAttackState, Snapshot
+from th06_rl.retail.model import PlayerAttackState, RepeatStarState, Snapshot
 from th06_rl.th06.source_dataset import SourceDatasetError, validate_frame_authority
 from th06_rl.th06.control_capture import (
     CONTROL_CAPTURE_TIER,
@@ -25,6 +25,9 @@ def _pair() -> tuple[ControlSnapshot, Snapshot]:
         (), 0.0, 0.0, 0, False,
         0, 0, 0.0, 0, 0, 0.0,
         ((0.0, 0.0), (0.0, 0.0)), 0, False, False,
+    )
+    repeat_star_state = RepeatStarState(
+        (0.0,) * 6, 192.0, 128.0, 192.0, 400.0
     )
     tail_size = (
         native.ENEMY_MANAGER_SIZE
@@ -86,6 +89,7 @@ def _pair() -> tuple[ControlSnapshot, Snapshot]:
         timeline_boss_slots=(-1,) * 8,
         timeline_time_previous=9,
         boss_present=False,
+        repeat_star_state=repeat_star_state,
     )
     control = decode_control_snapshot({
         field.name: getattr(control, field.name)
@@ -115,11 +119,12 @@ def _pair() -> tuple[ControlSnapshot, Snapshot]:
         player_attack=attack,
         timeline_complete=True,
         ecl_ex_function_addresses=ex_addresses,
+        repeat_star_state=repeat_star_state,
     )
     return control, anchor
 
 
-def test_control_v4_frame_is_self_contained_after_wine_exit() -> None:
+def test_control_v5_frame_is_self_contained_after_wine_exit() -> None:
     control, anchor = _pair()
 
     validate_frame_authority(control, anchor)
@@ -150,3 +155,15 @@ def test_source_dataset_rejects_external_ex_dispatch_assumption() -> None:
             replace(control, ecl_ex_function_addresses=(0x500000,) * 17),
             anchor,
         )
+
+
+def test_source_dataset_rejects_mismatched_repeat_star_globals() -> None:
+    control, anchor = _pair()
+    assert anchor.repeat_star_state is not None
+    anchor = replace(
+        anchor,
+        repeat_star_state=replace(anchor.repeat_star_state, enemy_x=193.0),
+    )
+
+    with pytest.raises(SourceDatasetError, match="repeating-star globals"):
+        validate_frame_authority(control, anchor)

@@ -36,7 +36,7 @@ def _documents(stage: int = 4):
         "policy_state_sha256_before": "s",
     }
     run = {
-        "schemas": {"frame": "th06-rl-authoritative-frame-v8"},
+        "schemas": {"frame": "th06-rl-authoritative-frame-v9"},
         "metadata": {"planner": {
             "source_commitment": "source-complete-hard-v1",
             "publication_epoch": "source-root-process-suspended-v1",

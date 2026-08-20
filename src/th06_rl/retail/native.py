@@ -27,6 +27,7 @@ from .model import (
     PLAYER_INVULNERABLE,
     PlayerAttackState,
     PlayerShot,
+    RepeatStarState,
     Snapshot,
     StageTimelineInstruction,
 )
@@ -50,6 +51,9 @@ ADDR_ENEMY_MANAGER = 0x4B79C8
 ADDR_EFFECT_MANAGER = 0x487FE0
 ADDR_ECL_EX_TABLE = 0x476220
 ADDR_ECL_MANAGER = 0x487E50
+ADDR_STAR_ANGLE_TABLE = 0x487EDC
+ADDR_STAR_ENEMY_POSITION = 0x487F5C
+ADDR_STAR_PLAYER_POSITION = 0x487F68
 ADDR_ENEMY_CALC_CHAIN = 0x5A5FB4
 ADDR_BULLET_MANAGER = 0x5A5FF8
 ADDR_BULLET_ARRAY = 0x5AB5F8
@@ -273,6 +277,25 @@ class ResultScreenState:
     cursor: int
     replay_number: int
     selected_character: int
+
+
+def _read_repeat_star_state(process: "NativeProcess") -> RepeatStarState:
+    """Capture the three exact globals owned by external instruction 2."""
+    angles = struct.unpack(
+        "<6f", process.read(ADDR_STAR_ANGLE_TABLE, 6 * 4)
+    )
+    enemy_x, enemy_y, _enemy_z = struct.unpack(
+        "<3f", process.read(ADDR_STAR_ENEMY_POSITION, 3 * 4)
+    )
+    player_x, player_y, _player_z = struct.unpack(
+        "<3f", process.read(ADDR_STAR_PLAYER_POSITION, 3 * 4)
+    )
+    values = (*angles, enemy_x, enemy_y, player_x, player_y)
+    if not all(math.isfinite(value) for value in values):
+        raise RuntimeError("non-finite repeating-star global state")
+    return RepeatStarState(
+        tuple(angles), enemy_x, enemy_y, player_x, player_y
+    )
 
 
 class NativeDecodeError(RuntimeError):
@@ -1544,6 +1567,7 @@ def _read_snapshot_once(
     rng_seed, rng_generation = struct.unpack(
         "<HxxI", process.read(ADDR_RNG, 8)
     )
+    repeat_star_state = _read_repeat_star_state(process)
     time_stopped = bool(game[GAME_TIME_STOPPED_OFFSET])
     is_replay = bool(struct.unpack_from("<I", game, GAME_REPLAY_OFFSET)[0])
     frame_multiplier = struct.unpack("<f", process.read(ADDR_FRAME_MULTIPLIER, 4))[0]
@@ -2482,6 +2506,7 @@ def _read_snapshot_once(
         bombs_remaining,
         extra_lives,
         tuple(ex_function_addresses),
+        repeat_star_state,
     )
 
 

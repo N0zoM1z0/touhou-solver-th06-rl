@@ -1,4 +1,4 @@
-"""Algorithm-neutral access to source-authoritative control-v4 corpus rows.
+"""Algorithm-neutral access to source-authoritative control-v5 corpus rows.
 
 This loader deliberately returns the dense factual root and its active
 immutable source anchor separately.  It validates that no live ECL/timeline
@@ -186,7 +186,8 @@ def validate_frame_authority(
     """Fail closed unless one dense row is self-contained with its anchor."""
     if control.capture_tier != CONTROL_CAPTURE_TIER:
         raise SourceDatasetError(
-            f"unsupported dense tier {control.capture_tier!r}; control-v4 required"
+            f"unsupported dense tier {control.capture_tier!r}; "
+            f"{CONTROL_CAPTURE_TIER} required"
         )
     if (
         control.source_record_schema != SOURCE_RECORD_SCHEMA
@@ -209,6 +210,10 @@ def validate_frame_authority(
         anchor.ecl_ex_function_addresses
     ):
         raise SourceDatasetError("EX callback dispatch table disagrees with anchor")
+    if control.repeat_star_state != anchor.repeat_star_state:
+        raise SourceDatasetError(
+            "repeating-star globals disagree with the same-pause anchor"
+        )
 
     addresses = _source_addresses(anchor)
     timeline_pointer = _timeline_pointer(control)

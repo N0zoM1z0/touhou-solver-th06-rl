@@ -28,12 +28,13 @@ from ..retail.model import (
     Laser,
     PlayerAttackState,
     PlayerShot,
+    RepeatStarState,
     StageTimelineInstruction,
 )
 
 
-CONTROL_CAPTURE_TIER = "control-v4"
-SOURCE_RECORD_SCHEMA = "th06-1.02h-source-records-v2"
+CONTROL_CAPTURE_TIER = "control-v5"
+SOURCE_RECORD_SCHEMA = "th06-1.02h-source-records-v3"
 OFFLINE_FACT_SCHEMA = "th06-1.02h-offline-facts-v2"
 MAX_CAPTURE_ATTEMPTS = 8
 DYNAMIC_BULLET_FLAGS = 0xDF1
@@ -238,6 +239,9 @@ class ControlSnapshot:
     timeline_boss_slots: tuple[int, ...] = ()
     timeline_time_previous: int | None = None
     boss_present: bool | None = None
+    # Shared dynamic globals for EXINSREPEAT(2). This is required source
+    # authority in control-v5, not an inferred learner feature.
+    repeat_star_state: RepeatStarState | None = None
 
 
 def _finite(*values: float) -> bool:
@@ -563,6 +567,7 @@ def _decode_control_once(
         raise RuntimeError("invalid compact GameManager state")
 
     rng_seed, rng_generation = struct.unpack("<HxxI", process.read(native.ADDR_RNG, 8))
+    repeat_star_state = native._read_repeat_star_state(process)
     frame_multiplier = struct.unpack(
         "<f", process.read(native.ADDR_FRAME_MULTIPLIER, 4)
     )[0]
@@ -924,6 +929,7 @@ def _decode_control_once(
             (pointer, *source_sprite_dimensions[pointer])
             for pointer in sorted(enemy_sprite_pointers)
         ),
+        repeat_star_state=repeat_star_state,
     )
 
 
@@ -1030,6 +1036,7 @@ def read_safety_snapshot_pair(
         "power_item_count_for_score",
         "bombs_remaining",
         "extra_lives",
+        "repeat_star_state",
     ):
         if getattr(control, name) != getattr(authority, name):
             mismatches.append(name)
@@ -1177,6 +1184,12 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
     values.setdefault("timeline_boss_slots", ())
     values.setdefault("timeline_time_previous", None)
     values.setdefault("boss_present", None)
+    values.setdefault("repeat_star_state", None)
+    repeat_star_state = values["repeat_star_state"]
+    if isinstance(repeat_star_state, dict):
+        repeat_star_state = dict(repeat_star_state)
+        repeat_star_state["angles"] = tuple(repeat_star_state.get("angles", ()))
+        values["repeat_star_state"] = RepeatStarState(**repeat_star_state)
 
     def decode_dimensions(name: str) -> dict[int, tuple[float, float]]:
         dimensions = {}
@@ -1285,6 +1298,21 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
         )
         values["ecl_ex_function_addresses"] = ex_addresses
         values["timeline_boss_slots"] = timeline_boss_slots
+        repeat_state = values["repeat_star_state"]
+        repeat_state_complete = bool(
+            isinstance(repeat_state, RepeatStarState)
+            and repeat_state.angles_known
+            and len(repeat_state.angles) == 6
+            and repeat_state.enemy_uncertainty_x == 0.0
+            and repeat_state.enemy_uncertainty_y == 0.0
+            and all(math.isfinite(value) for value in (
+                *repeat_state.angles,
+                repeat_state.enemy_x,
+                repeat_state.enemy_y,
+                repeat_state.player_x,
+                repeat_state.player_y,
+            ))
+        )
         if (
             values["source_record_schema"] != SOURCE_RECORD_SCHEMA
             or values["factual_state_schema"] != OFFLINE_FACT_SCHEMA
@@ -1297,6 +1325,9 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
             or int(values["timeline_current_message_waits"]) < 0
             or values["timeline_time_previous"] is None
             or values["boss_present"] is None
+            or not repeat_state_complete
         ):
-            raise ValueError("control-v4 source/factual records are incomplete")
+            raise ValueError(
+                f"{CONTROL_CAPTURE_TIER} source/factual records are incomplete"
+            )
     return ControlSnapshot(**values)

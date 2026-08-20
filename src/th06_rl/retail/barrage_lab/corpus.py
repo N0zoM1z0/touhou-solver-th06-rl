@@ -16,6 +16,7 @@ from ..model import (
     Laser,
     PlayerAttackState,
     PlayerShot,
+    RepeatStarState,
     Snapshot,
     StageTimelineInstruction,
 )
@@ -120,6 +121,16 @@ def decode_snapshot(raw: dict) -> Snapshot:
                     for position in attack.get("orb_positions", ())
                 ),
             }
+        )
+    repeat_star_state = values.get("repeat_star_state")
+    if isinstance(repeat_star_state, dict):
+        values["repeat_star_state"] = RepeatStarState(
+            tuple(repeat_star_state.get("angles", ())),
+            float(repeat_star_state["enemy_x"]),
+            float(repeat_star_state["enemy_y"]),
+            float(repeat_star_state["player_x"]),
+            float(repeat_star_state["player_y"]),
+            bool(repeat_star_state.get("angles_known", True)),
         )
     return Snapshot(**values)
 
