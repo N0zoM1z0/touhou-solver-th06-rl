@@ -382,7 +382,14 @@ def run(args: argparse.Namespace) -> int:
                         "exploration_rate": args.exploration_rate,
                         "diagnostic_rng_seed": args.diagnostic_rng_seed,
                     },
+                    episode_unit=("route" if args.start_route else "practice-stage"),
+                    expected_stages=(
+                        tuple(range(1, 7))
+                        if args.start_route
+                        else (expected_stage,)
+                    ),
                 ),
+                max_run_bytes=int(args.max_corpus_gib * GIB),
                 deferred_compression=args.defer_corpus_compression,
             )
         lease = InputLease()
@@ -1569,6 +1576,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "post-Stage finalizer must recompress and archive them"
         ),
     )
+    parser.add_argument(
+        "--max-corpus-gib",
+        type=float,
+        default=0.5,
+        help="fail closed if this physical episode exceeds the storage bound",
+    )
     parser.add_argument("--no-corpus", action="store_true")
     parser.add_argument("--no-post-run-audit", action="store_true")
     parser.add_argument(
@@ -1597,6 +1610,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         )
     if args.min_commit_headroom_gib < 0.0:
         parser.error("--min-commit-headroom-gib cannot be negative")
+    if args.max_corpus_gib <= 0.0:
+        parser.error("--max-corpus-gib must be positive")
     expected_stage = args.practice_stage or args.expected_stage
     label = (
         f"{args.difficulty}_reimu_a_route"

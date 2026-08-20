@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -34,6 +35,49 @@ def test_empty_complete_stage_audit_is_structurally_stable(tmp_path) -> None:
     assert report["physical_hits"] == 0
     assert report["integrity_errors"] == []
     assert report["infra_stable_for_learning"] is True
+
+
+def test_route_audit_accepts_only_declared_complete_stage_coverage(tmp_path) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata(
+            "test", "exe", "native", "test", 3, 0, 0, 1, {},
+            episode_unit="route",
+            expected_stages=(1, 2, 3, 4, 5, 6),
+        ),
+    )
+    run_dir = recorder.close({
+        "termination_reason": "route-complete",
+        "stage_completed": True,
+        "physical_hits": 0,
+    })
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["summary"]["phases"] = [
+        {"scope": f"3/0/0/{stage}/source:test"}
+        for stage in range(1, 7)
+    ]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = audit(run_dir)
+
+    assert report["integrity_errors"] == []
+    assert report["scope"]["episode_unit"] == "route"
+    assert report["scope"]["observed_stages"] == [1, 2, 3, 4, 5, 6]
+
+
+def test_audit_rejects_physical_hit_count_disagreement(tmp_path) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata("test", "exe", "native", "test", 3, 0, 0, 4, {}),
+    )
+    run_dir = recorder.close({
+        "termination_reason": "practice-stage-complete",
+        "stage_completed": True,
+        "physical_hits": 1,
+    })
+
+    assert "physical-hit-count-mismatch" in audit(run_dir)["integrity_errors"]
 
 
 def test_collision_evidence_identifies_new_enemy_body() -> None:

@@ -76,6 +76,55 @@ def test_manifest_distinguishes_storage_from_complete_stage(tmp_path) -> None:
     }
     assert manifest["run_outcome"] == outcome
     assert manifest["summary"]["frames"] == 0
+    assert manifest["summary"]["learning_eligible_transitions"] == 0
+
+
+def test_route_corpus_retains_one_physical_episode_across_six_stages(
+    tmp_path,
+) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata(
+            "test",
+            "exe",
+            "native",
+            "test",
+            3,
+            0,
+            0,
+            1,
+            {},
+            episode_unit="route",
+            expected_stages=(1, 2, 3, 4, 5, 6),
+        ),
+    )
+    run_dir = recorder.close({
+        "termination_reason": "route-complete",
+        "stage_completed": True,
+        "physical_hits": 12,
+    })
+
+    run = json.loads((run_dir / "run.json").read_text())
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    assert run["metadata"]["episode_unit"] == "route"
+    assert run["metadata"]["expected_stages"] == [1, 2, 3, 4, 5, 6]
+    assert manifest["episode"] == {
+        "id": recorder.run_id,
+        "unit": "route",
+        "complete": True,
+        "termination_reason": "route-complete",
+    }
+
+
+def test_practice_metadata_cannot_claim_multiple_stages(tmp_path) -> None:
+    with pytest.raises(ValueError, match="episode metadata"):
+        CorpusRecorder(
+            tmp_path,
+            RunMetadata(
+                "test", "exe", "native", "test", 3, 0, 0, 1, {},
+                expected_stages=(1, 2),
+            ),
+        )
 
 
 def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:

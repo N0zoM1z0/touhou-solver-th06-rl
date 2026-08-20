@@ -247,8 +247,21 @@ def test_controller_completion_is_explicitly_parsed_for_full_stage(tmp_path: Pat
     )
     assert _summarize_controller_completion(log) == {
         "practice_stage_completed": True,
+        "route_completed": False,
         "practice_stage": 6,
         "physical_hits": 10,
+    }
+
+
+def test_controller_completion_parses_full_route_hit_total(tmp_path: Path) -> None:
+    log = tmp_path / "controller.log"
+    log.write_bytes(b"Full route reached Ending; physical_hits=37\n")
+
+    assert _summarize_controller_completion(log) == {
+        "practice_stage_completed": False,
+        "route_completed": True,
+        "practice_stage": None,
+        "physical_hits": 37,
     }
 
 
@@ -293,6 +306,28 @@ def test_complete_stage_training_corpus_allows_natural_or_fixed_rng(
         "--exploration-rate", "0",
     ])
     assert fixed.diagnostic_rng_seed == 123
+
+
+def test_complete_route_corpus_requires_natural_full_route(tmp_path: Path) -> None:
+    root = str(tmp_path / "route-corpus")
+    args = parse_args([
+        "--start-route",
+        "--complete-route-corpus-root", root,
+        "--exploration-rate", "0",
+    ])
+    assert args.complete_route_corpus_root == tmp_path / "route-corpus"
+
+    with pytest.raises(SystemExit):
+        parse_args([
+            "--practice-stage", "1",
+            "--complete-route-corpus-root", root,
+        ])
+    with pytest.raises(SystemExit):
+        parse_args([
+            "--start-route",
+            "--complete-route-corpus-root", root,
+            "--diagnostic-rng-seed", "1",
+        ])
 
 
 def test_option_smoke_is_time_bounded_fixed_rng_and_non_evidence(

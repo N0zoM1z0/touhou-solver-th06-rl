@@ -117,6 +117,17 @@ POLICY_STATE=path/to/frozen_candidate.json \
   --artifact-dir artifacts/wine-retail-route-example
 ```
 
+Collect and audit the frozen native-baseline route before fitting a learner:
+
+```bash
+scripts/collect_baseline_route.sh
+```
+
+This is one natural-RNG physical episode spanning declared Stages 1--6. The
+stage-reset transitions remain factual but are excluded from learning because
+their frame gap is not one. Completion verifies HIT conservation across the
+controller log, trace, manifest outcome, and lossless event stream.
+
 `--seconds 0` means natural completion, not an infinite or arbitrary timeout.
 HIT continuation is explicitly benchmark-only and training-ineligible. Bomb is
 unrepresentable in the input bridge. Every artifact directory contains the

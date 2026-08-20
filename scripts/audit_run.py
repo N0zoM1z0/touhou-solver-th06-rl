@@ -348,14 +348,37 @@ def audit(
         categories[key] = categories.get(key, 0) + 1
     bomb_events = sum(row.get("event") == "bomb-used" for row in events)
     expected = run["metadata"]
-    scope_prefix = "/".join(str(expected[key]) for key in (
-        "difficulty", "character", "shot_type", "stage"
-    )) + "/"
+    episode_unit = str(expected.get("episode_unit", "practice-stage"))
+    raw_stages = expected.get("expected_stages")
+    if raw_stages is None:
+        raw_stages = [expected.get("stage")]
+    if (
+        episode_unit not in {"practice-stage", "route"}
+        or not isinstance(raw_stages, list)
+        or not raw_stages
+        or any(not isinstance(stage, int) or not 1 <= stage <= 6 for stage in raw_stages)
+    ):
+        raise ValueError("physical episode scope metadata is invalid")
+    expected_stages = tuple(raw_stages)
+    scope_prefixes = tuple(
+        "/".join(str(value) for value in (
+            expected["difficulty"],
+            expected["character"],
+            expected["shot_type"],
+            stage,
+        )) + "/"
+        for stage in expected_stages
+    )
     scope_pollution = [
         item.get("scope")
         for item in summary.get("phases", ())
-        if not str(item.get("scope", "")).startswith(scope_prefix)
+        if not str(item.get("scope", "")).startswith(scope_prefixes)
     ]
+    observed_stages = {
+        int(str(item.get("scope", "")).split("/", 4)[3])
+        for item in summary.get("phases", ())
+        if str(item.get("scope", "")).startswith(scope_prefixes)
+    }
     integrity_errors = []
     if manifest.get("dropped_records", 0):
         integrity_errors.append("dropped-records")
@@ -367,6 +390,11 @@ def audit(
         integrity_errors.append("bomb-observed")
     if scope_pollution:
         integrity_errors.append("scope-pollution")
+    if episode_unit == "route" and observed_stages != set(expected_stages):
+        integrity_errors.append("route-stage-coverage")
+    outcome = manifest.get("run_outcome") or {}
+    if outcome.get("physical_hits") != len(hit_sequences):
+        integrity_errors.append("physical-hit-count-mismatch")
     if dense_hard_parity and dense_hard_parity["unsafe_divergences"]:
         integrity_errors.append("dense-hard-parity-unsafe-divergence")
     counterexamples = categories.get("safety-counterexample-candidate", 0)
@@ -374,11 +402,17 @@ def audit(
     return {
         "schema_version": "th06-rl-infra-audit-v1",
         "run_id": manifest.get("run_id"),
-        "scope": {key: expected[key] for key in (
-            "difficulty", "character", "shot_type", "stage"
-        )},
+        "scope": {
+            **{key: expected[key] for key in (
+                "difficulty", "character", "shot_type", "stage"
+            )},
+            "episode_unit": episode_unit,
+            "expected_stages": list(expected_stages),
+            "observed_stages": sorted(observed_stages),
+        },
         "stage_completed": manifest.get("stage_trajectory_complete"),
         "physical_hits": len(hit_sequences),
+        "bomb_events": bomb_events,
         "hit_classifications": categories,
         "integrity_errors": integrity_errors,
         "scope_pollution": scope_pollution,

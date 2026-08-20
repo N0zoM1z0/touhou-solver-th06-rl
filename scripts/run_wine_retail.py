@@ -31,6 +31,7 @@ FULL_UNLOCK_SCORE_SHA256 = "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e
 _PRACTICE_COMPLETE_RE = re.compile(
     rb"Practice Stage (\d+) complete; physical_hits=(\d+)"
 )
+_ROUTE_COMPLETE_RE = re.compile(rb"Full route reached Ending; physical_hits=(\d+)")
 _PRIORITY_ENVIRONMENT = (
     "DISPLAY",
     "LANG",
@@ -174,6 +175,7 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
 def _summarize_controller_completion(path: Path) -> dict[str, Any]:
     summary = {
         "practice_stage_completed": False,
+        "route_completed": False,
         "practice_stage": None,
         "physical_hits": None,
     }
@@ -186,6 +188,12 @@ def _summarize_controller_completion(path: Path) -> dict[str, Any]:
             "practice_stage_completed": True,
             "practice_stage": int(stage),
             "physical_hits": int(hits),
+        })
+    route_matches = list(_ROUTE_COMPLETE_RE.finditer(path.read_bytes()))
+    if route_matches:
+        summary.update({
+            "route_completed": True,
+            "physical_hits": int(route_matches[-1].group(1)),
         })
     return summary
 
@@ -355,6 +363,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--complete-route-corpus-root",
+        type=Path,
+        help=(
+            "collect one natural-RNG patched-life full-route episode for "
+            "baseline/offline-RL evidence"
+        ),
+    )
+    parser.add_argument(
         "--option-smoke-corpus-root",
         type=Path,
         help=(
@@ -431,6 +447,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         for value in (
             args.first_failure_corpus_root,
             args.complete_stage_training_corpus_root,
+            args.complete_route_corpus_root,
             args.option_smoke_corpus_root,
         )
     )
@@ -441,6 +458,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error("complete-Stage training corpus currently requires Practice")
         if args.seconds != 0.0:
             parser.error("complete-Stage training corpus requires --seconds 0")
+    if args.complete_route_corpus_root is not None:
+        if not args.start_route:
+            parser.error("complete-route corpus requires --start-route")
+        if args.seconds != 0.0:
+            parser.error("complete-route corpus requires --seconds 0")
+        if args.diagnostic_rng_seed is not None:
+            parser.error("complete-route corpus requires natural RNG")
     if args.option_smoke_corpus_root is not None:
         if args.start_route:
             parser.error("option smoke currently requires Practice")
@@ -452,6 +476,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         args.diagnostic_rng_seed is not None
         and args.first_failure_corpus_root is None
         and args.complete_stage_training_corpus_root is None
+        and args.complete_route_corpus_root is None
         and args.option_smoke_corpus_root is None
     ):
         parser.error(
@@ -540,6 +565,11 @@ def run(args: argparse.Namespace) -> int:
         if args.complete_stage_training_corpus_root is not None
         else None
     )
+    complete_route_corpus_root = (
+        args.complete_route_corpus_root.resolve()
+        if args.complete_route_corpus_root is not None
+        else None
+    )
     option_smoke_corpus_root = (
         args.option_smoke_corpus_root.resolve()
         if args.option_smoke_corpus_root is not None
@@ -567,6 +597,8 @@ def run(args: argparse.Namespace) -> int:
                 else "natural-rng-complete-stage-training"
             )
             if complete_stage_training_corpus_root is not None
+            else "natural-rng-complete-route-collection"
+            if complete_route_corpus_root is not None
             else "fixed-rng-option-smoke-non-evidence"
             if option_smoke_corpus_root is not None
             else "fixed-rng-first-failure-training"
@@ -583,6 +615,11 @@ def run(args: argparse.Namespace) -> int:
         "complete_stage_training_corpus_root": (
             str(complete_stage_training_corpus_root)
             if complete_stage_training_corpus_root is not None
+            else None
+        ),
+        "complete_route_corpus_root": (
+            str(complete_route_corpus_root)
+            if complete_route_corpus_root is not None
             else None
         ),
         "option_smoke_corpus_root": (
@@ -869,7 +906,16 @@ def run(args: argparse.Namespace) -> int:
                 "--diagnostic-rng-seed",
                 hex(args.diagnostic_rng_seed),
             ))
-        if complete_stage_training_corpus_root is not None:
+        if complete_route_corpus_root is not None:
+            controller.extend((
+                "--patch-lives",
+                "--continuous-stage",
+                "--corpus-root",
+                _windows_path(complete_route_corpus_root),
+                "--max-corpus-gib",
+                "4",
+            ))
+        elif complete_stage_training_corpus_root is not None:
             controller.extend((
                 "--patch-lives",
                 "--continuous-stage",

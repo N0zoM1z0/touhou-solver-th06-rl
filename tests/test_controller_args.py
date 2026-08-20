@@ -92,3 +92,10 @@ def test_controller_accepts_source_u16_diagnostic_rng_seed() -> None:
         "0x1234",
     ])
     assert args.diagnostic_rng_seed == 0x1234
+
+
+def test_controller_requires_a_positive_corpus_storage_bound() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(["--armed", "--start-route", "--max-corpus-gib", "0"])
+    args = parse_args(["--armed", "--start-route", "--max-corpus-gib", "4"])
+    assert args.max_corpus_gib == 4.0

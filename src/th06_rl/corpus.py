@@ -77,6 +77,8 @@ class RunMetadata:
     shot_type: int
     stage: int
     planner: dict[str, object]
+    episode_unit: str = "practice-stage"
+    expected_stages: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -188,6 +190,7 @@ class _Envelope:
     snapshot: object
     evidence: FrameEvidence
     scope: dict[str, object]
+    episode_unit: str
 
 
 @dataclass(frozen=True)
@@ -758,12 +761,12 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "learning_eligible": not learning_exclusions,
         "learning_exclusion_reasons": learning_exclusions,
         # A patched HIT is a failure observation, not the end of the physical
-        # Practice Stage.  Keep the stage episode, source option boundary and
+        # episode. Keep the episode, source option boundary and
         # failure signal independent so an offline trainer may choose its own
         # bootstrapping semantics without guessing what legacy `done` meant.
         "episode": {
             "id": before.snapshot_id.split(":", 1)[0],
-            "unit": "practice-stage",
+            "unit": before.episode_unit,
             "step": before.sequence,
             "done": False,
         },
@@ -792,6 +795,19 @@ class CorpusRecorder:
     ) -> None:
         if min(shard_records, queue_records, max_run_bytes) <= 0:
             raise ValueError("corpus bounds must be positive")
+        expected_stages = metadata.expected_stages or (metadata.stage,)
+        if (
+            metadata.episode_unit not in {"practice-stage", "route"}
+            or not expected_stages
+            or any(not 1 <= stage <= 6 for stage in expected_stages)
+            or tuple(sorted(set(expected_stages))) != expected_stages
+            or metadata.stage != expected_stages[0]
+            or (
+                metadata.episode_unit == "practice-stage"
+                and expected_stages != (metadata.stage,)
+            )
+        ):
+            raise ValueError("physical episode metadata is invalid")
         created_ns = time.time_ns()
         self.run_id = run_id or (
             time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
@@ -805,6 +821,8 @@ class CorpusRecorder:
             DEFAULT_SPOOL_MAX_RUN_BYTES if deferred_compression else max_run_bytes
         )
         self.compresslevel = 0 if deferred_compression else 3
+        self.episode_unit = metadata.episode_unit
+        self.expected_stages = expected_stages
         self.sequence = 0
         self.anchor_sequence = 0
         self.enqueued = 0
@@ -850,11 +868,13 @@ class CorpusRecorder:
             "archive_max_run_bytes": self.archive_max_run_bytes,
             "storage_compression": f"gzip-{self.compresslevel}",
         }
+        serialized_metadata = asdict(metadata)
+        serialized_metadata["expected_stages"] = list(expected_stages)
         _atomic_json(self.run_dir / "run.json", {
             "schema_version": RUN_SCHEMA,
             "run_id": self.run_id,
             "created_unix_ns": created_ns,
-            "metadata": asdict(metadata),
+            "metadata": serialized_metadata,
             "schemas": {
                 "object": OBJECT_SCHEMA,
                 "frame": FRAME_SCHEMA,
@@ -999,6 +1019,10 @@ class CorpusRecorder:
                 int(raw["learning_eligible_elapsed_frames"])
                 for raw in self.phase_metrics.values()
             ),
+            "learning_eligible_transitions": sum(
+                int(raw["learning_eligible_transitions"])
+                for raw in self.phase_metrics.values()
+            ),
             "compressed_bytes_per_frame": compressed / frames if frames else None,
             "dense_frame_samples": [
                 {"bullets": bullets, "sequence": sequence, "frame": frame}
@@ -1046,6 +1070,7 @@ class CorpusRecorder:
             snapshot,
             evidence,
             _scope(snapshot, evidence.phase_id),
+            self.episode_unit,
         )
         try:
             self.queue.put_nowait(envelope)
@@ -1189,7 +1214,7 @@ class CorpusRecorder:
                 "stage_trajectory_complete": stage_complete,
                 "episode": {
                     "id": self.run_id,
-                    "unit": "practice-stage",
+                    "unit": self.episode_unit,
                     "complete": stage_complete,
                     "termination_reason": (
                         run_outcome.get("termination_reason")
