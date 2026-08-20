@@ -1308,7 +1308,12 @@ def _forecast_ecl_births_single(
             instruction = program.get(instruction_address)
             if instruction is None:
                 return EclForecast(
-                    tuple(map(tuple, births)), frame_index, "incomplete ECL instruction graph"
+                    tuple(map(tuple, births)),
+                    frame_index,
+                    (
+                        "incomplete ECL instruction graph at "
+                        f"0x{instruction_address:08X}"
+                    ),
                 )
             if run_interrupt >= 0:
                 if not 0 <= run_interrupt < len(interrupts):

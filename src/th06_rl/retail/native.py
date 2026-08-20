@@ -252,7 +252,10 @@ ITEM_TYPE_OFFSET = 0x140
 ITEM_IN_USE_OFFSET = 0x141
 ITEM_STATE_OFFSET = 0x143
 ECL_EX_COUNT = 17
-ECL_PROGRAM_INSTRUCTION_LIMIT = 256
+# Capacity guard for one transitive ECL source graph.  This is not a coverage
+# horizon: capture must exhaust the graph or fail immediately.  Stage 4 alone
+# has a reachable graph beyond 256 instructions.
+ECL_PROGRAM_INSTRUCTION_LIMIT = 4096
 ECL_SUBROUTINE_LIMIT = 512
 ECL_TIMELINE_INSTRUCTION_LIMIT = 4096
 ECL_TIMELINE_SNAPSHOT_LIMIT = 96
@@ -926,10 +929,14 @@ def _read_ecl_program(
             return cached
     pending = deque((start_address,))
     found: dict[int, EclInstruction] = {}
-    while pending and len(found) < ECL_PROGRAM_INSTRUCTION_LIMIT:
+    while pending:
         address = pending.popleft()
         if not address or address in found:
             continue
+        if len(found) >= ECL_PROGRAM_INSTRUCTION_LIMIT:
+            raise RuntimeError(
+                "ECL instruction graph exceeds the source capture capacity"
+            )
         instruction = process.read_ecl_instruction(address)
         found[address] = instruction
         if instruction.time < 0:

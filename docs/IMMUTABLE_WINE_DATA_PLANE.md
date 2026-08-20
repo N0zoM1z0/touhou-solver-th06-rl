@@ -50,6 +50,8 @@ fails closed; a compatible-looking transition version is insufficient.
    link names a physical movement action. Unknown or incomplete source
    coverage is absent. The frame schema is versioned when this evidence
    changes, so an older row cannot masquerade as a complete current row.
+   ECL source graphs must terminate naturally below their capacity guard;
+   silent instruction-prefix capture is forbidden.
 5. The ordinary run audit has no integrity error, dense native replay agrees,
    and the one-sided retained-next-root audit finds no uncovered factual AABB or
    laser hazard. A separate numeric successor audit requires bit-exact float32

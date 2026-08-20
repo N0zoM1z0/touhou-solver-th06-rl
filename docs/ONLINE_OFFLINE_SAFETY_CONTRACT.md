@@ -12,7 +12,8 @@ Online and offline work have different jobs.
   to the certified epoch; pausing never lengthens the four-frame pickup proof.
 - The immutable online policy only ranks actions already certified by that
   authority. It cannot change geometry, margins, delivery delays, or source
-  coverage.
+  coverage. After a HIT, the learned actor has no choice surface: the online
+  set is the single source-safe reactive baseline until `PLAYER_ALIVE` returns.
 - Offline jobs may be expensive and may use wide temporal and spatial context.
   They train only from factual original-retail Wine transitions. They may not
   manufacture an unexecuted successor state.
@@ -22,6 +23,11 @@ animation fallthrough; enemy clamps; and any timeline/ECL birth or body/laser
 mutation that can occur before the input lease expires. Repeating an
 observed-only forecast during the fresh issue check does not cover a future
 source event.
+
+An ECL program capture is admitted only after its transitive fallthrough,
+jump, call, spawn, callback, interrupt, and live call-stack graph is exhausted.
+The instruction capacity is a resource guard, never a truncation rule: a graph
+that reaches it fails during capture rather than returning a partial program.
 
 ## Dense corpus authority
 
