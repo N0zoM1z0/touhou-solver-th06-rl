@@ -131,9 +131,12 @@ first-order bottleneck, although set encoding remains a useful ablation.
   RNG with alternating incumbent/candidate blocks.
 - Cost-versus-reward sign is not itself a repair; consistency and property
   tests are what matter.
-- Concurrent Wine collection is disabled. The fixed-seed differential changed
-  HIT counts (`28` serial versus `30` and `26` concurrently), frame/boundary
-  counts, and digests. Offline fitting and replay may parallelize.
+- The historical shared-prefix concurrent collector is disabled because its
+  fixed-seed differential changed HIT counts (`28` serial versus `30` and
+  `26` concurrently), frame/boundary counts, and digests. The replacement may
+  collect concurrently only with isolated, preinitialized workers after the
+  exact commit/pool/native/policy serial-versus-two-worker gate passes; offline
+  fitting and replay may parallelize independently.
 
 ## Generation-7 architecture decision
 

@@ -43,6 +43,9 @@ runtime with
 [docs/PORTABLE_WINE_RUNTIME.md](docs/PORTABLE_WINE_RUNTIME.md). No historical
 solver checkout is needed. Then start with [HAND_OFF.md](HAND_OFF.md) and
 [START_HERE.md](START_HERE.md).
+Provision the isolated offline learner environment with
+`scripts/bootstrap_offline_rl.sh`; on Linux it deliberately uses CPU-only
+XGBoost and the official CPU-only Torch wheel instead of CUDA runtimes.
 The authoritative method and
 evaluation contract is
 [docs/WINE_ONLY_AUTONOMOUS_LEARNING.md](docs/WINE_ONLY_AUTONOMOUS_LEARNING.md).

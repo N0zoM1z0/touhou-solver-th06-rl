@@ -11,7 +11,11 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
-offline = ["numpy>=2", "xgboost>=3", "torch>=2.8,<2.9"]
+offline = [
+    "numpy>=2",
+    "xgboost-cpu>=3; platform_system == 'Linux'",
+    "xgboost>=3; platform_system != 'Linux'",
+]
 
 [tool.pytest.ini_options]
 addopts = "-q"
