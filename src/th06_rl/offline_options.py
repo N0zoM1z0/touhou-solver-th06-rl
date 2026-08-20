@@ -18,7 +18,7 @@ from th06_rl.th06.source_dataset import (
 )
 
 
-OPTION_DATASET_SCHEMA = "th06-rl-causal-options-v1"
+OPTION_DATASET_SCHEMA = "th06-rl-causal-options-v2"
 DISCOUNT = 1.0
 
 
@@ -41,6 +41,7 @@ class OfflineOptionTransition:
     schema: str
     episode_id: str
     episode_unit: str
+    behavior_policy_id: str
     option_id: str
     start_sequence: int
     end_sequence: int
@@ -52,7 +53,10 @@ class OfflineOptionTransition:
     state: ActorState
     next_state: ActorState | None
     physical_hit_cost: int
+    controlled_hit_cost: int
+    interstitial_hit_cost: int
     elapsed_frames: int
+    interstitial_elapsed_frames: int
     terminal: bool
     eligible: bool
     exclusion_reasons: tuple[str, ...]
@@ -62,6 +66,7 @@ class OfflineOptionTransition:
 class _ActiveOption:
     episode_id: str
     episode_unit: str
+    behavior_policy_id: str
     option_id: str
     start_sequence: int
     end_sequence: int
@@ -71,8 +76,10 @@ class _ActiveOption:
     behavior_probability: float
     behavior_probabilities: tuple[tuple[str, float], ...]
     state: ActorState
-    physical_hit_cost: int = 0
+    controlled_hit_cost: int = 0
+    interstitial_hit_cost: int = 0
     elapsed_frames: int = 0
+    interstitial_elapsed_frames: int = 0
     last_declared_elapsed: int = 0
     exclusions: set[str] = field(default_factory=set)
 
@@ -193,6 +200,7 @@ def _finish(
         OPTION_DATASET_SCHEMA,
         active.episode_id,
         active.episode_unit,
+        active.behavior_policy_id,
         active.option_id,
         active.start_sequence,
         active.end_sequence,
@@ -203,8 +211,11 @@ def _finish(
         active.behavior_probabilities,
         active.state,
         next_state,
-        active.physical_hit_cost,
+        active.controlled_hit_cost + active.interstitial_hit_cost,
+        active.controlled_hit_cost,
+        active.interstitial_hit_cost,
         active.elapsed_frames,
+        active.interstitial_elapsed_frames,
         terminal,
         not exclusions,
         exclusions,
@@ -260,9 +271,6 @@ def iter_offline_options(run_dir: Path) -> Iterator[OfflineOptionTransition]:
                 raise OfflineOptionError(
                     "new option boundary preceded an unterminated option"
                 )
-            if pending is not None:
-                yield _finish(pending, next_state=state, terminal=False)
-                pending = None
             probabilities = _probabilities(option, state, transition)
             action = str(option.get("intent"))
             probability = _numeric(
@@ -275,13 +283,32 @@ def iter_offline_options(run_dir: Path) -> Iterator[OfflineOptionTransition]:
                 raise OfflineOptionError("option boundary lacks episode/scope identity")
             episode_id = str(episode.get("id", ""))
             episode_unit = str(episode.get("unit", ""))
+            policy_id = str(transition.get("policy_id", ""))
             option_id = str(option.get("option_id", ""))
             diagnostic_scope = str(scope.get("key", ""))
-            if not episode_id or not episode_unit or not option_id or not diagnostic_scope:
+            if (
+                not episode_id
+                or not episode_unit
+                or not policy_id
+                or not option_id
+                or not diagnostic_scope
+            ):
                 raise OfflineOptionError("option boundary identity is incomplete")
+            if pending is not None:
+                if (
+                    pending.episode_id != episode_id
+                    or pending.episode_unit != episode_unit
+                    or pending.behavior_policy_id != policy_id
+                ):
+                    raise OfflineOptionError(
+                        "pending option crossed an episode or behavior identity"
+                    )
+                yield _finish(pending, next_state=state, terminal=False)
+                pending = None
             active = _ActiveOption(
                 episode_id,
                 episode_unit,
+                policy_id,
                 option_id,
                 int(transition["sequence"]),
                 int(transition["sequence"]),
@@ -333,6 +360,33 @@ def iter_offline_options(run_dir: Path) -> Iterator[OfflineOptionTransition]:
                 "active option disappeared without a recorded termination"
             )
 
+        if active is None and pending is not None:
+            episode = transition.get("episode")
+            outcome = transition.get("outcome_terms") or {}
+            elapsed = int(outcome.get("elapsed_frames", -1))
+            hit = outcome.get("life_lost")
+            if (
+                not isinstance(episode, dict)
+                or episode.get("id") != pending.episode_id
+                or episode.get("unit") != pending.episode_unit
+                or transition.get("policy_id") != pending.behavior_policy_id
+                or elapsed < 0
+                or not isinstance(hit, bool)
+            ):
+                raise OfflineOptionError(
+                    "interstitial transition lacks factual episode/time/HIT state"
+                )
+            pending.interstitial_elapsed_frames += elapsed
+            pending.interstitial_hit_cost += int(hit)
+            if transition.get("learning_eligible") is not True:
+                reasons = transition.get("learning_exclusion_reasons") or (
+                    "interstitial-transition-not-learning-eligible",
+                )
+                pending.exclusions.update(str(reason) for reason in reasons)
+            if outcome.get("bomb_used"):
+                pending.exclusions.add("interstitial-bomb")
+            if outcome.get("authority_lost"):
+                pending.exclusions.add("interstitial-authority-loss")
         if active is None:
             continue
         assert option is not None
@@ -341,8 +395,9 @@ def iter_offline_options(run_dir: Path) -> Iterator[OfflineOptionTransition]:
             not isinstance(episode, dict)
             or episode.get("id") != active.episode_id
             or episode.get("unit") != active.episode_unit
+            or transition.get("policy_id") != active.behavior_policy_id
         ):
-            raise OfflineOptionError("option crossed a physical episode identity")
+            raise OfflineOptionError("option crossed an episode or behavior identity")
         declared_elapsed = int(option.get("elapsed_frames_at_decision", -1))
         if declared_elapsed != active.last_declared_elapsed + 1:
             raise OfflineOptionError("option decision elapsed sequence is not contiguous")
@@ -358,7 +413,7 @@ def iter_offline_options(run_dir: Path) -> Iterator[OfflineOptionTransition]:
         ):
             raise OfflineOptionError("option outcome lacks factual time/HIT state")
         active.elapsed_frames += elapsed
-        active.physical_hit_cost += int(hit)
+        active.controlled_hit_cost += int(hit)
         if transition.get("executed_action") != active.action:
             active.exclusions.add("option-action-not-executed")
         if transition.get("learning_eligible") is not True:

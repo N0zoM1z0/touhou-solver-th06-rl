@@ -50,6 +50,7 @@ def _transition(
         "behavior_probability": (
             option["conditional_probability"] if option is not None else 1.0
         ),
+        "policy_id": "safe-option-exploration-v2",
         "policy_context": {
             "current_action": "stay",
             "observation_features": _features(OBSERVATION_FEATURE_NAMES),
@@ -131,7 +132,7 @@ def test_option_aggregation_stops_at_termination_and_skips_forced_gap(monkeypatc
             ),
             hit=True,
         ),
-        _transition(2, option=None),
+        _transition(2, option=None, hit=True),
         _transition(
             3,
             option=_option("b", "stay", boundary=True, elapsed=1),
@@ -146,8 +147,12 @@ def test_option_aggregation_stops_at_termination_and_skips_forced_gap(monkeypatc
     first, second = tuple(iter_offline_options(SimpleNamespace(resolve=lambda: None)))
 
     assert first.option_id == "a"
-    assert first.physical_hit_cost == 1
+    assert first.behavior_policy_id == "safe-option-exploration-v2"
+    assert first.physical_hit_cost == 2
+    assert first.controlled_hit_cost == 1
+    assert first.interstitial_hit_cost == 1
     assert first.elapsed_frames == 2
+    assert first.interstitial_elapsed_frames == 1
     assert first.next_state is not None
     assert first.terminal is False
     assert first.eligible is True

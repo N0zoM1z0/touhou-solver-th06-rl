@@ -693,8 +693,10 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         learning_exclusions.append(f"decision:{before.evidence.reason}")
     if outcome["elapsed_frames"] != 1:
         learning_exclusions.append("observation-gap")
-    if before.evidence.capture_ms > FRAME_BUDGET_MS:
-        learning_exclusions.append("capture-over-frame-budget")
+    # Paused-root capture latency changes wall-clock throughput, not the game
+    # transition: the exact process cannot advance until the action is issued.
+    # Keep latency as a separate online-deployment gate and use the factual
+    # game-frame observation gap above for causal data admission.
     if (
         not before.evidence.observation_features
         or not before.evidence.action_features

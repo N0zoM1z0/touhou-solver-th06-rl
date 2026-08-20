@@ -8,7 +8,6 @@ import math
 from pathlib import Path
 
 from ..actions import ACTION_NAMES
-from ..legacy_ranker_schema import FEATURE_NAMES, FEATURE_SCHEMA
 
 
 MODEL_SCHEMA = "th06-rl-portable-xgboost-regressor-v1"
@@ -22,8 +21,8 @@ class PortableXGBoostRegressor:
         self,
         artifact: dict[str, object],
         *,
-        expected_feature_schema: str = FEATURE_SCHEMA,
-        expected_feature_names: tuple[str, ...] = FEATURE_NAMES,
+        expected_feature_schema: str,
+        expected_feature_names: tuple[str, ...],
     ) -> None:
         if artifact.get("schema") != MODEL_SCHEMA:
             raise ValueError("unsupported portable offline model schema")

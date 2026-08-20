@@ -13,7 +13,8 @@ from th06_rl.hazard_representation import (
     HAZARD_PRIMITIVE_FEATURE_NAMES,
     NativeHazardCodebookEncoder,
 )
-from th06_rl.legacy_ranker_schema import FEATURE_NAMES, FEATURE_SCHEMA
+from th06_rl.g7_learner import ACTOR_FEATURE_NAMES
+from th06_rl.learning_features import CAUSAL_TREE_FEATURE_SCHEMA
 from th06_rl.policies.offline_ranker import (
     MODEL_SCHEMA,
     NativePrototypeSupport,
@@ -22,6 +23,10 @@ from th06_rl.policies.offline_ranker import (
     PortablePrototypeSupport,
     PortableXGBoostRegressor,
 )
+
+
+FEATURE_NAMES = ACTOR_FEATURE_NAMES
+FEATURE_SCHEMA = CAUSAL_TREE_FEATURE_SCHEMA
 
 
 def _model_artifact() -> dict[str, object]:
@@ -40,7 +45,11 @@ def _model_artifact() -> dict[str, object]:
 
 
 def test_portable_tree_scorer_obeys_frozen_feature_schema() -> None:
-    model = PortableXGBoostRegressor(_model_artifact())
+    model = PortableXGBoostRegressor(
+        _model_artifact(),
+        expected_feature_schema=FEATURE_SCHEMA,
+        expected_feature_names=FEATURE_NAMES,
+    )
     rows = [
         [0.0] * len(FEATURE_NAMES),
         [0.0, 1.0, *([0.0] * (len(FEATURE_NAMES) - 2))],
@@ -70,7 +79,11 @@ def test_native_scorers_match_portable_references(tmp_path: Path) -> None:
         check=True,
     )
     digest = hashlib.sha256(library.read_bytes()).hexdigest()
-    portable = PortableXGBoostRegressor(_model_artifact())
+    portable = PortableXGBoostRegressor(
+        _model_artifact(),
+        expected_feature_schema=FEATURE_SCHEMA,
+        expected_feature_names=FEATURE_NAMES,
+    )
     native = NativeXGBoostRegressor(
         library,
         expected_sha256=digest,
