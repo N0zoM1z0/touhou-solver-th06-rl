@@ -38,6 +38,7 @@ def verify(
     records = manifest.get("records")
     summary = manifest.get("summary")
     audit_scope = audit.get("scope")
+    successor_coverage = audit.get("source_successor_coverage")
     for name, value in (
         ("controller completion", completion),
         ("trace", trace),
@@ -47,6 +48,7 @@ def verify(
         ("records", records),
         ("summary", summary),
         ("audit scope", audit_scope),
+        ("source successor coverage", successor_coverage),
     ):
         if not isinstance(value, dict):
             raise ValueError(f"baseline route is missing {name}")
@@ -110,6 +112,14 @@ def verify(
             and hits == audit.get("physical_hits")
         ),
         "audit_integrity": audit.get("integrity_errors") == [],
+        "causal_source_successors": (
+            successor_coverage.get("method")
+            == "retained-next-root-one-sided-coverage-v1"
+            and isinstance(successor_coverage.get("checked_links"), int)
+            and successor_coverage["checked_links"] > 0
+            and successor_coverage.get("uncovered_aabbs") == 0
+            and successor_coverage.get("uncovered_lasers") == 0
+        ),
     }
     failed = [name for name, passed in checks.items() if not passed]
     if failed:
@@ -124,6 +134,7 @@ def verify(
         "learning_eligible_transitions": summary["learning_eligible_transitions"],
         "hit_classifications": audit.get("hit_classifications"),
         "latency": audit.get("latency"),
+        "source_successor_coverage": successor_coverage,
         "checks": checks,
     }
 

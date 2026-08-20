@@ -50,6 +50,12 @@ def _documents(hits: int = 12):
         "integrity_errors": [],
         "hit_classifications": {},
         "latency": {},
+        "source_successor_coverage": {
+            "method": "retained-next-root-one-sided-coverage-v1",
+            "checked_links": 99,
+            "uncovered_aabbs": 0,
+            "uncovered_lasers": 0,
+        },
     }
     return report, run, manifest, audit
 
@@ -93,4 +99,20 @@ def test_baseline_route_verifier_rejects_incomplete_offline_facts() -> None:
     del documents[1]["metadata"]["planner"]["factual_state_schema"]
 
     with pytest.raises(ValueError, match="comprehensive_offline_facts"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_legacy_audit_without_causal_check() -> None:
+    documents = list(_documents())
+    del documents[3]["source_successor_coverage"]
+
+    with pytest.raises(ValueError, match="source successor coverage"):
+        verify(*documents)
+
+
+def test_baseline_route_verifier_rejects_uncovered_successor_hazard() -> None:
+    documents = list(_documents())
+    documents[3]["source_successor_coverage"]["uncovered_aabbs"] = 1
+
+    with pytest.raises(ValueError, match="causal_source_successors"):
         verify(*documents)
