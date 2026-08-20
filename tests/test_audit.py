@@ -120,3 +120,48 @@ def test_collision_evidence_identifies_new_enemy_body() -> None:
 
     assert evidence["after_overlapping_enemy_indices"] == [0]
     assert evidence["new_after_overlapping_enemy_indices"] == [0]
+
+
+def test_successor_aabb_comparison_is_one_sided_and_float_tolerant() -> None:
+    actual = (10.0, 20.0, 14.0, 24.0)
+
+    assert _AUDIT._aabb_contains((9.9995, 19.9995, 13.9995, 23.9995), actual)
+    assert not _AUDIT._aabb_contains((10.01, 20.0, 14.0, 24.0), actual)
+
+
+def test_post_update_laser_recovers_source_midpoint_bug() -> None:
+    laser = SimpleNamespace(
+        x=100.0,
+        y=120.0,
+        angle=0.25,
+        start_offset=8.0,
+        end_offset=108.0,
+        width=16.0,
+        start_time=10,
+        hitbox_start_time=3,
+        duration=30,
+        despawn_duration=10,
+        hitbox_end_delay=5,
+        timer=6,
+        timer_float=6.0,
+        flags=0,
+        state=0,
+    )
+
+    hazards, reason = _AUDIT._retained_post_update_laser_hazards(laser)
+
+    assert reason == "checked"
+    assert len(hazards) == 1
+    # The source used timer 5 before Tick: (5 * width / startTime) / 2.
+    assert hazards[0].size_x == 4.0
+    assert hazards[0].size_y == 8.0
+
+
+def test_successor_laser_accepts_exact_or_conservative_aabb_coverage() -> None:
+    actual = _AUDIT.LaserHazard(100.0, 120.0, 0.4, 60.0, 80.0, 8.0)
+    exact = _AUDIT.LaserHazard(100.0, 120.0, 0.4, 60.0, 80.0, 8.0)
+    enclosing = _AUDIT._laser_aabb(actual)
+
+    assert _AUDIT._laser_is_covered(actual, (), (exact,))
+    assert _AUDIT._laser_is_covered(actual, (enclosing,), ())
+    assert not _AUDIT._laser_is_covered(actual, (), ())

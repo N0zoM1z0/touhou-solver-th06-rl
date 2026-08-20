@@ -79,6 +79,7 @@ from .system_health import GIB, below_commit_reserve, read_system_memory
 ACTIVE_PLAYER_STATES = (0, 3)
 HEALTH_SAMPLE_SECONDS = 1.0
 HEALTH_TRACE_SECONDS = 10.0
+PAUSED_CAPTURE_ATTEMPTS = 8
 DIALOGUE_PROBE_SECONDS = 1.0 / 60.0
 LOW_COMMIT_EXIT_CODE = 75
 MENU_RETRY_EXIT_CODE = 77
@@ -181,6 +182,40 @@ def _anchor_partition(source_context: str) -> str:
     if source_context == "timeline-complete":
         return source_context
     return "timeline"
+
+
+def _capture_safety_root_while_paused(process, bridge, *, horizon: int):
+    """Resume the exact process between rejected paused-root attempts.
+
+    The successful pause remains entered so source certification and input
+    publication belong to that same epoch. A calc phase cannot finish while
+    the exact process is suspended, so every rejected attempt is resumed
+    before the next bounded retry.
+    """
+    failures = []
+    for attempt in range(1, PAUSED_CAPTURE_ATTEMPTS + 1):
+        pause = bridge.suspended()
+        pause.__enter__()
+        try:
+            snapshot, authority = read_safety_snapshot_pair(
+                process,
+                horizon=horizon,
+                suspend=None,
+                compact_attempts=1,
+            )
+        except (NativeDecodeError, OSError, RuntimeError, ValueError) as error:
+            pause.__exit__(type(error), error, error.__traceback__)
+            failures.append(f"{type(error).__name__}:{str(error)[:160]}")
+            if attempt < PAUSED_CAPTURE_ATTEMPTS:
+                time.sleep(0.002)
+            continue
+        if snapshot.capture_attempts != attempt:
+            snapshot = replace(snapshot, capture_attempts=attempt)
+        return snapshot, authority, pause
+    raise RuntimeError(
+        "paused coherent source capture exhausted resume-separated retries; "
+        f"failures={failures}"
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -668,14 +703,21 @@ def run(args: argparse.Namespace) -> int:
             capture_started = time.perf_counter()
             try:
                 if bridge is not None:
-                    pause = bridge.suspended()
-                    pause.__enter__()
-                    decision_pause = pause
-                snapshot, authority_snapshot = read_safety_snapshot_pair(
-                    process,
-                    horizon=args.horizon,
-                    suspend=None,
-                )
+                    (
+                        snapshot,
+                        authority_snapshot,
+                        decision_pause,
+                    ) = _capture_safety_root_while_paused(
+                        process,
+                        bridge,
+                        horizon=args.horizon,
+                    )
+                else:
+                    snapshot, authority_snapshot = read_safety_snapshot_pair(
+                        process,
+                        horizon=args.horizon,
+                        suspend=None,
+                    )
                 if snapshot.factual_state_schema != OFFLINE_FACT_SCHEMA:
                     raise RuntimeError("dense offline factual root is incomplete")
             except (NativeDecodeError, OSError, RuntimeError) as error:
@@ -1539,12 +1581,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="apply the verified 1.02h HIT-continuation life patch",
     )
-    parser.add_argument(
+    hit_mode = parser.add_mutually_exclusive_group()
+    hit_mode.add_argument(
         "--continuous-stage",
+        dest="continuous_stage",
         action="store_true",
+        default=None,
         help=(
             "record HIT/dead-end feedback and keep playing Practice or the "
-            "ordinary route until its natural terminal"
+            "ordinary route until its natural terminal (the default for "
+            "armed menu-started physical episodes)"
+        ),
+    )
+    hit_mode.add_argument(
+        "--stop-on-hit",
+        dest="continuous_stage",
+        action="store_false",
+        help=(
+            "explicit diagnostic-only first-HIT prefix; incomplete output is "
+            "not a training or promotion episode"
         ),
     )
     parser.add_argument(
@@ -1633,6 +1688,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     args = parser.parse_args(argv)
+    if args.continuous_stage is None:
+        # A physical menu-started episode is complete by default. Direct
+        # attach/observe commands retain their bounded first-failure behavior
+        # because they do not own the game lifecycle or life patch.
+        args.continuous_stage = bool(
+            args.armed and (args.practice_stage is not None or args.start_route)
+        )
     if args.start_route and args.practice_stage is not None:
         parser.error("--start-route and --practice-stage are mutually exclusive")
     if not _valid_executable_basename(args.game_executable_name):

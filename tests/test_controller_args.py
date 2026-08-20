@@ -1,7 +1,12 @@
+from dataclasses import dataclass
+
 import pytest
+
+import th06_rl.th06.controller as controller
 
 from th06_rl.th06.controller import (
     RouteTrial,
+    _capture_safety_root_while_paused,
     _control_dead_end,
     _advance_route_scope,
     _valid_executable_basename,
@@ -92,6 +97,64 @@ def test_controller_accepts_source_u16_diagnostic_rng_seed() -> None:
         "0x1234",
     ])
     assert args.diagnostic_rng_seed == 0x1234
+
+
+def test_armed_menu_episode_defaults_to_hit_continuation() -> None:
+    args = parse_args(["--armed", "--start-route", "--patch-lives"])
+    assert args.continuous_stage is True
+
+
+def test_first_hit_stop_requires_explicit_diagnostic_flag() -> None:
+    args = parse_args(["--armed", "--practice-stage", "6", "--stop-on-hit"])
+    assert args.continuous_stage is False
+
+
+def test_paused_capture_resumes_between_partial_phase_retries(monkeypatch) -> None:
+    events = []
+
+    @dataclass(frozen=True)
+    class Snapshot:
+        capture_attempts: int
+
+    class Pause:
+        def __init__(self, index):
+            self.index = index
+
+        def __enter__(self):
+            events.append(("enter", self.index))
+            return self
+
+        def __exit__(self, *_args):
+            events.append(("exit", self.index))
+
+    class Bridge:
+        calls = 0
+
+        def suspended(self):
+            self.calls += 1
+            return Pause(self.calls)
+
+    reads = 0
+
+    def read_pair(*_args, **kwargs):
+        nonlocal reads
+        reads += 1
+        assert kwargs["compact_attempts"] == 1
+        if reads == 1:
+            raise RuntimeError("calc chain incomplete")
+        return Snapshot(capture_attempts=1), object()
+
+    monkeypatch.setattr(controller, "read_safety_snapshot_pair", read_pair)
+    monkeypatch.setattr(controller.time, "sleep", lambda _seconds: None)
+
+    snapshot, _authority, retained_pause = (
+        _capture_safety_root_while_paused(object(), Bridge(), horizon=12)
+    )
+
+    assert snapshot.capture_attempts == 2
+    assert events == [("enter", 1), ("exit", 1), ("enter", 2)]
+    retained_pause.__exit__(None, None, None)
+    assert events[-1] == ("exit", 2)
 
 
 def test_controller_requires_a_positive_corpus_storage_bound() -> None:

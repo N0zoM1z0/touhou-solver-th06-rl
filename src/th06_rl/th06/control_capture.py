@@ -882,6 +882,7 @@ def read_control_snapshot(
     horizon: int = 12,
     collision_margin: float = 0.35,
     suspend=None,
+    max_attempts: int = MAX_CAPTURE_ATTEMPTS,
 ) -> ControlSnapshot:
     """Return one coherent observed-hazard root or fail closed.
 
@@ -890,9 +891,11 @@ def read_control_snapshot(
     the existing source timer witnesses still reject a process suspended in
     the middle of its update chain.
     """
+    if max_attempts <= 0:
+        raise ValueError("compact capture attempts must be positive")
     observed_epochs: list[int] = []
     last_error: BaseException | None = None
-    for attempt in range(1, MAX_CAPTURE_ATTEMPTS + 1):
+    for attempt in range(1, max_attempts + 1):
         try:
             with suspend() if suspend is not None else nullcontext():
                 return _decode_control_once(
@@ -929,6 +932,7 @@ def read_safety_snapshot_pair(
     horizon: int = 12,
     collision_margin: float = 0.35,
     suspend=None,
+    compact_attempts: int = MAX_CAPTURE_ATTEMPTS,
 ):
     """Capture compact data and exhaustive source authority in one pause.
 
@@ -943,6 +947,7 @@ def read_safety_snapshot_pair(
             horizon=horizon,
             collision_margin=collision_margin,
             suspend=None,
+            max_attempts=compact_attempts,
         )
         authority = native.read_snapshot(process)
     mismatches = []

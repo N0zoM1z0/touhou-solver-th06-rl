@@ -91,11 +91,12 @@ outcomes. TH06-specific memory and input details stay in the environment
 adapter. Porting to TH08 should replace that adapter and configuration, not the
 dataset, fitting, validation, or orchestration algorithm.
 
-RNG control, accelerated Wine, snapshots, and parallel workers are diagnostic
-or training accelerators only. Final comparison uses normal-speed original
-Wine, natural full Practice Stages, HIT continuation, zero Bomb, immutable
-policies, and alternating incumbent/candidate trials. The per-run physical HIT
-count is authoritative.
+RNG control and isolated parallel normal-speed Wine workers may accelerate
+training collection; snapshots and first-HIT prefixes are diagnostic only.
+Do not accelerate the game clock for any evidence-producing corpus. Final
+comparison uses normal-speed original Wine, natural full Practice Stages, HIT
+continuation, zero Bomb, immutable policies, and alternating
+incumbent/candidate trials. The per-run physical HIT count is authoritative.
 
 ## No scripted play
 
@@ -106,13 +107,19 @@ context may partition evidence but may not select a handwritten route.
 
 ## Physical-run safety
 
-- Stop on the first HIT, authority failure, or Bomb request unless running an
-  explicitly marked complete-Stage HIT-continuation training or evaluation.
+- Armed menu-started play defaults to patched-life HIT continuation through the
+  complete declared Practice Stage or route. A HIT is a factual failure event,
+  never the episode terminal. Stop on source-authority, infrastructure,
+  storage, or Bomb failure; do not relax the online Hard gate to keep playing.
+- First-HIT prefixes require the explicit diagnostic-only `--stop-on-hit`
+  mode. They are incomplete and cannot enter offline training, canary, or
+  promotion evidence.
 - Menu/dialogue control stays separate from battle movement.
 - Never launch the Windows game through a PTY.
 - Release every input, stop the exact trial PID, and check for leftover game,
   controller, display, or high-CPU processes after every run.
-- Do not run canonical promotion trials concurrently or in accelerated mode.
+- Do not run canonical promotion trials concurrently or with a modified game
+  clock.
 
 ## Gensokyo skill attribution
 

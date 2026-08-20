@@ -7,12 +7,14 @@ import argparse
 import gzip
 import heapq
 import json
+import math
 from pathlib import Path
 
 from th06_rl.corpus import expand_compact
 from th06_rl.retail.barrage_lab.corpus import decode_snapshot
 from th06_rl.retail.hazards.enemies import future_boxes
 from th06_rl.retail.hazards.lasers import (
+    LaserHazard,
     future_hazards,
     signed_laser_clearance,
 )
@@ -131,6 +133,350 @@ def _decode_frame(row: dict, objects: dict[str, object]):
     if not str(raw.get("capture_tier", "")).startswith("control-v"):
         return decode_snapshot(raw)
     return decode_control_snapshot(raw)
+
+
+# This tolerance belongs only to the offline comparison between Python double
+# arithmetic and source float32 roots. It is not a collision margin and never
+# enters online certification.
+_SUCCESSOR_FLOAT_TOLERANCE = 1e-3
+_MAX_SUCCESSOR_COUNTEREXAMPLES = 128
+
+
+def _reachable_envelope(snapshot, steps: int, margin: float):
+    speed = max(snapshot.normal_speed, snapshot.focus_speed)
+    return (
+        max(8.0, snapshot.x - speed * steps)
+        - snapshot.half_width - margin,
+        max(16.0, snapshot.y - speed * steps)
+        - snapshot.half_height - margin,
+        min(376.0, snapshot.x + speed * steps)
+        + snapshot.half_width + margin,
+        min(432.0, snapshot.y + speed * steps)
+        + snapshot.half_height + margin,
+    )
+
+
+def _aabb_intersects(left, right) -> bool:
+    return not (
+        left[2] < right[0]
+        or left[0] > right[2]
+        or left[3] < right[1]
+        or left[1] > right[3]
+    )
+
+
+def _aabb_contains(outer, inner, tolerance=_SUCCESSOR_FLOAT_TOLERANCE) -> bool:
+    return (
+        outer[0] <= inner[0] + tolerance
+        and outer[1] <= inner[1] + tolerance
+        and outer[2] >= inner[2] - tolerance
+        and outer[3] >= inner[3] - tolerance
+    )
+
+
+def _laser_corners(laser) -> tuple[tuple[float, float], ...]:
+    half_x = max(0.0, laser.size_x) / 2.0
+    half_y = max(0.0, laser.size_y) / 2.0
+    cosine = math.cos(laser.angle)
+    sine = math.sin(laser.angle)
+    result = []
+    for local_x in (
+        laser.center_offset - half_x,
+        laser.center_offset + half_x,
+    ):
+        for local_y in (-half_y, half_y):
+            result.append((
+                laser.origin_x + cosine * local_x - sine * local_y,
+                laser.origin_y + sine * local_x + cosine * local_y,
+            ))
+    return tuple(result)
+
+
+def _laser_aabb(laser) -> tuple[float, float, float, float]:
+    corners = _laser_corners(laser)
+    return (
+        min(point[0] for point in corners),
+        min(point[1] for point in corners),
+        max(point[0] for point in corners),
+        max(point[1] for point in corners),
+    )
+
+
+def _point_in_laser(point, laser, tolerance=_SUCCESSOR_FLOAT_TOLERANCE) -> bool:
+    dx = point[0] - laser.origin_x
+    dy = point[1] - laser.origin_y
+    cosine = math.cos(laser.angle)
+    sine = math.sin(laser.angle)
+    local_x = cosine * dx + sine * dy
+    local_y = cosine * dy - sine * dx
+    return (
+        laser.center_offset - laser.size_x / 2.0 - tolerance
+        <= local_x
+        <= laser.center_offset + laser.size_x / 2.0 + tolerance
+        and -laser.size_y / 2.0 - tolerance
+        <= local_y
+        <= laser.size_y / 2.0 + tolerance
+    )
+
+
+def _laser_is_covered(laser, committed_aabbs, committed_lasers) -> bool:
+    corners = _laser_corners(laser)
+    actual_aabb = _laser_aabb(laser)
+    return any(
+        _aabb_contains(box, actual_aabb) for box in committed_aabbs
+    ) or any(
+        all(_point_in_laser(point, candidate) for point in corners)
+        for candidate in committed_lasers
+    )
+
+
+def _retained_post_update_laser_hazards(laser):
+    """Recover collision geometry from a retained post-BulletManager root.
+
+    The exact source ticks the timer after collision. Natural state
+    transitions reset it before that tick. A forced clear and a natural
+    state-1 -> state-2 transition with zero hitbox delay are indistinguishable
+    in the retained scalar root, so that one case is explicitly unavailable
+    rather than guessed.
+    """
+    if laser.timer <= 0:
+        return (), "timer-not-yet-ticked"
+    full_length = max(0.0, laser.end_offset - laser.start_offset)
+    prior_timer = laser.timer - 1
+    prior_timer_float = laser.timer_float - 1.0
+
+    if laser.state == 0:
+        if prior_timer < laser.hitbox_start_time:
+            return (), "not-collidable"
+        if laser.flags & 1:
+            size_x = full_length
+        else:
+            res = min(laser.start_time, 30)
+            width_now = (
+                prior_timer_float * laser.width / max(1, laser.start_time)
+                if laser.start_time - res < prior_timer
+                else 1.2
+            )
+            size_x = width_now / 2.0
+    elif laser.state == 1:
+        # startTime==0 lasers are born directly in state 1. Otherwise timer 1
+        # witnesses the source's state-0 fallthrough and its midpoint bug.
+        size_x = (
+            full_length
+            if laser.start_time == 0 or laser.timer > 1 or laser.flags & 1
+            else laser.width / 2.0
+        )
+    elif laser.state == 2:
+        if laser.timer == 1:
+            if laser.hitbox_end_delay <= 0:
+                return (), "ambiguous-zero-delay-state-transition"
+            # The natural transition performed the state-1 full-length test
+            # before falling through to the despawn branch.
+            size_x = full_length
+        else:
+            if prior_timer >= laser.hitbox_end_delay:
+                return (), "not-collidable"
+            if laser.flags & 1:
+                size_x = full_length
+            else:
+                width_now = laser.width
+                if laser.despawn_duration > 0:
+                    width_now -= (
+                        prior_timer_float * laser.width
+                        / laser.despawn_duration
+                    )
+                size_x = max(0.0, width_now / 2.0)
+    else:
+        return (), "invalid-state"
+    return (LaserHazard(
+        laser.x,
+        laser.y,
+        laser.angle,
+        (laser.end_offset - laser.start_offset) / 2.0 + laser.start_offset,
+        max(0.0, size_x),
+        laser.width / 2.0,
+    ),), "checked"
+
+
+def _audit_source_successor_coverage(
+    run_dir: Path,
+    manifest: dict,
+    objects: dict[str, object],
+) -> dict[str, object]:
+    """Check committed Hard frames against the following factual Wine root.
+
+    This is intentionally a one-sided coverage check. It can disprove a
+    source envelope by finding a retained physical hazard outside it; it does
+    not call an envelope complete merely because hazards that retired during
+    the update are absent from the next root.
+    """
+    paths = _stream_paths(run_dir, manifest, "frames")
+    skipped = {
+        "non_control_v3": 0,
+        "source_uncommitted": 0,
+        "stage_boundary": 0,
+        "outside_hard_horizon": 0,
+    }
+    laser_unavailable: dict[str, int] = {}
+    checked_links = 0
+    actual_aabbs_checked = 0
+    actual_lasers_checked = 0
+    uncovered_aabbs = 0
+    uncovered_lasers = 0
+    counterexamples = []
+    previous_row = None
+    previous_snapshot = None
+
+    for row in _rows(paths):
+        current_snapshot = _decode_frame(row, objects)
+        if previous_row is None:
+            previous_row = row
+            previous_snapshot = current_snapshot
+            continue
+        assert previous_snapshot is not None
+        before = previous_snapshot
+        after = current_snapshot
+        decision = previous_row.get("decision") or {}
+        tier = str(getattr(before, "capture_tier", ""))
+        if tier != "control-v3" or str(
+            getattr(after, "capture_tier", "")
+        ) != "control-v3":
+            skipped["non_control_v3"] += 1
+        elif decision.get("source_commitment") != "source-complete-hard-v1":
+            skipped["source_uncommitted"] += 1
+        elif before.stage != after.stage:
+            skipped["stage_boundary"] += 1
+        else:
+            elapsed = int(after.frame) - int(before.frame)
+            if not 1 <= elapsed <= 4:
+                skipped["outside_hard_horizon"] += 1
+            else:
+                aabb_frames = decision.get("source_hard_aabb_frames", ())
+                laser_frames = decision.get("source_hard_laser_frames", ())
+                margin = decision.get("hard_collision_margin")
+                if (
+                    margin is None
+                    or len(aabb_frames) < elapsed
+                    or len(laser_frames) < elapsed
+                ):
+                    if len(counterexamples) < _MAX_SUCCESSOR_COUNTEREXAMPLES:
+                        counterexamples.append({
+                            "sequence": int(previous_row["sequence"]),
+                            "frame": int(before.frame),
+                            "elapsed": elapsed,
+                            "kind": "committed-primitives-missing",
+                        })
+                    uncovered_aabbs += 1
+                else:
+                    committed_aabbs = tuple(
+                        tuple(map(float, item))
+                        for item in aabb_frames[elapsed - 1]
+                    )
+                    committed_lasers = tuple(
+                        LaserHazard(*map(float, item))
+                        for item in laser_frames[elapsed - 1]
+                    )
+                    reachable = _reachable_envelope(
+                        before, elapsed, float(margin)
+                    )
+                    actual_aabbs = [
+                        (
+                            f"bullet:{bullet.slot}",
+                            (
+                                bullet.x - bullet.half_width,
+                                bullet.y - bullet.half_height,
+                                bullet.x + bullet.half_width,
+                                bullet.y + bullet.half_height,
+                            ),
+                        )
+                        for bullet in after.bullets
+                        if bullet.state == 1
+                    ]
+                    actual_aabbs.extend(
+                        (
+                            f"enemy:{index}",
+                            (
+                                enemy.x - enemy.half_width,
+                                enemy.y - enemy.half_height,
+                                enemy.x + enemy.half_width,
+                                enemy.y + enemy.half_height,
+                            ),
+                        )
+                        for index, enemy in enumerate(after.enemies)
+                    )
+                    for identity, actual in actual_aabbs:
+                        if not _aabb_intersects(actual, reachable):
+                            continue
+                        actual_aabbs_checked += 1
+                        if any(
+                            _aabb_contains(candidate, actual)
+                            for candidate in committed_aabbs
+                        ):
+                            continue
+                        uncovered_aabbs += 1
+                        if len(counterexamples) < _MAX_SUCCESSOR_COUNTEREXAMPLES:
+                            counterexamples.append({
+                                "sequence": int(previous_row["sequence"]),
+                                "frame": int(before.frame),
+                                "next_frame": int(after.frame),
+                                "kind": identity,
+                                "actual": list(actual),
+                                "reachable_envelope": list(reachable),
+                            })
+                    for laser in after.lasers:
+                        hazards, reason = _retained_post_update_laser_hazards(
+                            laser
+                        )
+                        if reason != "checked":
+                            laser_unavailable[reason] = (
+                                laser_unavailable.get(reason, 0) + 1
+                            )
+                        for actual in hazards:
+                            if not _aabb_intersects(
+                                _laser_aabb(actual), reachable
+                            ):
+                                continue
+                            actual_lasers_checked += 1
+                            if _laser_is_covered(
+                                actual, committed_aabbs, committed_lasers
+                            ):
+                                continue
+                            uncovered_lasers += 1
+                            if len(counterexamples) < _MAX_SUCCESSOR_COUNTEREXAMPLES:
+                                counterexamples.append({
+                                    "sequence": int(previous_row["sequence"]),
+                                    "frame": int(before.frame),
+                                    "next_frame": int(after.frame),
+                                    "kind": f"laser:{laser.slot}",
+                                    "actual": [
+                                        actual.origin_x,
+                                        actual.origin_y,
+                                        actual.angle,
+                                        actual.center_offset,
+                                        actual.size_x,
+                                        actual.size_y,
+                                    ],
+                                    "reachable_envelope": list(reachable),
+                                })
+                checked_links += 1
+        previous_row = row
+        previous_snapshot = current_snapshot
+
+    return {
+        "method": "retained-next-root-one-sided-coverage-v1",
+        "float_comparison_tolerance": _SUCCESSOR_FLOAT_TOLERANCE,
+        "checked_links": checked_links,
+        "actual_aabbs_checked": actual_aabbs_checked,
+        "actual_lasers_checked": actual_lasers_checked,
+        "uncovered_aabbs": uncovered_aabbs,
+        "uncovered_lasers": uncovered_lasers,
+        "skipped_links": skipped,
+        "retained_laser_geometry_unavailable": laser_unavailable,
+        "counterexamples_truncated": (
+            uncovered_aabbs + uncovered_lasers > len(counterexamples)
+        ),
+        "counterexamples": counterexamples,
+    }
 
 
 def _audit_dense_hard_parity(
@@ -398,6 +744,11 @@ def audit(
         objects,
         native_library,
     )
+    source_successor_coverage = _audit_source_successor_coverage(
+        run_dir,
+        manifest,
+        objects,
+    )
     categories: dict[str, int] = {}
     for finding in findings:
         key = str(finding["classification"])
@@ -461,6 +812,14 @@ def audit(
         integrity_errors.append("physical-hit-count-mismatch")
     if dense_hard_parity and dense_hard_parity["unsafe_divergences"]:
         integrity_errors.append("dense-hard-parity-unsafe-divergence")
+    frame_records = int((manifest.get("records") or {}).get("frames", 0))
+    if frame_records > 1 and not source_successor_coverage["checked_links"]:
+        integrity_errors.append("source-successor-coverage-unavailable")
+    if (
+        source_successor_coverage["uncovered_aabbs"]
+        or source_successor_coverage["uncovered_lasers"]
+    ):
+        integrity_errors.append("source-successor-coverage-counterexample")
     counterexamples = categories.get("safety-counterexample-candidate", 0)
     unresolved = categories.get("unresolved-hit-needs-local-trace", 0)
     return {
@@ -482,6 +841,7 @@ def audit(
         "scope_pollution": scope_pollution,
         "anchor_records": int(manifest.get("records", {}).get("anchors", 0)),
         "dense_hard_parity": dense_hard_parity,
+        "source_successor_coverage": source_successor_coverage,
         "latency": {
             "capture": summary.get("capture_timing"),
             "solve": summary.get("solve_timing"),

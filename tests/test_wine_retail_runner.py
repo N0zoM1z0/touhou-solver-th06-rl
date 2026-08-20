@@ -206,7 +206,7 @@ def test_attested_child_pid_bypasses_sudo_monitor_pid(tmp_path: Path) -> None:
         process.wait(timeout=5)
 
 
-def test_first_failure_corpus_requires_frozen_natural_practice(
+def test_first_failure_corpus_is_an_explicit_practice_diagnostic(
     tmp_path: Path,
 ) -> None:
     common = [

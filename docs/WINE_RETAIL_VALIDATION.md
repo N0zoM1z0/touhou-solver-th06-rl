@@ -2,8 +2,10 @@
 
 This path runs the original Japanese TH06 1.02h executable under Wine. Wine is
 the project's only gameplay, learning, and evaluation environment. Fixed RNG,
-accelerated Wine, and offline replay remain diagnostic/training strata; final
-policy comparison uses normal-speed complete original-retail Wine Stages.
+isolated parallel normal-speed workers, and offline replay remain
+diagnostic/training strata. Evidence-producing Wine does not use an accelerated
+game clock; final policy comparison uses sequential normal-speed complete
+original-retail Wine Stages.
 
 ## Fixed inputs
 

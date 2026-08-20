@@ -51,8 +51,10 @@ The original-retail runner contract is
 
 Final policy evidence is the physical HIT count in alternating, normal-speed,
 complete original-retail Wine Practice Stages with HIT continuation. Fixed RNG,
-accelerated Wine, first-failure prefixes, shadow replay, and offline metrics may
-reject or select a candidate, but may not promote one.
+first-failure prefixes, shadow replay, and offline metrics may reject a
+candidate, but may not promote one. Evidence-producing Wine always retains the
+retail clock; collection throughput comes from isolated parallel workers and
+offline computation.
 
 There is currently no authorized gameplay candidate or current-generation Wine
 experiment command. The tracked Wine smoke policy is infrastructure-only and

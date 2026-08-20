@@ -65,6 +65,10 @@ The audit is bound to GensokyoClub/th06 commit
 - collidable enemy projection omitted `Enemy::ClampPos`;
 - the former resident observed-only gate did not cover future ECL/timeline
   births or body/laser mutations, so it was not a complete Hard authority;
+- a rejected calc-phase root was retried while the exact process remained
+  suspended, so BulletManager could never finish that phase; paused capture
+  now resumes between bounded attempts and retains only the successful pause
+  through publication;
 - the corpus omitted the Hard fallback margin and its audit consequently
   reported a false unsafe divergence;
 - dense learner hazard features are intentionally capped/lossy and therefore
@@ -76,3 +80,13 @@ source commitment from the exhaustive retail root and records the exact
 committed primitives. Promotion remains blocked until live all-stage coverage,
 latency, and replay parity pass; an observed-only action set must never be
 described or promoted as a complete retail-safe set.
+
+The run audit also performs an offline causal cross-check. For every adjacent
+`control-v3` root within Hard-4, it asks whether the preceding committed frame
+contains every retained bullet, lethal enemy body, and laser collision
+geometry that can intersect the player's preceding reachable envelope. This
+is a one-sided falsifier: a retained uncovered hazard rejects the run, while a
+hazard that retired during the source update is not silently counted as
+verified. Ambiguous zero-delay laser retirement is reported separately. The
+small float32 comparison tolerance in this audit never changes the online
+collision margin or certified action set.

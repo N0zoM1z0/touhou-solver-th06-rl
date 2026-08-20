@@ -147,8 +147,9 @@ may neither discard a HIT nor assign one to an action Wine did not execute.
 - The learned component ranks only native-safe actions and can abstain.
 - No online `observe`, weight update, or checkpoint mutation occurs.
 - No movement depends on game RNG, frame, run identity, or handwritten phase.
-- Fixed RNG, acceleration, snapshots, and first-failure runs are training tools
-  only; they cannot promote a candidate.
+- Fixed RNG and isolated parallel workers may accelerate training collection;
+  snapshots and first-failure prefixes are diagnostic tools only. Neither can
+  promote a candidate, and first-failure prefixes are not training episodes.
 - Every Wine worker is resource-isolated and exact cleanup is verified after
   every episode; canary and final-evaluation Wine jobs are sequential.
 

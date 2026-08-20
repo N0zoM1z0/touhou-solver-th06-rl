@@ -348,9 +348,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--first-failure-corpus-root",
         type=Path,
         help=(
-            "collect one lossless physical Practice prefix and stop on the first "
-            "HIT or authority failure; unlike continuation benchmarks, this "
-            "mode does not patch lives"
+            "explicit diagnostic only: collect one lossless physical Practice "
+            "prefix and stop on the first HIT; this incomplete mode is not "
+            "offline-RL training or promotion evidence"
         ),
     )
     parser.add_argument(
@@ -601,9 +601,9 @@ def run(args: argparse.Namespace) -> int:
             if complete_route_corpus_root is not None
             else "fixed-rng-option-smoke-non-evidence"
             if option_smoke_corpus_root is not None
-            else "fixed-rng-first-failure-training"
+            else "fixed-rng-first-failure-diagnostic"
             if args.diagnostic_rng_seed is not None
-            else "first-failure-corpus"
+            else "first-failure-diagnostic"
             if first_failure_corpus_root is not None
             else "hit-continuation-benchmark"
         ),
@@ -934,6 +934,7 @@ def run(args: argparse.Namespace) -> int:
         else:
             controller.extend(
                 (
+                    "--stop-on-hit",
                     "--corpus-root",
                     _windows_path(first_failure_corpus_root),
                 )
