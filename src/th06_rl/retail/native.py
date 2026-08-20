@@ -734,6 +734,14 @@ class NativeProcess:
         self.ecl_timeline_instruction_cache: dict[
             int, StageTimelineInstruction
         ] = {}
+        # Compact control only needs the 8-byte timeline header for its phase
+        # label.  Keep those partial records out of the exhaustive immutable
+        # instruction cache: a newly loaded stage can publish its timeline
+        # pointer one frame after the stage root, while ``ecl_cache_stage`` is
+        # already current.
+        self.control_timeline_header_cache: dict[
+            int, StageTimelineInstruction
+        ] = {}
         self.ecl_timeline_cache: dict[
             int, tuple[StageTimelineInstruction, ...]
         ] = {}
@@ -864,6 +872,7 @@ def _invalidate_source_caches(process) -> None:
         "ecl_instruction_cache",
         "ecl_program_cache",
         "ecl_timeline_instruction_cache",
+        "control_timeline_header_cache",
         "ecl_timeline_cache",
         "ecl_timeline_program_cache",
         "ecl_subroutine_traits",
@@ -874,6 +883,12 @@ def _invalidate_source_caches(process) -> None:
             cache.clear()
     process.ecl_cache_stage = None
     process.ecl_subroutines = ()
+    # These compact-reader markers also belong to the rejected capture epoch.
+    # Leaving them current would make the next pair reuse an empty or partial
+    # source view after the exhaustive caches above were cleared.
+    process._th06_rl_control_ecl_stage = None
+    process._th06_rl_control_sprite_stage = None
+    process._th06_rl_control_sprite_dimensions = {}
 
 
 def _read_ecl_program(

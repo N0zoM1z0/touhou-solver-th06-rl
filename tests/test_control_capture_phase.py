@@ -6,6 +6,7 @@ import pytest
 from th06_rl.th06.control_capture import (
     _completed_calc_lag,
     _read_bulk_view,
+    _timeline_context_instruction,
     read_passive_input_delivery,
 )
 from th06_rl.retail import native
@@ -123,12 +124,16 @@ def test_rejected_snapshot_attempt_cannot_publish_source_cache(monkeypatch):
         ecl_instruction_cache={1: object()},
         ecl_program_cache={2: object()},
         ecl_timeline_instruction_cache={3: object()},
+        control_timeline_header_cache={30: object()},
         ecl_timeline_cache={4: object()},
         ecl_timeline_program_cache={5: object()},
         ecl_subroutine_traits={6: object()},
         message_program_cache={7: object()},
         ecl_cache_stage=1,
         ecl_subroutines=(0x1234,),
+        _th06_rl_control_ecl_stage=1,
+        _th06_rl_control_sprite_stage=1,
+        _th06_rl_control_sprite_dimensions={0x10000: (8.0, 8.0)},
     )
     attempts = 0
 
@@ -146,11 +151,15 @@ def test_rejected_snapshot_attempt_cannot_publish_source_cache(monkeypatch):
             "ecl_instruction_cache",
             "ecl_program_cache",
             "ecl_timeline_instruction_cache",
+            "control_timeline_header_cache",
             "ecl_timeline_cache",
             "ecl_timeline_program_cache",
             "ecl_subroutine_traits",
             "message_program_cache",
         ))
+        assert candidate._th06_rl_control_ecl_stage is None
+        assert candidate._th06_rl_control_sprite_stage is None
+        assert candidate._th06_rl_control_sprite_dimensions == {}
         return SimpleNamespace(frame=2)
 
     monkeypatch.setattr(native, "read_game_frame", lambda _process: 2)
@@ -158,3 +167,43 @@ def test_rejected_snapshot_attempt_cannot_publish_source_cache(monkeypatch):
 
     assert native.read_snapshot(process).frame == 2
     assert attempts == 2
+
+
+def test_control_timeline_header_cannot_truncate_exhaustive_stage_root():
+    address = 0x40000
+    spawn = struct.pack(
+        "<hhhhfffhhI",
+        330,
+        0,
+        4,
+        28,
+        -999.0,
+        -32.0,
+        0.0,
+        70,
+        0,
+        700,
+    )
+    terminator = struct.pack("<hhhh", -1, 0, 0, 8)
+    memory = spawn + terminator
+
+    class Process:
+        ecl_cache_stage = 2
+        ecl_timeline_instruction_cache = {}
+        ecl_timeline_cache = {}
+        control_timeline_header_cache = {}
+
+        @staticmethod
+        def read(read_address, size):
+            offset = read_address - address
+            return memory[offset : offset + size]
+
+    process = Process()
+    header = _timeline_context_instruction(process, native, address, 2)
+    assert len(bytes.fromhex(header.raw_hex)) == 8
+    assert process.ecl_timeline_instruction_cache == {}
+
+    timeline = native._read_stage_timeline(process, address)
+    assert timeline[0].size == 28
+    assert bytes.fromhex(timeline[0].raw_hex) == spawn
+    assert timeline[1].time == -1

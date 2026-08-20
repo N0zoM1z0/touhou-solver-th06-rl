@@ -332,7 +332,42 @@ def _ensure_subroutines(process, stage: int, native) -> tuple[int, ...]:
     if getattr(process, "_th06_rl_control_ecl_stage", None) != stage:
         process.ecl_subroutines = native._read_ecl_subroutines(process)
         process._th06_rl_control_ecl_stage = stage
+        # Heap addresses may be reused by the next stage.  This compact cache
+        # contains headers only and therefore has its own stage ownership.
+        process.control_timeline_header_cache = {}
     return process.ecl_subroutines
+
+
+def _timeline_context_instruction(process, native, address: int, stage: int):
+    """Read a phase-label header without poisoning exhaustive source bytes."""
+    instruction = None
+    # The exhaustive cache is usable only when its stage owner is current;
+    # every positive-time record stored there includes all encoded bytes.
+    if getattr(process, "ecl_cache_stage", None) == stage:
+        instruction = process.ecl_timeline_instruction_cache.get(address)
+    if instruction is not None:
+        return instruction
+
+    cache = getattr(process, "control_timeline_header_cache", None)
+    if cache is None:
+        cache = {}
+        process.control_timeline_header_cache = cache
+    instruction = cache.get(address)
+    if instruction is not None:
+        return instruction
+
+    header = process.read(address, 8)
+    time_value, arg0, opcode, size = struct.unpack("<hhhh", header)
+    if time_value >= 0 and not 0x08 <= size <= 0x100:
+        raise RuntimeError(
+            f"invalid ECL timeline instruction size {size} "
+            f"at 0x{address:08X}"
+        )
+    instruction = StageTimelineInstruction(
+        address, time_value, arg0, opcode, size, header.hex()
+    )
+    cache[address] = instruction
+    return instruction
 
 
 def _control_sprite_dimensions(
@@ -422,20 +457,7 @@ def _source_context(
         return "timeline-unknown", None
     if not 0x10000 <= address < 0x80000000:
         raise RuntimeError(f"invalid ECL timeline pointer 0x{address:08X}")
-    cache = process.ecl_timeline_instruction_cache
-    instruction = cache.get(address)
-    if instruction is None:
-        header = process.read(address, 8)
-        time_value, arg0, opcode, size = struct.unpack("<hhhh", header)
-        if time_value >= 0 and not 0x08 <= size <= 0x100:
-            raise RuntimeError(
-                f"invalid ECL timeline instruction size {size} "
-                f"at 0x{address:08X}"
-            )
-        instruction = StageTimelineInstruction(
-            address, time_value, arg0, opcode, size, header.hex()
-        )
-        cache[address] = instruction
+    instruction = _timeline_context_instruction(process, native, address, stage)
     if instruction.time < 0:
         return "timeline-complete", None
     return (
