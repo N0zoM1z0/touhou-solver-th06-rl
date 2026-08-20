@@ -168,6 +168,11 @@ Generation 7 proceeds in three falsifiable layers.
    thinning sampler.
 7. Physical-safe, statistically-supported, and forecast-risk masks remain
    distinct. Only the first has action-publication authority.
+8. Post-HIT invulnerability is outside the NMNB actor state distribution. The
+   online candidate set is therefore the single source-safe reactive baseline
+   action. Held-out PDIS accepts that interval only with this exact singleton
+   propensity, carries the preceding prefix weight through every factual HIT,
+   and rejects every other ineligible interval.
 
 Proper nonnegative advantage-weighted maximum likelihood follows the core
 supervised extraction idea in [Advantage-Weighted Regression](https://arxiv.org/abs/1910.00177).

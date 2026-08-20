@@ -43,7 +43,7 @@ def _option(
 ) -> OfflineOptionTransition:
     state = _state()
     return OfflineOptionTransition(
-        schema="th06-rl-causal-options-v2",
+        schema="th06-rl-causal-options-v3",
         episode_id=episode,
         episode_unit="complete-route",
         behavior_policy_id="safe-option-exploration-v2",

@@ -9,10 +9,13 @@ from th06_rl.g7_forecast import forecast_accepted_actions
 from th06_rl.g7_learner import linear_actor_distribution
 from th06_rl.g7_support import locally_supported_actions
 from th06_rl.g7_training import CANDIDATE_SCHEMA
-from th06_rl.offline_options import validate_offline_episode
+from th06_rl.offline_options import (
+    NMNB_FORCED_EXCLUSION,
+    validate_offline_episode,
+)
 
 
-OPE_SCHEMA = "th06-rl-g7-heldout-pdis-v1"
+OPE_SCHEMA = "th06-rl-g7-heldout-pdis-v2"
 
 
 def _mean(values) -> float:
@@ -157,11 +160,11 @@ def evaluate_candidate(
     maximum_observed_cumulative_ratio = 0.0
     nonincumbent_mass = 0.0
     decisions = 0
+    eligible_decisions = 0
+    forced_post_hit_decisions = 0
     episode_ids = set()
     for episode in episodes:
         validate_offline_episode(episode)
-        if any(not option.eligible for option in episode):
-            raise ValueError("held-out OPE episode contains an ineligible option")
         episode_id = episode[0].episode_id
         if episode_id in episode_ids:
             raise ValueError("held-out OPE repeats a physical episode")
@@ -172,21 +175,47 @@ def evaluate_candidate(
         incumbent_value = 0.0
         observed_value = 0.0
         for depth, option in enumerate(episode):
-            supported = locally_supported_actions(support_artifact, option.state)
-            forecast = forecast_accepted_actions(
-                forecast_artifact,
-                option.state,
-                supported_actions=supported,
-            )
-            distribution = linear_actor_distribution(
-                actor,
-                option.state,
-                supported_actions=supported,
-                forecast_accepted_actions=forecast,
-                max_kl=max_kl,
-            )
-            target = dict(distribution.probabilities)
             behavior = dict(option.behavior_probabilities)
+            forced_post_hit = not option.eligible
+            if forced_post_hit:
+                if (
+                    option.exclusion_reasons != (NMNB_FORCED_EXCLUSION,)
+                    or option.state.legal_actions
+                    != (option.state.baseline_action,)
+                    or option.action != option.state.baseline_action
+                    or behavior != {option.state.baseline_action: 1.0}
+                    or option.behavior_probability != 1.0
+                ):
+                    raise ValueError(
+                        "held-out OPE has a non-deterministic or unsupported "
+                        "ineligible option"
+                    )
+                # Both deployed policies are deliberately extended with the
+                # exact same deterministic source-safe fallback after a HIT.
+                # Do not query the actor outside the NMNB state distribution.
+                target = behavior
+                forced_post_hit_decisions += 1
+            else:
+                supported = locally_supported_actions(
+                    support_artifact, option.state
+                )
+                forecast = forecast_accepted_actions(
+                    forecast_artifact,
+                    option.state,
+                    supported_actions=supported,
+                )
+                distribution = linear_actor_distribution(
+                    actor,
+                    option.state,
+                    supported_actions=supported,
+                    forecast_accepted_actions=forecast,
+                    max_kl=max_kl,
+                )
+                target = dict(distribution.probabilities)
+                nonincumbent_mass += 1.0 - target[
+                    option.state.baseline_action
+                ]
+                eligible_decisions += 1
             if any(
                 target[action] > 0.0 and behavior.get(action, 0.0) <= 0.0
                 for action in target
@@ -194,7 +223,11 @@ def evaluate_candidate(
                 raise ValueError("candidate is outside logged behavior support")
             factual = option.action
             candidate_ratio = target[factual] / option.behavior_probability
-            incumbent_probability = float(factual == option.state.baseline_action)
+            incumbent_probability = (
+                behavior[factual]
+                if forced_post_hit
+                else float(factual == option.state.baseline_action)
+            )
             incumbent_ratio = incumbent_probability / option.behavior_probability
             if (
                 candidate_ratio > maximum_step_ratio + 1e-12
@@ -232,13 +265,14 @@ def evaluate_candidate(
             candidate_value += candidate_weight * option.physical_hit_cost
             incumbent_value += incumbent_weight * option.physical_hit_cost
             observed_value += option.physical_hit_cost
-            nonincumbent_mass += 1.0 - target[option.state.baseline_action]
             decisions += 1
         candidate_values.append(candidate_value)
         incumbent_values.append(incumbent_value)
         observed_values.append(observed_value)
         candidate_final_weights.append(candidate_weight)
         incumbent_final_weights.append(incumbent_weight)
+    if not eligible_decisions:
+        raise ValueError("held-out OPE has no NMNB-eligible decisions")
     differences = [
         candidate_value - incumbent_value
         for candidate_value, incumbent_value in zip(
@@ -313,6 +347,8 @@ def evaluate_candidate(
         "authorization": "offline-evidence-only",
         "episodes": len(episodes),
         "decisions": decisions,
+        "eligible_decisions": eligible_decisions,
+        "forced_post_hit_decisions": forced_post_hit_decisions,
         "observed_mean_physical_hits": _mean(observed_values),
         "candidate_pdis_mean": _mean(candidate_values),
         "candidate_pdis_interval": list(candidate_interval),
@@ -329,7 +365,7 @@ def evaluate_candidate(
         "incumbent_minimum_hit_prefix_ess": incumbent_minimum_ess,
         "maximum_step_ratio": maximum_observed_step_ratio,
         "maximum_cumulative_ratio": maximum_observed_cumulative_ratio,
-        "mean_nonincumbent_probability": nonincumbent_mass / decisions,
+        "mean_nonincumbent_probability": nonincumbent_mass / eligible_decisions,
         "confidence": confidence,
         "bootstrap_resamples": bootstrap_resamples,
         "permutation_resamples": permutation_resamples,

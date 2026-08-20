@@ -135,9 +135,11 @@ controller log, trace, manifest outcome, and lossless event stream.
 This native-baseline run is diagnostic because its behavior policy has no
 randomized option propensities; that, not HIT continuation, makes it
 training-ineligible. Declared exploration collection also continues after HIT
-to retain a complete physical episode, while post-HIT invulnerable choices are
-excluded only by the NMNB learner view. Bomb is unrepresentable in the input
-bridge. Every artifact directory contains the controller/game/GDB logs, a
+to retain a complete physical episode. Post-HIT invulnerable roots use a
+source-safe deterministic baseline and are excluded only from the NMNB
+actor/critic fit; their factual costs remain in returns and OPE. Bomb is
+unrepresentable in the input bridge. Every artifact directory contains the
+controller/game/GDB logs, a
 frame trace, configuration evidence, and `report.json` with process cleanup
 and provenance.
 

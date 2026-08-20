@@ -18,8 +18,9 @@ from th06_rl.th06.source_dataset import (
 )
 
 
-OPTION_DATASET_SCHEMA = "th06-rl-causal-options-v2"
+OPTION_DATASET_SCHEMA = "th06-rl-causal-options-v3"
 DISCOUNT = 1.0
+NMNB_FORCED_EXCLUSION = "player-not-vulnerable"
 
 
 class OfflineOptionError(RuntimeError):
@@ -424,7 +425,7 @@ def iter_offline_options(run_dir: Path) -> Iterator[OfflineOptionTransition]:
             # NMNB deployment never visits post-HIT invulnerability. Retain
             # these factual intervals and their HIT costs in the episode, but
             # do not fit the actor/critic on an unreachable target state.
-            active.exclusions.add("player-not-vulnerable")
+            active.exclusions.add(NMNB_FORCED_EXCLUSION)
         if transition.get("learning_eligible") is not True:
             reasons = transition.get("learning_exclusion_reasons") or (
                 "transition-not-learning-eligible",

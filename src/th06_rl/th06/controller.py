@@ -46,7 +46,7 @@ from ..retail.hazards.lasers import (
     unknown_motion_may_reach_player,
 )
 from ..retail.input_lease import InputLease
-from ..retail.model import PLAYER_ALIVE, action_from_input
+from ..retail.model import PLAYER_ALIVE, PLAYER_INVULNERABLE, action_from_input
 from ..retail.native import (
     ADDR_LIFE_PATCH,
     NativeDecodeError,
@@ -75,7 +75,7 @@ from .source import (
 from .system_health import GIB, below_commit_reserve, read_system_memory
 
 
-ACTIVE_PLAYER_STATES = (0, 3)
+ACTIVE_PLAYER_STATES = (PLAYER_ALIVE, PLAYER_INVULNERABLE)
 HEALTH_SAMPLE_SECONDS = 1.0
 HEALTH_TRACE_SECONDS = 10.0
 PAUSED_CAPTURE_ATTEMPTS = 8
@@ -86,6 +86,21 @@ DIFFICULTIES = {"normal": 1, "hard": 2, "lunatic": 3}
 SUPERVISOR_GAMEPLAY = 2
 SUPERVISOR_GAMEPLAY_REINIT = 3
 SUPERVISOR_ENDING = 10
+
+
+def _nmnb_policy_actions(
+    player_state: int,
+    hard_actions: tuple[str, ...],
+    baseline_action: str,
+) -> tuple[str, ...]:
+    """Expose learned choice only on states reachable by a no-miss policy."""
+    if not hard_actions or baseline_action not in hard_actions:
+        raise ValueError("reactive baseline must belong to the source-safe set")
+    if player_state == PLAYER_ALIVE:
+        return hard_actions
+    if player_state == PLAYER_INVULNERABLE:
+        return (baseline_action,)
+    raise ValueError("NMNB policy boundary received an inactive player state")
 
 
 class RouteTrial:
@@ -1097,11 +1112,18 @@ def run(args: argparse.Namespace) -> int:
                             checkpoints=(1, 2, 3, 4),
                             collision_margin=hard_collision_margin,
                         )
-                        locally_admissible = tuple(
-                            item.action.name for item in legal
-                        )
                         baseline = _reactive_baseline(legal, current_core)
                         baseline_action = baseline.action.name
+                        # A no-miss target never reaches post-HIT
+                        # invulnerability. Keep collecting the full physical
+                        # route, but make that off-target lifecycle a witnessed
+                        # deterministic source-safe fallback instead of asking
+                        # either exploration or a learned actor to extrapolate.
+                        locally_admissible = _nmnb_policy_actions(
+                            snapshot.player_state,
+                            tuple(item.action.name for item in legal),
+                            baseline_action,
+                        )
                         observation_features, action_features = (
                             project_learning_features(
                                 snapshot,

@@ -140,16 +140,19 @@ grouped validation, and uncertainty contract before fitting. Model complexity
 is unrestricted offline provided the exact deployable policy remains bounded,
 immutable, and fast enough online.
 
-For option-boundary complete-Stage returns, a rejected tentative option is not
+For option-boundary complete-route returns, a rejected tentative option is not
 a treatment or a new decision boundary. Physical HITs that appear while
-learning is paused for the normal death/invulnerability lifecycle remain part
-of the preceding factual interval and all earlier returns. Prefix HITs before
+learning is paused for the normal death/spawning lifecycle remain part of the
+preceding factual interval and all earlier returns. Prefix HITs before
 the first factual boundary are reported separately. Transition HITs, factual
 interval HITs, prefix HITs, and manifest HITs must conserve exactly; accounting
 may neither discard a HIT nor assign one to an unpublished command. Options
 whose decision root is already invulnerable remain in the corpus and return
 accounting but are excluded from the NMNB actor/critic fit: that post-HIT state
-is unreachable under the target no-miss policy.
+is unreachable under the target no-miss policy. Online and during exploration,
+that state exposes only the source-safe reactive baseline with propensity one.
+Held-out PDIS carries its incoming prefix weight across this forced interval;
+it rejects any other ineligible reason or non-singleton propensity.
 
 ## Runtime and promotion invariants
 

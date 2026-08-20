@@ -42,7 +42,7 @@ def _option(index: int) -> OfflineOptionTransition:
     cost = int(action == "stay")
     state = _state()
     return OfflineOptionTransition(
-        "th06-rl-causal-options-v2",
+        "th06-rl-causal-options-v3",
         f"episode-{index:03d}",
         "complete-route",
         "safe-option-exploration-v2",
