@@ -5,10 +5,10 @@ from __future__ import annotations
 import math
 import random
 
+from th06_rl.g7_contract import CANDIDATE_SCHEMA
 from th06_rl.g7_forecast import forecast_accepted_actions
 from th06_rl.g7_learner import linear_actor_distribution
 from th06_rl.g7_support import locally_supported_actions
-from th06_rl.g7_training import CANDIDATE_SCHEMA
 from th06_rl.offline_options import (
     NMNB_FORCED_EXCLUSION,
     validate_offline_episode,

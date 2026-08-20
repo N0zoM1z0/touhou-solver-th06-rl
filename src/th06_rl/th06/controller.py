@@ -1081,6 +1081,9 @@ def run(args: argparse.Namespace) -> int:
                                 for item in retained
                             ),
                             effort_horizon=4,
+                            learning_eligible=(
+                                snapshot.player_state == PLAYER_ALIVE
+                            ),
                         ))
                     else:
                         prepared_hard = prepared_source_hard
@@ -1169,6 +1172,9 @@ def run(args: argparse.Namespace) -> int:
                             action_features=action_features,
                             hazard_primitives=hazard_primitives,
                             history_features=history_features,
+                            learning_eligible=(
+                                snapshot.player_state == PLAYER_ALIVE
+                            ),
                         ))
                         selected = next(
                             item.action for item in legal

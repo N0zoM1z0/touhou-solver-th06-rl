@@ -184,6 +184,7 @@ class FrameEvidence:
                 "safe-option-exploration-v1",
                 "safe-option-exploration-v2",
                 "propensity-aware-option-exploration-v1",
+                "g7-qualified-candidate-v1",
             ):
                 raise ValueError("option trace requires a declared behavior policy")
             if self.proposed_action != self.option.intent:

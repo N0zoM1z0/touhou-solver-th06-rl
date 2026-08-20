@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import math
 
 
-POLICY_API_VERSION = 1
+POLICY_API_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,10 @@ class PolicyContext:
     ] = ()
     hazard_primitives: tuple[tuple[float, ...], ...] = ()
     history_features: tuple[tuple[str, float], ...] = ()
+    # Explicit reachable-state contract. False is the deterministic post-HIT
+    # extension used to finish a physical route; learned actors must not infer
+    # this lifecycle state from the size or contents of the safe action set.
+    learning_eligible: bool = True
 
 
 @dataclass(frozen=True)

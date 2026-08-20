@@ -18,6 +18,23 @@ Online and offline work have different jobs.
   They train only from factual original-retail Wine transitions. They may not
   manufacture an unexecuted successor state.
 
+The Generation-7 training artifact is deliberately not a runnable policy
+state. It retains `offline-research-only` authorization. The immutable online
+loader accepts only a separately qualified state that binds the candidate
+SHA-256 and target KL limit and records four successful gates: held-out OPE,
+offline/online distribution parity, Windows embedded-Python latency, and an
+original-retail Wine shadow run. Missing, false, non-finite, or mismatched
+qualification fields fail during policy loading. Unit-test fixtures exercise
+this contract but are not deployment evidence.
+
+At an eligible option boundary the online plugin uses the same support filter,
+forecast consensus, linear actor, and constrained distribution functions used
+by OPE. Between boundaries it only continues the already selected eight-frame
+option. When the controller reports a post-HIT extension as ineligible, the
+plugin refuses to query the actor and requires the legal set to be exactly the
+reactive baseline singleton. This keeps route completion evidence while
+excluding unreachable post-HIT choices from learning and evaluation.
+
 “Source-complete” includes current bullets, enemy bodies, and lasers; spawn
 animation fallthrough; enemy clamps; and any timeline/ECL birth or body/laser
 mutation that can occur before the input lease expires. Repeating an

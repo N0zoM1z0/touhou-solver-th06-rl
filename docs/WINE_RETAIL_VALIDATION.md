@@ -155,3 +155,11 @@ controller's background input, exposed coherent live state, counted physical
 HITs, completed a Practice stage, or reached the original Ending state. It does
 not prove policy quality by itself. Promotion follows the complete-Stage
 alternating HIT-count contract in `WINE_ONLY_AUTONOMOUS_LEARNING.md`.
+
+Likewise, a Generation-7 offline candidate cannot be supplied directly as
+`--policy-state`. Online authorization additionally requires held-out OPE,
+bit-for-bit offline/online distribution parity, a latency measurement under the
+bundled Windows Python runtime, and an original-retail Wine shadow result, all
+bound to the candidate digest and target KL limit. Accelerated or suspended
+collection is corpus evidence only; final gameplay validation remains at the
+original 60 Hz timing.

@@ -86,7 +86,7 @@ class SafeOptionExplorationPolicy:
         return None
 
     def _boundary_probabilities(
-        self, legal: tuple[str, ...], baseline: str
+        self, _context, legal: tuple[str, ...], baseline: str
     ) -> dict[str, float]:
         if len(legal) == 1 or self.exploration_probability == 0.0:
             return {action: float(action == baseline) for action in legal}
@@ -116,7 +116,7 @@ class SafeOptionExplorationPolicy:
             # A hardware lease may outlive the causal option horizon. The
             # controller still recertifies its single forced action, but that
             # is not a new randomized assignment without a choice boundary.
-            return PolicyDecision(context.baseline_action, POLICY_NAME, 1.0)
+            return PolicyDecision(context.baseline_action, self.name, 1.0)
         if preceding is not None:
             raise RuntimeError("active option survived an invalid continuation")
         return self.decide(context)
@@ -143,7 +143,7 @@ class SafeOptionExplorationPolicy:
         preceding = self._preceding_termination(context, legal)
         boundary = self.active_id is None
         if boundary:
-            probabilities = self._boundary_probabilities(legal, baseline)
+            probabilities = self._boundary_probabilities(context, legal, baseline)
             chosen = self._sample(probabilities)
             probability = probabilities[chosen]
             if probability <= 0.0:
@@ -185,7 +185,7 @@ class SafeOptionExplorationPolicy:
 
         self.decisions += 1
         self.selected[chosen] += 1
-        return PolicyDecision(chosen, POLICY_NAME, probability, trace)
+        return PolicyDecision(chosen, self.name, probability, trace)
 
     def metrics(self) -> dict[str, object]:
         return {

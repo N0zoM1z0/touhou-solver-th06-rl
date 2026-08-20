@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 
+from th06_rl.g7_contract import CANDIDATE_SCHEMA
 from th06_rl.g7_forecast import build_forecast_artifact
 from th06_rl.g7_learner import (
     build_critic_dataset,
@@ -12,10 +13,6 @@ from th06_rl.g7_learner import (
     fit_linear_awr_actor,
 )
 from th06_rl.g7_support import fit_local_support
-
-
-CANDIDATE_SCHEMA = "th06-rl-g7-offline-candidate-v1"
-
 
 def _episode_subsets(
     episodes,
