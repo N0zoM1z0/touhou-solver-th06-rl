@@ -16,10 +16,7 @@ import os
 import struct
 import time
 
-from .donor import enable_donor_imports
-
-enable_donor_imports()
-from th06.model import (  # noqa: E402
+from ..retail.model import (
     BUTTON_BOMB,
     BUTTON_DOWN,
     BUTTON_FOCUS,
@@ -154,7 +151,7 @@ class BackgroundInputBridge:
 
     @contextmanager
     def suspended(self):
-        # The capture donor deliberately owns a narrow read/write process
+        # The retail adapter deliberately owns a narrow read/write process
         # handle. Wine enforces PROCESS_SUSPEND_RESUME on NtSuspendProcess,
         # so acquire that one right explicitly and retain it for this exact
         # PID's bridge lifetime instead of reopening it every controlled frame

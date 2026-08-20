@@ -1,6 +1,6 @@
 """Small frame-coherent TH06 capture for the resident safety loop.
 
-The authoritative donor snapshot is deliberately exhaustive: it retains
+The authoritative retail snapshot is deliberately exhaustive: it retains
 player attacks, items, effects, immutable ECL graphs, sprite geometry, and
 callback state for source replay.  Decoding all of that before every input
 publication made capture, rather than the native Hard gate, the hot path.
@@ -21,7 +21,8 @@ import math
 import struct
 import time
 
-from .donor import enable_donor_imports
+from ..retail import native
+from ..retail.model import Bullet, EnemyBody, Laser, StageTimelineInstruction
 
 
 CONTROL_CAPTURE_TIER = "control-v2"
@@ -32,7 +33,7 @@ DYNAMIC_BULLET_FLAGS = 0xDF1
 def _read_bulk_view(process, address: int, size: int) -> memoryview:
     """Read the hot manager interval into one process-owned reusable buffer.
 
-    The donor's general-purpose ``read`` API correctly returns an owning
+    The retail adapter's general-purpose ``read`` API returns an owning
     ``bytes`` object, but that means allocating and zeroing a new ~2 MiB
     ctypes buffer and then copying it into another ~2 MiB Python object every
     controlled frame.  This capture consumes the interval synchronously, so
@@ -192,7 +193,7 @@ def _tail_may_reach_player(
     horizon: int,
     collision_margin: float,
 ) -> bool:
-    """Cheap scalar equivalent of the donor's conservative sweep reject."""
+    """Cheap scalar equivalent of the retained conservative sweep reject."""
     relative = lambda absolute: absolute - native.BULLET_SIZE_OFFSET
     size_x, size_y = struct.unpack_from("<ff", tail, 0)
     x, y = struct.unpack_from(
@@ -364,8 +365,6 @@ def _source_context(
                 f"invalid ECL timeline instruction size {size} "
                 f"at 0x{address:08X}"
             )
-        from th06.model import StageTimelineInstruction
-
         instruction = StageTimelineInstruction(
             address, time_value, arg0, opcode, size, header.hex()
         )
@@ -588,8 +587,6 @@ def _decode_control_once(
         if bullet is not None:
             bullets.append(bullet)
 
-    from th06.model import EnemyBody, Laser
-
     lasers = []
     laser_base = native.ADDR_LASER_ARRAY - native.ADDR_BULLET_ARRAY
     for slot in range(native.LASER_COUNT):
@@ -750,9 +747,6 @@ def read_control_snapshot(
     the existing source timer witnesses still reject a process suspended in
     the middle of its update chain.
     """
-    enable_donor_imports()
-    import th06.native as native
-
     observed_epochs: list[int] = []
     last_error: BaseException | None = None
     for attempt in range(1, MAX_CAPTURE_ATTEMPTS + 1):
@@ -794,9 +788,6 @@ def observe_passive_control_clock(process) -> bool:
     those skipped frames, without admitting dialogue state into movement or
     learning.
     """
-    enable_donor_imports()
-    import th06.native as native
-
     def read_clock() -> tuple[bool, int, int]:
         time_stopped = bool(process.read(
             native.ADDR_GAME_MANAGER + native.GAME_TIME_STOPPED_OFFSET,
@@ -835,9 +826,6 @@ def observe_passive_control_clock(process) -> bool:
 
 def read_passive_input_delivery(process) -> tuple[int, int, int, int, int]:
     """Read one coherent retail input sample without copying battle hazards."""
-    enable_donor_imports()
-    import th06.native as native
-
     for _attempt in range(MAX_CAPTURE_ATTEMPTS):
         before = native.read_game_frame(process)
         block = process.read(native.ADDR_CURRENT_INPUT, 14)
@@ -857,9 +845,6 @@ def with_tracked_lasers(snapshot: ControlSnapshot, lasers) -> ControlSnapshot:
 
 def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
     """Hydrate a serialized control root for offline replay/audit."""
-    enable_donor_imports()
-    from th06.model import Bullet, EnemyBody, Laser
-
     values = dict(raw)
     values.setdefault("live_bullet_count", len(values.get("bullets", ())))
     values.setdefault("raw_bullet_tails", b"")
@@ -886,8 +871,6 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
     )
     raw_tails = values.get("raw_bullet_tails", b"")
     if raw_tails:
-        import th06.native as native
-
         tail_size = native.BULLET_STRIDE - native.BULLET_SIZE_OFFSET
         record_size = 6 + tail_size
         if len(raw_tails) % record_size:

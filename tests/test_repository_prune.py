@@ -157,3 +157,26 @@ def test_retained_python_does_not_import_retired_backends() -> None:
                         )
 
     assert violations == []
+
+
+def test_retail_runtime_has_no_external_solver_import_boundary() -> None:
+    roots = (REPOSITORY / "src", REPOSITORY / "scripts", REPOSITORY / "tests")
+    violations: list[str] = []
+    for root in roots:
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    modules = tuple(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                    modules = (node.module,)
+                else:
+                    continue
+                for module in modules:
+                    if module == "th06" or module.startswith("th06."):
+                        violations.append(
+                            f"{path.relative_to(REPOSITORY)}:{node.lineno}:{module}"
+                        )
+
+    assert not (REPOSITORY / "src/th06_rl/th06/donor.py").exists()
+    assert violations == []

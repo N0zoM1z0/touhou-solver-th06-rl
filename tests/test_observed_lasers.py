@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from th06_rl.native import LaserRect
-from th06_rl.th06.donor import enable_donor_imports
+from th06_rl.retail.hazards.lasers import hazards_by_frame
+from th06_rl.retail.model import Laser
 from th06_rl.th06.observed_lasers import laser_rects_by_frame
 
 
 def test_scalar_laser_projection_matches_established_source_model() -> None:
-    enable_donor_imports()
-    from th06.hazards.lasers import hazards_by_frame
-    from th06.model import Laser
-
     base = {
         "x": 192.0,
         "y": 96.0,

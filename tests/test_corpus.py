@@ -16,14 +16,10 @@ from th06_rl.corpus import (
     expand_compact,
 )
 from th06_rl.policy_api import PolicyOptionTrace
-from th06_rl.th06.donor import enable_donor_imports
+from th06_rl.retail import native
+from th06_rl.retail.model import Bullet, Snapshot
 from th06_rl.th06.control_capture import ControlSnapshot, decode_control_snapshot
 from th06_rl.th06.source import automatic_source_context
-
-
-enable_donor_imports()
-from th06.model import Bullet, Snapshot  # noqa: E402
-import th06.native as native  # noqa: E402
 
 
 def _packed_control_bullet(

@@ -18,13 +18,9 @@ from pathlib import Path
 import struct
 import sys
 
-from th06_rl.th06.donor import enable_donor_imports
+from th06_rl.retail import native
+from th06_rl.retail.model import Bullet, Laser
 from th06_rl.th06.observed_bullets import classify_ex_flags
-
-
-enable_donor_imports()
-from th06 import native  # noqa: E402
-from th06.model import Bullet, Laser  # noqa: E402
 
 try:
     import msgspec

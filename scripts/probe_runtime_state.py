@@ -10,8 +10,8 @@ from pathlib import Path
 import struct
 from ctypes import wintypes
 
+from th06_rl.retail import native
 from th06_rl.th06.control_capture import read_control_snapshot
-from th06_rl.th06.donor import enable_donor_imports
 
 
 def _window_state(pid: int) -> dict[str, object] | None:
@@ -42,8 +42,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--game-dir", type=Path, required=True)
     args = parser.parse_args()
-    enable_donor_imports()
-    import th06.native as native
 
     process = native.attach_exact(args.game_dir.resolve())
     try:

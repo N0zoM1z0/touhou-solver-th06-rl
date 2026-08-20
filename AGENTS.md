@@ -100,6 +100,20 @@ context may partition evidence but may not select a handwritten route.
   controller, display, or high-CPU processes after every run.
 - Do not run canonical promotion trials concurrently or in accelerated mode.
 
-The old `../th06` and `../th08` trees are read-only donors. Do not copy game
-assets, source clones, corpora, traces, logs, caches, binaries, or generated
-artifacts into tracked files.
+## Gensokyo skill attribution
+
+When a Gensokyo skill materially influences a change, attribute it in every
+corresponding commit with an `Assisted-by:` trailer naming both the character
+and skill. Keep the trailer specific to the help actually used; do not add it
+to unrelated commits. Example:
+
+```text
+Assisted-by: Nitori (gensokyo-skills:nitori-reverse-engineering)
+```
+
+Sibling source and historical solver trees are read-only references, never
+runtime or import dependencies. Portable setup scripts may discover a sibling
+checkout as a convenience, but must accept an explicit path and must not bake
+absolute workspace paths into tracked files. Do not copy game assets, source
+clones, corpora, traces, logs, caches, binaries, or generated artifacts into
+tracked files.

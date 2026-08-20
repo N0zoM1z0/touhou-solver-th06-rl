@@ -7,10 +7,7 @@ import time
 from collections.abc import Callable
 
 from .background_input import KEY_MASKS
-from .donor import enable_donor_imports
-
-enable_donor_imports()
-from th06.native import read_menu_state  # noqa: E402
+from ..retail.native import read_menu_state
 
 
 STATE_PRE_INPUT = 1
@@ -22,7 +19,7 @@ STATE_PRACTICE_LVL_SELECT = 17
 BACKGROUND_MENU_TIMEOUT = 15.0
 # Maximum wait for the authoritative Supervisor to sample a published edge. A
 # background TH06 instance can be throttled to roughly four updates/second, so
-# the donor's foreground-oriented 50 ms tap is insufficient. We release as soon
+# a foreground-oriented 50 ms tap is insufficient. We release as soon
 # as the real current/last pair proves the edge, rather than holding for all
 # 350 ms and risking source key repeat when Wine runs faster than expected.
 BACKGROUND_TAP_SECONDS = 0.35
@@ -141,7 +138,7 @@ def _settled_tap(
     # MainMenu uses WAS_PRESSED, which compares the current and previous
     # sampled masks (authoritative utils.hpp). Require the source input global
     # itself to equal the released bridge mask before publishing another key.
-    # Keyboard-like test/donor implementations retain the old timer fallback.
+    # Keyboard-like test implementations retain the old timer fallback.
     _wait_release_tick(
         process,
         maintain_activity=maintain_activity,

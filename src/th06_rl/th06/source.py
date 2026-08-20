@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from ..core.model import Action, Kinematics, movement_actions
 from ..native import Aabb, LaserRect, PackedHazards
-from .donor import enable_donor_imports
+from ..retail.model import CONTROL_ACTIONS, action_from_input
 from .observed_lasers import laser_rects_by_frame
 
 
@@ -36,17 +36,11 @@ class SourceForecast:
 
 
 def core_action_from_input(input_mask: int) -> Action:
-    enable_donor_imports()
-    from th06.model import action_from_input
-
     source = action_from_input(input_mask)
     return ACTION_BY_STATE[(source.dx, source.dy, source.focused)]
 
 
-def donor_action(action: Action):
-    enable_donor_imports()
-    from th06.model import CONTROL_ACTIONS
-
+def retail_action(action: Action):
     return next(
         item for item in CONTROL_ACTIONS
         if (
@@ -145,11 +139,10 @@ def lower_source_forecast(
     """Project live hazards and source ECL births without phase control flow."""
     if requested_horizon < HARD_HORIZON:
         raise ValueError("source forecast must cover Hard-4")
-    enable_donor_imports()
     from .observed_bullets import reachable_hazards_by_frame
-    from th06.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
-    from th06.hazards.lasers import hazards_by_frame as laser_hazards_by_frame
-    from th06.hazards.world import forecast_world_births
+    from ..retail.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
+    from ..retail.hazards.lasers import hazards_by_frame as laser_hazards_by_frame
+    from ..retail.hazards.world import forecast_world_births
 
     player_positions = ((snapshot.x, snapshot.y),) * requested_horizon
     hard_births = forecast_world_births(
@@ -264,9 +257,8 @@ def lower_observed_hazards(
     """
     if requested_horizon < HARD_HORIZON:
         raise ValueError("observed hazard gate must cover Hard-4")
-    enable_donor_imports()
     from .observed_bullets import reachable_hazards_by_frame
-    from th06.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
+    from ..retail.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
 
     bullet_frames = reachable_hazards_by_frame(
         snapshot,

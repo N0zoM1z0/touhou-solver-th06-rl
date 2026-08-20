@@ -14,7 +14,7 @@ def laser_rects_by_frame(
     """Project live lasers without cloning a full Laser object each step.
 
     The state transitions mirror authoritative ``BulletManager.cpp`` lines
-    967--1099 and the established donor laser model.  ECL rotation has already
+    967--1099 and the retained retail laser model. ECL rotation has already
     been inferred on each captured laser; this advances that write before the
     frame hitbox, as the shipped update order requires.
     """

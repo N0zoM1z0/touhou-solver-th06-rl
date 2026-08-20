@@ -7,11 +7,7 @@ from th06_rl.th06.control_capture import (
     _read_bulk_view,
     read_passive_input_delivery,
 )
-from th06_rl.th06.donor import enable_donor_imports
-
-
-enable_donor_imports()
-import th06.native as native  # noqa: E402
+from th06_rl.retail import native
 
 
 def test_bulk_view_falls_back_to_ordinary_reader():

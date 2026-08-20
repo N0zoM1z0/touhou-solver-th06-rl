@@ -5,7 +5,7 @@ from .source import (
     SourceForecast,
     automatic_source_context,
     core_action_from_input,
-    donor_action,
+    retail_action,
     lower_source_forecast,
 )
 
@@ -14,6 +14,6 @@ __all__ = (
     "SourceForecast",
     "automatic_source_context",
     "core_action_from_input",
-    "donor_action",
+    "retail_action",
     "lower_source_forecast",
 )

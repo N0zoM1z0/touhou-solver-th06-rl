@@ -38,7 +38,25 @@ from .control_capture import (
     read_control_snapshot,
     read_passive_input_delivery,
 )
-from .donor import enable_donor_imports
+from ..retail import native as retail_native
+from ..retail.dialogue import DialogueSkipper
+from ..retail.hazards.lasers import (
+    track_motion,
+    unknown_motion_may_reach_player,
+)
+from ..retail.input_lease import InputLease
+from ..retail.model import PLAYER_ALIVE, action_from_input
+from ..retail.native import (
+    ADDR_LIFE_PATCH,
+    NativeDecodeError,
+    TARGET_SHA256,
+    attach_exact,
+    read_dialogue_state,
+    read_game_frame,
+    read_snapshot as read_authoritative_snapshot,
+    read_supervisor_state,
+)
+from ..retail.trial import PracticeTrial, physical_hit
 from .menu import (
     MenuNavigationError,
     start_reimu_a_practice,
@@ -50,7 +68,7 @@ from .source import (
     COLLISION_MARGIN,
     automatic_source_context,
     core_action_from_input,
-    donor_action,
+    retail_action,
     kinematics_from_snapshot,
     lower_observed_hazards,
 )
@@ -250,30 +268,9 @@ def run(args: argparse.Namespace) -> int:
             "--continuous-stage requires armed Practice or route play with "
             "--patch-lives"
         )
-    enable_donor_imports()
-    from th06.dialogue import DialogueSkipper
-    from th06.hazards.lasers import (
-        track_motion,
-        unknown_motion_may_reach_player,
-    )
-    from th06.input_lease import InputLease
-    from th06.model import PLAYER_ALIVE, action_from_input
-    from th06.native import (
-        ADDR_LIFE_PATCH,
-        NativeDecodeError,
-        TARGET_SHA256,
-        attach_exact,
-        read_dialogue_state,
-        read_game_frame,
-        read_snapshot as read_authoritative_snapshot,
-        read_supervisor_state,
-    )
-    import th06.native as donor_native
-    from th06.trial import PracticeTrial, physical_hit
-
     expected_stage = args.practice_stage or (1 if args.start_route else args.expected_stage)
     expected_scope = (DIFFICULTIES[args.difficulty], 0, 0, expected_stage)
-    donor_native.TARGET_EXE = args.game_executable_name
+    retail_native.TARGET_EXE = args.game_executable_name
     process = attach_exact(Path(args.game_dir).resolve())
     bridge = None
     activity = None
@@ -848,7 +845,7 @@ def run(args: argparse.Namespace) -> int:
                         desired_core = core_action_from_input(
                             # Donor action -> source control mask through its
                             # own exact conversion path.
-                            _donor_action_mask(lease_status.action)
+                            _retail_action_mask(lease_status.action)
                         )
                         hard_forecast = lower_observed_hazards(snapshot, 4)
                         retained, hard_collision_margin = (
@@ -1045,12 +1042,12 @@ def run(args: argparse.Namespace) -> int:
                             selected = None
                             reason = "stale-retry"
                         elif keyboard is not None:
-                            events = keyboard.apply(donor_action(selected))
+                            events = keyboard.apply(retail_action(selected))
                             published = selected.name
                             if events and selected != current_core:
                                 lease.issued(
                                     read_game_frame(process),
-                                    donor_action(selected),
+                                    retail_action(selected),
                                     action_from_input(snapshot.input_mask),
                                 )
             except AuthorityUnavailable as error:
@@ -1460,7 +1457,7 @@ def run(args: argparse.Namespace) -> int:
     return exit_code
 
 
-def _donor_action_mask(action) -> int:
+def _retail_action_mask(action) -> int:
     mask = 0x04 if action.focused else 0
     if action.dx < 0:
         mask |= 0x40

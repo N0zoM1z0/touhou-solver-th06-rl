@@ -6,15 +6,11 @@ import struct
 
 import pytest
 
-from th06_rl.th06.donor import enable_donor_imports
+from th06_rl.retail.model import Bullet
 from th06_rl.th06.observed_bullets import (
     classify_ex_flags,
     hazard_boxes,
 )
-
-
-enable_donor_imports()
-from th06.model import Bullet  # noqa: E402
 
 
 def _bullet(**changes) -> Bullet:

@@ -1,13 +1,13 @@
 """Source-exact projections for observed TH06 bullet motion modes.
 
-The donor hazard model deliberately fails closed for EX modes that it does
+The retained retail hazard model deliberately fails closed for EX modes it does
 not simulate.  That fallback is appropriate for unknown motion, but is far
 too broad for the source's deterministic boundary-reflection flags: an
 in-bounds 0x400/0x800 bullet continues linearly until its visual sprite has
 fully left the 384x448 playfield.
 
 This narrow adapter adds the missing deterministic modes without changing
-the donor's conservative prefilter or its spawning-bullet uncertainty.
+the retail adapter's conservative prefilter or spawning-bullet uncertainty.
 """
 
 from __future__ import annotations
@@ -16,7 +16,10 @@ import math
 import struct
 from dataclasses import replace
 
-from .donor import enable_donor_imports
+from ..retail.hazards.bullets import (
+    _may_reach_player,
+    hazard_boxes as retail_hazard_boxes,
+)
 
 
 SLOWDOWN_FLAG = 0x001
@@ -237,9 +240,6 @@ def _local_exact_positions(bullet, horizon: int):
 
 
 def hazard_boxes(bullet, horizon: int):
-    enable_donor_imports()
-    from th06.hazards.bullets import hazard_boxes as donor_hazard_boxes
-
     dynamic = int(bullet.ex_flags) & DYNAMIC_EX_FLAGS
     if (
         bullet.state in (2, 3, 4)
@@ -250,10 +250,10 @@ def hazard_boxes(bullet, horizon: int):
         return _spawn_transition_hazard_boxes(
             bullet,
             horizon,
-            donor_hazard_boxes,
+            retail_hazard_boxes,
         )
     if not _supports_local_exact_projection(bullet):
-        return donor_hazard_boxes(bullet, horizon)
+        return retail_hazard_boxes(bullet, horizon)
     half_width = bullet.half_width
     half_height = bullet.half_height
     return [
@@ -262,7 +262,7 @@ def hazard_boxes(bullet, horizon: int):
     ]
 
 
-def _fired_hazard_boxes(bullet, horizon: int, donor_hazard_boxes):
+def _fired_hazard_boxes(bullet, horizon: int, retail_hazard_boxes):
     if _supports_local_exact_projection(bullet):
         half_width = bullet.half_width
         half_height = bullet.half_height
@@ -270,10 +270,10 @@ def _fired_hazard_boxes(bullet, horizon: int, donor_hazard_boxes):
             (x - half_width, y - half_height, x + half_width, y + half_height)
             for x, y in _local_exact_positions(bullet, horizon)
         ]
-    return donor_hazard_boxes(bullet, horizon)
+    return retail_hazard_boxes(bullet, horizon)
 
 
-def _spawn_transition_hazard_boxes(bullet, horizon: int, donor_hazard_boxes):
+def _spawn_transition_hazard_boxes(bullet, horizon: int, retail_hazard_boxes):
     """Enclose every possible spawn-animation completion within ``horizon``.
 
     The compact control snapshot intentionally does not copy the large ANM VM
@@ -321,7 +321,7 @@ def _spawn_transition_hazard_boxes(bullet, horizon: int, donor_hazard_boxes):
         fired_boxes = _fired_hazard_boxes(
             fired,
             horizon - transition_frame + 1,
-            donor_hazard_boxes,
+            retail_hazard_boxes,
         )
         for offset, box in enumerate(fired_boxes):
             possible[transition_frame - 1 + offset].append(box)
@@ -485,10 +485,7 @@ def hazard_box(bullet, frame: int):
 
 
 def reachable_hazards_by_frame(snapshot, horizon: int, collision_margin: float):
-    """Keep the donor's broad prefilter, then use the exact local boxes."""
-    enable_donor_imports()
-    from th06.hazards.bullets import _may_reach_player
-
+    """Keep the retail adapter's broad prefilter, then use exact local boxes."""
     frames: list[list[tuple[float, float, float, float]]] = [
         [] for _ in range(horizon)
     ]

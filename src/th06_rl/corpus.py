@@ -18,11 +18,7 @@ import threading
 import time
 
 from .policy_api import PolicyOptionTrace
-
-from .th06.donor import enable_donor_imports
-
-enable_donor_imports()
-from th06.model import BUTTON_BOMB  # noqa: E402
+from .retail.model import BUTTON_BOMB
 
 
 RUN_SCHEMA = "th06-rl-run-v1"
@@ -583,8 +579,7 @@ def _frame_from_snapshot_ref(value: object) -> int | None:
 
 
 def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
-    enable_donor_imports()
-    from th06.trial import physical_hit
+    from .retail.trial import physical_hit
 
     hit = physical_hit(before.snapshot.player_state, after.snapshot.player_state)
     bomb = bool(

@@ -33,7 +33,7 @@ class BackgroundKeyboard:
         events = tuple((key, False) for key in sorted(self.held - desired)) + tuple(
             (key, True) for key in sorted(desired - self.held)
         )
-        # One verified DWORD publication replaces the donor's sequence of
+        # One verified DWORD publication replaces the old sequence of
         # SendInput events, so TH06 cannot sample a transition prefix.
         self.bridge.set_keys(desired)
         self.held = set(desired)

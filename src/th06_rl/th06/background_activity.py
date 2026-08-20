@@ -27,7 +27,7 @@ def _decode_activity(raw: bytes) -> int:
 
 
 def _write_verified(process, address: int, data: bytes) -> None:
-    """Write through the donor process handle and verify the exact bytes."""
+    """Write through the retail process handle and verify the exact bytes."""
     buffer = ctypes.create_string_buffer(data)
     written = ctypes.c_size_t()
     if not process.kernel32.WriteProcessMemory(

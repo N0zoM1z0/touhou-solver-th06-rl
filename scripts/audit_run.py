@@ -10,8 +10,13 @@ import json
 from pathlib import Path
 
 from th06_rl.corpus import expand_compact
+from th06_rl.retail.barrage_lab.corpus import decode_snapshot
+from th06_rl.retail.hazards.enemies import future_boxes
+from th06_rl.retail.hazards.lasers import (
+    future_hazards,
+    signed_laser_clearance,
+)
 from th06_rl.th06.control_capture import decode_control_snapshot
-from th06_rl.th06.donor import enable_donor_imports
 from th06_rl.th06.observed_bullets import hazard_box
 
 
@@ -60,10 +65,6 @@ def _overlaps_player(snapshot, box) -> bool:
 
 
 def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
-    enable_donor_imports()
-    from th06.hazards.enemies import future_boxes
-    from th06.hazards.lasers import future_hazards, signed_laser_clearance
-
     before_bullet_slots = {item.slot for item in before.bullets}
     after_overlaps = [
         item.slot
@@ -128,9 +129,6 @@ def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
 def _decode_frame(row: dict, objects: dict[str, object]):
     raw = expand_compact(row["snapshot"], objects)
     if not str(raw.get("capture_tier", "")).startswith("control-v"):
-        enable_donor_imports()
-        from th06.barrage_lab.corpus import decode_snapshot
-
         return decode_snapshot(raw)
     return decode_control_snapshot(raw)
 

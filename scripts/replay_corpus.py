@@ -13,7 +13,7 @@ import time
 from th06_rl.corpus import expand_compact
 from th06_rl.core.planner import LocalPlannerConfig
 from th06_rl.native import NativeKernel, PackedHazards
-from th06_rl.th06.donor import enable_donor_imports
+from th06_rl.retail.barrage_lab.corpus import decode_snapshot
 from th06_rl.th06.control_capture import decode_control_snapshot
 from th06_rl.th06.source import (
     AuthorityUnavailable,
@@ -89,9 +89,6 @@ def _timing_summary(values: list[float]) -> dict[str, float]:
 
 
 def replay(args: argparse.Namespace) -> dict[str, object]:
-    enable_donor_imports()
-    from th06.barrage_lab.corpus import decode_snapshot
-
     run_dir = args.run_dir.resolve()
     objects = _load_objects(run_dir)
     rows = list(_rows(sorted(run_dir.glob("frames-*.jsonl.gz"))))
