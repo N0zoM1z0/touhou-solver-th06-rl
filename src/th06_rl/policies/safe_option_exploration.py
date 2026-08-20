@@ -18,8 +18,8 @@ from ..policy_api import (
 )
 
 
-STATE_SCHEMA = "th06-rl-safe-option-exploration-v1"
-POLICY_NAME = "safe-option-exploration-v1"
+STATE_SCHEMA = "th06-rl-safe-option-exploration-v2"
+POLICY_NAME = "safe-option-exploration-v2"
 OPTION_HORIZON_FRAMES = 8
 
 
@@ -36,6 +36,7 @@ class SafeOptionExplorationPolicy:
         self.active_id: str | None = None
         self.active_intent: str | None = None
         self.active_boundary_probability = 1.0
+        self.active_behavior_probabilities: tuple[tuple[str, float], ...] = ()
         self.active_start_frame = 0
         self.active_last_frame = -1
         self.active_scope: tuple[int, int, int, int] | None = None
@@ -57,7 +58,7 @@ class SafeOptionExplorationPolicy:
         if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
             raise ValueError("exploration_probability must be in [0, 1]")
         if horizon != OPTION_HORIZON_FRAMES:
-            raise ValueError("generation-3 option horizon must be eight frames")
+            raise ValueError("safe option horizon must be eight frames")
         self.policy_seed = seed
         self.exploration_probability = probability
         self.random = random.Random(seed)
@@ -70,6 +71,7 @@ class SafeOptionExplorationPolicy:
         self.active_id = None
         self.active_intent = None
         self.active_scope = None
+        self.active_behavior_probabilities = ()
         return reason
 
     def _preceding_termination(self, context, legal: tuple[str, ...]) -> str | None:
@@ -150,6 +152,10 @@ class SafeOptionExplorationPolicy:
             self.active_id = f"{self.policy_seed:016x}:{self.option_counter:08d}"
             self.active_intent = chosen
             self.active_boundary_probability = probability
+            self.active_behavior_probabilities = tuple(
+                (action, probabilities[action])
+                for action in sorted(probabilities)
+            )
             self.active_start_frame = int(context.frame)
             self.active_scope = tuple(context.scope)
             self.boundaries += 1
@@ -171,6 +177,7 @@ class SafeOptionExplorationPolicy:
             elapsed_frames=elapsed,
             termination_reason=termination,
             preceding_termination_reason=preceding,
+            behavior_probabilities=self.active_behavior_probabilities,
         )
         self.active_last_frame = int(context.frame)
         if termination is not None:

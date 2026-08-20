@@ -80,9 +80,10 @@ class PolicyOptionTrace:
                 len(set(names)) != len(names)
                 or self.intent not in names
                 or any(
-                    not math.isfinite(value) or value <= 0.0
+                    not math.isfinite(value) or value < 0.0
                     for value in probabilities
                 )
+                or dict(self.behavior_probabilities)[self.intent] <= 0.0
                 or not math.isclose(
                     sum(probabilities), 1.0, rel_tol=1e-9, abs_tol=1e-9
                 )
@@ -95,7 +96,7 @@ class PolicyOptionTrace:
             ):
                 raise ValueError("complete option propensity vector is invalid")
             for diagnostics in (self.information_weights, self.propensity_ess):
-                if (
+                if diagnostics and (
                     tuple(name for name, _value in diagnostics) != names
                     or any(
                         not math.isfinite(float(value)) or float(value) < 0.0

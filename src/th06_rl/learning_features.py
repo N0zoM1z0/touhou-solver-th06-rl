@@ -7,6 +7,7 @@ import math
 
 FEATURE_SCHEMA = "safe-action-relative-interactions-v1"
 TREE_FEATURE_SCHEMA = "native-trajectory-tree-candidates-v2"
+CAUSAL_TREE_FEATURE_SCHEMA = "native-trajectory-causal-history-candidates-v1"
 
 
 def _feature_map(
@@ -152,3 +153,45 @@ def tree_candidate_vector(
         float(action == baseline_action),
         float(action == current_action),
     ))
+
+
+def causal_tree_feature_names(
+    observation_names: tuple[str, ...],
+    action_names: tuple[str, ...],
+    history_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not history_names or len(set(history_names)) != len(history_names):
+        raise ValueError("history feature names are empty or duplicated")
+    return (
+        *tree_feature_names(observation_names, action_names),
+        *(f"history:{name}" for name in history_names),
+    )
+
+
+def causal_tree_candidate_vector(
+    *,
+    observation_features,
+    action_features,
+    history_features,
+    action: str,
+    baseline_action: str,
+    current_action: str,
+    observation_names: tuple[str, ...],
+    action_names: tuple[str, ...],
+    history_names: tuple[str, ...],
+) -> tuple[float, ...]:
+    history = _feature_map(history_features, label="causal history")
+    if tuple(history) != history_names:
+        raise ValueError("adapter causal-history feature schema mismatch")
+    return (
+        *tree_candidate_vector(
+            observation_features=observation_features,
+            action_features=action_features,
+            action=action,
+            baseline_action=baseline_action,
+            current_action=current_action,
+            observation_names=observation_names,
+            action_names=action_names,
+        ),
+        *(history[name] for name in history_names),
+    )

@@ -49,6 +49,12 @@ def test_option_assignment_persists_but_is_recensored_each_frame() -> None:
     assert second.option.option_id == first.option.option_id
     assert second.option.elapsed_frames == 2
     assert second.behavior_probability == 1.0
+    assert second.option.behavior_probabilities == first.option.behavior_probabilities
+    probabilities = dict(first.option.behavior_probabilities)
+    assert sum(probabilities.values()) == pytest.approx(1.0)
+    assert probabilities[first.action] == pytest.approx(
+        first.behavior_probability
+    )
 
     remaining = "right" if first.action == "left" else "left"
     replacement = policy.decide(_context(
@@ -67,6 +73,10 @@ def test_option_has_a_fixed_eight_physical_frame_horizon() -> None:
     decisions = [policy.decide(_context(frame)) for frame in range(1, 10)]
 
     first_id = decisions[0].option.option_id
+    assert dict(decisions[0].option.behavior_probabilities) == {
+        "left": 1.0,
+        "right": 0.0,
+    }
     assert all(row.option.option_id == first_id for row in decisions[:8])
     assert decisions[7].option.termination_reason == "horizon"
     assert decisions[8].option.boundary is True

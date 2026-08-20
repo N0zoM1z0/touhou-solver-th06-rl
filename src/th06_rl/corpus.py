@@ -177,6 +177,7 @@ class FrameEvidence:
         if self.option is not None:
             if self.policy_id not in (
                 "safe-option-exploration-v1",
+                "safe-option-exploration-v2",
                 "propensity-aware-option-exploration-v1",
             ):
                 raise ValueError("option trace requires a declared behavior policy")

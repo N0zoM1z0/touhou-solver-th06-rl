@@ -6,7 +6,13 @@ from types import SimpleNamespace
 import pytest
 
 from th06_rl.core.model import movement_actions
-from th06_rl.learning_features import candidate_vector, feature_names
+from th06_rl.hazard_representation import HISTORY_FEATURE_NAMES
+from th06_rl.learning_features import (
+    candidate_vector,
+    causal_tree_candidate_vector,
+    causal_tree_feature_names,
+    feature_names,
+)
 from th06_rl.th06.learning_adapter import (
     ACTION_FEATURE_NAMES,
     OBSERVATION_FEATURE_NAMES,
@@ -112,3 +118,30 @@ def test_generic_vector_rejects_adapter_schema_drift() -> None:
             observation_names=OBSERVATION_FEATURE_NAMES,
             action_names=ACTION_FEATURE_NAMES,
         )
+
+
+def test_causal_tree_vector_binds_only_observed_history() -> None:
+    observation, actions = _projection()
+    history = tuple(
+        (name, float(index))
+        for index, name in enumerate(HISTORY_FEATURE_NAMES)
+    )
+    names = causal_tree_feature_names(
+        OBSERVATION_FEATURE_NAMES,
+        ACTION_FEATURE_NAMES,
+        HISTORY_FEATURE_NAMES,
+    )
+    vector = causal_tree_candidate_vector(
+        observation_features=observation,
+        action_features=actions,
+        history_features=history,
+        action="left",
+        baseline_action="stay",
+        current_action="stay",
+        observation_names=OBSERVATION_FEATURE_NAMES,
+        action_names=ACTION_FEATURE_NAMES,
+        history_names=HISTORY_FEATURE_NAMES,
+    )
+
+    assert len(vector) == len(names)
+    assert vector[-len(history):] == tuple(value for _name, value in history)
