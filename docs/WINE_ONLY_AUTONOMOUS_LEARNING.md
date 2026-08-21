@@ -55,11 +55,11 @@ Only one rung changes at a time. Corpus inventory, whole-episode split, feature
 and target schema, seeds, acceptance statistic, and artifact hashes are frozen
 before fitting.
 
-1. **L0 — causal audit (active).** Build and test the decision-epoch view,
+1. **L0 — causal audit (completed).** Build and test the decision-epoch view,
    action/propensity reconstruction, HIT conservation, exclusions,
    forbidden-feature rejection, and offline/online feature parity. No model
    result is meaningful before this passes.
-2. **L1 — transparent supervised baseline.** After L0, predeclare and collect
+2. **L1 — transparent supervised baseline (active).** After L0, predeclare and collect
    the first training inventory serially with unchanged retail clock/update
    semantics, coherent capture suspension, the frozen 20% uniform
    observed-shield mixture, and complete episodes. Freeze its episode
@@ -103,9 +103,14 @@ feature and a parity test.
   produced 16, 10, and 13 HITs and different factual digests. Shared-host
   parallel collection remains disabled and those runs are not the L1 training
   inventory.
-- E2/L0 is the only active next experiment. No learning corpus has been
-  admitted, no model has been fitted, and no learned online candidate has been
-  evaluated.
+- E2/L0 passed at commit `2818861f4079bebfbd8443638ed0cb34236bd5e0`.
+  Canonical E0 Stage 4 and complete-route replay conserved 18/18 and 108/108
+  physical HITs respectively while retaining every excluded decision row.
+- E3/L1 is preregistered in `experiments/l1-stage4-bc-v1.json`: 12 serial
+  complete natural-RNG Lunatic Practice Stage 4 episodes, eight train and four
+  validation, under independent streams of the frozen 20% uniform observed-
+  shield mixture. No L1 episode has yet been collected, no research model has
+  been fitted, and no learned online candidate has been evaluated.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final

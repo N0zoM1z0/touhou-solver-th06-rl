@@ -1,0 +1,91 @@
+{
+  "auxiliary_targets": [],
+  "collection": {
+    "base_policy_seed": 0,
+    "complete_episode_required": true,
+    "difficulty": "lunatic",
+    "episodes": [
+      {"index": 0, "policy_seed": 5092467501283562921, "split": "train"},
+      {"index": 1, "policy_seed": 121411235382453485, "split": "train"},
+      {"index": 2, "policy_seed": 16965835866031509668, "split": "validation"},
+      {"index": 3, "policy_seed": 10656700968571562832, "split": "train"},
+      {"index": 4, "policy_seed": 837465855425659516, "split": "train"},
+      {"index": 5, "policy_seed": 4450104909074281216, "split": "validation"},
+      {"index": 6, "policy_seed": 18139680761023721462, "split": "train"},
+      {"index": 7, "policy_seed": 4985732666200205420, "split": "train"},
+      {"index": 8, "policy_seed": 3681449322263733280, "split": "validation"},
+      {"index": 9, "policy_seed": 14972331885127234561, "split": "train"},
+      {"index": 10, "policy_seed": 17523965681007922069, "split": "train"},
+      {"index": 11, "policy_seed": 15322812398536836143, "split": "validation"}
+    ],
+    "exploration_probability": 0.2,
+    "game_clock": "original-retail-normal-speed",
+    "infrastructure_admission": {
+      "capture_p99_ms_max": 40.0,
+      "dense_shield_parity_required": true,
+      "observation_gap_rate_max": 0.005,
+      "player_successor_bit_exact_required": true,
+      "solve_p99_ms_max": 16.7,
+      "stale_retry_rate_max": 0.0,
+      "validator": "scripts.gate_parallel_wine.validate_gate_run"
+    },
+    "max_attempts_per_slot": 3,
+    "natural_retail_rng": true,
+    "physical_hit_retry": false,
+    "policy_seed_derivation_domain": "th06-rl:l1-stage4-bc-v1",
+    "serial_wine_workers": 1,
+    "stage": 4,
+    "stop_rule": "fit only after all 12 scheduled slots have one complete zero-Bomb infrastructure-valid episode; retain every failed attempt and stop incomplete after three infrastructure attempts for any slot",
+    "worker_index": 0
+  },
+  "comparators": [
+    "per-admissible-mask-laplace-action-frequency-v1",
+    "reactive-action-agreement-v1"
+  ],
+  "decision": "Does the frozen current-observation representation learn the declared Stage 4 behavior distribution well enough to admit one representation ablation?",
+  "experiment_id": "l1-stage4-bc-v1",
+  "fit": {
+    "bootstrap_samples": 2000,
+    "calibration_tolerance": 0.02,
+    "decision_epoch_schema": "th06-rl-decision-epoch-v1",
+    "epochs": 100,
+    "feature_schema": "th06-rl-current-observation-features-v1",
+    "l2": 0.0001,
+    "learning_rate": 0.05,
+    "max_rows_per_split": 400000,
+    "model": "masked-linear-softmax",
+    "seed": 0,
+    "target_schema": "th06-rl-published-executed-action-target-v1"
+  },
+  "gate": {
+    "calibration": "BC validation ECE-10 must be no more than action-frequency ECE-10 plus 0.02",
+    "minimum_validation_episodes": 4,
+    "proper_score": "the upper endpoint of the episode-bootstrap 95% interval for BC minus action-frequency validation NLL must be below zero"
+  },
+  "hypothesis": "If the scalar portable root and shield summaries contain nontrivial behavior information, current-observation BC will pass the frozen held-out complete-episode NLL and calibration gate after 8 train and 4 validation episodes.",
+  "online_canary": {
+    "corpus_is_training_data": false,
+    "max_attempts": 3,
+    "natural_retail_rng": true,
+    "run_only_if_bc_gate_passes": true,
+    "stage": 4
+  },
+  "paths": {
+    "artifact_root": "artifacts/l1-stage4-bc-v1",
+    "base_policy_state": "config/uniform_shield_exploration.json",
+    "bc_policy_plugin": "src/th06_rl/policies/linear_behavior_clone.py",
+    "collection_ledger": "artifacts/l1-stage4-bc-v1/collection-ledger.json",
+    "corpus_root": "corpora/l1-stage4-bc-v1",
+    "experiment_result": "artifacts/l1-stage4-bc-v1/experiment-result.json",
+    "fit_artifact": "artifacts/l1-stage4-bc-v1/model/linear-bc.json",
+    "uniform_policy_plugin": "src/th06_rl/policies/uniform_shield_exploration.py",
+    "wine_pool": "reference/wine-workers-v2-zklean-safe/pool.json",
+    "work_log_root": "work_log"
+  },
+  "schema": "th06-rl-l1-stage4-bc-prereg-v1",
+  "sha256_bindings": {
+    "base_policy_state": "a63fbbb0b6d5886d327eb28b4b3d683cc13c6c759bffde8f9b2f554649068ef1",
+    "bc_policy_plugin": "21e15a5962125eb2b2018d37f68a927b615e8d6133e260899a2673f57339b10c",
+    "uniform_policy_plugin": "c70a2ad0a03bb189a01baabb62f6f404f6c4c91aa0e16c86645bfc0925f3e805"
+  }
+}

@@ -11,6 +11,7 @@ dist/
 
 # Physical artifacts never belong in Git.
 artifacts/
+work_log/
 corpus/
 corpora/
 logs/

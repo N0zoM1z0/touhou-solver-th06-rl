@@ -48,9 +48,10 @@ decision-epoch dataset, a transparent supervised baseline, and immutable Wine
 evaluation.  History encoders, offline value learning, uncertainty, adaptive
 collection, learned dynamics, and exact-prefix branching are admitted one at a
 time only after a simpler preregistered experiment exposes a concrete failure.
-The paper reports an audited six-stage infrastructure baseline with 108 HITs
-and a negative serial/parallel equivalence gate.  No model has been trained and
-no learned candidate has been evaluated online.
+The paper reports an audited six-stage infrastructure baseline with 108 HITs,
+a completed causal learner-view audit, a negative serial/parallel equivalence
+gate, and the frozen Stage~4 supervised-baseline preregistration.  No research
+model has been trained and no learned candidate has been evaluated online.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -328,12 +329,13 @@ Only one rung may change at a time.  Every rung freezes its corpus inventory,
 whole-episode split, feature schema, target schema, seeds, acceptance statistic,
 and artifact hashes before fitting.
 
-\paragraph{L0: causal data audit (active next step).}
+\paragraph{L0: causal data audit (completed).}
 Build and test decision-epoch rows.  Admission requires exact raw linkage,
 command/sample/execution separation, propensity normalization, interval and
 episode HIT conservation, exclusion replay, forbidden-feature rejection, and
 two materially different feature builders reading the same episode identities.
-No model result is meaningful before L0 passes.
+No model result is meaningful before L0 passes.  The implementation and E0
+replay evidence described in E2 satisfy this gate.
 
 \paragraph{L1: transparent supervised baseline.}
 After L0, collect the initial training inventory serially, with unchanged retail
@@ -411,9 +413,9 @@ constraint they solve.
 Policy or method & Status & Evidence or admission condition \\
 \midrule
 Reactive scorer & Executed control & E0 completed one route with 108 HITs; this is infrastructure evidence, not a learned-policy result. \\
-20\% uniform-shield mixture & Executed diagnostic & E5 Stage 4 runs had 16, 10, and 13 HITs, but factual equivalence failed; no training inventory or policy claim was admitted. \\
-Action frequency & Not run & First non-fitted L1 comparator after L0 and initial serial inventory. \\
-Current-observation BC & Not run & First fitted candidate; requires the L1 held-out likelihood and calibration gate. \\
+20\% uniform-shield mixture & L1 collection preregistered & E5 Stage 4 runs had 16, 10, and 13 HITs, but parallel factual equivalence failed.  E3 therefore uses 12 new serial episodes only. \\
+Action frequency & Preregistered, not run & Frozen non-fitted comparator for the eight-train/four-validation Stage 4 split. \\
+Current-observation BC & Preregistered, not run & First fitted candidate; exact hyperparameters and held-out likelihood/calibration gate are frozen before collection. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -447,8 +449,8 @@ ID & Decisive question & Status \\
 \midrule
 E0 & Does the reset runner complete Practice 4--6 and one full route? & \completedstatus \\
 E1 & Can a post-root birth hit before the next controllable root? & \progressstatus \\
-E2 & Does the causal learner view preserve actions, propensities, and HITs? & \progressstatus \\
-E3 & Do portable supervised baselines generalize by episode? & \notrunstatus \\
+E2 & Does the causal learner view preserve actions, propensities, and HITs? & \completedstatus \\
+E3 & Do portable supervised baselines generalize by episode? & \progressstatus \\
 E4 & Does one offline value learner reduce complete-route HIT cost? & \notrunstatus \\
 E5 & Does shared-host parallel collection preserve exact facts? & \negativestatus \\
 E6 & Does a new frozen Wine batch resolve a measured coverage failure? & \notrunstatus \\
@@ -544,7 +546,18 @@ conserves interval and episode HIT totals, validates complete propensities and
 exclusions, and lets two different feature builders consume the same raw
 episode identities.  A feature-parity fixture must prove that the online
 exporter receives exactly the versioned values produced by offline replay.
-E2 changes no policy and collects no new gameplay evidence.
+E2 changes no policy and collects no new gameplay evidence.  At commit
+\path{2818861f4079bebfbd8443638ed0cb34236bd5e0}, the decision builder,
+two-path offline/online feature-parity fixture, masked linear BC fixture, and
+immutable export/reload tests passed as part of 176 repository tests.  Read-only
+replay of canonical E0 Practice Stage~4 produced 24,385 decision epochs,
+retained 24,249 as action-conditioned learner rows, and conserved all 18
+physical HITs; 7 HITs remained explicitly attached to excluded intervals.
+The canonical complete route produced 126,468 decision epochs, retained
+126,424, and conserved all 108 HITs; one HIT remained in an excluded interval.
+Raw-frame and compact-context actions and propensities are checked exactly,
+forbidden source facts are absent from the portable root, and offline and
+online feature vectors are bit-exact.  E2 is therefore complete.
 
 \subsection{E3: supervised representation baselines}
 
@@ -559,6 +572,28 @@ be added.  The same split may then support simple executed-action factual probes
 for HIT within fixed horizons and future observed-shield collapse.  These
 probes test information content; they do not define reward, infer unexecuted
 successors, or constitute policy improvement.
+
+The first E3 inventory is frozen in
+\path{experiments/l1-stage4-bc-v1.json}.  It contains exactly 12 complete
+natural-RNG Lunatic Practice Stage~4 episodes under the 20\% uniform
+observed-shield mixture, with independent preregistered policy RNG streams.
+Episode indices 2, 5, 8, and 11 are validation; the remaining eight are
+training.  Collection uses one isolated eight-CPU Wine worker at a time because
+E5 did not admit parallel Wine.  A physical HIT never causes retry.  Bomb,
+incomplete storage, infrastructure failure, semantic/parity failure, capture
+p99 above 40 ms, solve p99 above 16.7 ms, observation-gap rate above 0.5\%, or
+nonzero stale-retry rate rejects that attempt; each fixed policy slot permits
+at most three infrastructure attempts, after which the experiment stops
+incomplete without fitting.
+
+The current-observation masked linear softmax fit is frozen at 100 full-batch
+epochs, learning rate 0.05, $L_2=10^{-4}$, seed 0, 2,000 episode-bootstrap
+draws, and at most 400,000 rows per split.  BC passes only when the upper end of
+the 95\% episode-bootstrap interval for validation NLL minus the per-mask
+Laplace action-frequency NLL is below zero and ten-bin ECE is no more than
+0.02 worse than the comparator.  No auxiliary target is active in L1.  A
+passing artifact earns one complete natural-RNG Stage~4 online integration
+canary; that canary is excluded from training and makes no HIT-reduction claim.
 
 \subsection{E4: minimal offline policy improvement}
 
@@ -668,10 +703,10 @@ E7 replaces only the environment adapter and configuration and reports
 unchanged versus changed code/schema surfaces, zero-shot behavior, and
 fine-tuning sample cost.  It was not run.
 
-This documentation checkpoint follows E0 and the negative E5.  The only active
-next implementation is E2/L0 causal learner-view work.  No new corpus
-collection, model fit, policy-API expansion, or learned online candidate has
-yet been authorized as evidence.
+This documentation checkpoint follows E0, completed E2, and the negative E5.
+The only active experiment is the preregistered serial Stage~4 E3/L1 baseline.
+No L1 episode has yet been collected, no research model has been fitted, and no
+learned online candidate has been evaluated.
 
 \section{Threats to Validity}
 
@@ -714,11 +749,12 @@ shield-constrained Wine evaluation.  Every additional representation,
 algorithm, objective, uncertainty mechanism, or collection strategy must solve
 one measured failure of that baseline.
 
-E0 establishes the serial factual data plane, while E5 rejects the current
-parallel pool.  E2 causal learner reconstruction is the next active step.  No
-model has been fit, no learned policy has run online, exact-prefix branching is
-not established, and this checkpoint makes no learning, NMNB, or transfer
-claim.
+E0 establishes the serial factual data plane, E2 establishes the causal learner
+projection and first exporter, and E5 rejects the current parallel pool.  E3's
+serial Stage~4 inventory and supervised gate are now preregistered but not yet
+run.  No research model has been fit, no learned policy has run online,
+exact-prefix branching is not established, and this checkpoint makes no policy
+improvement, NMNB, or transfer claim.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

@@ -8,11 +8,20 @@ Read in this order:
 4. `docs/IMMUTABLE_WINE_DATA_PLANE.md` — reusable factual episode contract;
 5. `docs/PORTABLE_WINE_RUNTIME.md` — machine-independent Wine setup;
 6. `docs/WINE_RETAIL_VALIDATION.md` — original-game runner details.
+7. `docs/WORK_LOG.md` — ignored operational experiment narration.
 
 E0 is complete at commit
 `af9900524520b72934a4c55e2f44118f88094633`: Practice Stages 4--6 and one
 natural-RNG six-stage Lunatic route all completed and passed their factual
 audits. The full route retained 108 HITs and zero Bomb.
+
+E2/L0 is complete at commit
+`2818861f4079bebfbd8443638ed0cb34236bd5e0`: the causal decision-epoch
+builder, current-observation feature parity, masked linear BC fixture, and
+immutable exporter passed the repository test suite. Read-only replay of the
+canonical E0 Practice Stage 4 episode conserved all 18 HITs across 24,385
+decision epochs; the complete E0 route conserved all 108 HITs across 126,468
+decision epochs. Excluded rows and HITs remain explicit.
 
 Current checkpoint:
 
@@ -20,12 +29,14 @@ Current checkpoint:
 2. retain the negative fixed-seed serial/parallel differential from commit
    `76782a4f37e0d12a9a2384561b53e68ceaf998ae`: every run passed its own audit,
    but exact factual/HIT equality failed, so no parallel pool is admitted;
-3. implement only E2/L0 next: derive and audit causal decision-epoch learner
-   rows from complete factual episodes, preserving command/sample/execution,
-   behavior probabilities, exclusions, elapsed frames, and HIT conservation;
-4. do not collect a new corpus, fit a model, widen `PolicyContext`, or run a
-   learned Wine candidate until that data contract and its acceptance tests
-   pass. Parallel collection remains disabled.
+3. run E3/L1 from `experiments/l1-stage4-bc-v1.json`: exactly 12 serial,
+   natural-RNG, complete Lunatic Practice Stage 4 episodes under the frozen 20%
+   uniform observed-shield mixture, split 8 train and 4 validation before the
+   first run;
+4. fit only the preregistered current-observation BC after all 12 episodes pass
+   their individual audits, and run one learned-policy Stage 4 integration
+   canary only if the held-out likelihood/calibration gate passes. Parallel
+   Wine collection remains disabled.
 
 There is no authorized learned candidate yet. A complete route with many HITs
 is still a successful infrastructure baseline when the factual and control
@@ -41,7 +52,7 @@ one offline value method. Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.
 
-After E2/L0 passes, the first training inventory is collected serially with
+The first training inventory is collected serially with
 unchanged retail clock/update semantics, coherent capture suspension, the
 frozen declared 20% uniform observed-shield mixture, and complete-episode
 admission. Its episode count, seeds, stopping rule, and
