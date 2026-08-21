@@ -1,0 +1,34 @@
+{
+  "schema": "th06-ecl-reference-v1",
+  "archive_sha256": "0f834a35aef2d73b05cffecc830c017dacbcc6f11b9a0611a9da2f3970a112e7",
+  "entries": {
+    "ecldata1.ecl": {
+      "sha256": "9d9a40e9f7e3ab9346d3874438134659cacf9d34f4aff57b96b4be4ea85b99d7",
+      "size": 24562
+    },
+    "ecldata2.ecl": {
+      "sha256": "aa89aaaf13264d909bbaaa24f2af263ae1a58145ad5cc33fcea5eb9cb920c43e",
+      "size": 26880
+    },
+    "ecldata3.ecl": {
+      "sha256": "44dfcaa737b7d4b3d1275655627e15a9d5b7710fc75a0885fb39d8c9485056d6",
+      "size": 33070
+    },
+    "ecldata4.ecl": {
+      "sha256": "92695da99b651da492f4fb7c7497b5c8ed8105a23370cc4529901609077c8b60",
+      "size": 60796
+    },
+    "ecldata5.ecl": {
+      "sha256": "50b5c4777a56910148466c7e5ea1c8dadc126e706420604d52421a49bf861d1b",
+      "size": 30392
+    },
+    "ecldata6.ecl": {
+      "sha256": "4a4d4e5bf7ff79ab49b918267130b42308b3a5565cc892dc0e636b8b667740e5",
+      "size": 30866
+    },
+    "ecldata7.ecl": {
+      "sha256": "fb900c7e54b1f5d0c36a2e09986bef8f8fde002ca7b5005d12e3aaec7e856392",
+      "size": 59890
+    }
+  }
+}
