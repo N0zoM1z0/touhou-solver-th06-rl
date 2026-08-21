@@ -27,8 +27,8 @@ def reference_distribution(
     baseline = str(baseline_action)
     if baseline not in safe:
         raise ValueError("reference baseline is outside the physical-safe set")
-    if not math.isfinite(epsilon) or not 0.0 <= epsilon <= 1.0:
-        raise ValueError("reference epsilon must be in [0, 1]")
+    if not math.isfinite(epsilon) or not 0.0 < epsilon <= 1.0:
+        raise ValueError("reference epsilon must be in (0, 1]")
     uniform = epsilon / len(safe)
     return tuple(
         (

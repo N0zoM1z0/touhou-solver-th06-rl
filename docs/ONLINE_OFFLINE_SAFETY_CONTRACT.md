@@ -37,6 +37,16 @@ set to be exactly the reactive baseline singleton. This keeps route completion
 evidence while excluding unreachable post-HIT choices from learning and
 evaluation.
 
+Local support is calibrated in physical-route units, not correlated option
+rows. Prototype fit and calibration routes are disjoint; each calibration
+route contributes its maximum factual distance for an action, and the online
+threshold uses the finite-sample split-conformal `ceil((n + 1) q)` rank. If
+that rank is not observable, the action has no support. Importance-weight ESS
+is likewise clustered by physical route. The forecast gate counts only
+distinct portable scoring models, and a tie with the baseline is not an
+improvement. These gates may remove a learned deviation but never add an
+action to the native-safe set.
+
 “Source-complete” includes current bullets, enemy bodies, and lasers; spawn
 animation fallthrough; enemy clamps; and any timeline/ECL birth or body/laser
 mutation that can occur before the input lease expires. Repeating an

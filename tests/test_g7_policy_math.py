@@ -18,6 +18,9 @@ def test_reference_distribution_matches_logged_safe_exploration_law() -> None:
         epsilon=0.3,
     )) == pytest.approx({"left": 0.1, "right": 0.1, "stay": 0.8})
 
+    with pytest.raises(ValueError, match=r"in \(0, 1\]"):
+        reference_distribution(("stay", "left"), "stay", epsilon=0.0)
+
 
 def test_cost_tilt_is_complete_safe_and_kl_bounded() -> None:
     result = constrained_cost_distribution(

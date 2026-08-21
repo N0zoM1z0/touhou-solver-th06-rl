@@ -86,6 +86,7 @@ def test_episode_calibrated_support_accepts_seen_state_and_rejects_ood() -> None
         dataset,
         seed=11,
         prototypes_per_action=2,
+        distance_quantile=0.8,
         minimum_samples=8,
         minimum_ess=8.0,
     )
@@ -104,3 +105,33 @@ def test_episode_calibrated_support_accepts_seen_state_and_rejects_ood() -> None
         state.current_action,
     )
     assert locally_supported_actions(artifact, ood) == ()
+
+
+def test_support_rejects_an_unresolved_episode_level_conformal_rank() -> None:
+    episodes = tuple(
+        (
+            _option(
+                f"episode-{index:03d}",
+                0,
+                "left" if index % 2 == 0 else "stay",
+                0,
+                terminal=True,
+            ),
+        )
+        for index in range(80)
+    )
+    artifact = fit_local_support(
+        build_critic_dataset(episodes, reference_epsilon=1.0),
+        seed=11,
+        prototypes_per_action=2,
+        minimum_samples=8,
+        minimum_ess=8.0,
+    )
+
+    assert all(
+        specification["supported"] is False
+        and specification["conformal_rank"]
+        > specification["calibration_episodes"]
+        for specification in artifact["actions"].values()
+        if specification["fit_samples"]
+    )

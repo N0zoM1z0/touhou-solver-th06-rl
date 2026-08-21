@@ -101,9 +101,9 @@ def _episode_with_forced_post_hit(index: int):
     return eligible, forced
 
 
-def _actor() -> dict[str, object]:
+def _actor(left_weight: float = 2.0) -> dict[str, object]:
     weights = [0.0] * len(ACTOR_FEATURE_NAMES)
-    weights[ACTOR_FEATURE_NAMES.index("action:direction_x")] = -2.0
+    weights[ACTOR_FEATURE_NAMES.index("action:direction_x")] = -left_weight
     return {
         "schema": "th06-rl-g7-linear-awr-actor-v1",
         "feature_schema": CAUSAL_TREE_FEATURE_SCHEMA,
@@ -123,6 +123,7 @@ def test_paired_heldout_pdis_recovers_known_lower_hit_policy() -> None:
         build_critic_dataset(episodes, reference_epsilon=1.0),
         seed=3,
         prototypes_per_action=2,
+        distance_quantile=0.9,
         minimum_samples=16,
         minimum_ess=16.0,
     )
@@ -132,7 +133,11 @@ def test_paired_heldout_pdis_recovers_known_lower_hit_policy() -> None:
         "authorization": "offline-research-only",
         "actor": actor,
         "local_support": support,
-        "forecast": build_forecast_artifact([actor, actor, actor]),
+        "forecast": build_forecast_artifact([
+            _actor(1.0),
+            _actor(2.0),
+            _actor(3.0),
+        ]),
     }
     report = evaluate_candidate(
         candidate,
@@ -166,6 +171,7 @@ def test_heldout_ope_rejects_non_deterministic_ineligible_option() -> None:
         build_critic_dataset(episodes, reference_epsilon=1.0),
         seed=3,
         prototypes_per_action=2,
+        distance_quantile=0.9,
         minimum_samples=16,
         minimum_ess=16.0,
     )
@@ -175,7 +181,11 @@ def test_heldout_ope_rejects_non_deterministic_ineligible_option() -> None:
         "authorization": "offline-research-only",
         "actor": actor,
         "local_support": support,
-        "forecast": build_forecast_artifact([actor, actor, actor]),
+        "forecast": build_forecast_artifact([
+            _actor(1.0),
+            _actor(2.0),
+            _actor(3.0),
+        ]),
     }
     first = episodes[0]
     invalid_state = replace(first[1].state, legal_actions=("left", "stay"))

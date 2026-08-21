@@ -19,7 +19,7 @@ def test_training_entry_keeps_holdout_disjoint_and_cannot_authorize_wine(
     config_path = tmp_path / "config/g7.json"
     _write(dataset, {"schema": "fixture"})
     config = json.loads(
-        (train_g7.REPOSITORY / "config/g7_training_v1.json").read_text()
+        (train_g7.REPOSITORY / "config/g7_training_v2.json").read_text()
     )
     config["minimum_validation_episodes"] = 2
     config["validation_fraction"] = 0.5

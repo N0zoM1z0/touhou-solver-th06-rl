@@ -16,7 +16,9 @@ from th06_rl.learning_features import CAUSAL_TREE_FEATURE_SCHEMA
 from th06_rl.offline_options import ActorState
 
 
-SUPPORT_SCHEMA = "th06-rl-g7-local-prototype-support-v1"
+SUPPORT_SCHEMA = "th06-rl-g7-local-prototype-support-v2"
+CALIBRATION_UNIT = "physical-episode-maximum"
+CALIBRATION_QUANTILE = "split-conformal-ceil-(n+1)q"
 
 
 def _nearest_distance(row, prototypes) -> float:
@@ -127,9 +129,13 @@ def fit_local_support(
             example for example in calibration_examples
             if example.factual_action == action
         ]
-        inverse_propensities = [
-            1.0 / example.behavior_probability for example in action_fit
-        ]
+        inverse_propensity_by_episode: dict[str, float] = {}
+        for example in action_fit:
+            inverse_propensity_by_episode[example.episode_id] = (
+                inverse_propensity_by_episode.get(example.episode_id, 0.0)
+                + 1.0 / example.behavior_probability
+            )
+        inverse_propensities = tuple(inverse_propensity_by_episode.values())
         ess = (
             sum(inverse_propensities) ** 2
             / sum(weight * weight for weight in inverse_propensities)
@@ -138,19 +144,8 @@ def fit_local_support(
         )
         supported = (
             len(action_fit) >= minimum_samples
-            and len(action_calibration) >= 1
             and ess >= minimum_ess
         )
-        if not supported:
-            actions[action] = {
-                "supported": False,
-                "fit_samples": len(action_fit),
-                "calibration_samples": len(action_calibration),
-                "effective_sample_size": ess,
-                "distance_threshold": None,
-                "prototypes": [],
-            }
-            continue
         normalized_fit = [
             tuple((value - center) / width for value, center, width in zip(
                 _actor_vector_from_critic(
@@ -162,36 +157,47 @@ def fit_local_support(
             ))
             for example in action_fit
         ]
-        prototypes = _kmeans(
-            normalized_fit,
-            count=prototypes_per_action,
-            seed=seed + ACTION_NAMES.index(action),
+        prototypes = (
+            _kmeans(
+                normalized_fit,
+                count=prototypes_per_action,
+                seed=seed + ACTION_NAMES.index(action),
+            )
+            if normalized_fit
+            else ()
         )
-        distances = sorted(
-            _nearest_distance(
-                tuple((value - center) / width for value, center, width in zip(
+        calibration_distance_by_episode: dict[str, float] = {}
+        for example in action_calibration:
+            normalized = tuple(
+                (value - center) / width
+                for value, center, width in zip(
                     _actor_vector_from_critic(
                         dict(example.candidate_vectors)[action]
                     ),
                     mean,
                     scale,
                     strict=True,
-                )),
-                prototypes,
+                )
             )
-            for example in action_calibration
-        )
-        quantile_index = min(
-            len(distances) - 1,
-            math.ceil(distance_quantile * len(distances)) - 1,
-        )
+            distance = _nearest_distance(normalized, prototypes) if prototypes else 0.0
+            calibration_distance_by_episode[example.episode_id] = max(
+                distance,
+                calibration_distance_by_episode.get(example.episode_id, 0.0),
+            )
+        episode_distances = sorted(calibration_distance_by_episode.values())
+        conformal_rank = math.ceil((len(episode_distances) + 1) * distance_quantile)
+        supported = supported and conformal_rank <= len(episode_distances)
+        threshold = episode_distances[conformal_rank - 1] if supported else None
         actions[action] = {
-            "supported": True,
+            "supported": supported,
             "fit_samples": len(action_fit),
             "calibration_samples": len(action_calibration),
-            "effective_sample_size": ess,
-            "distance_threshold": distances[quantile_index],
-            "prototypes": [list(row) for row in prototypes],
+            "fit_episodes": len(inverse_propensity_by_episode),
+            "calibration_episodes": len(calibration_distance_by_episode),
+            "episode_effective_sample_size": ess,
+            "conformal_rank": conformal_rank,
+            "distance_threshold": threshold,
+            "prototypes": [list(row) for row in prototypes] if supported else [],
         }
     return {
         "schema": SUPPORT_SCHEMA,
@@ -202,6 +208,8 @@ def fit_local_support(
         "actions": actions,
         "fit_fold_by_episode": [list(row) for row in fold_rows],
         "calibration_fold": calibration_fold,
+        "calibration_unit": CALIBRATION_UNIT,
+        "calibration_quantile": CALIBRATION_QUANTILE,
         "distance_quantile": distance_quantile,
         "minimum_samples": minimum_samples,
         "minimum_effective_sample_size": minimum_ess,
@@ -213,12 +221,25 @@ def locally_supported_actions(
     state: ActorState,
 ) -> tuple[str, ...]:
     """Evaluate only statistical support; native safety remains external."""
+    distance_quantile_value = artifact.get("distance_quantile")
+    minimum_samples = artifact.get("minimum_samples")
+    minimum_ess_value = artifact.get("minimum_effective_sample_size")
     if (
         artifact.get("schema") != SUPPORT_SCHEMA
         or artifact.get("feature_schema") != CAUSAL_TREE_FEATURE_SCHEMA
         or tuple(artifact.get("feature_names", ())) != ACTOR_FEATURE_NAMES
+        or artifact.get("calibration_unit") != CALIBRATION_UNIT
+        or artifact.get("calibration_quantile") != CALIBRATION_QUANTILE
+        or not isinstance(distance_quantile_value, (int, float))
+        or isinstance(distance_quantile_value, bool)
+        or not isinstance(minimum_samples, int)
+        or isinstance(minimum_samples, bool)
+        or not isinstance(minimum_ess_value, (int, float))
+        or isinstance(minimum_ess_value, bool)
     ):
         raise ValueError("local support artifact contract mismatch")
+    distance_quantile = float(distance_quantile_value)
+    minimum_ess = float(minimum_ess_value)
     mean = tuple(float(value) for value in artifact.get("mean", ()))
     scale = tuple(float(value) for value in artifact.get("scale", ()))
     actions = artifact.get("actions")
@@ -229,8 +250,64 @@ def locally_supported_actions(
         or any(not math.isfinite(value) or value <= 0.0 for value in scale)
         or not isinstance(actions, dict)
         or set(actions) != set(ACTION_NAMES)
+        or not 0.5 <= distance_quantile < 1.0
+        or minimum_samples < 1
+        or not math.isfinite(minimum_ess)
+        or minimum_ess <= 0.0
     ):
         raise ValueError("local support numeric artifact is invalid")
+    for specification in actions.values():
+        if not isinstance(specification, dict):
+            raise ValueError("local support action artifact is malformed")
+        integer_names = (
+            "fit_samples",
+            "calibration_samples",
+            "fit_episodes",
+            "calibration_episodes",
+            "conformal_rank",
+        )
+        integers = tuple(specification.get(name) for name in integer_names)
+        ess_value = specification.get("episode_effective_sample_size")
+        if (
+            not isinstance(specification.get("supported"), bool)
+            or any(
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 0
+                for value in integers
+            )
+            or not isinstance(ess_value, (int, float))
+            or isinstance(ess_value, bool)
+        ):
+            raise ValueError("local support action counts are invalid")
+        fit_samples, calibration_samples, fit_episodes, calibration_episodes, rank = (
+            integers
+        )
+        ess = float(ess_value)
+        supported = specification["supported"]
+        threshold = specification.get("distance_threshold")
+        prototypes = specification.get("prototypes")
+        if (
+            fit_episodes > fit_samples
+            or calibration_episodes > calibration_samples
+            or rank != math.ceil((calibration_episodes + 1) * distance_quantile)
+            or not math.isfinite(ess)
+            or ess < 0.0
+            or supported
+            and (
+                fit_samples < minimum_samples
+                or ess < minimum_ess
+                or rank > calibration_episodes
+                or not isinstance(prototypes, list)
+                or not prototypes
+                or not isinstance(threshold, (int, float))
+                or isinstance(threshold, bool)
+                or not math.isfinite(float(threshold))
+                or float(threshold) < 0.0
+            )
+            or not supported and (threshold is not None or prototypes != [])
+        ):
+            raise ValueError("local support action evidence is inconsistent")
     result = []
     for action in state.legal_actions:
         specification = actions.get(action)

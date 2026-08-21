@@ -67,9 +67,9 @@ def _context(**changes) -> PolicyContext:
     return PolicyContext(**values)
 
 
-def _actor() -> dict[str, object]:
+def _actor(left_weight: float = 2.0) -> dict[str, object]:
     weights = [0.0] * len(ACTOR_FEATURE_NAMES)
-    weights[ACTOR_FEATURE_NAMES.index("action:direction_x")] = -2.0
+    weights[ACTOR_FEATURE_NAMES.index("action:direction_x")] = -left_weight
     return {
         "schema": LINEAR_ACTOR_SCHEMA,
         "feature_schema": CAUSAL_TREE_FEATURE_SCHEMA,
@@ -90,6 +90,12 @@ def _candidate() -> dict[str, object]:
         supported = action in {"left", "stay"}
         support_actions[action] = {
             "supported": supported,
+            "fit_samples": 100 if supported else 0,
+            "calibration_samples": 100 if supported else 0,
+            "fit_episodes": 100 if supported else 0,
+            "calibration_episodes": 100 if supported else 0,
+            "episode_effective_sample_size": 100.0 if supported else 0.0,
+            "conformal_rank": 100 if supported else 1,
             "distance_threshold": 1_000_000.0 if supported else None,
             "prototypes": (
                 [[0.0] * len(ACTOR_FEATURE_NAMES)] if supported else []
@@ -106,8 +112,17 @@ def _candidate() -> dict[str, object]:
             "mean": [0.0] * len(ACTOR_FEATURE_NAMES),
             "scale": [1.0] * len(ACTOR_FEATURE_NAMES),
             "actions": support_actions,
+            "calibration_unit": "physical-episode-maximum",
+            "calibration_quantile": "split-conformal-ceil-(n+1)q",
+            "distance_quantile": 0.99,
+            "minimum_samples": 32,
+            "minimum_effective_sample_size": 16.0,
         },
-        "forecast": build_forecast_artifact([actor, actor, actor]),
+        "forecast": build_forecast_artifact([
+            _actor(1.0),
+            _actor(2.0),
+            _actor(3.0),
+        ]),
     }
 
 

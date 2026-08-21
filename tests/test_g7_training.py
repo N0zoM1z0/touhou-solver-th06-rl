@@ -79,6 +79,7 @@ def test_complete_fit_uses_only_supplied_episode_partition() -> None:
         n_jobs=2,
         maximum_importance_ratio=2.0,
         support_prototypes_per_action=2,
+        support_distance_quantile=0.8,
         support_minimum_samples=8,
         support_minimum_ess=8.0,
         ensemble_members=3,

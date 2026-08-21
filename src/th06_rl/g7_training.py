@@ -62,6 +62,7 @@ def fit_g7_candidate(
     n_jobs: int,
     maximum_importance_ratio: float,
     support_prototypes_per_action: int,
+    support_distance_quantile: float,
     support_minimum_samples: int,
     support_minimum_ess: float,
     ensemble_members: int,
@@ -100,6 +101,7 @@ def fit_g7_candidate(
         dataset,
         seed=seed + 1,
         prototypes_per_action=support_prototypes_per_action,
+        distance_quantile=support_distance_quantile,
         minimum_samples=support_minimum_samples,
         minimum_ess=support_minimum_ess,
     )

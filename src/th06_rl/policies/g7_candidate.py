@@ -19,10 +19,10 @@ from th06_rl.g7_contract import (
     ONLINE_QUALIFICATION_SCHEMA,
     ONLINE_STATE_SCHEMA,
 )
-from th06_rl.g7_forecast import forecast_accepted_actions
-from th06_rl.g7_learner import linear_actor_distribution
+from th06_rl.g7_forecast import FORECAST_SCHEMA, forecast_accepted_actions
+from th06_rl.g7_learner import LINEAR_ACTOR_SCHEMA, linear_actor_distribution
 from th06_rl.g7_policy_math import sample_action
-from th06_rl.g7_support import locally_supported_actions
+from th06_rl.g7_support import SUPPORT_SCHEMA, locally_supported_actions
 from th06_rl.offline_options import ActorState
 from th06_rl.policies.safe_option_exploration import (
     OPTION_HORIZON_FRAMES,
@@ -106,6 +106,12 @@ class G7CandidatePolicy(SafeOptionExplorationPolicy):
             for name in ("actor", "local_support", "forecast")
         ):
             raise ValueError("G7 candidate lacks a portable serving artifact")
+        if (
+            candidate["actor"].get("schema") != LINEAR_ACTOR_SCHEMA
+            or candidate["local_support"].get("schema") != SUPPORT_SCHEMA
+            or candidate["forecast"].get("schema") != FORECAST_SCHEMA
+        ):
+            raise ValueError("G7 candidate serving artifact schema is stale")
 
         self.policy_seed = seed
         self.random.seed(seed)

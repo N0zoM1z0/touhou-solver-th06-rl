@@ -22,7 +22,7 @@ from th06_rl.g7_training import fit_g7_candidate  # noqa: E402
 from th06_rl.offline_options import OfflineOptionError, whole_episode_split  # noqa: E402
 
 
-CONFIG_SCHEMA = "th06-rl-g7-training-config-v1"
+CONFIG_SCHEMA = "th06-rl-g7-training-config-v2"
 TRAINING_RUN_SCHEMA = "th06-rl-g7-training-run-v1"
 
 
@@ -71,7 +71,8 @@ def _config(path: Path) -> dict[str, object]:
         "schema", "seed", "validation_fraction", "reference_epsilon",
         "awr_temperature", "crossfit_folds", "critic_estimators", "n_jobs",
         "maximum_importance_ratio", "support_prototypes_per_action",
-        "support_minimum_samples", "support_minimum_ess", "ensemble_members",
+        "support_distance_quantile", "support_minimum_samples",
+        "support_minimum_ess", "ensemble_members",
         "ensemble_episode_fraction", "required_vote_fraction", "target_max_kl",
         "maximum_step_ratio", "maximum_cumulative_ratio",
         "minimum_effective_sample_size", "minimum_validation_episodes",
@@ -115,6 +116,7 @@ def train(
         n_jobs=int(config["n_jobs"]),
         maximum_importance_ratio=float(config["maximum_importance_ratio"]),
         support_prototypes_per_action=int(config["support_prototypes_per_action"]),
+        support_distance_quantile=float(config["support_distance_quantile"]),
         support_minimum_samples=int(config["support_minimum_samples"]),
         support_minimum_ess=float(config["support_minimum_ess"]),
         ensemble_members=int(config["ensemble_members"]),
@@ -170,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--config",
         type=Path,
-        default=REPOSITORY / "config/g7_training_v1.json",
+        default=REPOSITORY / "config/g7_training_v2.json",
     )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
