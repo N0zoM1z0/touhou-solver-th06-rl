@@ -33,10 +33,15 @@ Current checkpoint:
    `559572a8f3699c06eb41080e6061e579a1156c33`: all 12 serial Stage 4 episodes
    passed on their first attempt, but the current-observation BC passed the
    held-out NLL criterion and failed the frozen calibration criterion;
-4. do not run the withheld Wine canary, IQL, history, or an object encoder from
-   this result. First audit the frozen model's reliability/confidence behavior,
-   then preregister exactly one transparent L1 follow-up if justified. Parallel
-   Wine collection remains disabled.
+4. retain the read-only L1 diagnosis: train and validation are both strongly
+   under-confident, the frozen train gradient remains 19.1% of its initial
+   norm, portable roots reproduce the reactive baseline exactly, and a real
+   floating ECE-bin defect is far too small to change the negative decision;
+5. run only the frozen offline L1b convergence follow-up in
+   `experiments/l1b-stage4-bc-convergence-v1.json`. It reuses the exact L1
+   corpus and split, changes no representation or model class, and admits no
+   Wine canary inside L1b. IQL, history, object encoders, and parallel Wine
+   collection remain disabled.
 
 One research model has been fitted, but it failed its preregistered promotion
 gate and is not an authorized learned candidate. No learned policy has been run
@@ -47,8 +52,10 @@ The research goal is complete-route Lunatic NMNB probability. The first value
 optimization target is expected undiscounted physical HIT count over complete
 episodes; it is a dense surrogate and is not claimed equivalent to the goal
 metric. The completed current-observation BC improved held-out action NLL over
-action frequency but failed calibration, so the active next step is a bounded
-calibration diagnosis and one separately preregistered transparent follow-up.
+action frequency but failed calibration. The bounded diagnosis attributes the
+first unresolved boundary to optimization convergence rather than missing
+capture or validation drift. L1b therefore refits the identical model from
+zero with a train-only relative-gradient stop and corrected, versioned ECE.
 Short history and offline value learning remain blocked by that decision.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,

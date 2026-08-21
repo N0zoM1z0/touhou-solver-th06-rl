@@ -66,6 +66,13 @@ before fitting.
    criterion. It was not exported to Wine and the withheld canary was not run.
    A refit or calibration method is a new preregistered L1 experiment, not a
    reinterpretation of this result.
+   The read-only diagnosis reproduced the failure and found systematic
+   under-confidence: validation accuracy was 0.461290 while mean top
+   confidence was 0.337672, and the frozen train gradient remained 19.1% of
+   its initial norm. Portable roots reproduced every recorded reactive
+   baseline, so missing capture is not the failure. L1b is the only active
+   follow-up: it reuses the exact corpus/split and changes only train-only
+   optimization convergence plus a corrected ECE implementation.
 3. **L2 — one representation ablation (blocked).** Add one fixed short physical/action
    history and simple factual HIT-horizon or observed-shield-collapse probes.
    Retain it only after a preregistered held-out proper-score improvement. A
@@ -111,6 +118,21 @@ feature and a parity test.
   ECE was 0.124251 versus the admissible bound 0.028749, so the joint gate
   failed. The result is `stop-l1-bc-learnability`; no Wine canary was run and
   there is no authorized learned candidate.
+- The post-hoc reliability audit found validation mean top confidence 0.337672
+  against accuracy 0.461290 in all four held-out episodes. The model recovered
+  the deterministic reactive baseline from the permitted facts on only 56.19%
+  of rows, although a diagnostic replay of those same facts recovered the
+  recorded baseline on 100%. The 100-update fit was not stationary: final
+  train gradient L2 was 19.1% of its initial value and increasing logit scale
+  locally reduced train NLL. A floating ECE edge omitted exact confidence 0.6,
+  but corrected binning changed the comparator ECE by only 0.000017 and left
+  the L1 decision negative.
+- `experiments/l1b-stage4-bc-convergence-v1.json` freezes the only active
+  follow-up. It reuses all 12 episode identities and the eight/four split,
+  starts the same masked linear softmax from zero, and stops after the first
+  train-only gradient ratio at or below 0.01 following at least 100 updates, or
+  inconclusively after 2,000 updates. Validation is evaluated once at the end.
+  L1b itself performs no Wine run.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final

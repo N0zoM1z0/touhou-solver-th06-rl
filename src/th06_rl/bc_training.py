@@ -31,6 +31,9 @@ if DECISION_EPOCH_SCHEMA != DATASET_DECISION_EPOCH_SCHEMA:
     raise RuntimeError("behavior-clone and dataset decision schemas disagree")
 
 
+CALIBRATION_SCHEMA = "th06-rl-top-label-ece-10-equal-width-v2"
+
+
 @dataclass(frozen=True)
 class BehaviorDataset:
     episode_ids: tuple[str, ...]
@@ -142,6 +145,38 @@ def _masked_probabilities(
     return exponentials / totals
 
 
+def _expected_calibration_error(
+    confidence: np.ndarray,
+    correct: np.ndarray,
+    *,
+    bins: int = 10,
+) -> float:
+    """Return equal-width top-label ECE with every boundary assigned once."""
+    if bins <= 0:
+        raise ValueError("calibration bin count must be positive")
+    if confidence.ndim != 1 or correct.ndim != 1 or confidence.shape != correct.shape:
+        raise ValueError("calibration inputs must be aligned one-dimensional arrays")
+    if confidence.size == 0:
+        raise ValueError("calibration inputs cannot be empty")
+    if np.any(~np.isfinite(confidence)) or np.any(
+        (confidence < 0.0) | (confidence > 1.0)
+    ):
+        raise ValueError("calibration confidence must be finite and in [0, 1]")
+    bin_indices = np.minimum(
+        np.floor(confidence * bins).astype(np.int64),
+        bins - 1,
+    )
+    ece = 0.0
+    for bin_index in range(bins):
+        members = bin_indices == bin_index
+        if np.any(members):
+            ece += float(np.mean(members)) * abs(
+                float(np.mean(confidence[members]))
+                - float(np.mean(correct[members]))
+            )
+    return ece
+
+
 def _metrics(
     probabilities: np.ndarray,
     dataset: BehaviorDataset,
@@ -153,17 +188,7 @@ def _metrics(
     one_hot = np.zeros_like(probabilities)
     one_hot[rows, dataset.targets] = 1.0
     confidence = probabilities[rows, predictions]
-    ece = 0.0
-    for lower in np.linspace(0.0, 0.9, 10):
-        upper = lower + 0.1
-        members = (confidence >= lower) & (
-            confidence <= upper if upper >= 1.0 else confidence < upper
-        )
-        if np.any(members):
-            ece += float(np.mean(members)) * abs(
-                float(np.mean(confidence[members]))
-                - float(np.mean(correct[members]))
-            )
+    ece = _expected_calibration_error(confidence, correct)
     baseline_known = dataset.baseline_targets >= 0
     return {
         "negative_log_likelihood": float(-np.mean(np.log(selected))),
@@ -256,6 +281,8 @@ def fit_behavior_clone(
     seed: int = 0,
     bootstrap_samples: int = 2_000,
     calibration_tolerance: float = 0.02,
+    minimum_updates: int = 0,
+    relative_gradient_l2_tolerance: float | None = None,
     max_rows: int = 2_000_000,
     code_commit: str = "fixture",
     policy_plugin_sha256: str = "fixture",
@@ -269,6 +296,15 @@ def fit_behavior_clone(
         raise ValueError("l2 must be finite and nonnegative")
     if not math.isfinite(calibration_tolerance) or calibration_tolerance < 0.0:
         raise ValueError("calibration tolerance must be finite and nonnegative")
+    if not 0 <= minimum_updates <= epochs:
+        raise ValueError("minimum updates must be between zero and maximum epochs")
+    if relative_gradient_l2_tolerance is not None and (
+        not math.isfinite(relative_gradient_l2_tolerance)
+        or not 0.0 <= relative_gradient_l2_tolerance < 1.0
+    ):
+        raise ValueError(
+            "relative gradient L2 tolerance must be finite and in [0, 1)"
+        )
     if not 0 <= seed < 2**64:
         raise ValueError("seed must be an unsigned 64-bit integer")
     if not code_commit or not policy_plugin_sha256:
@@ -287,7 +323,8 @@ def fit_behavior_clone(
     weights = np.zeros((len(ACTION_NAMES), len(FEATURE_NAMES)), dtype=np.float64)
     biases = np.zeros(len(ACTION_NAMES), dtype=np.float64)
     first_loss = None
-    for _epoch in range(epochs):
+
+    def training_step_values() -> tuple[np.ndarray, float, np.ndarray, np.ndarray, float]:
         probabilities = _masked_probabilities(
             train_features,
             train.legal_masks,
@@ -300,15 +337,48 @@ def fit_behavior_clone(
             1.0,
         )
         loss = float(-np.mean(np.log(selected)) + 0.5 * l2 * np.sum(weights ** 2))
-        if first_loss is None:
-            first_loss = loss
         errors = probabilities.copy()
         errors[np.arange(train.rows), train.targets] -= 1.0
         errors = np.where(train.legal_masks, errors, 0.0)
         gradient_weights = errors.T @ train_features / train.rows + l2 * weights
         gradient_biases = np.mean(errors, axis=0)
+        gradient_l2 = float(math.sqrt(
+            float(np.sum(gradient_weights ** 2))
+            + float(np.sum(gradient_biases ** 2))
+        ))
+        return probabilities, loss, gradient_weights, gradient_biases, gradient_l2
+
+    _, first_loss, gradient_weights, gradient_biases, initial_gradient_l2 = (
+        training_step_values()
+    )
+    gradient_l2 = initial_gradient_l2
+    updates_completed = 0
+    optimization_converged = False
+    while updates_completed < epochs:
+        if (
+            relative_gradient_l2_tolerance is not None
+            and updates_completed >= minimum_updates
+            and gradient_l2
+            <= relative_gradient_l2_tolerance * initial_gradient_l2
+        ):
+            optimization_converged = True
+            break
         weights -= learning_rate * gradient_weights
         biases -= learning_rate * gradient_biases
+        updates_completed += 1
+        _, _, gradient_weights, gradient_biases, gradient_l2 = training_step_values()
+
+    if relative_gradient_l2_tolerance is not None and (
+        updates_completed >= minimum_updates
+        and gradient_l2 <= relative_gradient_l2_tolerance * initial_gradient_l2
+    ):
+        optimization_converged = True
+    final_gradient_l2 = gradient_l2
+    gradient_ratio = (
+        final_gradient_l2 / initial_gradient_l2
+        if initial_gradient_l2 > 0.0
+        else 0.0
+    )
 
     train_probabilities = _masked_probabilities(
         train_features,
@@ -333,12 +403,20 @@ def fit_behavior_clone(
         seed=seed,
         samples=bootstrap_samples,
     )
-    gate_passed = bool(
+    proper_score_passed = bool(
         len(validation.episode_ids) >= 2
         and interval[1] < 0.0
-        and validation_metrics["expected_calibration_error_10_bin"]
+    )
+    calibration_passed = bool(
+        validation_metrics["expected_calibration_error_10_bin"]
         <= frequency_metrics["expected_calibration_error_10_bin"]
         + calibration_tolerance
+    )
+    optimization_passed = bool(
+        relative_gradient_l2_tolerance is None or optimization_converged
+    )
+    gate_passed = bool(
+        proper_score_passed and calibration_passed and optimization_passed
     )
     action_major_weights = tuple(
         tuple(float(value) for value in row) for row in weights
@@ -376,7 +454,28 @@ def fit_behavior_clone(
             "seed": seed,
             "bootstrap_samples": bootstrap_samples,
             "calibration_tolerance": calibration_tolerance,
+            "calibration_schema": CALIBRATION_SCHEMA,
             "initial_regularized_nll": first_loss,
+            "optimization": {
+                "kind": "full-batch-gradient-descent",
+                "maximum_updates": epochs,
+                "minimum_updates": minimum_updates,
+                "relative_gradient_l2_tolerance": relative_gradient_l2_tolerance,
+                "updates_completed": updates_completed,
+                "converged": (
+                    optimization_converged
+                    if relative_gradient_l2_tolerance is not None
+                    else None
+                ),
+                "stop_reason": (
+                    "relative-gradient-l2"
+                    if optimization_converged
+                    else "maximum-updates"
+                ),
+                "initial_gradient_l2": initial_gradient_l2,
+                "final_gradient_l2": final_gradient_l2,
+                "final_to_initial_gradient_l2_ratio": gradient_ratio,
+            },
             "train": {
                 "episodes": len(train.episode_ids),
                 "rows": train.rows,
@@ -389,6 +488,9 @@ def fit_behavior_clone(
             },
             "action_frequency_validation": frequency_metrics,
             "episode_bootstrap_nll_delta_95": list(interval),
+            "proper_score_gate_passed": proper_score_passed,
+            "calibration_gate_passed": calibration_passed,
+            "optimization_gate_passed": optimization_passed,
             "learnability_gate_passed": gate_passed,
         },
         "inventory": {

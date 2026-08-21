@@ -409,6 +409,12 @@ calibration does not regress beyond a frozen tolerance.  Accuracy alone is
 insufficient.  E3 passed the likelihood condition but failed calibration, so
 L1 emitted no online candidate and does not admit L2 without a new transparent
 preregistration.
+Read-only replay subsequently bounded the first failure at optimization rather
+than capture: the portable roots reconstruct the recorded reactive choice
+exactly, train and validation show the same under-confidence, and the frozen
+train gradient is not stationary.  L1b therefore changes only the train-only
+stopping rule and corrects the ECE implementation; it does not change data,
+split, representation, target, model class, regularization, or comparator.
 
 \paragraph{L2: one representation change.}
 Add a short, fixed physical/action history and simple factual heads for HIT
@@ -477,6 +483,7 @@ Reactive scorer & Executed control & E0 completed one route with 108 HITs; this 
 20\% uniform-shield mixture & Executed collection & Twelve new serial Stage 4 episodes completed on attempt 1 with 139 factual HITs; this is a training inventory, not policy-improvement evidence. \\
 Action frequency & Evaluated comparator & Validation NLL 2.286394 and ECE 0.008749 on the frozen four-episode split. \\
 Current-observation BC & Negative held-out gate & Validation NLL 2.014976 beat action frequency, but ECE 0.124251 exceeded the frozen 0.028749 bound; no Wine canary ran. \\
+Current-observation BC convergence follow-up & Preregistered, not run & Reuse the exact L1 corpus and split; require train-only relative-gradient convergence before applying the corrected NLL-plus-ECE gate. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -696,6 +703,43 @@ temperature calibration, optimizer change, or representation change is a new
 preregistered experiment.  E4 and online learned-policy evaluation remain
 blocked.
 
+That read-only decomposition reproduced the BC metrics and found systematically
+low confidence rather than a validation-only failure.  Validation accuracy was
+0.461290 while mean top confidence was 0.337672; train showed 0.468140 versus
+0.341038.  Each validation episode had ECE between 0.1151 and 0.1362, only
+0.808\% of validation rows used an unseen training shield mask, and the largest
+feature-mean displacement was 0.214 training SD.  The frozen
+train gradient L2 norm was 0.197788, 19.1\% of its initial 1.037370, while the
+train-NLL derivative along a uniform logit-scale increase was $-0.271893$.
+Thus the 100 full-batch updates did not reach a stationary train solution.
+
+The permitted portable facts independently reconstructed the recorded reactive
+baseline on all 94,162 validation rows, excluding missing capture and the
+future-birth boundary as explanations for this action-imitation result.  The
+linear BC reproduced that baseline on only 56.19\% of rows.  This may still
+expose linear expressivity after convergence: 58.3\% of rows tied at maximum
+clearance and 43.4\% had all clearances infinite, so the controller frequently
+used later tie breakers including nonlinear boundary reserve.  That hypothesis
+is not admitted until optimization is resolved.
+
+The decomposition also found that floating ECE edges failed to assign exact
+confidence 0.6 to any bin.  Integer equal-width binning changes the frozen
+action-frequency ECE from 0.008749 to 0.008732 and leaves BC ECE at 0.124251;
+the corrected bound is 0.028732, so the historical L1 decision remains
+negative.  The original result is not rewritten.
+
+The separately frozen L1b protocol is
+\path{experiments/l1b-stage4-bc-convergence-v1.json}.  It reuses the exact
+12-episode inventory and eight/four split, initializes the identical masked
+linear softmax at zero, retains learning rate 0.05 and $L_2=10^{-4}$, and uses
+the corrected versioned ECE.  After at least 100 updates, training stops when
+gradient L2 is at most 0.01 of its initialization value, or after 2,000 updates.
+The latter outcome is inconclusive and cannot be attributed to representation.
+Validation is evaluated exactly once after the train-only stop.  The likelihood
+and comparator-plus-0.02 calibration conditions are unchanged.  L1b collects
+no data and runs no Wine canary; a joint pass only admits a separately executed
+Stage~4 integration canary.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -807,9 +851,9 @@ fine-tuning sample cost.  It was not run.
 This documentation checkpoint follows E0, completed E2, and negative E3 and E5
 gates.  E3 collected its complete serial Stage~4 inventory and fitted one
 research model.  That model improved held-out likelihood but failed calibration
-and was never executed online.  There is no authorized learned candidate; the
-next decision is a bounded calibration diagnosis before any new
-preregistration.
+and was never executed online.  The bounded diagnosis is complete and the
+offline-only L1b convergence follow-up is preregistered but not run.  There is
+no authorized learned candidate.
 
 \section{Threats to Validity}
 
@@ -856,8 +900,10 @@ E0 establishes the serial factual data plane, E2 establishes the causal learner
 projection and first exporter, and E5 rejects the current parallel pool.  E3
 completed its serial Stage~4 inventory and one frozen supervised fit; improved
 held-out likelihood but failed calibration, so it emitted no online candidate.
-No learned policy has run online, exact-prefix branching is not established,
-and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
+The diagnosis localized the next test to convergence of that same transparent
+fit, and L1b is frozen without a representation or online change.  No learned
+policy has run online, exact-prefix branching is not established, and this
+checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

@@ -78,6 +78,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--bootstrap-samples", type=int, default=2000)
     parser.add_argument("--calibration-tolerance", type=float, default=0.02)
+    parser.add_argument("--minimum-updates", type=int, default=0)
+    parser.add_argument("--relative-gradient-l2-tolerance", type=float)
     parser.add_argument("--max-rows", type=int, default=2_000_000)
     args = parser.parse_args()
 
@@ -94,6 +96,8 @@ def main() -> int:
         seed=args.seed,
         bootstrap_samples=args.bootstrap_samples,
         calibration_tolerance=args.calibration_tolerance,
+        minimum_updates=args.minimum_updates,
+        relative_gradient_l2_tolerance=args.relative_gradient_l2_tolerance,
         max_rows=args.max_rows,
         code_commit=commit,
         policy_plugin_sha256=_sha256(POLICY_PLUGIN),
@@ -106,6 +110,7 @@ def main() -> int:
         "learnability_gate_passed": state["fit"]["learnability_gate_passed"],
         "train_rows": state["fit"]["train"]["rows"],
         "validation_rows": state["fit"]["validation"]["rows"],
+        "optimization": state["fit"]["optimization"],
         "cpu_affinity": list(affinity.effective),
     }, sort_keys=True))
     return 0

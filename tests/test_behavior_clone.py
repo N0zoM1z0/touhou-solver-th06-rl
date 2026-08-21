@@ -4,7 +4,9 @@ import json
 import hashlib
 from pathlib import Path
 
-from th06_rl.bc_training import fit_behavior_clone
+import numpy as np
+
+from th06_rl.bc_training import _expected_calibration_error, fit_behavior_clone
 from th06_rl.bc_features import (
     features_from_policy_context,
     linear_action_scores,
@@ -187,3 +189,46 @@ def test_fit_is_deterministic_and_rejects_episode_leakage(tmp_path) -> None:
         assert "episode leakage" in str(error)
     else:
         raise AssertionError("train/validation episode leakage was accepted")
+
+
+def test_ece_assigns_every_exact_decimal_boundary_once() -> None:
+    confidence = np.asarray([index / 10 for index in range(11)], dtype=np.float64)
+    correct = np.ones(11, dtype=np.bool_)
+
+    observed = _expected_calibration_error(confidence, correct)
+    expected = float(np.mean(1.0 - confidence))
+
+    assert np.isclose(observed, expected)
+    assert np.isclose(
+        _expected_calibration_error(np.asarray([0.6]), np.asarray([True])),
+        0.4,
+    )
+
+
+def test_train_only_gradient_stop_is_recorded_and_gates_fit(tmp_path) -> None:
+    train = (
+        _learning_episode(tmp_path / "train-left", x=96.0, action="left"),
+        _learning_episode(tmp_path / "train-right", x=288.0, action="right"),
+    )
+    validation = (
+        _learning_episode(tmp_path / "validation-left", x=104.0, action="left"),
+        _learning_episode(tmp_path / "validation-right", x=280.0, action="right"),
+    )
+
+    state = fit_behavior_clone(
+        train,
+        validation,
+        epochs=2_000,
+        minimum_updates=10,
+        relative_gradient_l2_tolerance=0.05,
+        learning_rate=0.1,
+        calibration_tolerance=0.1,
+        bootstrap_samples=20,
+    )
+
+    optimization = state["fit"]["optimization"]
+    assert optimization["converged"] is True
+    assert 10 <= optimization["updates_completed"] < 2_000
+    assert optimization["stop_reason"] == "relative-gradient-l2"
+    assert optimization["final_to_initial_gradient_l2_ratio"] <= 0.05
+    assert state["fit"]["optimization_gate_passed"] is True
