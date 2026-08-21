@@ -3,7 +3,8 @@
 
 The report distinguishes every occupied physical bullet slot retained in the
 raw control snapshot from the smaller reachable subset used by the online
-Hard gate.  It is an offline audit and never runs in the resident controller.
+observed-hazard shield.  It is an offline audit and never runs in the resident
+controller.
 """
 
 from __future__ import annotations

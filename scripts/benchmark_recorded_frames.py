@@ -93,9 +93,9 @@ def main() -> int:
     reasons: Counter[str] = Counter()
     phases: set[str] = set()
     latencies: list[tuple[int, float, float]] = []
-    planning_effort: Counter[int] = Counter()
+    shield_horizons: Counter[int] = Counter()
     legal_sizes: Counter[int] = Counter()
-    hard_sizes: Counter[int] = Counter()
+    shield_sizes: Counter[int] = Counter()
     frame_count = 0
     paired = 0
     trailing = 0
@@ -141,13 +141,15 @@ def main() -> int:
                 if isinstance(transition.get("policy_context"), dict)
                 else {}
             )
-            hard = tuple(str(item[0]) for item in decision.get("hard_actions", []))
+            recorded_shield = tuple(
+                str(item[0]) for item in decision.get("shield_actions", [])
+            )
             legal = tuple(str(item) for item in decision.get("locally_admissible_actions", []))
             phases.add(str(decision.get("phase_id")))
             reasons[str(decision.get("reason"))] += 1
-            hard_sizes[len(hard)] += 1
+            shield_sizes[len(recorded_shield)] += 1
             legal_sizes[len(legal)] += 1
-            planning_effort[int(decision.get("effort_horizon", 0))] += 1
+            shield_horizons[int(decision.get("shield_horizon", 0))] += 1
             bullets = int(snapshot.get("live_bullet_count", len(snapshot.get("bullets", []))))
             latencies.append((bullets, float(decision.get("capture_ms", 0.0)), float(decision.get("solve_ms", 0.0))))
 
@@ -161,25 +163,32 @@ def main() -> int:
                 "legal_actions": legal == tuple(str(item) for item in transition.get("legal_actions", [])),
                 "behavior_probability": _close(decision.get("behavior_probability"), transition.get("behavior_probability"), 1e-12),
                 "current_action": decision.get("current_action") == context.get("current_action"),
-                "hard_actions": hard == tuple(str(item) for item in context.get("hard_admissible_actions", [])),
-                "phase_elapsed_frames": int(decision.get("phase_elapsed_frames", -1)) == int(context.get("phase_elapsed_frames", -2)),
+                "shield_actions": recorded_shield == tuple(
+                    str(item)
+                    for item in context.get("shield_admissible_actions", [])
+                ),
                 "player_x": _close(snapshot.get("x"), context.get("player_x")),
                 "player_y": _close(snapshot.get("y"), context.get("player_y")),
                 "power": int(snapshot.get("current_power", -1)) == int(context.get("power", -2)),
                 "bullet_count": bullets == int(context.get("bullet_count", -1)),
                 "laser_count": int(snapshot.get("laser_count", -1)) == int(context.get("laser_count", -2)),
-                "hard_action_count": len(hard) == int(context.get("hard_action_count", -1)),
+                "shield_action_count": len(recorded_shield)
+                == int(context.get("shield_action_count", -1)),
             }
             for name, matches in comparisons.items():
                 mismatches[name] += not matches
-            mismatches["legal_not_subset_of_hard"] += not set(legal).issubset(hard)
-            mismatches["duplicate_hard_action"] += len(hard) != len(set(hard))
+            mismatches["legal_not_subset_of_shield"] += not set(legal).issubset(
+                recorded_shield
+            )
+            mismatches["duplicate_shield_action"] += len(recorded_shield) != len(
+                set(recorded_shield)
+            )
             mismatches["bomb_input"] += bool(int(snapshot.get("input_mask", 0)) & BOMB_BIT)
             mismatches["bomb_active"] += bool(snapshot.get("bomb_active"))
             x = float(snapshot.get("x", -math.inf))
             y = float(snapshot.get("y", -math.inf))
             mismatches["player_outside_runtime_bounds"] += not (8.0 <= x <= 376.0 and 16.0 <= y <= 432.0)
-            for item in decision.get("hard_actions", []):
+            for item in decision.get("shield_actions", []):
                 mismatches["hard_endpoint_outside_runtime_bounds"] += not (
                     8.0 <= float(item[2]) <= 376.0
                     and 16.0 <= float(item[3]) <= 432.0
@@ -209,9 +218,13 @@ def main() -> int:
         "coherence_mismatches": dict(sorted(mismatches.items())),
         "nonzero_coherence_mismatches": nonzero_mismatches,
         "decision_reasons": dict(reasons.most_common()),
-        "hard_action_set_sizes": {str(key): value for key, value in sorted(hard_sizes.items())},
+        "shield_action_set_sizes": {
+            str(key): value for key, value in sorted(shield_sizes.items())
+        },
         "local_action_set_sizes": {str(key): value for key, value in sorted(legal_sizes.items())},
-        "planning_effort_horizon": {str(key): value for key, value in sorted(planning_effort.items())},
+        "shield_horizon": {
+            str(key): value for key, value in sorted(shield_horizons.items())
+        },
         "physical_control_latency": {
             "overall": _latency(latencies),
             "by_live_bullet_count": {

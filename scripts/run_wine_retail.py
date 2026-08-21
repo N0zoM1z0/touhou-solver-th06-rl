@@ -131,7 +131,7 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
         "physical_hit_events": None,
         "physical_hits_in_run": 0,
         "zero_margin_frames": 0,
-        "invalid_hard_collision_margin_frames": 0,
+        "invalid_shield_collision_margin_frames": 0,
         "decisions": None,
         "last_policy_metrics": None,
         "corpus_run_ids": [],
@@ -165,14 +165,14 @@ def _summarize_trace(path: Path) -> dict[str, Any]:
                 last_policy_metrics = metrics
             if record.get("reason") in {
                 "physical-hit",
-                "authority-stop:physical HIT",
+                "infrastructure-stop:physical HIT",
             }:
                 summary["physical_hits_in_run"] += 1
-            margin = record.get("hard_collision_margin")
+            margin = record.get("shield_collision_margin")
             if margin == 0.0:
                 summary["zero_margin_frames"] += 1
             if margin is not None and margin != 0.35:
-                summary["invalid_hard_collision_margin_frames"] += 1
+                summary["invalid_shield_collision_margin_frames"] += 1
     summary["event_counts"] = dict(sorted(events.items()))
     summary["corpus_run_ids"] = sorted(corpus_run_ids)
     if frames:

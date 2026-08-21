@@ -20,7 +20,15 @@ class RuntimeSmokePolicy:
 
     def decide(self, context) -> PolicyDecision:
         self.decisions += 1
-        return PolicyDecision(context.baseline_action, self.name)
+        return PolicyDecision(
+            context.baseline_action,
+            self.name,
+            1.0,
+            tuple(
+                (action, float(action == context.baseline_action))
+                for action in context.locally_admissible_actions
+            ),
+        )
 
     def metrics(self) -> dict[str, object]:
         return {

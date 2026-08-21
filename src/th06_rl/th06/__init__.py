@@ -1,19 +1,17 @@
-"""Narrow TH06 capture/source/input adapter for the clean planner."""
+"""Narrow TH06 physical-capture and input adapter."""
 
 from .source import (
-    AuthorityUnavailable,
-    SourceForecast,
-    automatic_source_context,
+    ControlUnavailable,
+    ObservedHazardProjection,
     core_action_from_input,
     retail_action,
-    lower_source_forecast,
+    lower_observed_hazards,
 )
 
 __all__ = (
-    "AuthorityUnavailable",
-    "SourceForecast",
-    "automatic_source_context",
+    "ControlUnavailable",
+    "ObservedHazardProjection",
     "core_action_from_input",
     "retail_action",
-    "lower_source_forecast",
+    "lower_observed_hazards",
 )

@@ -1,36 +1,27 @@
 #!/usr/bin/env python3
-"""Classify post-Stage TH06 infra failures without tuning route policy."""
+"""Audit factual Wine episodes and the observed-hazard shield boundary."""
 
 from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import heapq
 import json
 import math
-import struct
 from pathlib import Path
+import struct
 
 from th06_rl.corpus import expand_compact
-from th06_rl.retail.barrage_lab.corpus import decode_snapshot
-from th06_rl.retail.hazards.bullets import (
-    ACCELERATION_FLAG,
-    DYNAMIC_EX_FLAGS,
-    RAINBOW_ACCELERATION_AXIS_BOUND,
-    SOURCE_EXACT_DYNAMIC_FLAGS,
-    _f32,
-    _source_dynamic_positions,
-)
+from th06_rl.episode_dataset import EpisodeDatasetError, validate_episode
 from th06_rl.retail.hazards.enemies import future_boxes
-from th06_rl.retail.hazards.lasers import (
-    LaserHazard,
-    future_hazards,
-    signed_laser_clearance,
-)
+from th06_rl.retail.hazards.lasers import future_hazards, signed_laser_clearance
 from th06_rl.retail.model import action_from_input
-from th06_rl.th06.control_capture import decode_control_snapshot
-from th06_rl.th06.source_dataset import SourceDatasetError, iter_source_frames
+from th06_rl.th06.control_capture import OFFLINE_FACT_SCHEMA, decode_control_snapshot
 from th06_rl.th06.observed_bullets import hazard_box
+
+
+_MAX_COUNTEREXAMPLES = 64
 
 
 def _rows(paths):
@@ -67,6 +58,11 @@ def _selected_paths(
     ]
 
 
+def _decode_frame(row: dict, objects: dict[str, object]):
+    raw = expand_compact(row["snapshot"], objects)
+    return decode_control_snapshot(raw)
+
+
 def _overlaps_player(snapshot, box) -> bool:
     left, top, right, bottom = box
     return not (
@@ -78,37 +74,44 @@ def _overlaps_player(snapshot, box) -> bool:
 
 
 def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
+    """Classify a HIT using only hazards factual at the prior root."""
     before_bullet_slots = {item.slot for item in before.bullets}
     after_overlaps = [
         item.slot
         for item in after.bullets
         if item.state == 1
-        and _overlaps_player(after, (
-            item.x - item.half_width,
-            item.y - item.half_height,
-            item.x + item.half_width,
-            item.y + item.half_height,
-        ))
+        and _overlaps_player(
+            after,
+            (
+                item.x - item.half_width,
+                item.y - item.half_height,
+                item.x + item.half_width,
+                item.y + item.half_height,
+            ),
+        )
     ]
     projected_bullets = [
         item.slot
         for item in before.bullets
         if _overlaps_player(after, hazard_box(item, max(1, elapsed)))
     ]
-    projected_enemy = []
+    projected_enemies = []
     for index, enemy in enumerate(before.enemies):
         boxes = future_boxes(enemy, max(1, elapsed))
         if boxes and _overlaps_player(after, boxes[-1]):
-            projected_enemy.append(index)
+            projected_enemies.append(index)
     after_enemy_overlaps = [
         index
         for index, enemy in enumerate(after.enemies)
-        if _overlaps_player(after, (
-            enemy.x - enemy.half_width,
-            enemy.y - enemy.half_height,
-            enemy.x + enemy.half_width,
-            enemy.y + enemy.half_height,
-        ))
+        if _overlaps_player(
+            after,
+            (
+                enemy.x - enemy.half_width,
+                enemy.y - enemy.half_height,
+                enemy.x + enemy.half_width,
+                enemy.y + enemy.half_height,
+            ),
+        )
     ]
     projected_lasers = []
     for laser in before.lasers:
@@ -120,7 +123,8 @@ def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
                 after.half_width,
                 after.half_height,
                 hazard,
-            ) <= 0.0
+            )
+            <= 0.0
             for hazard in frames[-1]
         ):
             projected_lasers.append(laser.slot)
@@ -130,7 +134,7 @@ def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
             slot for slot in after_overlaps if slot not in before_bullet_slots
         ],
         "projected_observed_bullet_slots": projected_bullets,
-        "projected_enemy_indices": projected_enemy,
+        "projected_enemy_indices": projected_enemies,
         "after_overlapping_enemy_indices": after_enemy_overlaps,
         "new_after_overlapping_enemy_indices": (
             after_enemy_overlaps if not before.enemies else []
@@ -139,35 +143,12 @@ def _collision_evidence(before, after, elapsed: int) -> dict[str, object]:
     }
 
 
-def _decode_frame(row: dict, objects: dict[str, object]):
-    raw = expand_compact(row["snapshot"], objects)
-    if not str(raw.get("capture_tier", "")).startswith("control-v"):
-        return decode_snapshot(raw)
-    return decode_control_snapshot(raw)
-
-
-# This tolerance belongs only to the offline comparison between Python double
-# arithmetic and source float32 roots. It is not a collision margin and never
-# enters online certification.
-_SUCCESSOR_FLOAT_TOLERANCE = 1e-3
-_TRANSCENDENTAL_SUCCESSOR_AXIS_BUDGET = 1e-2
-_MAX_SUCCESSOR_COUNTEREXAMPLES = 128
+def _f32(value: float) -> float:
+    return struct.unpack("<f", struct.pack("<f", value))[0]
 
 
 def _f32_bits(value: float) -> int:
     return struct.unpack("<I", struct.pack("<f", value))[0]
-
-
-def _f32_ulp(value: float) -> float:
-    """Return one outward binary32 ULP at a finite value."""
-    value = _f32(value)
-    if not math.isfinite(value):
-        return math.inf
-    bits = _f32_bits(abs(value))
-    if bits == 0:
-        return struct.unpack("<f", struct.pack("<I", 1))[0]
-    successor = struct.unpack("<f", struct.pack("<I", bits + 1))[0]
-    return successor - abs(value)
 
 
 def _new_player_successor_parity() -> dict[str, object]:
@@ -182,19 +163,13 @@ def _new_player_successor_parity() -> dict[str, object]:
             "stage_boundary": 0,
             "player_not_active": 0,
             "time_stopped": 0,
-            "sampled_action_missing": 0,
         },
         "counterexamples": [],
     }
 
 
-def _measure_player_successor(
-    before,
-    after,
-    sequence: int,
-    parity: dict[str, object],
-) -> None:
-    """Check one witnessed TH06 player movement against source float32 order."""
+def _measure_player_successor(before, after, sequence: int, parity) -> None:
+    """Verify sampled input against the next factual player center."""
     parity["candidate_links"] += 1
     elapsed = int(after.frame) - int(before.frame)
     skipped = parity["skipped"]
@@ -211,30 +186,23 @@ def _measure_player_successor(
         skipped["time_stopped"] += 1
         return
     sampled = action_from_input(after.input_mask)
-    if not sampled.name:
-        skipped["sampled_action_missing"] += 1
-        return
     diagonal = sampled.dx != 0 and sampled.dy != 0
-    if sampled.focused:
-        speed = (
-            before.focus_diagonal_speed if diagonal else before.focus_speed
-        )
-    else:
-        speed = (
-            before.normal_diagonal_speed if diagonal else before.normal_speed
-        )
-    expected_x = min(376.0, max(8.0, _f32(
-        _f32(before.x) + _f32(sampled.dx * speed)
-    )))
-    expected_y = min(432.0, max(16.0, _f32(
-        _f32(before.y) + _f32(sampled.dy * speed)
-    )))
+    speed = (
+        before.focus_diagonal_speed if diagonal else before.focus_speed
+    ) if sampled.focused else (
+        before.normal_diagonal_speed if diagonal else before.normal_speed
+    )
+    expected_x = min(
+        376.0,
+        max(8.0, _f32(_f32(before.x) + _f32(sampled.dx * speed))),
+    )
+    expected_y = min(
+        432.0,
+        max(16.0, _f32(_f32(before.y) + _f32(sampled.dy * speed))),
+    )
     actual_x = _f32(after.x)
     actual_y = _f32(after.y)
-    axis_error = max(
-        abs(expected_x - actual_x),
-        abs(expected_y - actual_y),
-    )
+    axis_error = max(abs(expected_x - actual_x), abs(expected_y - actual_y))
     parity["checked_links"] += 1
     parity["max_axis_error"] = max(parity["max_axis_error"], axis_error)
     if (
@@ -244,597 +212,45 @@ def _measure_player_successor(
         parity["bit_exact_links"] += 1
         return
     parity["mismatches"] += 1
-    counterexamples = parity["counterexamples"]
-    if len(counterexamples) < _MAX_SUCCESSOR_COUNTEREXAMPLES:
-        counterexamples.append({
-            "sequence": sequence,
-            "frame": int(before.frame),
-            "next_frame": int(after.frame),
-            "sampled_action": sampled.name,
-            "input_mask": int(after.input_mask),
-            "before": [before.x, before.y],
-            "expected": [expected_x, expected_y],
-            "actual": [actual_x, actual_y],
-            "axis_error": axis_error,
-        })
-
-
-def _finish_player_successor_parity(
-    parity: dict[str, object],
-) -> dict[str, object]:
-    return {
-        "method": "contiguous-active-player-center-successor-v1",
-        "arithmetic_comparison": "float32-bit-exact",
-        "input_semantics": "next-completed-root-sampled-input",
-        "movement_order": "Player-before-Enemy-before-Bullet",
-        **parity,
-        "counterexamples_truncated": (
-            parity["mismatches"] > len(parity["counterexamples"])
-        ),
-    }
-
-
-def _new_bullet_successor_parity() -> dict[str, object]:
-    return {
-        "eligible_links": 0,
-        "stable_retained_bullets": 0,
-        "linear_exact_checked": 0,
-        "acceleration_exact_checked": 0,
-        "transcendental_checked": 0,
-        "global_stop_union_checked": 0,
-        "global_release_union_checked": 0,
-        "global_combined_union_checked": 0,
-        "global_mutation_union_violations": 0,
-        "max_global_release_axis_error": 0.0,
-        "unsupported_dynamic_skipped": 0,
-        "unstable_or_reused_skipped": 0,
-        "nonfinite_successors": 0,
-        "exact_mismatches": 0,
-        "transcendental_budget_violations": 0,
-        "max_transcendental_axis_error": 0.0,
-        "counterexamples": [],
-    }
-
-
-def _measure_bullet_successors(
-    before,
-    after,
-    sequence: int,
-    parity: dict[str, object],
-    decision: dict[str, object] | None = None,
-) -> None:
-    """Measure adjacent retained fired bullets against the source stepper."""
-    parity["eligible_links"] += 1
-    decision = decision or {}
-    stop_now = 0 in decision.get("source_bullet_stop_frames", ())
-    release_now = 0 in decision.get("source_bullet_release_frames", ())
-    after_by_slot = {
-        bullet.slot: bullet
-        for bullet in after.bullets
-        if bullet.slot >= 0
-    }
-    for bullet in before.bullets:
-        if bullet.slot < 0 or bullet.state != 1:
-            continue
-        successor = after_by_slot.get(bullet.slot)
-        valid_timers = {bullet.timer + 1}
-        if release_now:
-            # The release callback resets the source timer to zero before the
-            # BulletManager update; the retained post-update root reads one.
-            valid_timers.add(1)
-        if (
-            successor is None
-            or successor.state != 1
-            or successor.sprite != bullet.sprite
-            or successor.timer not in valid_timers
-        ):
-            parity["unstable_or_reused_skipped"] += 1
-            continue
-        dynamic_flags = bullet.ex_flags & DYNAMIC_EX_FLAGS
-        if dynamic_flags & ~SOURCE_EXACT_DYNAMIC_FLAGS:
-            parity["unsupported_dynamic_skipped"] += 1
-            continue
-        predicted_x, predicted_y = _source_dynamic_positions(bullet, 1)[0]
-        actual_x = _f32(successor.x)
-        actual_y = _f32(successor.y)
-        values = (predicted_x, predicted_y, actual_x, actual_y)
-        parity["stable_retained_bullets"] += 1
-        if not all(math.isfinite(value) for value in values):
-            parity["nonfinite_successors"] += 1
-            category = "nonfinite"
-            violated = True
-            error_x = math.inf
-            error_y = math.inf
-        else:
-            error_x = abs(predicted_x - actual_x)
-            error_y = abs(predicted_y - actual_y)
-            if stop_now or release_now:
-                stopped_exact = (
-                    _f32_bits(actual_x) == _f32_bits(_f32(bullet.x))
-                    and _f32_bits(actual_y) == _f32_bits(_f32(bullet.y))
-                )
-                release_budget_x = (
-                    RAINBOW_ACCELERATION_AXIS_BOUND
-                    + _f32_ulp(predicted_x)
-                    + _f32_ulp(actual_x)
-                    + _f32_ulp(successor.vx)
-                )
-                release_budget_y = (
-                    RAINBOW_ACCELERATION_AXIS_BOUND
-                    + _f32_ulp(predicted_y)
-                    + _f32_ulp(actual_y)
-                    + _f32_ulp(successor.vy)
-                )
-                release_union = (
-                    error_x <= release_budget_x
-                    and error_y <= release_budget_y
-                )
-                if release_now:
-                    parity["max_global_release_axis_error"] = max(
-                        float(parity["max_global_release_axis_error"]),
-                        error_x,
-                        error_y,
-                    )
-                if stop_now and release_now:
-                    category = "global-stop-release-union"
-                    parity["global_combined_union_checked"] += 1
-                    violated = not (stopped_exact or release_union)
-                elif stop_now:
-                    category = "global-stop-or-ordinary-union"
-                    parity["global_stop_union_checked"] += 1
-                    ordinary_exact = (
-                        _f32_bits(predicted_x) == _f32_bits(actual_x)
-                        and _f32_bits(predicted_y) == _f32_bits(actual_y)
-                    )
-                    violated = not (stopped_exact or ordinary_exact)
-                else:
-                    category = "global-release-or-ordinary-union"
-                    parity["global_release_union_checked"] += 1
-                    violated = not release_union
-                if violated:
-                    parity["global_mutation_union_violations"] += 1
-            elif dynamic_flags in (0, ACCELERATION_FLAG):
-                category = (
-                    "linear-exact"
-                    if dynamic_flags == 0
-                    else "acceleration-exact"
-                )
-                parity[
-                    "linear_exact_checked"
-                    if dynamic_flags == 0
-                    else "acceleration_exact_checked"
-                ] += 1
-                violated = (
-                    _f32_bits(predicted_x) != _f32_bits(actual_x)
-                    or _f32_bits(predicted_y) != _f32_bits(actual_y)
-                )
-                if violated:
-                    parity["exact_mismatches"] += 1
-            else:
-                category = "transcendental-budget"
-                parity["transcendental_checked"] += 1
-                parity["max_transcendental_axis_error"] = max(
-                    float(parity["max_transcendental_axis_error"]),
-                    error_x,
-                    error_y,
-                )
-                violated = max(error_x, error_y) > (
-                    _TRANSCENDENTAL_SUCCESSOR_AXIS_BUDGET
-                )
-                if violated:
-                    parity["transcendental_budget_violations"] += 1
-        if violated and len(parity["counterexamples"]) < (
-            _MAX_SUCCESSOR_COUNTEREXAMPLES
-        ):
-            parity["counterexamples"].append({
+    if len(parity["counterexamples"]) < _MAX_COUNTEREXAMPLES:
+        parity["counterexamples"].append(
+            {
                 "sequence": sequence,
                 "frame": int(before.frame),
                 "next_frame": int(after.frame),
-                "slot": int(bullet.slot),
-                "category": category,
-                "ex_flags": int(bullet.ex_flags),
-                "predicted": [predicted_x, predicted_y],
+                "sampled_action": sampled.name,
+                "before": [before.x, before.y],
+                "expected": [expected_x, expected_y],
                 "actual": [actual_x, actual_y],
-                "axis_error": [error_x, error_y],
-            })
-
-
-def _finish_bullet_successor_parity(
-    parity: dict[str, object],
-) -> dict[str, object]:
-    mismatches = int(parity["exact_mismatches"])
-    trig_violations = int(parity["transcendental_budget_violations"])
-    nonfinite = int(parity["nonfinite_successors"])
-    mutation_violations = int(parity["global_mutation_union_violations"])
-    return {
-        "method": "stable-retained-bullet-center-successor-v2",
-        "scope": (
-            "adjacent source-committed active fired bullets with stable slot, "
-            "sprite, and source-permitted timer transition"
-        ),
-        "arithmetic_comparison": "float32-bit-exact",
-        "transcendental_axis_error_budget": (
-            _TRANSCENDENTAL_SUCCESSOR_AXIS_BUDGET
-        ),
-        "required_collision_margin": 0.35,
-        "global_release_acceleration_axis_bound": (
-            RAINBOW_ACCELERATION_AXIS_BOUND
-        ),
-        "global_mutation_semantics": "source branch union",
-        **parity,
-        "counterexamples_truncated": (
-            mismatches + trig_violations + nonfinite + mutation_violations
-            > len(parity["counterexamples"])
-        ),
-    }
-
-
-def _reachable_envelope(snapshot, steps: int, margin: float):
-    speed = max(snapshot.normal_speed, snapshot.focus_speed)
-    return (
-        max(8.0, snapshot.x - speed * steps)
-        - snapshot.half_width - margin,
-        max(16.0, snapshot.y - speed * steps)
-        - snapshot.half_height - margin,
-        min(376.0, snapshot.x + speed * steps)
-        + snapshot.half_width + margin,
-        min(432.0, snapshot.y + speed * steps)
-        + snapshot.half_height + margin,
-    )
-
-
-def _aabb_intersects(left, right) -> bool:
-    return not (
-        left[2] < right[0]
-        or left[0] > right[2]
-        or left[3] < right[1]
-        or left[1] > right[3]
-    )
-
-
-def _aabb_contains(outer, inner, tolerance=_SUCCESSOR_FLOAT_TOLERANCE) -> bool:
-    return (
-        outer[0] <= inner[0] + tolerance
-        and outer[1] <= inner[1] + tolerance
-        and outer[2] >= inner[2] - tolerance
-        and outer[3] >= inner[3] - tolerance
-    )
-
-
-def _laser_corners(laser) -> tuple[tuple[float, float], ...]:
-    half_x = max(0.0, laser.size_x) / 2.0
-    half_y = max(0.0, laser.size_y) / 2.0
-    cosine = math.cos(laser.angle)
-    sine = math.sin(laser.angle)
-    result = []
-    for local_x in (
-        laser.center_offset - half_x,
-        laser.center_offset + half_x,
-    ):
-        for local_y in (-half_y, half_y):
-            result.append((
-                laser.origin_x + cosine * local_x - sine * local_y,
-                laser.origin_y + sine * local_x + cosine * local_y,
-            ))
-    return tuple(result)
-
-
-def _laser_aabb(laser) -> tuple[float, float, float, float]:
-    corners = _laser_corners(laser)
-    return (
-        min(point[0] for point in corners),
-        min(point[1] for point in corners),
-        max(point[0] for point in corners),
-        max(point[1] for point in corners),
-    )
-
-
-def _point_in_laser(point, laser, tolerance=_SUCCESSOR_FLOAT_TOLERANCE) -> bool:
-    dx = point[0] - laser.origin_x
-    dy = point[1] - laser.origin_y
-    cosine = math.cos(laser.angle)
-    sine = math.sin(laser.angle)
-    local_x = cosine * dx + sine * dy
-    local_y = cosine * dy - sine * dx
-    return (
-        laser.center_offset - laser.size_x / 2.0 - tolerance
-        <= local_x
-        <= laser.center_offset + laser.size_x / 2.0 + tolerance
-        and -laser.size_y / 2.0 - tolerance
-        <= local_y
-        <= laser.size_y / 2.0 + tolerance
-    )
-
-
-def _laser_is_covered(laser, committed_aabbs, committed_lasers) -> bool:
-    corners = _laser_corners(laser)
-    actual_aabb = _laser_aabb(laser)
-    return any(
-        _aabb_contains(box, actual_aabb) for box in committed_aabbs
-    ) or any(
-        all(_point_in_laser(point, candidate) for point in corners)
-        for candidate in committed_lasers
-    )
-
-
-def _retained_post_update_laser_hazards(laser):
-    """Recover collision geometry from a retained post-BulletManager root.
-
-    The exact source ticks the timer after collision. Natural state
-    transitions reset it before that tick. A forced clear and a natural
-    state-1 -> state-2 transition can be indistinguishable in the retained
-    scalar root. The predecessor-mechanism union is nevertheless exact for a
-    one-sided coverage audit: the natural transition performs the state-1
-    full-length collision before falling through, while forced clear adds no
-    larger geometry.
-    """
-    if laser.timer <= 0:
-        return (), "timer-not-yet-ticked"
-    full_length = max(0.0, laser.end_offset - laser.start_offset)
-    prior_timer = laser.timer - 1
-    prior_timer_float = laser.timer_float - 1.0
-
-    if laser.state == 0:
-        if prior_timer < laser.hitbox_start_time:
-            return (), "not-collidable"
-        if laser.flags & 1:
-            size_x = full_length
-        else:
-            res = min(laser.start_time, 30)
-            width_now = (
-                prior_timer_float * laser.width / max(1, laser.start_time)
-                if laser.start_time - res < prior_timer
-                else 1.2
-            )
-            size_x = width_now / 2.0
-    elif laser.state == 1:
-        # startTime==0 lasers are born directly in state 1. Otherwise timer 1
-        # witnesses the source's state-0 fallthrough and its midpoint bug.
-        size_x = (
-            full_length
-            if laser.start_time == 0 or laser.timer > 1 or laser.flags & 1
-            else laser.width / 2.0
+                "axis_error": axis_error,
+            }
         )
-    elif laser.state == 2:
-        if laser.timer == 1:
-            # Include the natural predecessor even with zero end delay. It
-            # performed the state-1 full-length test before this fallthrough.
-            size_x = full_length
-        else:
-            if prior_timer >= laser.hitbox_end_delay:
-                return (), "not-collidable"
-            if laser.flags & 1:
-                size_x = full_length
-            else:
-                width_now = laser.width
-                if laser.despawn_duration > 0:
-                    width_now -= (
-                        prior_timer_float * laser.width
-                        / laser.despawn_duration
-                    )
-                size_x = max(0.0, width_now / 2.0)
-    else:
-        return (), "invalid-state"
-    return (LaserHazard(
-        laser.x,
-        laser.y,
-        laser.angle,
-        (laser.end_offset - laser.start_offset) / 2.0 + laser.start_offset,
-        max(0.0, size_x),
-        laser.width / 2.0,
-    ),), "checked"
 
 
-def _audit_source_successor_coverage(
-    run_dir: Path,
-    manifest: dict,
-    objects: dict[str, object],
-) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
-    """Check committed Hard frames against the following factual Wine root.
-
-    This is intentionally a one-sided coverage check. It can disprove a
-    source envelope by finding a retained physical hazard outside it; it does
-    not call an envelope complete merely because hazards that retired during
-    the update are absent from the next root.
-    """
-    paths = _stream_paths(run_dir, manifest, "frames")
-    skipped = {
-        "non_control_v5": 0,
-        "source_uncommitted": 0,
-        "stage_boundary": 0,
-        "outside_hard_horizon": 0,
-    }
-    laser_unavailable: dict[str, int] = {}
-    checked_links = 0
-    actual_aabbs_checked = 0
-    actual_lasers_checked = 0
-    uncovered_aabbs = 0
-    uncovered_lasers = 0
-    counterexamples = []
-    bullet_parity = _new_bullet_successor_parity()
-    player_parity = _new_player_successor_parity()
-    previous_row = None
-    previous_snapshot = None
-
-    for row in _rows(paths):
-        current_snapshot = _decode_frame(row, objects)
-        if previous_row is None:
-            previous_row = row
-            previous_snapshot = current_snapshot
-            continue
-        assert previous_snapshot is not None
-        before = previous_snapshot
-        after = current_snapshot
-        decision = previous_row.get("decision") or {}
-        tier = str(getattr(before, "capture_tier", ""))
-        if tier != "control-v5" or str(
-            getattr(after, "capture_tier", "")
-        ) != "control-v5":
-            skipped["non_control_v5"] += 1
-        elif decision.get("source_commitment") != "source-complete-hard-v1":
-            skipped["source_uncommitted"] += 1
-        elif before.stage != after.stage:
-            skipped["stage_boundary"] += 1
-        else:
+def _audit_player_successors(run_dir, manifest, objects) -> dict[str, object]:
+    parity = _new_player_successor_parity()
+    previous = None
+    previous_sequence = -1
+    for row in _rows(_stream_paths(run_dir, manifest, "frames")):
+        current = _decode_frame(row, objects)
+        if previous is not None:
             _measure_player_successor(
-                before,
-                after,
-                int(previous_row["sequence"]),
-                player_parity,
+                previous,
+                current,
+                previous_sequence,
+                parity,
             )
-            elapsed = int(after.frame) - int(before.frame)
-            if (
-                elapsed == 1
-                and decision.get("hard_collision_margin") == 0.35
-            ):
-                _measure_bullet_successors(
-                    before,
-                    after,
-                    int(previous_row["sequence"]),
-                    bullet_parity,
-                    decision,
-                )
-            if not 1 <= elapsed <= 4:
-                skipped["outside_hard_horizon"] += 1
-            else:
-                aabb_frames = decision.get("source_hard_aabb_frames", ())
-                laser_frames = decision.get("source_hard_laser_frames", ())
-                margin = decision.get("hard_collision_margin")
-                if (
-                    margin != 0.35
-                    or len(aabb_frames) < elapsed
-                    or len(laser_frames) < elapsed
-                ):
-                    if len(counterexamples) < _MAX_SUCCESSOR_COUNTEREXAMPLES:
-                        counterexamples.append({
-                            "sequence": int(previous_row["sequence"]),
-                            "frame": int(before.frame),
-                            "elapsed": elapsed,
-                            "kind": (
-                                "invalid-hard-collision-margin"
-                                if margin != 0.35
-                                else "committed-primitives-missing"
-                            ),
-                        })
-                    uncovered_aabbs += 1
-                else:
-                    committed_aabbs = tuple(
-                        tuple(map(float, item))
-                        for item in aabb_frames[elapsed - 1]
-                    )
-                    committed_lasers = tuple(
-                        LaserHazard(*map(float, item))
-                        for item in laser_frames[elapsed - 1]
-                    )
-                    reachable = _reachable_envelope(
-                        before, elapsed, float(margin)
-                    )
-                    actual_aabbs = [
-                        (
-                            f"bullet:{bullet.slot}",
-                            (
-                                bullet.x - bullet.half_width,
-                                bullet.y - bullet.half_height,
-                                bullet.x + bullet.half_width,
-                                bullet.y + bullet.half_height,
-                            ),
-                        )
-                        for bullet in after.bullets
-                        if bullet.state == 1
-                    ]
-                    actual_aabbs.extend(
-                        (
-                            f"enemy:{index}",
-                            (
-                                enemy.x - enemy.half_width,
-                                enemy.y - enemy.half_height,
-                                enemy.x + enemy.half_width,
-                                enemy.y + enemy.half_height,
-                            ),
-                        )
-                        for index, enemy in enumerate(after.enemies)
-                    )
-                    for identity, actual in actual_aabbs:
-                        if not _aabb_intersects(actual, reachable):
-                            continue
-                        actual_aabbs_checked += 1
-                        if any(
-                            _aabb_contains(candidate, actual)
-                            for candidate in committed_aabbs
-                        ):
-                            continue
-                        uncovered_aabbs += 1
-                        if len(counterexamples) < _MAX_SUCCESSOR_COUNTEREXAMPLES:
-                            counterexamples.append({
-                                "sequence": int(previous_row["sequence"]),
-                                "frame": int(before.frame),
-                                "next_frame": int(after.frame),
-                                "kind": identity,
-                                "actual": list(actual),
-                                "reachable_envelope": list(reachable),
-                            })
-                    for laser in after.lasers:
-                        hazards, reason = _retained_post_update_laser_hazards(
-                            laser
-                        )
-                        if reason != "checked":
-                            laser_unavailable[reason] = (
-                                laser_unavailable.get(reason, 0) + 1
-                            )
-                        for actual in hazards:
-                            if not _aabb_intersects(
-                                _laser_aabb(actual), reachable
-                            ):
-                                continue
-                            actual_lasers_checked += 1
-                            if _laser_is_covered(
-                                actual, committed_aabbs, committed_lasers
-                            ):
-                                continue
-                            uncovered_lasers += 1
-                            if len(counterexamples) < _MAX_SUCCESSOR_COUNTEREXAMPLES:
-                                counterexamples.append({
-                                    "sequence": int(previous_row["sequence"]),
-                                    "frame": int(before.frame),
-                                    "next_frame": int(after.frame),
-                                    "kind": f"laser:{laser.slot}",
-                                    "actual": [
-                                        actual.origin_x,
-                                        actual.origin_y,
-                                        actual.angle,
-                                        actual.center_offset,
-                                        actual.size_x,
-                                        actual.size_y,
-                                    ],
-                                    "reachable_envelope": list(reachable),
-                                })
-                checked_links += 1
-        previous_row = row
-        previous_snapshot = current_snapshot
-
-    coverage = {
-        "method": "retained-next-root-one-sided-coverage-v1",
-        "float_comparison_tolerance": _SUCCESSOR_FLOAT_TOLERANCE,
-        "checked_links": checked_links,
-        "actual_aabbs_checked": actual_aabbs_checked,
-        "actual_lasers_checked": actual_lasers_checked,
-        "uncovered_aabbs": uncovered_aabbs,
-        "uncovered_lasers": uncovered_lasers,
-        "skipped_links": skipped,
-        "retained_laser_geometry_unavailable": laser_unavailable,
-        "counterexamples_truncated": (
-            uncovered_aabbs + uncovered_lasers > len(counterexamples)
-        ),
-        "counterexamples": counterexamples,
+        previous = current
+        previous_sequence = int(row["sequence"])
+    return {
+        "method": "contiguous-player-center-successor-v1",
+        "arithmetic_comparison": "float32-bit-exact",
+        "input_semantics": "next-completed-root-sampled-input",
+        **parity,
     }
-    return (
-        coverage,
-        _finish_bullet_successor_parity(bullet_parity),
-        _finish_player_successor_parity(player_parity),
-    )
 
 
-def _audit_dense_hard_parity(
+def _audit_dense_shield_parity(
     run_dir: Path,
     manifest: dict,
     objects: dict[str, object],
@@ -844,7 +260,6 @@ def _audit_dense_hard_parity(
         return None
     samples = (manifest.get("summary") or {}).get("dense_frame_samples", ())
     sequences = {int(item["sequence"]) for item in samples}
-    rows: dict[int, dict]
     sample_source = "manifest-dense-samples"
     if sequences:
         rows = {
@@ -855,22 +270,11 @@ def _audit_dense_hard_parity(
             if int(row["sequence"]) in sequences
         }
     else:
-        # Compatibility for the first control-v1 run, which predates compact
-        # dense sample indices. Stream once and retain only 64 encoded roots;
-        # never materialize the full Stage corpus in RAM.
-        sample_source = "streaming-fallback"
-        densest: list[tuple[int, int, dict]] = []
+        sample_source = "streaming-densest-64"
+        densest = []
         for row in _rows(_stream_paths(run_dir, manifest, "frames")):
-            sequence = int(row["sequence"])
-            encoded = row["snapshot"].get("live_bullet_count")
-            if encoded is None:
-                bullets = row["snapshot"].get("bullets", ())
-                encoded = (
-                    len(bullets.get("rows", ()))
-                    if isinstance(bullets, dict)
-                    else len(bullets)
-                )
-            entry = (int(encoded), sequence, row)
+            count = int(row["snapshot"].get("live_bullet_count", 0))
+            entry = (count, int(row["sequence"]), row)
             if len(densest) < 64:
                 heapq.heappush(densest, entry)
             else:
@@ -878,53 +282,34 @@ def _audit_dense_hard_parity(
         rows = {sequence: row for _count, sequence, row in densest}
         sequences = set(rows)
     from th06_rl.native import Aabb, LaserRect, NativeKernel, PackedHazards
-    from th06_rl.th06.source import (
-        core_action_from_input,
-        kinematics_from_snapshot,
-    )
+    from th06_rl.th06.source import core_action_from_input, kinematics_from_snapshot
 
     kernel = NativeKernel(native_library)
     unsafe = []
     conservative = []
     checked = 0
-    uncommitted_samples_skipped = 0
+    skipped = 0
     for sequence in sorted(sequences):
         row = rows.get(sequence)
         if row is None:
-            unsafe.append({
-                "sequence": sequence,
-                "reason": "dense-frame-row-missing",
-            })
+            unsafe.append({"sequence": sequence, "reason": "frame-row-missing"})
             continue
         snapshot = _decode_frame(row, objects)
         if snapshot.player_state not in (0, 3) or snapshot.in_menu:
             continue
-        recorded = {
-            item[0] for item in row["decision"].get("hard_actions", ())
-        }
-        recorded_margin = row["decision"].get("hard_collision_margin")
-        source_commitment = row["decision"].get("source_commitment")
-        if source_commitment != "source-complete-hard-v1":
-            uncommitted_samples_skipped += 1
+        decision = row.get("decision") or {}
+        if decision.get("shield_contract") != "observed-hazard-kinematics-v1":
+            skipped += 1
             continue
-        aabb_frames = row["decision"].get("source_hard_aabb_frames", ())
-        laser_frames = row["decision"].get("source_hard_laser_frames", ())
-        if (
-            recorded_margin != 0.35
-            or len(aabb_frames) < 4
-            or len(laser_frames) < 4
-        ):
-            unsafe.append({
-                "sequence": sequence,
-                "frame": snapshot.frame,
-                "reason": (
-                    "invalid-hard-collision-margin"
-                    if recorded_margin != 0.35
-                    else "source-commitment-primitives-missing"
-                ),
-            })
+        aabb_frames = decision.get("shield_aabb_frames", ())
+        laser_frames = decision.get("shield_laser_frames", ())
+        margin = decision.get("shield_collision_margin")
+        if margin != 0.35 or len(aabb_frames) < 4 or len(laser_frames) < 4:
+            unsafe.append(
+                {"sequence": sequence, "reason": "shield-primitives-incomplete"}
+            )
             continue
-        committed_hazards = PackedHazards(
+        hazards = PackedHazards(
             tuple(
                 tuple(Aabb(*map(float, hazard)) for hazard in frame)
                 for frame in aabb_frames[:4]
@@ -934,45 +319,37 @@ def _audit_dense_hard_parity(
                 for frame in laser_frames[:4]
             ),
         )
-
-        def replay() -> set[str]:
-            certified = kernel.certify_actions(
+        replayed = {
+            item.action.name
+            for item in kernel.certify_actions(
                 x=snapshot.x,
                 y=snapshot.y,
                 half_width=snapshot.half_width,
                 half_height=snapshot.half_height,
                 kinematics=kinematics_from_snapshot(snapshot),
                 current_action=core_action_from_input(snapshot.input_mask),
-                hazards=committed_hazards,
+                hazards=hazards,
                 collision_margin=0.35,
             )
-            return {item.action.name for item in certified}
-
-        margin = 0.35
-        full = replay()
-        unsafe_extra = sorted(recorded - full)
-        missing_safe = sorted(full - recorded)
-        if unsafe_extra:
-            unsafe.append({
-                "sequence": sequence,
-                "frame": snapshot.frame,
-                "bullets": snapshot.live_bullet_count,
-                "collision_margin": margin,
-                "recorded_but_not_full_safe": unsafe_extra,
-            })
-        if missing_safe:
-            conservative.append({
-                "sequence": sequence,
-                "frame": snapshot.frame,
-                "collision_margin": margin,
-                "full_safe_but_not_recorded": missing_safe,
-            })
+        }
+        recorded = {
+            str(item[0]) for item in decision.get("shield_actions", ())
+        }
+        if recorded - replayed:
+            unsafe.append(
+                {"sequence": sequence, "extra": sorted(recorded - replayed)}
+            )
+        if replayed - recorded:
+            conservative.append(
+                {"sequence": sequence, "missing": sorted(replayed - recorded)}
+            )
         checked += 1
     return {
+        "method": "stored-observed-primitives-native-replay-v1",
         "sample_source": sample_source,
         "checked": checked,
         "required_collision_margin": 0.35,
-        "uncommitted_samples_skipped": uncommitted_samples_skipped,
+        "uncommitted_samples_skipped": skipped,
         "unsafe_divergences": unsafe,
         "conservative_divergences": conservative,
     }
@@ -991,26 +368,16 @@ def audit(
         for row in _rows(_stream_paths(run_dir, manifest, "objects"))
     }
     events = list(_rows(_stream_paths(run_dir, manifest, "events")))
-    anchors = list(_rows(_stream_paths(run_dir, manifest, "anchors")))
-    policy_fallback_sequences = [
-        int(row["sequence"])
-        for row in _rows(_stream_paths(run_dir, manifest, "frames"))
-        if isinstance(row.get("decision"), dict)
-        and row["decision"].get("policy_id")
-        == "reactive-baseline-policy-error"
-    ]
     hit_sequences = {
         int(row["sequence"])
         for row in events
         if row.get("event") == "life-lost"
     }
-    wanted_frames = hit_sequences | {sequence + 1 for sequence in hit_sequences}
+    wanted = hit_sequences | {sequence + 1 for sequence in hit_sequences}
     frame_rows = {
         int(row["sequence"]): row
-        for row in _rows(
-            _selected_paths(run_dir, manifest, "frames", wanted_frames)
-        )
-        if int(row["sequence"]) in wanted_frames
+        for row in _rows(_selected_paths(run_dir, manifest, "frames", wanted))
+        if int(row["sequence"]) in wanted
     }
     transition_rows = {
         int(row["sequence"]): row
@@ -1025,88 +392,58 @@ def audit(
         after_row = frame_rows.get(sequence + 1)
         transition = transition_rows.get(sequence)
         if before_row is None or after_row is None or transition is None:
-            findings.append({
-                "sequence": sequence,
-                "classification": "corpus-linkage-missing",
-            })
+            findings.append(
+                {"sequence": sequence, "classification": "corpus-linkage-missing"}
+            )
             continue
         before = _decode_frame(before_row, objects)
         after = _decode_frame(after_row, objects)
         elapsed = int(transition["outcome_terms"]["elapsed_frames"])
         evidence = _collision_evidence(before, after, elapsed)
-        decision = before_row["decision"]
-        hard_actions = {item[0] for item in decision.get("hard_actions", ())}
+        decision = before_row.get("decision") or {}
+        shield_actions = {
+            str(item[0]) for item in decision.get("shield_actions", ())
+        }
+        reason = str(decision.get("reason", ""))
         published = decision.get("published_action")
-        decision_reason = str(decision.get("reason", ""))
         if elapsed != 1:
-            classification = "latency-observation-gap"
-        elif (
-            transition["outcome_terms"].get("control_dead_end")
-            or decision_reason.startswith("control-dead-end:")
-            or not hard_actions
-        ):
-            classification = "hard-safe-set-empty"
-        elif decision_reason == "stale-retry":
-            classification = "latency-stale-publication"
+            classification = "observation-gap"
+        elif reason.startswith("control-dead-end:") or not shield_actions:
+            classification = "observed-shield-empty"
         elif published is None:
             classification = "action-not-published"
         elif (
             evidence["new_after_overlapping_bullet_slots"]
             or evidence["new_after_overlapping_enemy_indices"]
         ):
-            classification = "new-hazard-after-observation"
+            classification = "future-unobserved-hazard"
         elif (
-            published in hard_actions
-            and (
-                evidence["projected_observed_bullet_slots"]
-                or evidence["projected_enemy_indices"]
-                or evidence["projected_laser_slots"]
-            )
+            evidence["projected_observed_bullet_slots"]
+            or evidence["projected_enemy_indices"]
+            or evidence["projected_laser_slots"]
         ):
-            classification = "safety-counterexample-candidate"
+            classification = "observed-shield-counterexample-candidate"
         else:
-            classification = "unresolved-hit-needs-local-trace"
-        findings.append({
-            "sequence": sequence,
-            "frame_before": before.frame,
-            "frame_after": after.frame,
-            "source_context": before_row["scope"]["phase_id"],
-            "classification": classification,
-            "decision_reason": decision_reason,
-            "published_action": published,
-            "hard_actions": sorted(hard_actions),
-            "capture_ms": decision.get("capture_ms"),
-            "solve_ms": decision.get("solve_ms"),
-            "elapsed_frames": elapsed,
-            "collision_evidence": evidence,
-        })
+            classification = "policy-outcome"
+        findings.append(
+            {
+                "sequence": sequence,
+                "frame_before": before.frame,
+                "frame_after": after.frame,
+                "classification": classification,
+                "decision_reason": reason,
+                "published_action": published,
+                "shield_actions": sorted(shield_actions),
+                "elapsed_frames": elapsed,
+                "collision_evidence": evidence,
+            }
+        )
 
     summary = manifest.get("summary") or {}
-    dense_hard_parity = _audit_dense_hard_parity(
-        run_dir,
-        manifest,
-        objects,
-        native_library,
-    )
-    (
-        source_successor_coverage,
-        source_numeric_successor_parity,
-        player_successor_parity,
-    ) = _audit_source_successor_coverage(
-        run_dir,
-        manifest,
-        objects,
-    )
-    categories: dict[str, int] = {}
-    for finding in findings:
-        key = str(finding["classification"])
-        categories[key] = categories.get(key, 0) + 1
-    bomb_events = sum(row.get("event") == "bomb-used" for row in events)
-    expected = run["metadata"]
+    expected = run.get("metadata") or {}
+    online_contract = expected.get("online_contract") or {}
     episode_unit = str(expected.get("episode_unit", "practice-stage"))
-    raw_stages = expected.get("expected_stages")
-    if raw_stages is None:
-        raw_stages = [expected.get("stage")]
+    raw_stages = expected.get("expected_stages") or [expected.get("stage")]
     if (
         episode_unit not in {"practice-stage", "route"}
         or not isinstance(raw_stages, list)
@@ -1116,40 +453,85 @@ def audit(
         raise ValueError("physical episode scope metadata is invalid")
     expected_stages = tuple(raw_stages)
     scope_prefixes = tuple(
-        "/".join(str(value) for value in (
-            expected["difficulty"],
-            expected["character"],
-            expected["shot_type"],
-            stage,
-        )) + "/"
+        "/".join(
+            str(value)
+            for value in (
+                expected["difficulty"],
+                expected["character"],
+                expected["shot_type"],
+                stage,
+            )
+        )
+        + "/"
         for stage in expected_stages
     )
+    phase_rows = summary.get("phases", ())
     scope_pollution = [
         item.get("scope")
-        for item in summary.get("phases", ())
+        for item in phase_rows
         if not str(item.get("scope", "")).startswith(scope_prefixes)
     ]
     observed_stages = {
         int(str(item.get("scope", "")).split("/", 4)[3])
-        for item in summary.get("phases", ())
+        for item in phase_rows
         if str(item.get("scope", "")).startswith(scope_prefixes)
     }
-    anchor_stages = {
-        int(scope["stage"])
-        for row in anchors
-        if isinstance((scope := row.get("scope")), dict)
-        and isinstance(scope.get("stage"), int)
-        and str(scope.get("key", "")).startswith(scope_prefixes)
+    outcome = manifest.get("run_outcome") or {}
+    bomb_events = sum(row.get("event") == "bomb-used" for row in events)
+    policy_fallback_sequences = [
+        int(row["sequence"])
+        for row in _rows(_stream_paths(run_dir, manifest, "frames"))
+        if isinstance(row.get("decision"), dict)
+        and row["decision"].get("policy_id") == "reactive-baseline-policy-error"
+    ]
+    raw_policy_failures = outcome.get("policy_failures")
+    policy_last_error = outcome.get("policy_last_error")
+    policy_contract_valid = (
+        isinstance(raw_policy_failures, int)
+        and not isinstance(raw_policy_failures, bool)
+        and raw_policy_failures >= 0
+        and (
+            (raw_policy_failures == 0 and policy_last_error is None)
+            or (
+                raw_policy_failures > 0
+                and isinstance(policy_last_error, str)
+                and bool(policy_last_error)
+            )
+        )
+    )
+    frame_records = int((manifest.get("records") or {}).get("frames", 0))
+    dataset_admission = {
+        "checked_frames": 0,
+        "checked_transitions": 0,
+        "passes": False,
+        "error": None,
     }
-    missing_anchor_stages = observed_stages - anchor_stages
+    if frame_records:
+        try:
+            counts = validate_episode(run_dir)
+            dataset_admission["checked_frames"] = counts["frames"]
+            dataset_admission["checked_transitions"] = counts["transitions"]
+            dataset_admission["passes"] = True
+        except (EpisodeDatasetError, OSError, ValueError) as error:
+            dataset_admission["error"] = str(error)
+    else:
+        dataset_admission["error"] = "episode contains no factual frames"
+
+    shield_parity = _audit_dense_shield_parity(
+        run_dir, manifest, objects, native_library
+    )
+    player_parity = _audit_player_successors(run_dir, manifest, objects)
     integrity_errors = []
-    planner = (run.get("metadata") or {}).get("planner") or {}
-    if planner.get("source_commitment") != "source-complete-hard-v1":
-        integrity_errors.append("source-authority-incomplete")
-    if (
-        planner.get("factual_state_schema")
-        != "th06-1.02h-offline-facts-v2"
+    if not (
+        online_contract.get("algorithm") == "observed-shield4-paused-publication-v1"
+        and online_contract.get("shield_contract") == "observed-hazard-kinematics-v1"
+        and online_contract.get("publication_epoch")
+        == "coherent-root-process-suspended-v1"
+        and online_contract.get("shield_horizon") == 4
+        and online_contract.get("predicts_future_births") is False
     ):
+        integrity_errors.append("observed-shield-contract-invalid")
+    if online_contract.get("factual_state_schema") != OFFLINE_FACT_SCHEMA:
         integrity_errors.append("offline-factual-state-incomplete")
     if manifest.get("dropped_records", 0):
         integrity_errors.append("dropped-records")
@@ -1163,89 +545,38 @@ def audit(
         integrity_errors.append("scope-pollution")
     if episode_unit == "route" and observed_stages != set(expected_stages):
         integrity_errors.append("route-stage-coverage")
-    if missing_anchor_stages:
-        integrity_errors.append("source-anchor-stage-coverage")
-    outcome = manifest.get("run_outcome") or {}
     if outcome.get("physical_hits") != len(hit_sequences):
         integrity_errors.append("physical-hit-count-mismatch")
-    raw_policy_failures = outcome.get("policy_failures")
-    policy_last_error = outcome.get("policy_last_error")
-    policy_failure_contract_valid = (
-        isinstance(raw_policy_failures, int)
-        and not isinstance(raw_policy_failures, bool)
-        and raw_policy_failures >= 0
-        and (
-            (raw_policy_failures == 0 and policy_last_error is None)
-            or (
-                raw_policy_failures > 0
-                and isinstance(policy_last_error, str)
-                and bool(policy_last_error)
-            )
-        )
-    )
-    if not policy_failure_contract_valid:
+    if not policy_contract_valid:
         integrity_errors.append("policy-failure-evidence-invalid")
     elif raw_policy_failures:
         integrity_errors.append("policy-callback-failure")
     if (
-        policy_failure_contract_valid
+        policy_contract_valid
         and raw_policy_failures != len(policy_fallback_sequences)
     ):
         integrity_errors.append("policy-failure-conservation")
-    if dense_hard_parity and dense_hard_parity["unsafe_divergences"]:
-        integrity_errors.append("dense-hard-parity-unsafe-divergence")
-    frame_records = int((manifest.get("records") or {}).get("frames", 0))
-    source_dataset_admission = {
-        "checked_frames": 0,
-        "passes": frame_records == 0,
-        "error": None,
-    }
-    if frame_records:
-        try:
-            source_dataset_admission["checked_frames"] = sum(
-                1 for _bundle in iter_source_frames(run_dir)
-            )
-            source_dataset_admission["passes"] = True
-        except (SourceDatasetError, OSError, ValueError) as error:
-            source_dataset_admission["error"] = str(error)
-            integrity_errors.append("source-dataset-not-self-contained")
-    if frame_records > 1 and not source_successor_coverage["checked_links"]:
-        integrity_errors.append("source-successor-coverage-unavailable")
-    if (
-        source_successor_coverage["uncovered_aabbs"]
-        or source_successor_coverage["uncovered_lasers"]
-    ):
-        integrity_errors.append("source-successor-coverage-counterexample")
-    if source_successor_coverage[
-        "retained_laser_geometry_unavailable"
-    ].get("invalid-state", 0):
-        integrity_errors.append("source-successor-laser-state-invalid")
-    if frame_records > 1 and not (
-        source_numeric_successor_parity["linear_exact_checked"]
-        + source_numeric_successor_parity["acceleration_exact_checked"]
-        + source_numeric_successor_parity["transcendental_checked"]
-    ):
-        integrity_errors.append("source-numeric-successor-parity-unavailable")
-    if (
-        source_numeric_successor_parity["exact_mismatches"]
-        or source_numeric_successor_parity["transcendental_budget_violations"]
-        or source_numeric_successor_parity["nonfinite_successors"]
-        or source_numeric_successor_parity["global_mutation_union_violations"]
-    ):
-        integrity_errors.append("source-numeric-successor-parity-counterexample")
-    if frame_records > 1 and not player_successor_parity["checked_links"]:
+    if frame_records and not dataset_admission["passes"]:
+        integrity_errors.append("episode-dataset-admission-failed")
+    if shield_parity and shield_parity["unsafe_divergences"]:
+        integrity_errors.append("native-shield-replay-divergence")
+    if frame_records > 1 and not player_parity["checked_links"]:
         integrity_errors.append("player-successor-parity-unavailable")
-    if player_successor_parity["mismatches"]:
+    if player_parity["mismatches"]:
         integrity_errors.append("player-successor-parity-counterexample")
-    counterexamples = categories.get("safety-counterexample-candidate", 0)
-    unresolved = categories.get("unresolved-hit-needs-local-trace", 0)
+
+    categories: dict[str, int] = {}
+    for finding in findings:
+        category = str(finding["classification"])
+        categories[category] = categories.get(category, 0) + 1
     return {
-        "schema_version": "th06-rl-infra-audit-v1",
+        "schema_version": "th06-rl-infra-audit-v2",
         "run_id": manifest.get("run_id"),
         "scope": {
-            **{key: expected[key] for key in (
-                "difficulty", "character", "shot_type", "stage"
-            )},
+            **{
+                key: expected[key]
+                for key in ("difficulty", "character", "shot_type", "stage")
+            },
             "episode_unit": episode_unit,
             "expected_stages": list(expected_stages),
             "observed_stages": sorted(observed_stages),
@@ -1256,19 +587,10 @@ def audit(
         "hit_classifications": categories,
         "integrity_errors": integrity_errors,
         "scope_pollution": scope_pollution,
-        "anchor_records": int(manifest.get("records", {}).get("anchors", 0)),
-        "source_anchor_coverage": {
-            "anchored_stages": sorted(anchor_stages),
-            "missing_observed_stages": sorted(missing_anchor_stages),
-        },
-        "dense_hard_parity": dense_hard_parity,
-        "source_successor_coverage": source_successor_coverage,
-        "source_numeric_successor_parity": source_numeric_successor_parity,
-        "player_successor_parity": player_successor_parity,
+        "dense_shield_parity": shield_parity,
+        "player_successor_parity": player_parity,
         "policy_callback_failures": {
-            "count": (
-                raw_policy_failures if policy_failure_contract_valid else None
-            ),
+            "count": raw_policy_failures if policy_contract_valid else None,
             "last_error": policy_last_error,
             "fallback_frames": len(policy_fallback_sequences),
             "fallback_sequences": policy_fallback_sequences[:128],
@@ -1276,11 +598,11 @@ def audit(
                 0, len(policy_fallback_sequences) - 128
             ),
             "conserved": bool(
-                policy_failure_contract_valid
+                policy_contract_valid
                 and raw_policy_failures == len(policy_fallback_sequences)
             ),
         },
-        "source_dataset_admission": source_dataset_admission,
+        "episode_dataset_admission": dataset_admission,
         "latency": {
             "capture": summary.get("capture_timing"),
             "solve": summary.get("solve_timing"),
@@ -1290,27 +612,25 @@ def audit(
                 "capture_over_frame_budget_rate"
             ),
         },
-        "infra_stable_for_learning": bool(
-            not integrity_errors and not counterexamples and not unresolved
-        ),
+        # HIT classifications are gameplay outcomes, not infrastructure errors.
+        "infra_stable_for_learning": not integrity_errors,
         "findings": findings,
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser()
     parser.add_argument("run_dir", type=Path)
-    parser.add_argument("--output", type=Path)
     parser.add_argument("--native-library", type=Path)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     report = audit(args.run_dir, native_library=args.native_library)
-    output = args.output or args.run_dir / "infra-audit.json"
-    output.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    print(json.dumps(report, indent=2, sort_keys=True))
-    return 0
+    encoded = json.dumps(report, indent=2, sort_keys=True)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(encoded + "\n", encoding="utf-8")
+    print(encoded)
+    return 0 if not report["integrity_errors"] else 2
 
 
 if __name__ == "__main__":

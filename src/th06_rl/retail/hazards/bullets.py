@@ -46,14 +46,6 @@ def _add_normalize_angle(left: float, right: float) -> float:
     return value
 
 
-# EnemyEclInstr::ExInsCirnoRainbowBallJank uses float32 0.01 and sincosmul.
-# One ULP outward covers the final float32 component multiply on either axis.
-_RAINBOW_ACCELERATION_BITS = struct.unpack("<I", struct.pack("<f", 0.01))[0]
-RAINBOW_ACCELERATION_AXIS_BOUND = struct.unpack(
-    "<f", struct.pack("<I", _RAINBOW_ACCELERATION_BITS + 1)
-)[0]
-
-
 def _source_dynamic_positions(
     bullet: Bullet,
     horizon: int,
@@ -208,7 +200,7 @@ def radial_hazard_box(
         ACCELERATION_FLAG | CURVE_ACCELERATION_FLAG | DIRECTION_ROTATION_FLAG
     )):
         # Source-visible extended modes may turn, home, or bounce. The existing
-        # hard model bounds those modes by five extra pixels per update.
+        # conservative envelope bounds those modes by five extra pixels per update.
         reach += 5.0 * frame
     return (
         bullet.x - bullet.half_width - reach,

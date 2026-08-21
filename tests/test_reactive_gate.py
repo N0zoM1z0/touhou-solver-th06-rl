@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from th06_rl.native import ACTIONS, NativeCertifiedAction
 from th06_rl.th06.controller import (
-    _certify_hard,
+    _apply_observed_shield,
     _reactive_baseline,
 )
 
@@ -49,20 +49,20 @@ class _RecordingKernel:
         return self.result
 
 
-def test_hard_gate_keeps_conservative_margin_when_nonempty() -> None:
+def test_observed_shield_keeps_collision_margin_when_nonempty() -> None:
     expected = (certified("left", 1.0, 180.0, 384.0),)
     kernel = _RecordingKernel(expected)
 
-    result = _certify_hard(kernel, token="root")
+    result = _apply_observed_shield(kernel, token="root")
 
     assert result == expected
     assert kernel.margins == [0.35]
 
 
-def test_hard_gate_never_retries_without_the_uncertainty_margin() -> None:
+def test_observed_shield_never_retries_without_the_margin() -> None:
     kernel = _RecordingKernel(())
 
-    result = _certify_hard(kernel, token="root")
+    result = _apply_observed_shield(kernel, token="root")
 
     assert result == ()
     assert kernel.margins == [0.35]

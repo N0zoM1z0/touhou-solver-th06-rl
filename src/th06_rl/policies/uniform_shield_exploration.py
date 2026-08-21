@@ -1,10 +1,4 @@
-"""Game-neutral propensity-recorded exploration inside an authority safe set.
-
-The policy deliberately has no gameplay eligibility gate.  On every decision
-it mixes the adapter-provided baseline with a uniform distribution over the
-complete locally admissible action set.  Native geometry remains the authority
-that constructs that set; this module only samples from it.
-"""
+"""Simple identifiable exploration inside the observed-shield action set."""
 
 from __future__ import annotations
 
@@ -15,11 +9,11 @@ import random
 from ..policy_api import POLICY_API_VERSION, PolicyDecision
 
 
-STATE_SCHEMA = "th06-rl-uniform-safe-exploration-v1"
-POLICY_NAME = "uniform-safe-exploration-v1"
+STATE_SCHEMA = "th06-rl-uniform-shield-exploration-v1"
+POLICY_NAME = "uniform-shield-exploration-v1"
 
 
-class UniformSafeExplorationPolicy:
+class UniformShieldExplorationPolicy:
     api_version = POLICY_API_VERSION
     name = POLICY_NAME
 
@@ -34,7 +28,7 @@ class UniformSafeExplorationPolicy:
 
     def import_state(self, state: dict[str, object]) -> None:
         if state.get("schema") != STATE_SCHEMA:
-            raise ValueError("uniform safe exploration state schema mismatch")
+            raise ValueError("uniform shield exploration state schema mismatch")
         seed = int(state.get("policy_seed", -1))
         probability = float(state.get("exploration_probability", float("nan")))
         if not 0 <= seed < 2**64:
@@ -48,23 +42,17 @@ class UniformSafeExplorationPolicy:
 
     def decide(self, context) -> PolicyDecision:
         if not self.loaded:
-            raise RuntimeError("uniform safe exploration requires a state file")
+            raise RuntimeError("uniform shield exploration requires a state file")
         legal = tuple(sorted(set(context.locally_admissible_actions)))
         if not legal:
-            raise ValueError("exploration policy received an empty safe set")
+            raise ValueError("exploration policy received an empty shield set")
         baseline = str(context.baseline_action)
         if baseline not in legal:
-            raise ValueError("adapter baseline is outside the safe set")
+            raise ValueError("adapter baseline is outside the shield set")
 
-        if len(legal) == 1 or self.exploration_probability == 0.0:
-            probabilities = {
-                action: float(action == baseline) for action in legal
-            }
-        else:
-            exploratory = self.exploration_probability / len(legal)
-            probabilities = {action: exploratory for action in legal}
-            probabilities[baseline] += 1.0 - self.exploration_probability
-
+        exploratory = self.exploration_probability / len(legal)
+        probabilities = {action: exploratory for action in legal}
+        probabilities[baseline] += 1.0 - self.exploration_probability
         draw = self.random.random()
         cumulative = 0.0
         chosen = legal[-1]
@@ -79,7 +67,12 @@ class UniformSafeExplorationPolicy:
         self.decisions += 1
         self.non_baseline += int(chosen != baseline)
         self.selected[chosen] += 1
-        return PolicyDecision(chosen, POLICY_NAME, probability)
+        return PolicyDecision(
+            chosen,
+            POLICY_NAME,
+            probability,
+            tuple((action, probabilities[action]) for action in legal),
+        )
 
     def metrics(self) -> dict[str, object]:
         return {
@@ -92,5 +85,5 @@ class UniformSafeExplorationPolicy:
         }
 
 
-def create_policy() -> UniformSafeExplorationPolicy:
-    return UniformSafeExplorationPolicy()
+def create_policy() -> UniformShieldExplorationPolicy:
+    return UniformShieldExplorationPolicy()

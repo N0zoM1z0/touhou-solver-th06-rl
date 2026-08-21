@@ -1,4 +1,4 @@
-"""ctypes facade for the compact native geometry, Hard, and beam kernel."""
+"""ctypes facade for the compact native observed-hazard shield kernel."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Iterable
 
 from .core.model import Action, CertifiedAction, Kinematics, movement_actions
-from .core.planner import LocalPlannerConfig
 
 
 ACTIONS = movement_actions()
@@ -35,31 +34,9 @@ class LaserRect:
 
 
 @dataclass(frozen=True)
-class PlayerAimedBullet:
-    """Exact source state for one supported final player-aim turn."""
-
-    x: float
-    y: float
-    vx: float
-    vy: float
-    half_width: float
-    half_height: float
-    speed: float
-    angle: float
-    turn_speed: float
-    direction_rotation: float
-    timer_float: float
-    timer: int
-    direction_interval: int
-    direction_num_times: int
-    direction_max_times: int
-
-
-@dataclass(frozen=True)
 class PackedHazards:
     aabb_frames: tuple[tuple[Aabb, ...], ...]
     laser_frames: tuple[tuple[LaserRect, ...], ...]
-    player_aimed_bullets: tuple[PlayerAimedBullet, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.aabb_frames:
@@ -84,27 +61,6 @@ class NativeCertifiedAction:
         return CertifiedAction(self.action, self.min_clearance)
 
 
-@dataclass(frozen=True)
-class NativeActionProfile:
-    action: Action
-    checkpoints: tuple[int, ...]
-    min_clearances: tuple[float, ...]
-
-
-@dataclass(frozen=True)
-class NativePlan:
-    action: Action
-    effort_horizon: int
-    surviving_actions: tuple[Action, ...]
-    min_clearance: float
-    cumulative_risk: float
-    terminal_x: float
-    terminal_y: float
-    terminal_boundary_deficit: float
-    endpoint_count: int
-    continuation_action_count: int
-
-
 class _Aabb(ctypes.Structure):
     _fields_ = [
         ("left", ctypes.c_float),
@@ -125,41 +81,6 @@ class _LaserRect(ctypes.Structure):
     ]
 
 
-class _PlayerAimedBullet(ctypes.Structure):
-    _fields_ = [
-        ("x", ctypes.c_float),
-        ("y", ctypes.c_float),
-        ("vx", ctypes.c_float),
-        ("vy", ctypes.c_float),
-        ("half_width", ctypes.c_float),
-        ("half_height", ctypes.c_float),
-        ("speed", ctypes.c_float),
-        ("angle", ctypes.c_float),
-        ("turn_speed", ctypes.c_float),
-        ("direction_rotation", ctypes.c_float),
-        ("timer_float", ctypes.c_float),
-        ("timer", ctypes.c_int32),
-        ("direction_interval", ctypes.c_int32),
-        ("direction_num_times", ctypes.c_int32),
-        ("direction_max_times", ctypes.c_int32),
-    ]
-
-
-class _PlanResult(ctypes.Structure):
-    _fields_ = [
-        ("selected_action", ctypes.c_int32),
-        ("effort_horizon", ctypes.c_int32),
-        ("surviving_first_action_mask", ctypes.c_uint32),
-        ("min_clearance", ctypes.c_float),
-        ("cumulative_risk", ctypes.c_float),
-        ("terminal_x", ctypes.c_float),
-        ("terminal_y", ctypes.c_float),
-        ("terminal_boundary_deficit", ctypes.c_float),
-        ("endpoint_count", ctypes.c_int32),
-        ("continuation_action_count", ctypes.c_int32),
-    ]
-
-
 @dataclass(frozen=True)
 class PreparedHazards:
     """One immutable ctypes packing with cheap horizon-prefix views."""
@@ -169,8 +90,6 @@ class PreparedHazards:
     aabbs: object
     laser_offsets: object
     lasers: object
-    player_aimed_bullets: object
-    player_aimed_bullet_count: int
 
     def prefix(self, horizon: int) -> PreparedHazards:
         if not 1 <= horizon <= self.horizon:
@@ -183,8 +102,6 @@ class PreparedHazards:
             self.aabbs,
             self.laser_offsets,
             self.lasers,
-            self.player_aimed_bullets,
-            self.player_aimed_bullet_count,
         )
 
     @property
@@ -256,68 +173,6 @@ class NativeKernel:
         ]
         self.certify_function.restype = ctypes.c_int
 
-        self.certify_aimed_function = (
-            self.library.th06_rl_certify_actions_aimed_v1
-        )
-        self.certify_aimed_function.argtypes = [
-            *floats8,
-            ctypes.c_int32,
-            ctypes.c_int32,
-            ctypes.POINTER(ctypes.c_int32),
-            ctypes.c_int32,
-            ctypes.c_uint32,
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(_Aabb),
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(_LaserRect),
-            ctypes.POINTER(_PlayerAimedBullet),
-            ctypes.c_int32,
-            ctypes.c_float,
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(ctypes.c_float),
-            ctypes.POINTER(ctypes.c_float),
-        ]
-        self.certify_aimed_function.restype = ctypes.c_int
-
-        self.profile_function = self.library.th06_rl_profile_actions_v1
-        self.profile_function.argtypes = [
-            *floats8,
-            ctypes.c_int32,
-            ctypes.c_int32,
-            ctypes.POINTER(ctypes.c_int32),
-            ctypes.c_int32,
-            ctypes.c_uint32,
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(_Aabb),
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(_LaserRect),
-            ctypes.c_float,
-            ctypes.POINTER(ctypes.c_int32),
-            ctypes.c_int32,
-            ctypes.POINTER(ctypes.c_float),
-        ]
-        self.profile_function.restype = ctypes.c_int
-
-        self.plan_function = self.library.th06_rl_local_plan_v1
-        self.plan_function.argtypes = [
-            *floats8,
-            ctypes.c_int32,
-            ctypes.c_int32,
-            ctypes.c_int32,
-            ctypes.c_int32,
-            ctypes.c_int32,
-            *([ctypes.c_float] * 8),
-            ctypes.c_uint32,
-            ctypes.c_uint32,
-            ctypes.POINTER(ctypes.c_float),
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(_Aabb),
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(_LaserRect),
-            ctypes.POINTER(_PlanResult),
-        ]
-        self.plan_function.restype = ctypes.c_int
-
     @staticmethod
     def _pack(
         hazards: PackedHazards,
@@ -349,17 +204,9 @@ class NativeKernel:
 
     @classmethod
     def prepare_hazards(cls, hazards: PackedHazards) -> PreparedHazards:
-        aimed = (_PlayerAimedBullet * max(1, len(hazards.player_aimed_bullets)))(
-            *(
-                _PlayerAimedBullet(*item.__dict__.values())
-                for item in hazards.player_aimed_bullets
-            )
-        )
         return PreparedHazards(
             hazards.horizon,
             *cls._pack(hazards),
-            aimed,
-            len(hazards.player_aimed_bullets),
         )
 
     @staticmethod
@@ -415,26 +262,15 @@ class NativeKernel:
             _action_mask(candidates),
             *prepared.native_args,
         )
-        if prepared.player_aimed_bullet_count:
-            status = self.certify_aimed_function(
-                *common_args,
-                prepared.player_aimed_bullets,
-                prepared.player_aimed_bullet_count,
-                collision_margin,
-                ctypes.byref(safe_mask),
-                minimum,
-                final_xy,
-            )
-        else:
-            status = self.certify_function(
-                *common_args,
-                collision_margin,
-                ctypes.byref(safe_mask),
-                minimum,
-                final_xy,
-            )
+        status = self.certify_function(
+            *common_args,
+            collision_margin,
+            ctypes.byref(safe_mask),
+            minimum,
+            final_xy,
+        )
         if status != 0:
-            raise RuntimeError(f"native Hard kernel rejected input: {status}")
+            raise RuntimeError(f"native shield kernel rejected input: {status}")
         return tuple(
             NativeCertifiedAction(
                 action,
@@ -444,138 +280,4 @@ class NativeKernel:
             )
             for index, action in enumerate(ACTIONS)
             if safe_mask.value & (1 << index)
-        )
-
-    def profile_actions(
-        self,
-        *,
-        x: float,
-        y: float,
-        half_width: float,
-        half_height: float,
-        kinematics: Kinematics,
-        current_action: Action,
-        hazards: PackedHazards | PreparedHazards,
-        candidates: tuple[Action, ...],
-        checkpoints: tuple[int, ...] = (4, 8, 12),
-        delivery_delays: tuple[int, ...] = (0, 1, 2, 3),
-        collision_margin: float = 0.35,
-    ) -> tuple[NativeActionProfile, ...]:
-        if not candidates or not delivery_delays or not checkpoints:
-            raise ValueError("profile candidates, delays, and checkpoints cannot be empty")
-        if tuple(sorted(set(checkpoints))) != checkpoints:
-            raise ValueError("profile checkpoints must be strictly increasing")
-        prepared = (
-            hazards
-            if isinstance(hazards, PreparedHazards)
-            else self.prepare_hazards(hazards)
-        )
-        if prepared.player_aimed_bullet_count:
-            raise ValueError(
-                "candidate-coupled aimed bullets are Hard-certification only"
-            )
-        if checkpoints[-1] > prepared.horizon:
-            raise ValueError("profile checkpoint exceeds hazard horizon")
-        delay_array = (ctypes.c_int32 * len(delivery_delays))(*delivery_delays)
-        checkpoint_array = (ctypes.c_int32 * len(checkpoints))(*checkpoints)
-        clearances = (ctypes.c_float * (len(ACTIONS) * len(checkpoints)))()
-        status = self.profile_function(
-            *self._physical_args(x, y, half_width, half_height, kinematics),
-            ACTION_INDEX[current_action],
-            prepared.horizon,
-            delay_array,
-            len(delivery_delays),
-            _action_mask(candidates),
-            *prepared.native_args,
-            collision_margin,
-            checkpoint_array,
-            len(checkpoints),
-            clearances,
-        )
-        if status != 0:
-            raise RuntimeError(f"native profile kernel rejected input: {status}")
-        return tuple(
-            NativeActionProfile(
-                action=action,
-                checkpoints=checkpoints,
-                min_clearances=tuple(
-                    float(clearances[index * len(checkpoints) + checkpoint])
-                    for checkpoint in range(len(checkpoints))
-                ),
-            )
-            for index, action in enumerate(ACTIONS)
-            if action in candidates
-        )
-
-    def plan(
-        self,
-        *,
-        x: float,
-        y: float,
-        half_width: float,
-        half_height: float,
-        kinematics: Kinematics,
-        current_action: Action,
-        hazards: PackedHazards,
-        hard: tuple[NativeCertifiedAction, ...],
-        continuation_actions: tuple[Action, ...] = ACTIONS,
-        config: LocalPlannerConfig | None = None,
-        control_delay: int = 2,
-        collision_margin: float = 0.35,
-    ) -> NativePlan | None:
-        if not hard:
-            return None
-        if hazards.player_aimed_bullets:
-            raise ValueError(
-                "candidate-coupled aimed bullets are Hard-certification only"
-            )
-        config = config or LocalPlannerConfig(horizon=hazards.horizon)
-        if config.horizon != hazards.horizon:
-            raise ValueError("planner config and hazard horizon differ")
-        packed = self._pack(hazards)
-        hard_minimum = (ctypes.c_float * len(ACTIONS))(
-            *([float("-inf")] * len(ACTIONS))
-        )
-        for item in hard:
-            hard_minimum[ACTION_INDEX[item.action]] = item.min_clearance
-        output = _PlanResult()
-        status = self.plan_function(
-            *self._physical_args(x, y, half_width, half_height, kinematics),
-            ACTION_INDEX[current_action],
-            config.horizon,
-            control_delay,
-            config.action_hold_frames,
-            config.beam_width,
-            config.position_quantization,
-            config.comfort_clearance,
-            config.boundary_reserve,
-            config.risk_scale,
-            config.direction_switch_cost,
-            config.direction_reverse_cost,
-            config.focus_switch_cost,
-            collision_margin,
-            _action_mask(item.action for item in hard),
-            _action_mask(continuation_actions),
-            hard_minimum,
-            *packed,
-            ctypes.byref(output),
-        )
-        if status == 1:
-            return None
-        if status != 0:
-            raise RuntimeError(f"native local planner rejected input: {status}")
-        return NativePlan(
-            action=ACTIONS[output.selected_action],
-            effort_horizon=output.effort_horizon,
-            surviving_actions=tuple(
-                action for index, action in enumerate(ACTIONS)
-                if output.surviving_first_action_mask & (1 << index)
-            ),
-            min_clearance=output.min_clearance,
-            cumulative_risk=output.cumulative_risk,
-            terminal_x=output.terminal_x,
-            terminal_y=output.terminal_y,
-            terminal_boundary_deficit=output.terminal_boundary_deficit,
-            endpoint_count=output.endpoint_count,
-            continuation_action_count=output.continuation_action_count,
         )

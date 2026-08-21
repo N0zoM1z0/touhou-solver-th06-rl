@@ -14,11 +14,6 @@ def _write_run(root: Path, run_id: str, *, x: float, capture_ms: float) -> Path:
     root.mkdir(parents=True)
     rows = {
         "objects": [{"object_id": "same", "payload": ["x"]}],
-        "anchors": [{
-            "sequence": 0,
-            "control_snapshot_ref": f"{run_id}:00000000:f1",
-            "snapshot": {"x": x},
-        }],
         "frames": [{
             "sequence": 0,
             "snapshot_ref": f"{run_id}:00000000:f1",

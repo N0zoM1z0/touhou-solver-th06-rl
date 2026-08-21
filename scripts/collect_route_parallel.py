@@ -36,10 +36,10 @@ from scripts.prepare_wine_workers import (  # noqa: E402
 )
 from scripts.verify_baseline_route import verify as verify_route  # noqa: E402
 from th06_rl.corpus_digest import normalized_factual_digest  # noqa: E402
-from th06_rl.policies.safe_option_exploration import STATE_SCHEMA  # noqa: E402
+from th06_rl.policies.uniform_shield_exploration import STATE_SCHEMA  # noqa: E402
 
 
-COLLECTION_SCHEMA = "th06-rl-source-complete-parallel-route-collection-v1"
+COLLECTION_SCHEMA = "th06-rl-observed-shield-parallel-route-collection-v1"
 SCHEDULE_SCHEMA = "th06-rl-parallel-route-schedule-v1"
 MAX_CORPUS_GIB = 4
 
@@ -67,12 +67,12 @@ def derive_episode_policy_state(
 ) -> dict[str, object]:
     """Derive independent, replayable exploration RNG streams per episode."""
     if base_state.get("schema") != STATE_SCHEMA:
-        raise ValueError("route collection requires safe-option-exploration-v2")
+        raise ValueError("route collection requires uniform-shield-exploration-v1")
     base_seed = int(base_state.get("policy_seed", -1))
     if not 0 <= base_seed < 2**64 or episode < 0:
         raise ValueError("base policy seed and episode index are invalid")
     digest = hashlib.sha256(
-        f"th06-rl:g7-route:{base_seed:016x}:{episode:016x}".encode("ascii")
+        f"th06-rl:route:{base_seed:016x}:{episode:016x}".encode("ascii")
     ).digest()
     result = dict(base_state)
     result["policy_seed"] = int.from_bytes(digest[:8], "big")

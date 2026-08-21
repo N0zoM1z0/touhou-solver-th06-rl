@@ -37,15 +37,14 @@ def _documents(stage: int = 4):
         "policy_state_sha256_before": "s",
     }
     run = {
-        "schemas": {"frame": "th06-rl-authoritative-frame-v11"},
-        "metadata": {"planner": {
-            "algorithm": "source-hard4-paused-publication-v2",
-            "source_commitment": "source-complete-hard-v1",
-            "publication_epoch": "source-root-process-suspended-v1",
-            "hard_horizon": 4,
-            "learner_feature_horizon": 4,
+        "schemas": {"frame": "th06-rl-authoritative-frame-v13"},
+        "metadata": {"online_contract": {
+            "algorithm": "observed-shield4-paused-publication-v1",
+            "shield_contract": "observed-hazard-kinematics-v1",
+            "publication_epoch": "coherent-root-process-suspended-v1",
+            "shield_horizon": 4,
             "minimum_collision_margin": 0.35,
-            "zero_margin_fallback": False,
+            "predicts_future_births": False,
         }},
     }
     outcome = {
@@ -71,39 +70,14 @@ def _documents(stage: int = 4):
         "physical_hits": hits,
         "bomb_events": 0,
         "integrity_errors": [],
-        "source_successor_coverage": {
-            "method": "retained-next-root-one-sided-coverage-v1",
-            "checked_links": 100,
-            "actual_lasers_checked": 25,
-            "uncovered_aabbs": 0,
-            "uncovered_lasers": 0,
-            "retained_laser_geometry_unavailable": {},
-        },
-        "source_numeric_successor_parity": {
-            "method": "stable-retained-bullet-center-successor-v2",
-            "arithmetic_comparison": "float32-bit-exact",
-            "required_collision_margin": 0.35,
-            "transcendental_axis_error_budget": 0.01,
-            "global_release_acceleration_axis_bound": 0.010000001,
-            "global_mutation_semantics": "source branch union",
-            "linear_exact_checked": 40,
-            "acceleration_exact_checked": 30,
-            "transcendental_checked": 30,
-            "global_stop_union_checked": 10,
-            "exact_mismatches": 0,
-            "transcendental_budget_violations": 0,
-            "nonfinite_successors": 0,
-            "global_mutation_union_violations": 0,
-        },
         "player_successor_parity": {
-            "method": "contiguous-active-player-center-successor-v1",
+            "method": "contiguous-player-center-successor-v1",
             "arithmetic_comparison": "float32-bit-exact",
             "input_semantics": "next-completed-root-sampled-input",
-            "movement_order": "Player-before-Enemy-before-Bullet",
             "checked_links": 90,
             "mismatches": 0,
         },
-        "dense_hard_parity": {
+        "dense_shield_parity": {
             "checked": 64,
             "unsafe_divergences": [],
             "conservative_divergences": [],
@@ -118,7 +92,7 @@ def _documents(stage: int = 4):
     return report, run, manifest, audit
 
 
-def test_gate_requires_current_source_complete_clean_episode() -> None:
+def test_gate_requires_current_observed_shield_clean_episode() -> None:
     report, run, manifest, audit = _documents()
     result = validate_gate_run(
         report=report, run=run, manifest=manifest, audit=audit, stage=4,
@@ -126,8 +100,8 @@ def test_gate_requires_current_source_complete_clean_episode() -> None:
     assert result["physical_hits"] == 3
     assert all(result["checks"].values())
 
-    audit["source_successor_coverage"]["uncovered_aabbs"] = 1
-    with pytest.raises(ValueError, match="successor"):
+    audit["dense_shield_parity"]["unsafe_divergences"] = ["extra-action"]
+    with pytest.raises(ValueError, match="native_parity"):
         validate_gate_run(
             report=report, run=run, manifest=manifest, audit=audit, stage=4,
         )

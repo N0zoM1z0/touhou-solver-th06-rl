@@ -15,10 +15,9 @@ from scripts.collect_route_parallel import (
 
 def _state(seed: int = 7) -> dict[str, object]:
     return {
-        "schema": "th06-rl-safe-option-exploration-v2",
+        "schema": "th06-rl-uniform-shield-exploration-v1",
         "policy_seed": seed,
         "exploration_probability": 0.2,
-        "option_horizon_frames": 8,
     }
 
 
@@ -29,7 +28,7 @@ def test_episode_policy_streams_are_distinct_replayable_and_canonical() -> None:
     assert first == derive_episode_policy_state(_state(), episode=0)
     assert first["policy_seed"] != second["policy_seed"]
     assert first["exploration_probability"] == 0.2
-    with pytest.raises(ValueError, match="safe-option"):
+    with pytest.raises(ValueError, match="uniform-shield"):
         derive_episode_policy_state({"schema": "wrong"}, episode=0)
 
 

@@ -54,6 +54,12 @@ class ImmutablePolicy:
                 raise ValueError(
                     f"policy proposed non-local action {decision.action!r}"
                 )
+            if set(dict(decision.behavior_probabilities)) != set(
+                context.locally_admissible_actions
+            ):
+                raise ValueError(
+                    "policy did not report its complete behavior distribution"
+                )
             return decision
         except Exception as error:
             self.policy_failures += 1
@@ -61,42 +67,12 @@ class ImmutablePolicy:
             return PolicyDecision(
                 context.baseline_action,
                 "reactive-baseline-policy-error",
+                1.0,
+                tuple(
+                    (action, float(action == context.baseline_action))
+                    for action in context.locally_admissible_actions
+                ),
             )
-
-    def continue_certified(
-        self, context: PolicyContext
-    ) -> PolicyDecision | None:
-        """Let an option policy trace a freshly certified input lease."""
-        callback = getattr(self.policy, "continue_certified", None)
-        if not callable(callback):
-            return None
-        try:
-            decision = callback(context)
-            if (
-                not isinstance(decision, PolicyDecision)
-                or decision.action not in context.locally_admissible_actions
-            ):
-                raise ValueError("policy continued outside the certified lease")
-            return decision
-        except Exception as error:
-            self.policy_failures += 1
-            self.last_error = (
-                f"continue_certified {type(error).__name__}: {error}"
-            )
-            # Absence of the optional callback is represented by None above.
-            # A callback failure is different: keep the current certified
-            # action, but preserve an explicit factual marker so collection
-            # admission can never mistake the fallback for policy output.
-            return PolicyDecision(
-                context.baseline_action,
-                "reactive-baseline-policy-error",
-            )
-
-    def reject_publication(self, decision: PolicyDecision) -> None:
-        """Abort tentative option bookkeeping after input was not published."""
-        callback = getattr(self.policy, "reject_publication", None)
-        if callable(callback):
-            callback(decision)
 
     def status(self, *, include_metrics: bool = True) -> dict[str, object]:
         result = {

@@ -95,7 +95,7 @@ of complete natural-RNG routes. Changing the policy requires a new gate:
 The collector writes the immutable schedule before gameplay and is resumable
 only at already clean scheduled episodes. It never redraws or skips an episode
 because of HIT count. The admission ledger appears only when the full schedule
-has passed lifecycle, HIT, source-successor, native-parity, latency, shard-hash,
+has passed lifecycle, HIT, player-successor, shield-replay, latency, shard-hash,
 and cleanup checks.
 
 ## Offline throughput

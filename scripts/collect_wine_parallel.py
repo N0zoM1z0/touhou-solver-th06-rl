@@ -38,7 +38,7 @@ from scripts.prepare_wine_workers import (  # noqa: E402
 from th06_rl.corpus_digest import normalized_factual_digest  # noqa: E402
 
 
-COLLECTION_SCHEMA = "th06-rl-source-complete-parallel-collection-v1"
+COLLECTION_SCHEMA = "th06-rl-observed-shield-parallel-collection-v1"
 SCHEDULE_SCHEMA = "th06-rl-parallel-collection-schedule-v1"
 
 

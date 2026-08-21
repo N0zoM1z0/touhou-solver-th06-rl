@@ -1,4 +1,4 @@
-"""Small value objects shared by the local planner and game adapter."""
+"""Small movement and geometry value objects."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def movement_actions() -> tuple[Action, ...]:
 
 @dataclass(frozen=True)
 class CertifiedAction:
-    """Authority-owned first action exposed read-only to the planner."""
+    """One action admitted by the observed-hazard shield."""
 
     action: Action
     min_clearance: float
@@ -150,4 +150,3 @@ class HazardOracle(Protocol):
 
     def sample(self, x: float, y: float, frame: int) -> HazardSample:
         ...
-

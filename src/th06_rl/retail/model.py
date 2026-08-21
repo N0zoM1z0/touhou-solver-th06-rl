@@ -405,7 +405,7 @@ class EnemySpawner:
     patchouli_shottype_vars: tuple[int, int, int] | None = None
     # Forecast-only uncertainty carried by not-yet-born enemies whose source
     # timeline coordinates come from the shared RNG. Physical captures leave
-    # both values at zero; Hard forecasts use them to preserve a bounded
+    # both values at zero; legacy forensic forecasts use them to preserve a bounded
     # position world without pretending that a future RNG value is known.
     forecast_position_uncertainty_x: float = 0.0
     forecast_position_uncertainty_y: float = 0.0

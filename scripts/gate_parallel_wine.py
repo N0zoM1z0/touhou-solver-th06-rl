@@ -283,15 +283,13 @@ def validate_gate_run(
 ) -> dict[str, object]:
     completion = report.get("controller_completion")
     outcome = manifest.get("run_outcome")
-    planner = (run.get("metadata") or {}).get("planner")
+    online_contract = (run.get("metadata") or {}).get("online_contract")
     schemas = run.get("schemas")
-    successor = audit.get("source_successor_coverage")
-    numeric_successor = audit.get("source_numeric_successor_parity")
     player_successor = audit.get("player_successor_parity")
-    parity = audit.get("dense_hard_parity")
+    parity = audit.get("dense_shield_parity")
     latency = audit.get("latency")
     if not all(isinstance(value, dict) for value in (
-        completion, outcome, planner, schemas, successor, numeric_successor,
+        completion, outcome, online_contract, schemas,
         player_successor, parity, latency,
     )):
         raise ValueError("parallel gate run is missing structured evidence")
@@ -317,71 +315,29 @@ def validate_gate_run(
             and outcome.get("physical_hits") == completion.get("physical_hits")
             and outcome.get("physical_hits") == audit.get("physical_hits")
         ),
-        "source_contract": (
+        "shield_contract": (
             schemas.get("frame") == FRAME_SCHEMA
-            and planner.get("source_commitment") == "source-complete-hard-v1"
-            and planner.get("publication_epoch")
-            == "source-root-process-suspended-v1"
-            and planner.get("algorithm")
-            == "source-hard4-paused-publication-v2"
-            and planner.get("hard_horizon") == 4
-            and planner.get("learner_feature_horizon") == 4
-            and planner.get("minimum_collision_margin") == 0.35
-            and planner.get("zero_margin_fallback") is False
+            and online_contract.get("shield_contract")
+            == "observed-hazard-kinematics-v1"
+            and online_contract.get("publication_epoch")
+            == "coherent-root-process-suspended-v1"
+            and online_contract.get("algorithm")
+            == "observed-shield4-paused-publication-v1"
+            and online_contract.get("shield_horizon") == 4
+            and online_contract.get("minimum_collision_margin") == 0.35
+            and online_contract.get("predicts_future_births") is False
         ),
         "audit": (
             audit.get("integrity_errors") == []
             and audit.get("bomb_events") == 0
         ),
-        "successor": (
-            successor.get("method") == "retained-next-root-one-sided-coverage-v1"
-            and successor.get("checked_links", 0) > 0
-            and successor.get("actual_lasers_checked", 0) > 0
-            and successor.get("uncovered_aabbs") == 0
-            and successor.get("uncovered_lasers") == 0
-            and (successor.get(
-                "retained_laser_geometry_unavailable", {}
-            ) or {}).get("invalid-state", 0) == 0
-        ),
-        "numeric_successor": (
-            numeric_successor.get("method")
-            == "stable-retained-bullet-center-successor-v2"
-            and numeric_successor.get("arithmetic_comparison")
-            == "float32-bit-exact"
-            and numeric_successor.get("required_collision_margin") == 0.35
-            and numeric_successor.get("transcendental_axis_error_budget", 1.0)
-            < 0.35
-            and 0
-            < numeric_successor.get(
-                "global_release_acceleration_axis_bound", 1.0
-            )
-            < 0.35
-            and numeric_successor.get("global_mutation_semantics")
-            == "source branch union"
-            and (
-                numeric_successor.get("linear_exact_checked", 0)
-                + numeric_successor.get("acceleration_exact_checked", 0)
-            ) > 0
-            and numeric_successor.get("transcendental_checked", 0) > 0
-            and (
-                numeric_successor.get("global_stop_union_checked", 0)
-                + numeric_successor.get("global_release_union_checked", 0)
-                + numeric_successor.get("global_combined_union_checked", 0)
-            ) > 0
-            and numeric_successor.get("exact_mismatches") == 0
-            and numeric_successor.get("transcendental_budget_violations") == 0
-            and numeric_successor.get("nonfinite_successors") == 0
-            and numeric_successor.get("global_mutation_union_violations") == 0
-        ),
         "player_successor": (
             player_successor.get("method")
-            == "contiguous-active-player-center-successor-v1"
+            == "contiguous-player-center-successor-v1"
             and player_successor.get("arithmetic_comparison")
             == "float32-bit-exact"
             and player_successor.get("input_semantics")
             == "next-completed-root-sampled-input"
-            and player_successor.get("movement_order")
-            == "Player-before-Enemy-before-Bullet"
             and player_successor.get("checked_links", 0) > 0
             and player_successor.get("mismatches") == 0
         ),

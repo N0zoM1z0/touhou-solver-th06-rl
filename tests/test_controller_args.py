@@ -6,8 +6,7 @@ import th06_rl.th06.controller as controller
 
 from th06_rl.th06.controller import (
     RouteTrial,
-    _anchor_partition,
-    _capture_safety_root_while_paused,
+    _capture_control_root_while_paused,
     _control_dead_end,
     _advance_route_scope,
     _valid_executable_basename,
@@ -24,9 +23,10 @@ def parse_args(args: list[str]):
     ])
 
 
-def test_in_flight_source_unsafe_is_a_control_dead_end_not_infra_loss() -> None:
-    assert _control_dead_end("control-dead-end:in-flight input unsafe")
-    assert _control_dead_end("authority-stop:in-flight input unsafe")
+def test_in_flight_shield_rejection_is_a_control_dead_end() -> None:
+    suffix = "in-flight input rejected by shield"
+    assert _control_dead_end(f"control-dead-end:{suffix}")
+    assert _control_dead_end(f"infrastructure-stop:{suffix}")
 
 
 def test_retail_executable_name_accepts_ascii_and_original_japanese_names() -> None:
@@ -55,13 +55,6 @@ def test_route_scope_accepts_only_next_stage_in_same_scope() -> None:
         _advance_route_scope((3, 0, 0, 2), (3, 0, 0, 4))
     with pytest.raises(Exception, match="route scope changed unexpectedly"):
         _advance_route_scope((3, 0, 0, 2), (2, 0, 0, 3))
-
-
-def test_source_anchor_partition_has_stage_local_ownership() -> None:
-    assert _anchor_partition("timeline:before-t330:op4:arg0", stage=1) != (
-        _anchor_partition("timeline:before-t330:op4:arg0", stage=2)
-    )
-    assert _anchor_partition("boss:0:sub1", stage=2).startswith("stage:2:")
 
 
 def test_controller_rejects_route_and_practice_together() -> None:
@@ -126,19 +119,20 @@ def test_paused_capture_resumes_between_partial_phase_retries(monkeypatch) -> No
 
     reads = 0
 
-    def read_pair(*_args, **kwargs):
+    def read_snapshot(*_args, **kwargs):
         nonlocal reads
         reads += 1
-        assert kwargs["compact_attempts"] == 1
+        assert kwargs["horizon"] == 4
+        assert kwargs["max_attempts"] == 1
         if reads == 1:
             raise RuntimeError("calc chain incomplete")
-        return Snapshot(capture_attempts=1), object()
+        return Snapshot(capture_attempts=1)
 
-    monkeypatch.setattr(controller, "read_safety_snapshot_pair", read_pair)
+    monkeypatch.setattr(controller, "read_control_snapshot", read_snapshot)
     monkeypatch.setattr(controller.time, "sleep", lambda _seconds: None)
 
-    snapshot, _authority, retained_pause = (
-        _capture_safety_root_while_paused(object(), Bridge(), horizon=12)
+    snapshot, retained_pause = _capture_control_root_while_paused(
+        object(), Bridge()
     )
 
     assert snapshot.capture_attempts == 2

@@ -17,23 +17,21 @@ import tempfile
 import threading
 import time
 
-from .policy_api import PolicyOptionTrace
 from .retail.model import BUTTON_BOMB
 
 
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v3"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v11"
-TRANSITION_SCHEMA = "th06-rl-transition-v11"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v13"
+TRANSITION_SCHEMA = "th06-rl-transition-v13"
 EVENT_SCHEMA = "th06-rl-event-v1"
-ANCHOR_SCHEMA = "th06-rl-authoritative-anchor-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
 # Match one shard of burst tolerance.  A dense control root is bounded by 640
 # raw bullet tails plus occupied hazard-source records. 512 queued roots bound
 # memory while tolerating one transient UNC shard close/fsync without dropping
 # a physical trajectory; storage preflight remains authoritative for the
-# larger control-v5 records.
+# larger control-v7 records.
 DEFAULT_SHARD_RECORDS = 512
 DEFAULT_QUEUE_RECORDS = 512
 DEFAULT_MAX_RUN_BYTES = 512 * 1024 * 1024
@@ -77,7 +75,7 @@ class RunMetadata:
     character: int
     shot_type: int
     stage: int
-    planner: dict[str, object]
+    online_contract: dict[str, object]
     episode_unit: str = "practice-stage"
     expected_stages: tuple[int, ...] = ()
 
@@ -119,57 +117,37 @@ class DialogueDeliverySample:
 class FrameEvidence:
     phase_id: str
     current_action: str | None
-    # None means source-known unbounded clearance (native +infinity).
-    hard_actions: tuple[tuple[str, float | None, float, float], ...]
+    # None means no observed primitive bounded clearance (native +infinity).
+    shield_actions: tuple[tuple[str, float | None, float, float], ...]
     baseline_action: str | None
     locally_admissible_actions: tuple[str, ...]
     proposed_action: str | None
     published_action: str | None
     behavior_probability: float
+    behavior_probabilities: tuple[tuple[str, float], ...]
     policy_id: str | None
     policy_generation: int
     policy_sha256: str | None
-    effort_horizon: int
-    plan_min_clearance: float | None
-    cumulative_risk: float | None
-    terminal_x: float | None
-    terminal_y: float | None
-    endpoint_count: int
-    continuation_action_count: int
     capture_ms: float
     solve_ms: float
     reason: str
     capture_attempts: int = 1
     observation_gap: int = 1
     snapshot_tier: str = "authoritative-full"
-    phase_elapsed_frames: int = 0
     dialogue_delivery: tuple[DialogueDeliverySample, ...] = ()
-    observation_features: tuple[tuple[str, float], ...] = ()
-    action_features: tuple[
-        tuple[str, tuple[tuple[str, float], ...]], ...
-    ] = ()
-    hazard_primitives: tuple[tuple[float, ...], ...] = ()
-    history_features: tuple[tuple[str, float], ...] = ()
-    option: PolicyOptionTrace | None = None
-    # Exact native collision contract used for the recorded Hard set. A
-    # published control-v5 action always uses the fixed 0.35 margin.
-    hard_collision_margin: float | None = None
-    source_commitment: str = ""
-    source_coverage: int = 0
-    # Exact four-frame primitives handed to the native kernel. They are kept
-    # separately from capped learner features and can be replayed directly.
-    source_hard_aabb_frames: tuple[
+    # Exact observed-hazard shield contract used for this decision.  It does
+    # not claim coverage of future script births or mutations.
+    shield_collision_margin: float | None = None
+    shield_contract: str = ""
+    shield_horizon: int = 0
+    # Exact primitives handed to the native kernel. They are factual replay
+    # evidence, independent of any future learner representation.
+    shield_aabb_frames: tuple[
         tuple[tuple[float, float, float, float], ...], ...
     ] = ()
-    source_hard_laser_frames: tuple[
+    shield_laser_frames: tuple[
         tuple[tuple[float, float, float, float, float, float], ...], ...
     ] = ()
-    # Possible source callback branches relative to this factual root.  The
-    # hard primitives above already union their trajectories; retaining the
-    # event coordinates makes the union independently auditable offline.
-    source_bullet_stop_frames: tuple[int, ...] = ()
-    source_bullet_release_frames: tuple[int, ...] = ()
-
     def __post_init__(self) -> None:
         if not self.phase_id:
             raise ValueError("phase_id cannot be empty")
@@ -179,59 +157,51 @@ class FrameEvidence:
             self.published_action not in self.locally_admissible_actions
         ):
             raise ValueError("published action is outside the recorded local set")
-        if self.option is not None:
-            if self.policy_id not in (
-                "safe-option-exploration-v1",
-                "safe-option-exploration-v2",
-                "propensity-aware-option-exploration-v1",
-                "g7-qualified-candidate-v1",
-            ):
-                raise ValueError("option trace requires a declared behavior policy")
-            if self.proposed_action != self.option.intent:
-                raise ValueError("option intent disagrees with the proposed action")
-            expected = (
-                self.option.boundary_probability
-                if self.option.boundary else 1.0
+        probabilities = dict(self.behavior_probabilities)
+        if self.published_action is not None and (
+            set(probabilities) != set(self.locally_admissible_actions)
+            or any(
+                not math.isfinite(float(value)) or float(value) < 0.0
+                for value in probabilities.values()
             )
-            if not math.isclose(
+            or not math.isclose(
+                sum(map(float, probabilities.values())),
+                1.0,
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            )
+            or not math.isclose(
+                float(probabilities.get(self.published_action, -1.0)),
                 self.behavior_probability,
-                expected,
                 rel_tol=1e-12,
                 abs_tol=1e-12,
-            ):
-                raise ValueError("frame propensity disagrees with option trace")
+            )
+        ):
+            raise ValueError("published action lacks its complete behavior distribution")
         if any(
             (right.stage, right.game_frame) < (left.stage, left.game_frame)
             for left, right in zip(self.dialogue_delivery, self.dialogue_delivery[1:])
         ):
             raise ValueError("dialogue delivery samples must be frame ordered")
-        if self.hard_collision_margin is not None and (
-            not math.isfinite(self.hard_collision_margin)
-            or self.hard_collision_margin < 0.0
+        if self.shield_collision_margin is not None and (
+            not math.isfinite(self.shield_collision_margin)
+            or self.shield_collision_margin < 0.0
         ):
-            raise ValueError("Hard collision margin must be finite and nonnegative")
-        if self.source_coverage < 0:
-            raise ValueError("source coverage cannot be negative")
-        for label, frames in (
-            ("stop", self.source_bullet_stop_frames),
-            ("release", self.source_bullet_release_frames),
+            raise ValueError("shield collision margin must be finite and nonnegative")
+        if self.shield_horizon < 0:
+            raise ValueError("shield horizon cannot be negative")
+        if self.shield_contract and (
+            self.shield_horizon < 4
+            or len(self.shield_aabb_frames) < 4
+            or len(self.shield_laser_frames) < 4
         ):
-            if tuple(sorted(set(frames))) != frames:
-                raise ValueError(f"source bullet {label} frames must be sorted and unique")
-            if any(frame < 0 or frame >= self.source_coverage for frame in frames):
-                raise ValueError(f"source bullet {label} frame is outside source coverage")
-        if self.source_commitment == "source-complete-hard-v1" and (
-            self.source_coverage < 4
-            or len(self.source_hard_aabb_frames) < 4
-            or len(self.source_hard_laser_frames) < 4
-        ):
-            raise ValueError("source-complete Hard evidence must retain four frames")
+            raise ValueError("observed shield evidence must retain four frames")
         if (
-            self.snapshot_tier == "control-v5"
+            self.snapshot_tier == "control-v7"
             and self.published_action is not None
-            and self.source_commitment != "source-complete-hard-v1"
+            and self.shield_contract != "observed-hazard-kinematics-v1"
         ):
-            raise ValueError("control-v5 publication lacks source-complete Hard evidence")
+            raise ValueError("control-v7 publication lacks observed shield evidence")
 
 
 @dataclass(frozen=True)
@@ -242,15 +212,6 @@ class _Envelope:
     evidence: FrameEvidence
     scope: dict[str, object]
     episode_unit: str
-
-
-@dataclass(frozen=True)
-class _AnchorEnvelope:
-    sequence: int
-    snapshot: object
-    phase_id: str
-    reason: str
-    control_snapshot_ref: str | None
 
 
 def _jsonable(value: object) -> object:
@@ -647,20 +608,18 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         )
     )
     control_dead_end = after.evidence.reason in (
-        "control-dead-end:in-flight input unsafe",
-        "control-dead-end:Hard safe set empty",
-        "control-dead-end:local forecast has no safe continuation",
-        "authority-stop:in-flight input unsafe",
-        "authority-stop:Hard safe set empty",
-        "authority-stop:local forecast has no safe continuation",
+        "control-dead-end:in-flight input rejected by shield",
+        "control-dead-end:observed shield set empty",
+        "infrastructure-stop:in-flight input rejected by shield",
+        "infrastructure-stop:observed shield set empty",
     )
-    authority = (
-        after.evidence.reason.startswith("authority-stop:")
+    infrastructure_failed = (
+        after.evidence.reason.startswith("infrastructure-stop:")
         and not control_dead_end
         and after.evidence.reason
         not in (
-            "authority-stop:physical HIT",
-            "authority-stop:physical Bomb state/input",
+            "infrastructure-stop:physical HIT",
+            "infrastructure-stop:physical Bomb state/input",
         )
     )
     before_life = _boss_life(before.snapshot)
@@ -669,7 +628,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "life_lost": hit,
         "bomb_used": bomb,
         "control_dead_end": control_dead_end,
-        "authority_lost": authority,
+        "infrastructure_failed": infrastructure_failed,
         "elapsed_frames": max(0, after.snapshot.frame - before.snapshot.frame),
         "lives_delta": after.snapshot.lives_remaining - before.snapshot.lives_remaining,
         "power_delta": after.snapshot.current_power - before.snapshot.current_power,
@@ -680,8 +639,8 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "player_y_before": before.snapshot.y,
         "player_x_after": after.snapshot.x,
         "player_y_after": after.snapshot.y,
-        "hard_count_before": len(before.evidence.hard_actions),
-        "hard_count_after": len(after.evidence.hard_actions),
+        "shield_count_before": len(before.evidence.shield_actions),
+        "shield_count_after": len(after.evidence.shield_actions),
         "phase_changed": before.scope["key"] != after.scope["key"],
         "capture_ms_before": before.evidence.capture_ms,
         "capture_ms_after": after.evidence.capture_ms,
@@ -696,8 +655,8 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         if bomb
         else "control-dead-end"
         if control_dead_end
-        else "authority-lost"
-        if authority
+        else "infrastructure-failed"
+        if infrastructure_failed
         else None
     )
     learning_exclusions = []
@@ -711,19 +670,14 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
     # transition: the exact process cannot advance until the action is issued.
     # Keep latency as a separate online-deployment gate and use the factual
     # game-frame observation gap above for causal data admission.
-    if (
-        not before.evidence.observation_features
-        or not before.evidence.action_features
-    ):
-        learning_exclusions.append("learner-adapter-features-absent")
     if bomb:
         learning_exclusions.append("bomb")
-    if authority:
-        learning_exclusions.append("authority-loss")
+    if infrastructure_failed:
+        learning_exclusions.append("infrastructure-failure")
     commanded_action = before.evidence.published_action
     if commanded_action is None and before.evidence.reason in (
         "stale-retry",
-        "stale-retain-source-certified-current",
+        "stale-retain-observed-shield-current",
     ):
         # No new key was sent, so the already-observed physical input remains
         # commanded over this transition. Keep command, sampling, and physical
@@ -739,51 +693,6 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         and sampled_action is not None
     )
     executed_action = sampled_action if player_motion_witnessed else None
-    option = None
-    trace = before.evidence.option
-    if trace is not None:
-        termination = trace.termination_reason
-        after_trace = after.evidence.option
-        if hit:
-            termination = "physical-hit"
-        elif bomb:
-            termination = "bomb"
-        elif control_dead_end:
-            termination = "hard-empty"
-        elif authority:
-            termination = "authority-loss"
-        elif before.snapshot.stage != after.snapshot.stage:
-            termination = "stage-transition"
-        elif commanded_action != trace.intent:
-            termination = "publication-rejected"
-        elif termination is None and (
-            after_trace is None or after_trace.option_id != trace.option_id
-        ):
-            termination = (
-                after_trace.preceding_termination_reason
-                if after_trace is not None
-                else f"controller:{after.evidence.reason}"
-            )
-        option = {
-            "option_id": trace.option_id,
-            "boundary": trace.boundary,
-            "intent": trace.intent,
-            "boundary_probability": trace.boundary_probability,
-            "conditional_probability": before.evidence.behavior_probability,
-            "elapsed_frames_at_decision": trace.elapsed_frames,
-            "physical_elapsed_frames": outcome["elapsed_frames"],
-            "termination_reason": termination,
-            "preceding_termination_reason": trace.preceding_termination_reason,
-            "behavior_probabilities": [
-                [name, value] for name, value in trace.behavior_probabilities
-            ],
-            "information_weights": [
-                [name, value] for name, value in trace.information_weights
-            ],
-            "propensity_ess": [
-                [name, value] for name, value in trace.propensity_ess
-            ],
-        }
     return {
         "schema_version": TRANSITION_SCHEMA,
         "sequence": before.sequence,
@@ -802,33 +711,25 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "sampled_action": sampled_action,
         "executed_action": executed_action,
         "behavior_probability": before.evidence.behavior_probability,
+        "behavior_probabilities": _jsonable(
+            before.evidence.behavior_probabilities
+        ),
         "policy_id": before.evidence.policy_id,
-        "option": option,
         # This compact projection preserves the factual policy context for
         # replaceable offline learners without decoding the raw hazard root.
-        # Raw snapshots remain the learner-independent authority evidence.
+        # Raw snapshots remain learner-independent factual evidence.
         "policy_context": {
             "current_action": before.evidence.current_action,
-            "hard_admissible_actions": [
-                str(item[0]) for item in before.evidence.hard_actions
+            "shield_admissible_actions": [
+                str(item[0]) for item in before.evidence.shield_actions
             ],
-            "phase_elapsed_frames": before.evidence.phase_elapsed_frames,
             "player_x": before.snapshot.x,
             "player_y": before.snapshot.y,
             "power": before.snapshot.current_power,
             "bullet_count": before.snapshot.live_bullet_count,
             "laser_count": before.snapshot.laser_count,
-            "hard_action_count": len(before.evidence.hard_actions),
-            "hard_collision_margin": before.evidence.hard_collision_margin,
-            "effort_horizon": before.evidence.effort_horizon,
-            "observation_features": _jsonable(
-                before.evidence.observation_features
-            ),
-            "action_features": _jsonable(before.evidence.action_features),
-            "hazard_primitives": _jsonable(
-                before.evidence.hazard_primitives
-            ),
-            "history_features": _jsonable(before.evidence.history_features),
+            "shield_action_count": len(before.evidence.shield_actions),
+            "shield_collision_margin": before.evidence.shield_collision_margin,
         },
         "outcome_terms": outcome,
         "learning_eligible": not learning_exclusions,
@@ -844,9 +745,9 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             "done": False,
         },
         "boundary": {
-            "source_context_changed": outcome["phase_changed"],
-            "source_context": before.scope["key"],
-            "next_source_context": after.scope["key"],
+            "phase_changed": outcome["phase_changed"],
+            "phase": before.scope["key"],
+            "next_phase": after.scope["key"],
             "failure": failure,
         },
     }
@@ -897,7 +798,6 @@ class CorpusRecorder:
         self.episode_unit = metadata.episode_unit
         self.expected_stages = expected_stages
         self.sequence = 0
-        self.anchor_sequence = 0
         self.enqueued = 0
         self.written = 0
         self.dropped = 0
@@ -914,7 +814,7 @@ class CorpusRecorder:
             "control_dead_ends": 0,
             "learning_eligible_transitions": 0,
             "learning_eligible_elapsed_frames": 0,
-            "hard_sum": 0,
+            "shield_sum": 0,
             "published_actions": Counter(),
             "legal_opportunities": Counter(),
         })
@@ -924,7 +824,7 @@ class CorpusRecorder:
         self.dense_frames: list[tuple[int, int, int]] = []
         self.observation_gap_frames = 0
         self.over_budget_capture_frames = 0
-        self.queue: queue.Queue[_Envelope | _AnchorEnvelope | None] = queue.Queue(
+        self.queue: queue.Queue[_Envelope | None] = queue.Queue(
             queue_records
         )
         self.manifest_lock = threading.Lock()
@@ -953,7 +853,6 @@ class CorpusRecorder:
                 "frame": FRAME_SCHEMA,
                 "transition": TRANSITION_SCHEMA,
                 "event": EVENT_SCHEMA,
-                "anchor": ANCHOR_SCHEMA,
             },
             "storage": {
                 "compression": f"gzip-{self.compresslevel}",
@@ -1010,7 +909,7 @@ class CorpusRecorder:
         self.last_frame = frame if self.last_frame is None else max(self.last_frame, frame)
         phase = self.phase_metrics[str(envelope.scope["key"])]
         phase["frames"] += 1
-        phase["hard_sum"] += len(evidence.hard_actions)
+        phase["shield_sum"] += len(evidence.shield_actions)
         if evidence.published_action is not None:
             phase["published_actions"][evidence.published_action] += 1
         phase["legal_opportunities"].update(evidence.locally_admissible_actions)
@@ -1063,7 +962,7 @@ class CorpusRecorder:
                 "learning_eligible_elapsed_frames": int(
                     raw["learning_eligible_elapsed_frames"]
                 ),
-                "mean_hard_actions": raw["hard_sum"] / count if count else None,
+                "mean_shield_actions": raw["shield_sum"] / count if count else None,
                 "published_actions": dict(raw["published_actions"].most_common()),
                 "legal_opportunities": dict(
                     raw["legal_opportunities"].most_common()
@@ -1136,22 +1035,16 @@ class CorpusRecorder:
         self._raise_error()
         if snapshot.input_mask & BUTTON_BOMB:
             raise CorpusError("Bomb bit observed in corpus root")
-        if getattr(snapshot, "capture_tier", "") == "control-v5":
+        if getattr(snapshot, "capture_tier", "") == "control-v7":
             item_states = getattr(snapshot, "item_states", ())
             if (
                 getattr(snapshot, "factual_state_schema", "")
-                != "th06-1.02h-offline-facts-v2"
+                != "th06-1.02h-physical-facts-v1"
                 or getattr(snapshot, "player_attack", None) is None
                 or getattr(snapshot, "item_active_upper_bound", -1)
                 != len(item_states)
-                or getattr(snapshot, "effect_active_upper_bound", -1) < 0
-                or not getattr(snapshot, "ecl_ex_function_addresses", ())
-                or len(getattr(snapshot, "timeline_boss_slots", ())) != 8
-                or getattr(snapshot, "timeline_time_previous", None) is None
-                or getattr(snapshot, "boss_present", None) is None
-                or getattr(snapshot, "repeat_star_state", None) is None
             ):
-                raise CorpusError("control-v5 source/factual root is incomplete")
+                raise CorpusError("control-v7 factual root is incomplete")
         snapshot_id = f"{self.run_id}:{self.sequence:08d}:f{snapshot.frame}"
         envelope = _Envelope(
             self.sequence,
@@ -1174,40 +1067,6 @@ class CorpusRecorder:
         )
         return snapshot_id
 
-    def record_anchor(
-        self,
-        snapshot,
-        *,
-        phase_id: str,
-        reason: str,
-        control_snapshot_ref: str | None,
-    ) -> None:
-        """Queue one exhaustive source root outside the decision hot path."""
-        if self.closed:
-            raise CorpusError("corpus recorder is closed")
-        self._raise_error()
-        if snapshot.input_mask & BUTTON_BOMB:
-            raise CorpusError("Bomb bit observed in corpus anchor")
-        envelope = _AnchorEnvelope(
-            self.anchor_sequence,
-            snapshot,
-            phase_id,
-            reason,
-            control_snapshot_ref,
-        )
-        try:
-            self.queue.put_nowait(envelope)
-        except queue.Full as error:
-            self.dropped += 1
-            raise CorpusBackpressure(
-                "corpus queue full while retaining source anchor"
-            ) from error
-        self.anchor_sequence += 1
-        self.queue_high_watermark = max(
-            self.queue_high_watermark,
-            self.queue.qsize(),
-        )
-
     def _worker(self) -> None:
         writers = {
             stream: _ShardWriter(
@@ -1217,7 +1076,7 @@ class CorpusRecorder:
                 self._on_shard,
                 compresslevel=self.compresslevel,
             )
-            for stream in ("objects", "frames", "transitions", "events", "anchors")
+            for stream in ("objects", "frames", "transitions", "events")
         }
         objects = _ObjectStore(writers["objects"])
         previous: _Envelope | None = None
@@ -1228,19 +1087,6 @@ class CorpusRecorder:
                     self.queue.task_done()
                     break
                 try:
-                    if isinstance(envelope, _AnchorEnvelope):
-                        writers["anchors"].write({
-                            "schema_version": ANCHOR_SCHEMA,
-                            "sequence": envelope.sequence,
-                            "frame": envelope.snapshot.frame,
-                            "scope": _scope(envelope.snapshot, envelope.phase_id),
-                            "reason": envelope.reason,
-                            "control_snapshot_ref": envelope.control_snapshot_ref,
-                            "snapshot": _serialize_snapshot(
-                                envelope.snapshot, objects
-                            ),
-                        }, envelope.sequence)
-                        continue
                     writers["frames"].write({
                         "schema_version": FRAME_SCHEMA,
                         "sequence": envelope.sequence,

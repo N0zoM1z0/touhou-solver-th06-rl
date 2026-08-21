@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import Any
 
 
-DIGEST_SCHEMA = "th06-rl-normalized-factual-digest-v1"
-STREAMS = ("objects", "anchors", "frames", "transitions", "events")
+DIGEST_SCHEMA = "th06-rl-normalized-factual-digest-v2"
+STREAMS = ("objects", "frames", "transitions", "events")
 _RUN_REFERENCE_KEYS = frozenset({
-    "id", "run_id", "snapshot_ref", "next_snapshot_ref", "control_snapshot_ref",
+    "id", "run_id", "snapshot_ref", "next_snapshot_ref",
 })
 _DROP = object()
 

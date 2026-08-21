@@ -15,13 +15,11 @@ from th06_rl.corpus import (
     RunMetadata,
     expand_compact,
 )
-from th06_rl.policy_api import PolicyOptionTrace
 from th06_rl.retail import native
 from th06_rl.retail.model import (
     Bullet,
     ItemState,
     PlayerAttackState,
-    RepeatStarState,
     Snapshot,
 )
 from th06_rl.th06.control_capture import (
@@ -31,7 +29,6 @@ from th06_rl.th06.control_capture import (
     ControlSnapshot,
     decode_control_snapshot,
 )
-from th06_rl.th06.source import automatic_source_context
 
 
 def _packed_control_bullet(
@@ -64,7 +61,7 @@ def test_manifest_distinguishes_storage_from_complete_stage(tmp_path) -> None:
             character=0,
             shot_type=0,
             stage=4,
-            planner={},
+            online_contract={},
         ),
     )
     outcome = {
@@ -167,22 +164,16 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     recorder.record(snapshot, FrameEvidence(
         phase_id="timeline:test",
         current_action="stay",
-        hard_actions=(("stay", 10.0, 192.0, 400.0),),
+        shield_actions=(("stay", 10.0, 192.0, 400.0),),
         baseline_action="stay",
         locally_admissible_actions=("stay",),
         proposed_action="stay",
         published_action="stay",
         behavior_probability=1.0,
+        behavior_probabilities=(("stay", 1.0),),
         policy_id="test",
         policy_generation=1,
         policy_sha256="abc",
-        effort_horizon=4,
-        plan_min_clearance=10.0,
-        cumulative_risk=None,
-        terminal_x=192.0,
-        terminal_y=400.0,
-        endpoint_count=1,
-        continuation_action_count=1,
         capture_ms=1.0,
         solve_ms=0.1,
         reason="ok",
@@ -226,9 +217,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
-    assert frame["schema_version"] == "th06-rl-authoritative-frame-v11"
-    assert frame["decision"]["source_bullet_stop_frames"] == []
-    assert frame["decision"]["source_bullet_release_frames"] == []
+    assert frame["schema_version"] == "th06-rl-authoritative-frame-v13"
     assert frame["decision"]["dialogue_delivery"] == [
         {
             "stage": 1,
@@ -295,22 +284,16 @@ def test_dialogue_delivery_rejects_bomb_and_out_of_order_samples() -> None:
         FrameEvidence(
             phase_id="timeline:test",
             current_action="stay",
-            hard_actions=(("stay", 10.0, 192.0, 400.0),),
+            shield_actions=(("stay", 10.0, 192.0, 400.0),),
             baseline_action="stay",
             locally_admissible_actions=("stay",),
             proposed_action="stay",
             published_action="stay",
             behavior_probability=1.0,
+            behavior_probabilities=(("stay", 1.0),),
             policy_id="test",
             policy_generation=1,
             policy_sha256="abc",
-            effort_horizon=4,
-            plan_min_clearance=10.0,
-            cumulative_risk=None,
-            terminal_x=192.0,
-            terminal_y=400.0,
-            endpoint_count=1,
-            continuation_action_count=1,
             capture_ms=1.0,
             solve_ms=0.1,
             reason="ok",
@@ -321,22 +304,16 @@ def test_dialogue_delivery_rejects_bomb_and_out_of_order_samples() -> None:
     FrameEvidence(
         phase_id="timeline:test",
         current_action="stay",
-        hard_actions=(("stay", 10.0, 192.0, 400.0),),
+        shield_actions=(("stay", 10.0, 192.0, 400.0),),
         baseline_action="stay",
         locally_admissible_actions=("stay",),
         proposed_action="stay",
         published_action="stay",
         behavior_probability=1.0,
+        behavior_probabilities=(("stay", 1.0),),
         policy_id="test",
         policy_generation=1,
         policy_sha256="abc",
-        effort_horizon=4,
-        plan_min_clearance=10.0,
-        cumulative_risk=None,
-        terminal_x=192.0,
-        terminal_y=400.0,
-        endpoint_count=1,
-        continuation_action_count=1,
         capture_ms=1.0,
         solve_ms=0.1,
         reason="ok",
@@ -344,7 +321,7 @@ def test_dialogue_delivery_rejects_bomb_and_out_of_order_samples() -> None:
     )
 
 
-def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) -> None:
+def test_control_frames_exclude_latency_gaps_without_source_anchors(tmp_path) -> None:
     recorder = CorpusRecorder(
         tmp_path,
         RunMetadata("test", "exe", "native", "test", 3, 0, 0, 4, {}),
@@ -398,77 +375,26 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     evidence = FrameEvidence(
         phase_id=control.source_context,
         current_action="stay",
-        hard_actions=(("stay", 10.0, 192.0, 400.0),),
+        shield_actions=(("stay", 10.0, 192.0, 400.0),),
         baseline_action="stay",
         locally_admissible_actions=("stay",),
         proposed_action="stay",
         published_action=None,
         behavior_probability=1.0,
-        policy_id="safe-option-exploration-v1",
+        behavior_probabilities=(),
+        policy_id="runtime-smoke-reactive-baseline-v1",
         policy_generation=1,
         policy_sha256="abc",
-        effort_horizon=4,
-        plan_min_clearance=10.0,
-        cumulative_risk=None,
-        terminal_x=192.0,
-        terminal_y=400.0,
-        endpoint_count=1,
-        continuation_action_count=1,
         capture_ms=2.0,
         solve_ms=0.1,
         reason="stale-retry",
         snapshot_tier="control-v2",
-        option=PolicyOptionTrace(
-            option_id="option-1",
-            intent="stay",
-            boundary=True,
-            boundary_probability=1.0,
-            elapsed_frames=1,
-        ),
-        hard_collision_margin=0.0,
+        shield_collision_margin=0.0,
     )
-    root_ref = recorder.record(control, evidence)
-    recorder.record_anchor(
-        Snapshot(
-            frame=20,
-            stage=4,
-            player_state=0,
-            x=192.0,
-            y=400.0,
-            half_width=1.5,
-            half_height=1.5,
-            normal_speed=4.0,
-            focus_speed=2.0,
-            normal_diagonal_speed=2.8,
-            focus_diagonal_speed=1.4,
-            frame_multiplier=1.0,
-            input_mask=1,
-            bullets=(),
-            laser_count=0,
-            in_menu=False,
-            time_stopped=False,
-            replay_or_demo=False,
-            difficulty=3,
-            character=0,
-        ),
-        phase_id=control.source_context,
-        reason="stage-root",
-        control_snapshot_ref=root_ref,
-    )
+    recorder.record(control, evidence)
     recorder.record(
         replace(control, frame=22),
-        replace(
-            evidence,
-            observation_gap=2,
-            option=PolicyOptionTrace(
-                option_id="option-2",
-                intent="stay",
-                boundary=True,
-                boundary_probability=1.0,
-                elapsed_frames=1,
-                preceding_termination_reason="observation-gap",
-            ),
-        ),
+        replace(evidence, observation_gap=2),
     )
     run_dir = recorder.close({"stage_completed": True})
     manifest = json.loads((run_dir / "manifest.json").read_text())
@@ -479,14 +405,12 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
     for shard in manifest["shards"]:
         payload = (run_dir / shard["path"]).read_bytes()
         assert hashlib.sha256(payload).hexdigest() == shard["sha256"]
-    assert manifest["records"]["anchors"] == 1
     assert manifest["summary"]["observation_gap_rate"] == 0.5
     assert manifest["summary"]["dense_frame_samples"][0] == {
         "bullets": 1,
         "sequence": 1,
         "frame": 22,
     }
-    assert automatic_source_context(control) == control.source_context
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
@@ -497,7 +421,7 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
                 row = json.loads(line)
                 objects[row["object_id"]] = row["payload"]
     hydrated = expand_compact(frame["snapshot"], objects)
-    assert frame["decision"]["hard_collision_margin"] == 0.0
+    assert frame["decision"]["shield_collision_margin"] == 0.0
     assert hydrated["bullets"] == []
     assert hydrated["raw_bullet_tails"] == _packed_control_bullet()
     decoded = decode_control_snapshot(hydrated)
@@ -520,49 +444,30 @@ def test_control_frames_exclude_latency_gaps_and_retain_full_anchor(tmp_path) ->
         "done": False,
     }
     assert transition["boundary"] == {
-        "source_context_changed": False,
-        "source_context": "3/0/0/4/timeline:before-t100:op0:arg7",
-        "next_source_context": "3/0/0/4/timeline:before-t100:op0:arg7",
+        "phase_changed": False,
+        "phase": "3/0/0/4/timeline:before-t100:op0:arg7",
+        "next_phase": "3/0/0/4/timeline:before-t100:op0:arg7",
         "failure": None,
     }
     assert transition["policy_context"] == {
-        "action_features": [],
         "current_action": "stay",
-        "effort_horizon": 4,
-        "hard_admissible_actions": ["stay"],
-        "phase_elapsed_frames": 0,
+        "shield_admissible_actions": ["stay"],
         "player_x": 192.0,
         "player_y": 400.0,
         "power": 64,
         "bullet_count": 1,
         "laser_count": 0,
-        "observation_features": [],
-        "hazard_primitives": [],
-        "history_features": [],
-        "hard_action_count": 1,
-        "hard_collision_margin": 0.0,
+        "shield_action_count": 1,
+        "shield_collision_margin": 0.0,
     }
-    assert transition["policy_id"] == "safe-option-exploration-v1"
+    assert transition["policy_id"] == "runtime-smoke-reactive-baseline-v1"
+    assert transition["behavior_probabilities"] == []
     assert transition["commanded_action"] == "stay"
     assert transition["sampled_action"] == "stay"
     assert transition["executed_action"] is None
-    assert transition["option"] == {
-        "option_id": "option-1",
-        "boundary": True,
-        "intent": "stay",
-        "boundary_probability": 1.0,
-        "conditional_probability": 1.0,
-        "elapsed_frames_at_decision": 1,
-        "physical_elapsed_frames": 2,
-            "termination_reason": "observation-gap",
-            "preceding_termination_reason": None,
-            "behavior_probabilities": [],
-            "information_weights": [],
-            "propensity_ess": [],
-        }
 
 
-def test_control_v5_retains_hazard_source_records() -> None:
+def test_control_v7_retains_comprehensive_physical_facts() -> None:
     tail_size = (
         native.ENEMY_MANAGER_SIZE
         - native.ENEMY_ARRAY_OFFSET
@@ -646,15 +551,6 @@ def test_control_v5_retains_hazard_source_records() -> None:
         score=123456,
         graze_in_stage=7,
         enemy_sprite_dimensions=((0x234567, 32.0, 48.0),),
-        ecl_ex_function_addresses=tuple(
-            0x401000 + index * 4 for index in range(native.ECL_EX_COUNT)
-        ),
-        timeline_boss_slots=(-1,) * 8,
-        timeline_time_previous=0,
-        boss_present=False,
-        repeat_star_state=RepeatStarState(
-            (0.0,) * 6, 192.0, 128.0, 192.0, 400.0
-        ),
     )
 
     decoded = decode_control_snapshot({
@@ -673,18 +569,17 @@ def test_control_v5_retains_hazard_source_records() -> None:
     assert decoded.score == 123456
     assert decoded.graze_in_stage == 7
     assert decoded.enemy_sprite_dimensions == ((0x234567, 32.0, 48.0),)
-    assert decoded.repeat_star_state == base.repeat_star_state
 
     incomplete = replace(base, enemy_sprite_dimensions=())
-    with pytest.raises(ValueError, match="control-v5 source/factual"):
+    with pytest.raises(ValueError, match="control-v7 factual"):
         decode_control_snapshot({
             field.name: getattr(incomplete, field.name)
             for field in __import__("dataclasses").fields(incomplete)
         })
 
-    missing_star_state = replace(base, repeat_star_state=None)
-    with pytest.raises(ValueError, match="control-v5 source/factual"):
+    missing_player_attack = replace(base, player_attack=None)
+    with pytest.raises(ValueError, match="control-v7 factual"):
         decode_control_snapshot({
-            field.name: getattr(missing_star_state, field.name)
-            for field in __import__("dataclasses").fields(missing_star_state)
+            field.name: getattr(missing_player_attack, field.name)
+            for field in __import__("dataclasses").fields(missing_player_attack)
         })

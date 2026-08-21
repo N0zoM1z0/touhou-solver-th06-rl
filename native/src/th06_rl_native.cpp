@@ -5,10 +5,6 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <map>
-#include <numbers>
-#include <set>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -295,76 +291,6 @@ HazardSample sample_hazards(
     return HazardSample{result.collisions, clearance};
 }
 
-struct PlayerAimedBulletState {
-    Th06RlPlayerAimedBullet source;
-    bool has_turned{false};
-};
-
-HazardSample advance_and_sample_player_aimed(
-    std::vector<PlayerAimedBulletState>& bullets,
-    Position player,
-    float player_half_width,
-    float player_half_height,
-    float collision_margin) {
-    HazardAccumulator result;
-    for (auto& state : bullets) {
-        auto& bullet = state.source;
-        if (!state.has_turned) {
-            const auto threshold = bullet.direction_interval
-                * (bullet.direction_num_times + 1);
-            if (bullet.timer >= threshold) {
-                bullet.direction_num_times++;
-                const float relative_x = player.x - bullet.x;
-                const float relative_y = player.y - bullet.y;
-                const float target_angle = (
-                    relative_x == 0.0f && relative_y == 0.0f)
-                    ? static_cast<float>(std::numbers::pi / 2.0)
-                    : std::atan2(relative_y, relative_x);
-                bullet.angle = target_angle + bullet.direction_rotation;
-                bullet.speed = bullet.turn_speed;
-                bullet.vx = std::cos(bullet.angle) * bullet.speed;
-                bullet.vy = std::sin(bullet.angle) * bullet.speed;
-                state.has_turned = true;
-            } else {
-                const float step_speed = bullet.speed
-                    - ((bullet.timer_float
-                        - static_cast<float>(
-                            bullet.direction_interval
-                            * bullet.direction_num_times))
-                        * bullet.speed)
-                        / static_cast<float>(bullet.direction_interval);
-                bullet.vx = std::cos(bullet.angle) * step_speed;
-                bullet.vy = std::sin(bullet.angle) * step_speed;
-            }
-        }
-        bullet.x += bullet.vx;
-        bullet.y += bullet.vy;
-        bullet.timer++;
-        bullet.timer_float += 1.0f;
-        accumulate_aabb(
-            player.x,
-            player.y,
-            player_half_width,
-            player_half_height,
-            Th06RlAabb{
-                bullet.x - bullet.half_width,
-                bullet.y - bullet.half_height,
-                bullet.x + bullet.half_width,
-                bullet.y + bullet.half_height,
-            },
-            collision_margin,
-            result);
-    }
-    const float clearance = std::isfinite(result.overlap_clearance)
-        ? result.overlap_clearance
-        : (
-            std::isfinite(result.minimum_distance_squared)
-                ? std::hypot(result.minimum_gap_x, result.minimum_gap_y)
-                : std::numeric_limits<float>::infinity()
-        );
-    return HazardSample{result.collisions, clearance};
-}
-
 std::vector<LaserBasis> prepare_laser_bases(
     std::int32_t horizon,
     const std::uint32_t* laser_offsets,
@@ -379,81 +305,6 @@ std::vector<LaserBasis> prepare_laser_bases(
         });
     }
     return bases;
-}
-
-bool opposed(std::int32_t first_index, std::int32_t second_index) {
-    const auto first = kActions[static_cast<std::size_t>(first_index)];
-    const auto second = kActions[static_cast<std::size_t>(second_index)];
-    return (first.dx != 0 || first.dy != 0)
-        && first.dx == -second.dx
-        && first.dy == -second.dy;
-}
-
-float boundary_deficit(Position position, float reserve) {
-    return std::max(reserve - (position.x - kLeft), 0.0f)
-        + std::max(reserve - (kRight - position.x), 0.0f)
-        + std::max(reserve - (position.y - kTop), 0.0f)
-        + std::max(reserve - (kBottom - position.y), 0.0f);
-}
-
-struct Node {
-    Position position;
-    std::int32_t first_action;
-    std::int32_t last_action;
-    float min_clearance;
-    float risk;
-    std::int32_t direction_switches;
-    std::int32_t reversals;
-};
-
-using NodeKey = std::tuple<
-    float, float, float, std::int32_t, std::int32_t, float,
-    std::int32_t, std::int32_t>;
-
-NodeKey node_key(
-    const Node& node,
-    float comfort_clearance,
-    float boundary_reserve) {
-    return {
-        std::max(comfort_clearance - node.min_clearance, 0.0f),
-        boundary_deficit(node.position, boundary_reserve),
-        node.risk,
-        node.reversals,
-        node.direction_switches,
-        -node.min_clearance,
-        node.first_action,
-        node.last_action,
-    };
-}
-
-struct ActionEvaluation {
-    std::int32_t action;
-    const Node* best;
-    float min_clearance;
-    float boundary;
-    std::int32_t endpoints;
-    std::int32_t continuation_actions;
-};
-
-using EvaluationKey = std::tuple<
-    float, float, std::int32_t, std::int32_t, float,
-    std::int32_t, std::int32_t, float, std::int32_t>;
-
-EvaluationKey evaluation_key(
-    const ActionEvaluation& value,
-    std::int32_t current_action,
-    float comfort_clearance) {
-    return {
-        std::max(comfort_clearance - value.min_clearance, 0.0f),
-        value.boundary,
-        -value.continuation_actions,
-        -value.endpoints,
-        value.best->risk,
-        static_cast<std::int32_t>(opposed(value.action, current_action)),
-        static_cast<std::int32_t>(value.action != current_action),
-        -value.min_clearance,
-        value.action,
-    };
 }
 
 bool valid_common_inputs(
@@ -476,37 +327,6 @@ bool valid_common_inputs(
         && laser_offsets != nullptr;
 }
 
-bool valid_player_aimed_bullets(
-    const Th06RlPlayerAimedBullet* bullets,
-    std::int32_t count) {
-    if (count < 0 || (count > 0 && bullets == nullptr)) return false;
-    for (std::int32_t index = 0; index < count; ++index) {
-        const auto& bullet = bullets[index];
-        if (!std::isfinite(bullet.x)
-            || !std::isfinite(bullet.y)
-            || !std::isfinite(bullet.vx)
-            || !std::isfinite(bullet.vy)
-            || !std::isfinite(bullet.half_width)
-            || !std::isfinite(bullet.half_height)
-            || !std::isfinite(bullet.speed)
-            || !std::isfinite(bullet.angle)
-            || !std::isfinite(bullet.turn_speed)
-            || !std::isfinite(bullet.direction_rotation)
-            || !std::isfinite(bullet.timer_float)
-            || bullet.half_width <= 0.0f
-            || bullet.half_height <= 0.0f
-            || bullet.timer < 0
-            || bullet.direction_interval < 0
-            || bullet.direction_num_times < 0
-            || bullet.direction_max_times <= 0
-            || bullet.direction_num_times >= bullet.direction_max_times
-            || bullet.direction_num_times + 1 < bullet.direction_max_times) {
-            return false;
-        }
-    }
-    return true;
-}
-
 int certify_actions_impl(
     float player_x,
     float player_y,
@@ -525,8 +345,6 @@ int certify_actions_impl(
     const Th06RlAabb* aabbs,
     const std::uint32_t* laser_frame_offsets,
     const Th06RlLaserRect* lasers,
-    const Th06RlPlayerAimedBullet* aimed_bullets,
-    std::int32_t aimed_bullet_count,
     float collision_margin,
     std::uint32_t* safe_mask,
     float* action_min_clearance,
@@ -545,8 +363,6 @@ int certify_actions_impl(
             horizon,
             aabb_frame_offsets,
             laser_frame_offsets)
-        || !valid_player_aimed_bullets(aimed_bullets, aimed_bullet_count)
-        || (aimed_bullet_count > 0 && horizon > 4)
         || delivery_delays == nullptr
         || delivery_delay_count <= 0
         || safe_mask == nullptr
@@ -589,15 +405,6 @@ int certify_actions_impl(
             }
             for (const auto prefix : prefixes) {
                 Position position{player_x, player_y};
-                std::vector<PlayerAimedBulletState> scenario_bullets;
-                scenario_bullets.reserve(
-                    static_cast<std::size_t>(aimed_bullet_count));
-                for (std::int32_t index = 0;
-                     index < aimed_bullet_count;
-                     ++index) {
-                    scenario_bullets.push_back(
-                        PlayerAimedBulletState{aimed_bullets[index], false});
-                }
                 for (std::int32_t frame = 1; frame <= horizon; ++frame) {
                     std::int32_t applied = action;
                     if (prefix >= 0 && frame == delay) {
@@ -613,16 +420,8 @@ int certify_actions_impl(
                         player_half_width,
                         player_half_height,
                         collision_margin);
-                    const auto aimed = advance_and_sample_player_aimed(
-                        scenario_bullets,
-                        position,
-                        player_half_width,
-                        player_half_height,
-                        collision_margin);
-                    minimum = std::min(
-                        minimum,
-                        std::min(common.clearance, aimed.clearance));
-                    if (common.collisions + aimed.collisions > 0) {
+                    minimum = std::min(minimum, common.clearance);
+                    if (common.collisions > 0) {
                         valid = false;
                         break;
                     }
@@ -683,404 +482,8 @@ extern "C" int th06_rl_certify_actions_v1(
         aabbs,
         laser_frame_offsets,
         lasers,
-        nullptr,
-        0,
         collision_margin,
         safe_mask,
         action_min_clearance,
         action_final_xy);
-}
-
-extern "C" int th06_rl_certify_actions_aimed_v1(
-    float player_x,
-    float player_y,
-    float player_half_width,
-    float player_half_height,
-    float normal_speed,
-    float focus_speed,
-    float normal_diagonal_speed,
-    float focus_diagonal_speed,
-    std::int32_t current_action,
-    std::int32_t horizon,
-    const std::int32_t* delivery_delays,
-    std::int32_t delivery_delay_count,
-    std::uint32_t candidate_mask,
-    const std::uint32_t* aabb_frame_offsets,
-    const Th06RlAabb* aabbs,
-    const std::uint32_t* laser_frame_offsets,
-    const Th06RlLaserRect* lasers,
-    const Th06RlPlayerAimedBullet* aimed_bullets,
-    std::int32_t aimed_bullet_count,
-    float collision_margin,
-    std::uint32_t* safe_mask,
-    float* action_min_clearance,
-    float* action_final_xy) {
-    return certify_actions_impl(
-        player_x,
-        player_y,
-        player_half_width,
-        player_half_height,
-        normal_speed,
-        focus_speed,
-        normal_diagonal_speed,
-        focus_diagonal_speed,
-        current_action,
-        horizon,
-        delivery_delays,
-        delivery_delay_count,
-        candidate_mask,
-        aabb_frame_offsets,
-        aabbs,
-        laser_frame_offsets,
-        lasers,
-        aimed_bullets,
-        aimed_bullet_count,
-        collision_margin,
-        safe_mask,
-        action_min_clearance,
-        action_final_xy);
-}
-
-extern "C" int th06_rl_profile_actions_v1(
-    float player_x,
-    float player_y,
-    float player_half_width,
-    float player_half_height,
-    float normal_speed,
-    float focus_speed,
-    float normal_diagonal_speed,
-    float focus_diagonal_speed,
-    std::int32_t current_action,
-    std::int32_t horizon,
-    const std::int32_t* delivery_delays,
-    std::int32_t delivery_delay_count,
-    std::uint32_t candidate_mask,
-    const std::uint32_t* aabb_frame_offsets,
-    const Th06RlAabb* aabbs,
-    const std::uint32_t* laser_frame_offsets,
-    const Th06RlLaserRect* lasers,
-    float collision_margin,
-    const std::int32_t* checkpoints,
-    std::int32_t checkpoint_count,
-    float* action_checkpoint_min_clearance) {
-    const Kinematics kinematics{
-        normal_speed,
-        focus_speed,
-        normal_diagonal_speed,
-        focus_diagonal_speed,
-    };
-    if (!valid_common_inputs(
-            player_half_width,
-            player_half_height,
-            kinematics,
-            current_action,
-            horizon,
-            aabb_frame_offsets,
-            laser_frame_offsets)
-        || delivery_delays == nullptr
-        || delivery_delay_count <= 0
-        || checkpoints == nullptr
-        || checkpoint_count <= 0
-        || action_checkpoint_min_clearance == nullptr) {
-        return 2;
-    }
-    for (std::int32_t index = 0; index < checkpoint_count; ++index) {
-        if (checkpoints[index] <= 0
-            || checkpoints[index] > horizon
-            || (index > 0 && checkpoints[index] <= checkpoints[index - 1])) {
-            return 2;
-        }
-    }
-    const auto laser_bases = prepare_laser_bases(
-        horizon,
-        laser_frame_offsets,
-        lasers);
-    const HazardView hazards{
-        horizon,
-        aabb_frame_offsets,
-        aabbs,
-        laser_frame_offsets,
-        lasers,
-        laser_bases.data(),
-    };
-    for (std::int32_t action = 0; action < kActionCount; ++action) {
-        for (std::int32_t checkpoint = 0;
-             checkpoint < checkpoint_count;
-             ++checkpoint) {
-            action_checkpoint_min_clearance[action * checkpoint_count + checkpoint]
-                = -std::numeric_limits<float>::infinity();
-        }
-        if ((candidate_mask & (1u << action)) == 0) continue;
-        for (std::int32_t checkpoint = 0;
-             checkpoint < checkpoint_count;
-             ++checkpoint) {
-            action_checkpoint_min_clearance[action * checkpoint_count + checkpoint]
-                = std::numeric_limits<float>::infinity();
-        }
-        for (std::int32_t delay_index = 0;
-             delay_index < delivery_delay_count;
-             ++delay_index) {
-            const auto delay = delivery_delays[delay_index];
-            if (delay < 0 || delay > horizon) return 2;
-            std::vector<std::int32_t> prefixes{-1};
-            if (delay > 0) {
-                const auto transition = transition_prefix_actions(
-                    current_action,
-                    action);
-                prefixes.insert(
-                    prefixes.end(), transition.begin(), transition.end());
-            }
-            for (const auto prefix : prefixes) {
-                Position position{player_x, player_y};
-                float running_minimum = std::numeric_limits<float>::infinity();
-                std::int32_t checkpoint_index = 0;
-                for (std::int32_t frame = 1; frame <= horizon; ++frame) {
-                    std::int32_t applied = action;
-                    if (prefix >= 0 && frame == delay) {
-                        applied = prefix;
-                    } else if (frame < delay || (prefix < 0 && frame <= delay)) {
-                        applied = current_action;
-                    }
-                    position = advance(position, applied, kinematics);
-                    const auto sample = sample_hazards(
-                        hazards,
-                        frame,
-                        position,
-                        player_half_width,
-                        player_half_height,
-                        collision_margin);
-                    running_minimum = std::min(running_minimum, sample.clearance);
-                    if (checkpoint_index < checkpoint_count
-                        && frame == checkpoints[checkpoint_index]) {
-                        auto& output = action_checkpoint_min_clearance[
-                            action * checkpoint_count + checkpoint_index];
-                        output = std::min(output, running_minimum);
-                        ++checkpoint_index;
-                    }
-                }
-            }
-        }
-    }
-    return 0;
-}
-
-extern "C" int th06_rl_local_plan_v1(
-    float player_x,
-    float player_y,
-    float player_half_width,
-    float player_half_height,
-    float normal_speed,
-    float focus_speed,
-    float normal_diagonal_speed,
-    float focus_diagonal_speed,
-    std::int32_t current_action,
-    std::int32_t horizon,
-    std::int32_t control_delay,
-    std::int32_t action_hold_frames,
-    std::int32_t beam_width,
-    float position_quantization,
-    float comfort_clearance,
-    float boundary_reserve,
-    float risk_scale,
-    float direction_switch_cost,
-    float direction_reverse_cost,
-    float focus_switch_cost,
-    float collision_margin,
-    std::uint32_t hard_first_action_mask,
-    std::uint32_t continuation_action_mask,
-    const float* hard_min_clearance,
-    const std::uint32_t* aabb_frame_offsets,
-    const Th06RlAabb* aabbs,
-    const std::uint32_t* laser_frame_offsets,
-    const Th06RlLaserRect* lasers,
-    Th06RlPlanResult* result) {
-    const Kinematics kinematics{
-        normal_speed,
-        focus_speed,
-        normal_diagonal_speed,
-        focus_diagonal_speed,
-    };
-    if (!valid_common_inputs(
-            player_half_width,
-            player_half_height,
-            kinematics,
-            current_action,
-            horizon,
-            aabb_frame_offsets,
-            laser_frame_offsets)
-        || control_delay < 0
-        || control_delay >= horizon
-        || action_hold_frames <= 0
-        || beam_width <= 0
-        || position_quantization <= 0.0f
-        || comfort_clearance <= 0.0f
-        || boundary_reserve <= 0.0f
-        || risk_scale <= 0.0f
-        || hard_first_action_mask == 0
-        || continuation_action_mask == 0
-        || hard_min_clearance == nullptr
-        || result == nullptr) {
-        return 2;
-    }
-    *result = Th06RlPlanResult{
-        -1, 0, 0, -std::numeric_limits<float>::infinity(),
-        std::numeric_limits<float>::infinity(), player_x, player_y,
-        std::numeric_limits<float>::infinity(), 0, 0,
-    };
-    const auto laser_bases = prepare_laser_bases(
-        horizon,
-        laser_frame_offsets,
-        lasers);
-    const HazardView hazards{
-        horizon,
-        aabb_frame_offsets,
-        aabbs,
-        laser_frame_offsets,
-        lasers,
-        laser_bases.data(),
-    };
-    std::vector<Node> beam;
-    for (std::int32_t action = 0; action < kActionCount; ++action) {
-        if ((hard_first_action_mask & (1u << action)) == 0) continue;
-        beam.push_back(Node{
-            {player_x, player_y},
-            action,
-            current_action,
-            hard_min_clearance[action],
-            0.0f,
-            0,
-            0,
-        });
-    }
-    std::vector<Node> last_complete;
-    std::int32_t effort_horizon = 0;
-    using DedupKey = std::tuple<long, long, std::int32_t, std::int32_t>;
-    for (std::int32_t frame = 1; frame <= horizon; ++frame) {
-        std::map<DedupKey, Node> deduplicated;
-        for (const auto& node : beam) {
-            std::vector<std::int32_t> choices;
-            if (frame <= control_delay) {
-                choices.push_back(current_action);
-            } else if (frame == control_delay + 1) {
-                choices.push_back(node.first_action);
-            } else if ((frame - control_delay - 1) % action_hold_frames == 0) {
-                for (std::int32_t action = 0; action < kActionCount; ++action) {
-                    if ((continuation_action_mask & (1u << action)) != 0) {
-                        choices.push_back(action);
-                    }
-                }
-            } else {
-                choices.push_back(node.last_action);
-            }
-            for (const auto action : choices) {
-                const auto position = advance(node.position, action, kinematics);
-                const auto sample = sample_hazards(
-                    hazards,
-                    frame,
-                    position,
-                    player_half_width,
-                    player_half_height,
-                    collision_margin);
-                if (sample.collisions > 0) continue;
-                const bool changed = action != node.last_action;
-                const bool reversed = opposed(action, node.last_action);
-                float transition_risk = std::isfinite(sample.clearance)
-                    ? std::exp(-std::max(sample.clearance, 0.0f) / risk_scale)
-                    : 0.0f;
-                if (changed) transition_risk += direction_switch_cost;
-                if (reversed) transition_risk += direction_reverse_cost;
-                if (kActions[static_cast<std::size_t>(action)].focused
-                    != kActions[static_cast<std::size_t>(node.last_action)].focused) {
-                    transition_risk += focus_switch_cost;
-                }
-                Node candidate{
-                    position,
-                    node.first_action,
-                    action,
-                    std::min(node.min_clearance, sample.clearance),
-                    node.risk + transition_risk,
-                    node.direction_switches + static_cast<std::int32_t>(changed),
-                    node.reversals + static_cast<std::int32_t>(reversed),
-                };
-                const DedupKey key{
-                    std::lround(position.x / position_quantization),
-                    std::lround(position.y / position_quantization),
-                    candidate.first_action,
-                    candidate.last_action,
-                };
-                const auto retained = deduplicated.find(key);
-                if (retained == deduplicated.end()
-                    || node_key(candidate, comfort_clearance, boundary_reserve)
-                        < node_key(retained->second, comfort_clearance, boundary_reserve)) {
-                    deduplicated.insert_or_assign(key, candidate);
-                }
-            }
-        }
-        if (deduplicated.empty()) break;
-        std::vector<Node> expanded;
-        expanded.reserve(deduplicated.size());
-        for (const auto& [key, node] : deduplicated) {
-            static_cast<void>(key);
-            expanded.push_back(node);
-        }
-        std::sort(expanded.begin(), expanded.end(), [&](const Node& left, const Node& right) {
-            return node_key(left, comfort_clearance, boundary_reserve)
-                < node_key(right, comfort_clearance, boundary_reserve);
-        });
-        if (expanded.size() > static_cast<std::size_t>(beam_width)) {
-            expanded.resize(static_cast<std::size_t>(beam_width));
-        }
-        beam = std::move(expanded);
-        last_complete = beam;
-        effort_horizon = frame;
-    }
-    if (last_complete.empty()) return 1;
-
-    std::vector<ActionEvaluation> evaluations;
-    for (std::int32_t action = 0; action < kActionCount; ++action) {
-        if ((hard_first_action_mask & (1u << action)) == 0) continue;
-        const Node* best = nullptr;
-        std::set<std::pair<long, long>> endpoints;
-        std::set<std::int32_t> continuations;
-        for (const auto& node : last_complete) {
-            if (node.first_action != action) continue;
-            endpoints.emplace(
-                std::lround(node.position.x / position_quantization),
-                std::lround(node.position.y / position_quantization));
-            continuations.insert(node.last_action);
-            if (best == nullptr
-                || node_key(node, comfort_clearance, boundary_reserve)
-                    < node_key(*best, comfort_clearance, boundary_reserve)) {
-                best = &node;
-            }
-        }
-        if (best == nullptr) continue;
-        evaluations.push_back(ActionEvaluation{
-            action,
-            best,
-            std::min(hard_min_clearance[action], best->min_clearance),
-            boundary_deficit(best->position, boundary_reserve),
-            static_cast<std::int32_t>(endpoints.size()),
-            static_cast<std::int32_t>(continuations.size()),
-        });
-        result->surviving_first_action_mask |= 1u << action;
-    }
-    if (evaluations.empty()) return 1;
-    const auto selected = std::min_element(
-        evaluations.begin(),
-        evaluations.end(),
-        [&](const ActionEvaluation& left, const ActionEvaluation& right) {
-            return evaluation_key(left, current_action, comfort_clearance)
-                < evaluation_key(right, current_action, comfort_clearance);
-        });
-    result->selected_action = selected->action;
-    result->effort_horizon = effort_horizon;
-    result->min_clearance = selected->min_clearance;
-    result->cumulative_risk = selected->best->risk;
-    result->terminal_x = selected->best->position.x;
-    result->terminal_y = selected->best->position.y;
-    result->terminal_boundary_deficit = selected->boundary;
-    result->endpoint_count = selected->endpoints;
-    result->continuation_action_count = selected->continuation_actions;
-    return 0;
 }

@@ -76,7 +76,7 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
             "frame": 121,
             "bullets": 9,
             "reason": "physical-hit",
-            "hard_collision_margin": 0.0,
+            "shield_collision_margin": 0.0,
             "policy": {
                 "metrics": {"physical_hit_events": 2, "decisions": 77}
             },
@@ -94,7 +94,7 @@ def test_trace_summary_retains_hit_and_fail_close_counts(tmp_path: Path) -> None
     assert summary["physical_hit_events"] == 2
     assert summary["physical_hits_in_run"] == 1
     assert summary["zero_margin_frames"] == 1
-    assert summary["invalid_hard_collision_margin_frames"] == 1
+    assert summary["invalid_shield_collision_margin_frames"] == 1
     assert summary["decisions"] == 77
     assert summary["corpus_run_ids"] == ["run-a"]
     assert summary["last_policy_metrics"] == {
@@ -210,7 +210,7 @@ def test_trace_summary_counts_default_first_hit_stop(tmp_path: Path) -> None:
     trace.write_text(
         json.dumps({
             "frame": 800,
-            "reason": "authority-stop:physical HIT",
+            "reason": "infrastructure-stop:physical HIT",
             "bullets": 200,
         })
         + "\n",

@@ -1,4 +1,4 @@
-"""Dependency-free short-horizon reactive planning core."""
+"""Dependency-free movement and geometry types."""
 
 from .model import (
     Action,
@@ -9,26 +9,12 @@ from .model import (
     Kinematics,
     movement_actions,
 )
-from .planner import (
-    ActionEvaluation,
-    LocalPlanner,
-    LocalPlannerConfig,
-    LocalPlanningRequest,
-    LocalProposal,
-)
-
 __all__ = (
     "Action",
-    "ActionEvaluation",
     "Bounds",
     "CertifiedAction",
     "HazardOracle",
     "HazardSample",
     "Kinematics",
-    "LocalPlanner",
-    "LocalPlannerConfig",
-    "LocalPlanningRequest",
-    "LocalProposal",
     "movement_actions",
 )
-

@@ -13,7 +13,6 @@ from .model import (
     BUTTON_UP,
     SafeAction,
 )
-from .safety import transition_input_masks
 
 
 _CONTROL_MASK = BUTTON_FOCUS | BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT
@@ -22,6 +21,51 @@ SEND_INPUT_CROSSING_MAX_FRAMES = 1
 BASE_CERTIFIED_DELIVERY_MAX_FRAMES = (
     INPUT_PICKUP_MAX_FRAMES + SEND_INPUT_CROSSING_MAX_FRAMES
 )
+
+
+def _action_mask(action: Action) -> int:
+    mask = BUTTON_FOCUS if action.focused else 0
+    if action.dx < 0:
+        mask |= BUTTON_LEFT
+    elif action.dx > 0:
+        mask |= BUTTON_RIGHT
+    if action.dy < 0:
+        mask |= BUTTON_UP
+    elif action.dy > 0:
+        mask |= BUTTON_DOWN
+    return mask
+
+
+def transition_input_masks(current: Action, target: Action) -> tuple[int, ...]:
+    """Control masks observable inside Keyboard's sorted event batch."""
+    current_mask = _action_mask(current)
+    target_mask = _action_mask(target)
+    prefix_mask = current_mask
+    prefixes: list[int] = []
+    control_keys = (
+        BUTTON_DOWN,
+        BUTTON_FOCUS,
+        BUTTON_LEFT,
+        BUTTON_RIGHT,
+        BUTTON_UP,
+    )
+    events = tuple(
+        bit
+        for bit in control_keys
+        if current_mask & bit and not target_mask & bit
+    ) + tuple(
+        bit
+        for bit in control_keys
+        if target_mask & bit and not current_mask & bit
+    )
+    for bit in events:
+        if prefix_mask & bit:
+            prefix_mask &= ~bit
+        else:
+            prefix_mask |= bit
+        if prefix_mask not in (current_mask, target_mask):
+            prefixes.append(prefix_mask)
+    return tuple(prefixes)
 
 
 def bounded_delivery_age(snapshot_frame: int, issue_frame: int) -> int | None:

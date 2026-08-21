@@ -1,42 +1,39 @@
-"""Lower one coherent TH06 snapshot into compact native hazard frames."""
+"""Lower one coherent TH06 snapshot into observed-hazard geometry.
+
+This adapter deliberately does not interpret stage timelines or ECL.  It
+projects only hazards that already exist in the captured Wine state, using
+their decoded motion fields.  Future births and script-driven mutations are
+policy uncertainty and become factual evidence only after Wine executes them.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from ..core.model import Action, Kinematics, movement_actions
-from ..native import Aabb, LaserRect, PackedHazards
+from ..native import Aabb, PackedHazards
 from ..retail.model import CONTROL_ACTIONS, action_from_input
 from .observed_lasers import laser_rects_by_frame
 
 
-HARD_HORIZON = 4
+SHIELD_HORIZON = 4
 COLLISION_MARGIN = 0.35
+OBSERVED_SHIELD_CONTRACT = "observed-hazard-kinematics-v1"
 ALL_ACTIONS = movement_actions()
 ACTION_BY_STATE = {
     (action.dx, action.dy, action.focused): action for action in ALL_ACTIONS
 }
 
 
-class AuthorityUnavailable(RuntimeError):
-    pass
+class ControlUnavailable(RuntimeError):
+    """The physical observation/publication transaction cannot continue."""
 
 
 @dataclass(frozen=True)
-class SourceForecast:
+class ObservedHazardProjection:
     hazards: PackedHazards
-    hard_horizon: int
-    requested_horizon: int
-    source_coverage: int
-    coverage_reason: str
-    # Possible source-level global bullet mutations, indexed from the current
-    # root.  These are branch unions, not claims that the event must occur.
-    bullet_stop_frames: tuple[int, ...] = ()
-    bullet_release_frames: tuple[int, ...] = ()
-
-    @property
-    def full_horizon(self) -> bool:
-        return self.source_coverage == self.requested_horizon
+    horizon: int
+    contract: str = OBSERVED_SHIELD_CONTRACT
 
 
 def core_action_from_input(input_mask: int) -> Action:
@@ -46,12 +43,10 @@ def core_action_from_input(input_mask: int) -> Action:
 
 def retail_action(action: Action):
     return next(
-        item for item in CONTROL_ACTIONS
-        if (
-            item.dx,
-            item.dy,
-            item.focused,
-        ) == (action.dx, action.dy, action.focused)
+        item
+        for item in CONTROL_ACTIONS
+        if (item.dx, item.dy, item.focused)
+        == (action.dx, action.dy, action.focused)
     )
 
 
@@ -64,221 +59,65 @@ def kinematics_from_snapshot(snapshot) -> Kinematics:
     )
 
 
-def automatic_source_context(snapshot) -> str:
-    """Stable source identity for data partitioning, never movement control."""
-    direct = getattr(snapshot, "source_context", None)
-    if direct:
-        return str(direct)
-    bosses = tuple(
-        sorted(
-            (spawner for spawner in snapshot.spawners if spawner.is_boss),
-            key=lambda item: (item.boss_id, item.slot),
-        )
-    )
-    if bosses:
-        boss = bosses[0]
-        instruction = boss.next_instruction
-        containing = tuple(
-            (address, index)
-            for index, address in enumerate(boss.ecl_subroutines)
-            if instruction is not None and address <= instruction.address
-        )
-        subroutine = str(max(containing)[1]) if containing else "unknown"
-        spell = bool(
-            snapshot.player_attack is not None
-            and snapshot.player_attack.spell_active
-        )
-        return ":".join((
-            "boss",
-            str(boss.boss_id),
-            f"sub{subroutine}",
-            f"life_cb{boss.life_callback_sub}",
-            f"timer_cb{boss.timer_callback_sub}",
-            "spell" if spell else "nonspell",
-        ))
-    if snapshot.timeline_instructions:
-        instruction = snapshot.timeline_instructions[0]
-        return (
-            f"timeline:before-t{instruction.time}:"
-            f"op{instruction.opcode}:arg{instruction.arg0}"
-        )
-    return (
-        "timeline-complete"
-        if snapshot.timeline_complete
-        else "timeline-unknown"
-    )
-
-
 def _reachable_aabbs(snapshot, frames, margin: float):
+    """Drop observed boxes that cannot intersect any player path."""
     speed = max(snapshot.normal_speed, snapshot.focus_speed)
     result = []
     for index, frame in enumerate(frames):
         steps = index + 1
-        minimum_x = max(8.0, snapshot.x - speed * steps) \
-            - snapshot.half_width - margin
-        maximum_x = min(376.0, snapshot.x + speed * steps) \
-            + snapshot.half_width + margin
-        minimum_y = max(16.0, snapshot.y - speed * steps) \
-            - snapshot.half_height - margin
-        maximum_y = min(432.0, snapshot.y + speed * steps) \
-            + snapshot.half_height + margin
-        result.append(tuple(
-            hazard for hazard in frame
-            if not (
-                hazard[2] < minimum_x
-                or hazard[0] > maximum_x
-                or hazard[3] < minimum_y
-                or hazard[1] > maximum_y
+        minimum_x = (
+            max(8.0, snapshot.x - speed * steps)
+            - snapshot.half_width
+            - margin
+        )
+        maximum_x = (
+            min(376.0, snapshot.x + speed * steps)
+            + snapshot.half_width
+            + margin
+        )
+        minimum_y = (
+            max(16.0, snapshot.y - speed * steps)
+            - snapshot.half_height
+            - margin
+        )
+        maximum_y = (
+            min(432.0, snapshot.y + speed * steps)
+            + snapshot.half_height
+            + margin
+        )
+        result.append(
+            tuple(
+                hazard
+                for hazard in frame
+                if not (
+                    hazard[2] < minimum_x
+                    or hazard[0] > maximum_x
+                    or hazard[3] < minimum_y
+                    or hazard[1] > maximum_y
+                )
             )
-        ))
+        )
     return tuple(result)
-
-
-def lower_source_forecast(
-    snapshot,
-    requested_horizon: int = 12,
-    *,
-    collision_margin: float = COLLISION_MARGIN,
-) -> SourceForecast:
-    """Project live hazards and source ECL births without phase control flow."""
-    if requested_horizon < HARD_HORIZON:
-        raise ValueError("source forecast must cover Hard-4")
-    from .observed_bullets import DYNAMIC_EX_FLAGS, reachable_hazards_by_frame
-    from ..retail.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
-    from ..retail.hazards.lasers import hazards_by_frame as laser_hazards_by_frame
-    from ..retail.hazards.world import forecast_world_births
-
-    player_positions = ((snapshot.x, snapshot.y),) * requested_horizon
-    hard_births = forecast_world_births(
-        snapshot,
-        player_positions[:HARD_HORIZON],
-    )
-    if hard_births.covered_frames < HARD_HORIZON:
-        raise AuthorityUnavailable(
-            "Hard source birth coverage ended at "
-            f"h{hard_births.covered_frames}: {hard_births.reason}"
-        )
-    bullet_mutation_frames = (
-        hard_births.bullet_stop_frames + hard_births.bullet_release_frames
-    )
-    if bullet_mutation_frames and any(
-        bullet.ex_flags & DYNAMIC_EX_FLAGS for bullet in snapshot.bullets
-    ):
-        first_mutation = min(bullet_mutation_frames)
-        raise AuthorityUnavailable(
-            "Hard source birth coverage ended at "
-            f"h{first_mutation}: deterministic global bullet mutation intersects "
-            "a live dynamic bullet"
-        )
-    nominal_births = (
-        forecast_world_births(
-            snapshot,
-            player_positions,
-            rng_mode="nominal",
-        )
-        if requested_horizon > HARD_HORIZON
-        else hard_births
-    )
-    source_coverage = min(requested_horizon, nominal_births.covered_frames)
-    if source_coverage < HARD_HORIZON:
-        source_coverage = HARD_HORIZON
-    bullet_frames = reachable_hazards_by_frame(
-        snapshot,
-        source_coverage,
-        collision_margin,
-        hard_births.bullet_stop_frames,
-        hard_births.bullet_release_frames,
-    )[:source_coverage]
-    enemy_frames = enemy_hazards_by_frame(
-        snapshot.enemies,
-        source_coverage,
-    )
-    live_laser_frames = laser_hazards_by_frame(
-        snapshot.lasers,
-        source_coverage,
-    )
-
-    aabb_frames = []
-    laser_frames = []
-    for index in range(source_coverage):
-        births = hard_births if index < HARD_HORIZON else nominal_births
-        birth_aabbs = (
-            births.hazards[index]
-            if index < births.covered_frames
-            else ()
-        )
-        birth_bodies = (
-            births.body_hazards[index]
-            if births.body_hazards and index < births.covered_frames
-            else ()
-        )
-        birth_lasers = (
-            births.laser_hazards[index]
-            if births.laser_hazards and index < births.covered_frames
-            else ()
-        )
-        aabb_frames.append(
-            bullet_frames[index]
-            + enemy_frames[index]
-            + birth_aabbs
-            + birth_bodies
-        )
-        laser_frames.append(live_laser_frames[index] + birth_lasers)
-
-    reachable_frames = _reachable_aabbs(
-        snapshot,
-        tuple(aabb_frames),
-        collision_margin,
-    )
-    packed = PackedHazards(
-        aabb_frames=tuple(
-            tuple(Aabb(*hazard) for hazard in frame)
-            for frame in reachable_frames
-        ),
-        laser_frames=tuple(
-            tuple(LaserRect(
-                hazard.origin_x,
-                hazard.origin_y,
-                hazard.angle,
-                hazard.center_offset,
-                hazard.size_x,
-                hazard.size_y,
-            ) for hazard in frame)
-            for frame in laser_frames
-        ),
-    )
-    return SourceForecast(
-        hazards=packed,
-        hard_horizon=HARD_HORIZON,
-        requested_horizon=requested_horizon,
-        source_coverage=source_coverage,
-        coverage_reason=(
-            ""
-            if source_coverage == requested_horizon
-            else nominal_births.reason
-        ),
-        bullet_stop_frames=hard_births.bullet_stop_frames,
-        bullet_release_frames=hard_births.bullet_release_frames,
-    )
 
 
 def lower_observed_hazards(
     snapshot,
-    requested_horizon: int = 12,
+    requested_horizon: int = SHIELD_HORIZON,
     *,
     collision_margin: float = COLLISION_MARGIN,
-) -> SourceForecast:
-    """Project only already-observed physical hazards for soft advisory use.
+) -> ObservedHazardProjection:
+    """Project already-instantiated hazards without predicting script output.
 
-    This deliberately performs no timeline/ECL interpretation and predicts no
-    future births. The controller may use frames beyond the source-complete
-    Hard prefix to rank already-safe actions, but this projection can never
-    add an action to the publishable set.
+    The returned action shield is exact only with respect to these supplied
+    primitives and their decoded short-horizon kinematics.  It is not a claim
+    that no unobserved bullet, laser, teleport, or global mutation can occur.
     """
-    if requested_horizon < HARD_HORIZON:
-        raise ValueError("observed hazard gate must cover Hard-4")
+    if requested_horizon < 1:
+        raise ValueError("observed hazard horizon must be positive")
     from .observed_bullets import reachable_hazards_by_frame
-    from ..retail.hazards.enemies import hazards_by_frame as enemy_hazards_by_frame
+    from ..retail.hazards.enemies import (
+        hazards_by_frame as enemy_hazards_by_frame,
+    )
 
     bullet_frames = reachable_hazards_by_frame(
         snapshot,
@@ -302,7 +141,7 @@ def lower_observed_hazards(
         aabb_frames,
         collision_margin,
     )
-    return SourceForecast(
+    return ObservedHazardProjection(
         hazards=PackedHazards(
             aabb_frames=tuple(
                 tuple(Aabb(*hazard) for hazard in frame)
@@ -310,8 +149,5 @@ def lower_observed_hazards(
             ),
             laser_frames=laser_frames,
         ),
-        hard_horizon=HARD_HORIZON,
-        requested_horizon=requested_horizon,
-        source_coverage=requested_horizon,
-        coverage_reason="observed-physical-hazards-only",
+        horizon=requested_horizon,
     )

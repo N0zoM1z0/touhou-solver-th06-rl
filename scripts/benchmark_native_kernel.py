@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fuzz source-grounded geometry and measure bounded native planning latency."""
+"""Fuzz source-grounded geometry and measure native shield latency."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ import random
 import subprocess
 import time
 
-from th06_rl.core import Kinematics, LocalPlannerConfig
+from th06_rl.core import Kinematics
 from th06_rl.native import ACTIONS, Aabb, LaserRect, NativeKernel, PackedHazards
 
 
 KINEMATICS = Kinematics(4.0, 2.0, 2.8284270763397217, 1.4142135381698608)
 BY_NAME = {action.name: action for action in ACTIONS}
-SOURCE_ANCHORS = {
+SOURCE_CHECKS = {
     "src/GameManager.hpp": (
         "#define GAME_REGION_WIDTH 384.0",
         "#define GAME_REGION_HEIGHT 448.0",
@@ -74,13 +74,15 @@ def _collides(
 
 def _source_provenance(root: Path) -> dict[str, object]:
     checked = {}
-    for relative, anchors in SOURCE_ANCHORS.items():
+    for relative, checks in SOURCE_CHECKS.items():
         path = root / relative
         text = path.read_text(encoding="utf-8")
-        missing = [anchor for anchor in anchors if anchor not in text]
+        missing = [check for check in checks if check not in text]
         if missing:
-            raise ValueError(f"authoritative source anchors missing from {path}: {missing}")
-        checked[relative] = list(anchors)
+            raise ValueError(
+                f"authoritative source checks missing from {path}: {missing}"
+            )
+        checked[relative] = list(checks)
     commit = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "HEAD"],
         check=True,
@@ -93,7 +95,7 @@ def _source_provenance(root: Path) -> dict[str, object]:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    return {"path": str(root), "commit": commit, "clean": not dirty, "anchors": checked}
+    return {"path": str(root), "commit": commit, "clean": not dirty, "checks": checked}
 
 
 def _random_aabb(rng: random.Random, x: float, y: float, span: float = 28.0) -> Aabb:
@@ -130,14 +132,18 @@ def _random_hazards(rng: random.Random, x: float, y: float, horizon: int) -> Pac
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=Path("reference/GensokyoClub-th06"))
+    parser.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        help="attested GensokyoClub/th06 checkout used for geometry provenance",
+    )
     parser.add_argument("--oracle-cases", type=int, default=4000)
     parser.add_argument("--gate-cases", type=int, default=800)
-    parser.add_argument("--planner-cases", type=int, default=160)
     parser.add_argument("--seed", type=int, default=6006)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    if min(args.oracle_cases, args.gate_cases, args.planner_cases) <= 0:
+    if min(args.oracle_cases, args.gate_cases) <= 0:
         parser.error("benchmark case counts must be positive")
     rng = random.Random(args.seed)
     kernel = NativeKernel()
@@ -174,14 +180,10 @@ def main() -> int:
     margin_monotonicity_failures = 0
     deterministic_failures = 0
     endpoint_bound_failures = 0
-    planner_us = []
-    planner_results = 0
-    planner_authority_failures = 0
-    planner_bound_failures = 0
-    for case in range(max(args.gate_cases, args.planner_cases)):
+    for case in range(args.gate_cases):
         x = rng.uniform(16.0, 368.0)
         y = rng.uniform(24.0, 424.0)
-        hazards = _random_hazards(rng, x, y, 12)
+        hazards = _random_hazards(rng, x, y, 4)
         current = rng.choice(ACTIONS)
         prepared = NativeKernel.prepare_hazards(hazards)
         if case < args.gate_cases:
@@ -193,7 +195,7 @@ def main() -> int:
                 half_height=1.25,
                 kinematics=KINEMATICS,
                 current_action=current,
-                hazards=prepared.prefix(4),
+                hazards=prepared,
             )
             gate_us.append((time.perf_counter_ns() - started) / 1000.0)
             strict = kernel.certify_actions(
@@ -203,7 +205,7 @@ def main() -> int:
                 half_height=1.25,
                 kinematics=KINEMATICS,
                 current_action=current,
-                hazards=prepared.prefix(4),
+                hazards=prepared,
                 collision_margin=0.75,
             )
             repeated = kernel.certify_actions(
@@ -213,7 +215,7 @@ def main() -> int:
                 half_height=1.25,
                 kinematics=KINEMATICS,
                 current_action=current,
-                hazards=prepared.prefix(4),
+                hazards=prepared,
             )
             normal_actions = {item.action for item in normal}
             strict_actions = {item.action for item in strict}
@@ -223,44 +225,6 @@ def main() -> int:
                 not (8.0 <= item.final_x <= 376.0 and 16.0 <= item.final_y <= 432.0)
                 for item in normal
             )
-        if case < args.planner_cases:
-            hard = kernel.certify_actions(
-                x=x,
-                y=y,
-                half_width=1.25,
-                half_height=1.25,
-                kinematics=KINEMATICS,
-                current_action=current,
-                hazards=prepared.prefix(4),
-            )
-            if not hard:
-                continue
-            started = time.perf_counter_ns()
-            plan = kernel.plan(
-                x=x,
-                y=y,
-                half_width=1.25,
-                half_height=1.25,
-                kinematics=KINEMATICS,
-                current_action=current,
-                hazards=hazards,
-                hard=hard,
-                config=LocalPlannerConfig(horizon=12),
-            )
-            planner_us.append((time.perf_counter_ns() - started) / 1000.0)
-            if plan is None:
-                continue
-            planner_results += 1
-            hard_actions = {item.action for item in hard}
-            planner_authority_failures += plan.action not in hard_actions
-            planner_bound_failures += not (
-                8.0 <= plan.terminal_x <= 376.0
-                and 16.0 <= plan.terminal_y <= 432.0
-                and 1 <= plan.effort_horizon <= 12
-                and plan.endpoint_count > 0
-                and plan.continuation_action_count > 0
-            )
-
     result = {
         "schema": "th06-rl-native-benchmark-v1",
         "source": provenance,
@@ -278,21 +242,11 @@ def main() -> int:
             "endpoint_bound_failures": endpoint_bound_failures,
             "certify_18_actions_h4_prepared": _timings(gate_us),
         },
-        "planner": {
-            "attempted_cases": args.planner_cases,
-            "timed_nonempty_hard_cases": len(planner_us),
-            "available_results": planner_results,
-            "selected_outside_hard_failures": planner_authority_failures,
-            "result_bound_failures": planner_bound_failures,
-            "plan_h12": _timings(planner_us),
-        },
         "passes": not any((
             oracle_mismatches,
             margin_monotonicity_failures,
             deterministic_failures,
             endpoint_bound_failures,
-            planner_authority_failures,
-            planner_bound_failures,
         )),
     }
     payload = json.dumps(result, indent=2, sort_keys=True) + "\n"

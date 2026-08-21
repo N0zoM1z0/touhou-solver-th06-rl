@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Verify one complete natural-RNG baseline route and its factual corpus."""
+"""Verify one complete natural-RNG baseline route and factual corpus."""
 
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
+
+from th06_rl.th06.control_capture import OFFLINE_FACT_SCHEMA
 
 
 _CLEAN_OUTCOME_FIELDS = (
@@ -39,12 +41,10 @@ def verify(
     records = manifest.get("records")
     summary = manifest.get("summary")
     audit_scope = audit.get("scope")
-    successor_coverage = audit.get("source_successor_coverage")
-    numeric_successor_parity = audit.get("source_numeric_successor_parity")
-    player_successor_parity = audit.get("player_successor_parity")
-    anchor_coverage = audit.get("source_anchor_coverage")
-    dataset_admission = audit.get("source_dataset_admission")
-    for name, value in (
+    dataset = audit.get("episode_dataset_admission")
+    player = audit.get("player_successor_parity")
+    shield = audit.get("dense_shield_parity")
+    named = (
         ("controller completion", completion),
         ("trace", trace),
         ("run metadata", metadata),
@@ -53,15 +53,19 @@ def verify(
         ("records", records),
         ("summary", summary),
         ("audit scope", audit_scope),
-        ("source successor coverage", successor_coverage),
-        ("source numeric successor parity", numeric_successor_parity),
-        ("player successor parity", player_successor_parity),
-        ("source anchor coverage", anchor_coverage),
-        ("source dataset admission", dataset_admission),
-    ):
+        ("episode dataset admission", dataset),
+        ("player successor parity", player),
+        ("observed shield replay", shield),
+    )
+    for name, value in named:
         if not isinstance(value, dict):
             raise ValueError(f"baseline route is missing {name}")
 
+    online_contract = (
+        metadata.get("online_contract") if isinstance(metadata, dict) else None
+    )
+    if not isinstance(online_contract, dict):
+        raise ValueError("baseline route is missing online contract")
     hits = completion.get("physical_hits")
     frames = records.get("frames")
     transitions = records.get("transitions")
@@ -82,32 +86,21 @@ def verify(
             and metadata.get("expected_stages") == [1, 2, 3, 4, 5, 6]
             and audit_scope.get("observed_stages") == [1, 2, 3, 4, 5, 6]
         ),
-        "source_complete_online_authority": (
-            isinstance(metadata.get("planner"), dict)
-            and metadata["planner"].get("algorithm")
-            == "source-hard4-paused-publication-v2"
-            and metadata["planner"].get("source_commitment")
-            == "source-complete-hard-v1"
-            and metadata["planner"].get("hard_horizon") == 4
-            and metadata["planner"].get("learner_feature_horizon") == 4
-            and metadata["planner"].get("minimum_collision_margin") == 0.35
-            and metadata["planner"].get("zero_margin_fallback") is False
+        "observed_shield_contract": (
+            online_contract.get("algorithm")
+            == "observed-shield4-paused-publication-v1"
+            and online_contract.get("shield_contract")
+            == "observed-hazard-kinematics-v1"
+            and online_contract.get("publication_epoch")
+            == "coherent-root-process-suspended-v1"
+            and online_contract.get("shield_horizon") == 4
+            and online_contract.get("predicts_future_births") is False
+            and online_contract.get("minimum_collision_margin") == 0.35
             and trace.get("zero_margin_frames") == 0
-            and trace.get("invalid_hard_collision_margin_frames") == 0
+            and trace.get("invalid_shield_collision_margin_frames") == 0
         ),
-        "comprehensive_offline_facts": (
-            isinstance(metadata.get("planner"), dict)
-            and metadata["planner"].get("factual_state_schema")
-            == "th06-1.02h-offline-facts-v2"
-        ),
-        "stage_local_source_anchors": (
-            anchor_coverage.get("anchored_stages") == [1, 2, 3, 4, 5, 6]
-            and anchor_coverage.get("missing_observed_stages") == []
-        ),
-        "self_contained_source_dataset": (
-            dataset_admission.get("passes") is True
-            and dataset_admission.get("checked_frames") == frames
-            and dataset_admission.get("error") is None
+        "physical_facts": (
+            online_contract.get("factual_state_schema") == OFFLINE_FACT_SCHEMA
         ),
         "durable_complete": (
             manifest.get("complete") is True
@@ -123,10 +116,12 @@ def verify(
             and isinstance(transitions, int)
             and frames > 1
             and transitions == frames - 1
-            and isinstance(records.get("anchors"), int)
-            and records["anchors"] > 0
-            and isinstance(summary.get("learning_eligible_transitions"), int)
-            and summary["learning_eligible_transitions"] > 0
+        ),
+        "algorithm_independent_episode": (
+            dataset.get("passes") is True
+            and dataset.get("checked_frames") == frames
+            and dataset.get("checked_transitions") == transitions
+            and dataset.get("error") is None
         ),
         "zero_bomb": audit.get("bomb_events", 0) == 0,
         "zero_infra_failure": (
@@ -140,86 +135,34 @@ def verify(
             and hits == audit.get("physical_hits")
         ),
         "audit_integrity": audit.get("integrity_errors") == [],
-        "causal_source_successors": (
-            successor_coverage.get("method")
-            == "retained-next-root-one-sided-coverage-v1"
-            and isinstance(successor_coverage.get("checked_links"), int)
-            and successor_coverage["checked_links"] > 0
-            and successor_coverage.get("actual_lasers_checked", 0) > 0
-            and successor_coverage.get("uncovered_aabbs") == 0
-            and successor_coverage.get("uncovered_lasers") == 0
-            and (successor_coverage.get(
-                "retained_laser_geometry_unavailable", {}
-            ) or {}).get("invalid-state", 0) == 0
-        ),
-        "numeric_source_successors": (
-            numeric_successor_parity.get("method")
-            == "stable-retained-bullet-center-successor-v2"
-            and numeric_successor_parity.get("arithmetic_comparison")
-            == "float32-bit-exact"
-            and numeric_successor_parity.get("required_collision_margin") == 0.35
-            and isinstance(
-                numeric_successor_parity.get("transcendental_axis_error_budget"),
-                (int, float),
-            )
-            and 0
-            < numeric_successor_parity["transcendental_axis_error_budget"]
-            < numeric_successor_parity["required_collision_margin"]
-            and 0
-            < numeric_successor_parity.get(
-                "global_release_acceleration_axis_bound", 1.0
-            )
-            < numeric_successor_parity["required_collision_margin"]
-            and numeric_successor_parity.get("global_mutation_semantics")
-            == "source branch union"
-            and (
-                numeric_successor_parity.get("linear_exact_checked", 0)
-                + numeric_successor_parity.get("acceleration_exact_checked", 0)
-            ) > 0
-            and numeric_successor_parity.get("transcendental_checked", 0) > 0
-            and (
-                numeric_successor_parity.get("global_stop_union_checked", 0)
-                + numeric_successor_parity.get("global_release_union_checked", 0)
-                + numeric_successor_parity.get("global_combined_union_checked", 0)
-            ) > 0
-            and numeric_successor_parity.get("exact_mismatches") == 0
-            and numeric_successor_parity.get(
-                "transcendental_budget_violations"
-            ) == 0
-            and numeric_successor_parity.get("nonfinite_successors") == 0
-            and numeric_successor_parity.get(
-                "global_mutation_union_violations"
-            ) == 0
-        ),
         "player_input_successors": (
-            player_successor_parity.get("method")
-            == "contiguous-active-player-center-successor-v1"
-            and player_successor_parity.get("arithmetic_comparison")
-            == "float32-bit-exact"
-            and player_successor_parity.get("input_semantics")
+            player.get("method") == "contiguous-player-center-successor-v1"
+            and player.get("arithmetic_comparison") == "float32-bit-exact"
+            and player.get("input_semantics")
             == "next-completed-root-sampled-input"
-            and player_successor_parity.get("movement_order")
-            == "Player-before-Enemy-before-Bullet"
-            and player_successor_parity.get("checked_links", 0) > 0
-            and player_successor_parity.get("mismatches") == 0
+            and player.get("checked_links", 0) > 0
+            and player.get("mismatches") == 0
+        ),
+        "observed_shield_replay": (
+            shield.get("method") == "stored-observed-primitives-native-replay-v1"
+            and shield.get("checked", 0) > 0
+            and shield.get("unsafe_divergences") == []
+            and shield.get("conservative_divergences") == []
         ),
     }
     failed = [name for name, passed in checks.items() if not passed]
     if failed:
         raise ValueError("baseline route verification failed: " + ", ".join(failed))
     return {
-        "schema": "th06-rl-baseline-route-verification-v1",
+        "schema": "th06-rl-baseline-route-verification-v2",
         "passed": True,
         "physical_hits": hits,
         "frames": frames,
         "transitions": transitions,
-        "anchors": records["anchors"],
-        "learning_eligible_transitions": summary["learning_eligible_transitions"],
         "hit_classifications": audit.get("hit_classifications"),
         "latency": audit.get("latency"),
-        "source_successor_coverage": successor_coverage,
-        "source_numeric_successor_parity": numeric_successor_parity,
-        "player_successor_parity": player_successor_parity,
+        "player_successor_parity": player,
+        "dense_shield_parity": shield,
         "checks": checks,
     }
 
@@ -232,9 +175,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("audit", type=Path)
     args = parser.parse_args(argv)
     try:
-        result = verify(*(_object(path) for path in (
-            args.report, args.run, args.manifest, args.audit
-        )))
+        result = verify(*(
+            _object(path)
+            for path in (args.report, args.run, args.manifest, args.audit)
+        ))
     except (OSError, TypeError, ValueError) as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2, sort_keys=True))

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+from th06_rl.policy_api import PolicyDecision
 from th06_rl.policy_loader import ImmutablePolicy
 
 
@@ -14,15 +15,18 @@ class Policy:
     name = 'test-immutable'
     def __init__(self):
         self.loaded = None
-        self.rejected = 0
     def import_state(self, state):
         self.loaded = state['token']
     def decide(self, context):
-        return PolicyDecision(context.baseline_action, self.name)
-    def reject_publication(self, decision):
-        self.rejected += 1
+        return PolicyDecision(
+            context.baseline_action,
+            self.name,
+            1.0,
+            tuple((action, float(action == context.baseline_action))
+                  for action in context.locally_admissible_actions),
+        )
     def metrics(self):
-        return {'loaded': self.loaded, 'rejected': self.rejected}
+        return {'loaded': self.loaded}
 
 def create_policy():
     return Policy()
@@ -60,17 +64,6 @@ def test_policy_source_and_state_changes_cannot_affect_live_run(tmp_path) -> Non
     assert loader.decide(_context()).policy_id == "test-immutable"
 
 
-def test_immutable_policy_receives_operational_publication_rejection(
-    tmp_path,
-) -> None:
-    loader = _loader(tmp_path)
-    decision = loader.decide(_context())
-
-    loader.reject_publication(decision)
-
-    assert loader.status()["metrics"]["rejected"] == 1
-
-
 def test_identity_status_does_not_materialize_metrics(tmp_path) -> None:
     loader = _loader(tmp_path)
 
@@ -97,22 +90,14 @@ def test_failed_decision_is_explicit_and_counted(tmp_path) -> None:
     )
 
 
-def test_failed_option_continuation_is_not_hidden_as_absent_callback(
-    tmp_path,
-) -> None:
+def test_incomplete_behavior_distribution_falls_back_and_is_counted(tmp_path) -> None:
     loader = _loader(tmp_path)
-
-    def fail(_context):
-        raise RuntimeError("broken continuation")
-
-    loader.policy.continue_certified = fail
-
-    decision = loader.continue_certified(_context())
-
-    assert decision is not None
-    assert decision.action == "stay"
-    assert decision.policy_id == "reactive-baseline-policy-error"
-    assert loader.status(include_metrics=False)["policy_failures"] == 1
-    assert loader.status(include_metrics=False)["last_error"] == (
-        "continue_certified RuntimeError: broken continuation"
+    loader.policy.decide = lambda context: PolicyDecision(
+        context.baseline_action, "bad"
     )
+
+    decision = loader.decide(_context())
+
+    assert decision.policy_id == "reactive-baseline-policy-error"
+    assert decision.behavior_probabilities == (("stay", 1.0),)
+    assert loader.status(include_metrics=False)["policy_failures"] == 1

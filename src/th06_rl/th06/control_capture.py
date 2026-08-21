@@ -1,14 +1,8 @@
-"""Small frame-coherent TH06 capture for the resident safety loop.
+"""Frame-coherent TH06 physical capture for control and offline evidence.
 
-The authoritative retail snapshot is deliberately exhaustive: it retains
-player attacks, items, effects, immutable ECL graphs, sprite geometry, and
-callback state for source replay.  Decoding all of that before every input
-publication made capture, rather than the native Hard gate, the hot path.
-
-This module keeps a compact collision decode and, in the same paused epoch,
-pairs it with the exhaustive source root. Hazard authority consumes only the
-bounded source projection; offline-only attacks, items, effects, and resource
-counters are attached to the dense root without entering the Hard gate.
+The hot path decodes instantiated objects and factual resources directly.  It
+does not decode ECL programs or require future-pattern coverage.  Raw occupied
+object records remain available for later offline derivations.
 """
 
 from __future__ import annotations
@@ -28,14 +22,12 @@ from ..retail.model import (
     Laser,
     PlayerAttackState,
     PlayerShot,
-    RepeatStarState,
-    StageTimelineInstruction,
 )
 
 
-CONTROL_CAPTURE_TIER = "control-v5"
+CONTROL_CAPTURE_TIER = "control-v7"
 SOURCE_RECORD_SCHEMA = "th06-1.02h-source-records-v3"
-OFFLINE_FACT_SCHEMA = "th06-1.02h-offline-facts-v2"
+OFFLINE_FACT_SCHEMA = "th06-1.02h-physical-facts-v1"
 MAX_CAPTURE_ATTEMPTS = 8
 DYNAMIC_BULLET_FLAGS = 0xDF1
 
@@ -202,7 +194,7 @@ class ControlSnapshot:
     raw_enemy_manager_tail: bytes = b""
     source_record_schema: str = ""
     # Offline-only factual state hydrated from the exhaustive root captured in
-    # the same pause. None of these fields participates in online Hard.
+    # the same pause. None of these fields participates in the online shield.
     factual_state_schema: str = ""
     player_attack: PlayerAttackState | None = None
     item_states: tuple[ItemState, ...] = ()
@@ -231,17 +223,6 @@ class ControlSnapshot:
     # retirement uses this geometry, which cannot be recovered from the raw
     # record's pointer after Wine exits.
     enemy_sprite_dimensions: tuple[tuple[int, float, float], ...] = ()
-    # Offline source replay facts copied from the exhaustive root captured in
-    # the exact same process pause. They are not consumed by online Hard.
-    ecl_ex_function_addresses: tuple[int, ...] = ()
-    timeline_current_message_waits: int = 0
-    message_active: bool = False
-    timeline_boss_slots: tuple[int, ...] = ()
-    timeline_time_previous: int | None = None
-    boss_present: bool | None = None
-    # Shared dynamic globals for EXINSREPEAT(2). This is required source
-    # authority in control-v5, not an inferred learner feature.
-    repeat_star_state: RepeatStarState | None = None
 
 
 def _finite(*values: float) -> bool:
@@ -331,56 +312,13 @@ def _tail_may_reach_player(
     )
 
 
-def _ensure_subroutines(process, stage: int, native) -> tuple[int, ...]:
-    """Load immutable stage subroutine addresses without decoding programs."""
-    if getattr(process, "_th06_rl_control_ecl_stage", None) != stage:
-        process.ecl_subroutines = native._read_ecl_subroutines(process)
-        process._th06_rl_control_ecl_stage = stage
-        # Heap addresses may be reused by the next stage.  This compact cache
-        # contains headers only and therefore has its own stage ownership.
-        process.control_timeline_header_cache = {}
-    return process.ecl_subroutines
-
-
-def _timeline_context_instruction(process, native, address: int, stage: int):
-    """Read a phase-label header without poisoning exhaustive source bytes."""
-    instruction = None
-    # The exhaustive cache is usable only when its stage owner is current;
-    # every positive-time record stored there includes all encoded bytes.
-    if getattr(process, "ecl_cache_stage", None) == stage:
-        instruction = process.ecl_timeline_instruction_cache.get(address)
-    if instruction is not None:
-        return instruction
-
-    cache = getattr(process, "control_timeline_header_cache", None)
-    if cache is None:
-        cache = {}
-        process.control_timeline_header_cache = cache
-    instruction = cache.get(address)
-    if instruction is not None:
-        return instruction
-
-    header = process.read(address, 8)
-    time_value, arg0, opcode, size = struct.unpack("<hhhh", header)
-    if time_value >= 0 and not 0x08 <= size <= 0x100:
-        raise RuntimeError(
-            f"invalid ECL timeline instruction size {size} "
-            f"at 0x{address:08X}"
-        )
-    instruction = StageTimelineInstruction(
-        address, time_value, arg0, opcode, size, header.hex()
-    )
-    cache[address] = instruction
-    return instruction
-
-
 def _control_sprite_dimensions(
     process,
     native,
     stage: int,
     pointers: set[int],
 ) -> dict[int, tuple[float, float]]:
-    """Resolve immutable visual geometry once per loaded stage resource."""
+    """Resolve visual geometry once per loaded stage resource."""
     if getattr(process, "_th06_rl_control_sprite_stage", None) != stage:
         process._th06_rl_control_sprite_stage = stage
         process._th06_rl_control_sprite_dimensions = {}
@@ -391,18 +329,9 @@ def _control_sprite_dimensions(
     return {pointer: cached[pointer] for pointer in pointers}
 
 
-def _source_context(
-    process,
-    native,
-    enemy_pool: bytes,
-    manager_bytes: bytes,
-    manager_relative,
-    stage: int,
-    spell_active: bool,
-) -> tuple[str, int | None]:
-    subroutines = _ensure_subroutines(process, stage, native)
-    bosses: list[tuple[int, int, int, int, int, int]] = []
-    boss_life: int | None = None
+def _boss_life(enemy_pool: bytes, native) -> int | None:
+    """Return the first live boss HP without interpreting its ECL context."""
+    bosses: list[tuple[int, int, int]] = []
     for slot in range(native.ENEMY_COUNT):
         base = slot * native.ENEMY_STRIDE
         flags0, flags1 = struct.unpack_from(
@@ -411,63 +340,66 @@ def _source_context(
         if not flags0 & 0x80 or not flags1 & 0x08:
             continue
         boss_id = enemy_pool[base + native.ENEMY_BOSS_ID_OFFSET]
-        instruction = struct.unpack_from(
-            "<I", enemy_pool, base + native.ENEMY_ECL_CONTEXT_OFFSET
-        )[0]
         life = struct.unpack_from(
             "<i", enemy_pool, base + native.ENEMY_LIFE_OFFSET
         )[0]
-        _life_threshold, life_callback, _timer_threshold, timer_callback = (
-            struct.unpack_from(
-                "<iiii",
-                enemy_pool,
-                base + native.ENEMY_LIFE_CALLBACK_THRESHOLD_OFFSET,
-            )
-        )
-        bosses.append((
-            boss_id,
-            slot,
-            instruction,
-            life_callback,
-            timer_callback,
-            life,
-        ))
-    if bosses:
-        boss_id, slot, instruction, life_callback, timer_callback, life = min(
-            bosses, key=lambda item: (item[0], item[1])
-        )
-        boss_life = life
-        containing = [
-            (address, index)
-            for index, address in enumerate(subroutines)
-            if instruction and address <= instruction
-        ]
-        subroutine = str(max(containing)[1]) if containing else "unknown"
-        return ":".join((
-            "boss",
-            str(boss_id),
-            f"sub{subroutine}",
-            f"life_cb{life_callback}",
-            f"timer_cb{timer_callback}",
-            "spell" if spell_active else "nonspell",
-        )), boss_life
+        bosses.append((boss_id, slot, life))
+    return min(bosses)[2] if bosses else None
 
-    address = struct.unpack_from(
-        "<I",
-        manager_bytes,
-        manager_relative(native.ENEMY_TIMELINE_INSTRUCTION_OFFSET),
-    )[0]
-    if not address:
-        return "timeline-unknown", None
-    if not 0x10000 <= address < 0x80000000:
-        raise RuntimeError(f"invalid ECL timeline pointer 0x{address:08X}")
-    instruction = _timeline_context_instruction(process, native, address, stage)
-    if instruction.time < 0:
-        return "timeline-complete", None
-    return (
-        f"timeline:before-t{instruction.time}:"
-        f"op{instruction.opcode}:arg{instruction.arg0}"
-    ), None
+
+def _read_items(process, native) -> tuple[int, tuple[ItemState, ...]]:
+    """Capture every instantiated item with stable retail slot identity."""
+    pool = process.read(
+        native.ADDR_ITEM_MANAGER,
+        native.ITEM_ACTIVE_COUNT_OFFSET + 4,
+    )
+    next_index, reported_count = struct.unpack_from(
+        "<II", pool, native.ITEM_NEXT_INDEX_OFFSET
+    )
+    if not 0 <= next_index < native.ITEM_COUNT or not 0 <= reported_count <= 512:
+        raise RuntimeError("invalid physical item manager state")
+    items = []
+    for slot in range(native.ITEM_COUNT):
+        base = slot * native.ITEM_STRIDE
+        if not pool[base + native.ITEM_IN_USE_OFFSET]:
+            continue
+        item_type = struct.unpack_from("<b", pool, base + native.ITEM_TYPE_OFFSET)[0]
+        state = pool[base + native.ITEM_STATE_OFFSET]
+        x, y = struct.unpack_from("<ff", pool, base + native.ITEM_POSITION_OFFSET)
+        start_x, start_y = struct.unpack_from(
+            "<ff", pool, base + native.ITEM_START_POSITION_OFFSET
+        )
+        target_x, target_y = struct.unpack_from(
+            "<ff", pool, base + native.ITEM_TARGET_POSITION_OFFSET
+        )
+        timer_previous, timer_subframe, timer = struct.unpack_from(
+            "<ifi", pool, base + native.ITEM_TIMER_OFFSET
+        )
+        if (
+            item_type not in range(7)
+            or state not in range(3)
+            or not _finite(
+                x, y, start_x, start_y, target_x, target_y, timer_subframe
+            )
+            or not -1000 <= timer_previous < 1_000_000
+            or not -1000 <= timer < 1_000_000
+        ):
+            raise RuntimeError(f"invalid physical item state at slot {slot}")
+        items.append(ItemState(
+            slot,
+            x,
+            y,
+            start_x,
+            start_y,
+            target_x,
+            target_y,
+            timer_previous,
+            timer,
+            timer + timer_subframe,
+            item_type,
+            state,
+        ))
+    return next_index, tuple(items)
 
 
 def _decode_control_once(
@@ -567,7 +499,6 @@ def _decode_control_once(
         raise RuntimeError("invalid compact GameManager state")
 
     rng_seed, rng_generation = struct.unpack("<HxxI", process.read(native.ADDR_RNG, 8))
-    repeat_star_state = native._read_repeat_star_state(process)
     frame_multiplier = struct.unpack(
         "<f", process.read(native.ADDR_FRAME_MULTIPLIER, 4)
     )[0]
@@ -680,6 +611,24 @@ def _decode_control_once(
         if enemy_pool[slot * native.ENEMY_STRIDE + native.ENEMY_FLAGS_OFFSET]
         & 0x80
     }
+    player_sprite_pointers = {
+        struct.unpack_from(
+            "<I",
+            player,
+            relative_player(native.PLAYER_BULLETS_OFFSET)
+            + slot * native.PLAYER_BULLET_STRIDE
+            + native.ANM_VM_SPRITE_OFFSET,
+        )[0]
+        for slot in range(native.PLAYER_BULLET_COUNT)
+        if struct.unpack_from(
+            "<h",
+            player,
+            relative_player(native.PLAYER_BULLETS_OFFSET)
+            + slot * native.PLAYER_BULLET_STRIDE
+            + native.PLAYER_BULLET_STATE_OFFSET,
+        )[0]
+        != 0
+    }
     if 0 in sprite_pointers:
         raise native._SnapshotReadTorn(
             "active bullet is between state publication and sprite setup"
@@ -689,7 +638,7 @@ def _decode_control_once(
             process,
             native,
             stage,
-            sprite_pointers | enemy_sprite_pointers,
+            sprite_pointers | enemy_sprite_pointers | player_sprite_pointers,
         )
     except RuntimeError as error:
         raise native._SnapshotReadTorn(str(error)) from error
@@ -845,15 +794,24 @@ def _decode_control_once(
             lower_move_x, lower_move_y, upper_move_x, upper_move_y,
         ))
 
-    source_context, boss_life = _source_context(
-        process,
-        native,
-        enemy_pool,
-        manager_bytes,
-        manager_relative,
-        stage,
-        spell_active,
+    boss_life = _boss_life(enemy_pool, native)
+    player_attack = native._decode_player_attack(
+        player,
+        source_sprite_dimensions,
+        shot_type=shot_type,
+        spell_active=spell_active,
     )
+    item_next_index, item_states = _read_items(process, native)
+    random_item_spawn_index = struct.unpack_from(
+        "<H",
+        manager_bytes,
+        manager_relative(native.ENEMY_RANDOM_ITEM_SPAWN_INDEX_OFFSET),
+    )[0]
+    random_item_table_index = struct.unpack_from(
+        "<H",
+        manager_bytes,
+        manager_relative(native.ENEMY_RANDOM_ITEM_TABLE_INDEX_OFFSET),
+    )[0]
     after = native.read_game_frame(process)
     if after != frame:
         raise native._SnapshotEpochChanged
@@ -889,7 +847,7 @@ def _decode_control_once(
         time_stopped, bool(replay or demo_mode), tuple(lasers), tuple(enemies),
         difficulty, character, shot_type, bomb_active, spell_active,
         rank, subrank, max_rank, min_rank, rng_seed, rng_generation,
-        current_power, lives_remaining, source_context, boss_life,
+        current_power, lives_remaining, "observed-world", boss_life,
         timeline_time, timeline_time + timeline_subframe,
         attempt, 0,
         tuple(bullet.slot for bullet in bullets),
@@ -898,15 +856,15 @@ def _decode_control_once(
         bytes(raw_laser_records),
         raw_enemy_manager_tail,
         SOURCE_RECORD_SCHEMA,
-        "",
-        None,
-        (),
-        0,
+        OFFLINE_FACT_SCHEMA,
+        player_attack,
+        item_states,
+        item_next_index,
         -1,
-        -1,
+        len(item_states),
         (),
-        0,
-        0,
+        random_item_spawn_index,
+        random_item_table_index,
         gui_score,
         score,
         next_score_increment,
@@ -929,14 +887,13 @@ def _decode_control_once(
             (pointer, *source_sprite_dimensions[pointer])
             for pointer in sorted(enemy_sprite_pointers)
         ),
-        repeat_star_state=repeat_star_state,
     )
 
 
 def read_control_snapshot(
     process,
     *,
-    horizon: int = 12,
+    horizon: int = 4,
     collision_margin: float = 0.35,
     suspend=None,
     max_attempts: int = MAX_CAPTURE_ATTEMPTS,
@@ -981,114 +938,6 @@ def read_control_snapshot(
         "compact coherent capture exhausted retries; "
         f"epochs={observed_epochs}; last={last_error}"
     ) from last_error
-
-
-def read_safety_snapshot_pair(
-    process,
-    *,
-    horizon: int = 12,
-    collision_margin: float = 0.35,
-    suspend=None,
-    compact_attempts: int = MAX_CAPTURE_ATTEMPTS,
-):
-    """Capture compact data and exhaustive source authority in one pause.
-
-    The compact root keeps the resident/data-plane representation. The
-    exhaustive root supplies immutable ECL graphs and every dynamic source
-    field consumed by the bounded Hard forecast. Both reads occur while the
-    exact process is suspended and are cross-checked before either is used.
-    """
-    with suspend() if suspend is not None else nullcontext():
-        control = read_control_snapshot(
-            process,
-            horizon=horizon,
-            collision_margin=collision_margin,
-            suspend=None,
-            max_attempts=compact_attempts,
-        )
-        authority = native.read_snapshot(process)
-    mismatches = []
-    for name in (
-        "frame",
-        "stage",
-        "player_state",
-        "input_mask",
-        "difficulty",
-        "character",
-        "rank",
-        "subrank",
-        "rng_seed",
-        "rng_generation",
-        "current_power",
-        "lives_remaining",
-        "gui_score",
-        "score",
-        "next_score_increment",
-        "high_score",
-        "graze_in_stage",
-        "graze_total",
-        "deaths",
-        "bombs_used",
-        "spellcards_captured",
-        "point_items_collected_in_stage",
-        "point_items_collected",
-        "retries",
-        "power_item_count_for_score",
-        "bombs_remaining",
-        "extra_lives",
-        "repeat_star_state",
-    ):
-        if getattr(control, name) != getattr(authority, name):
-            mismatches.append(name)
-    for name in ("x", "y", "half_width", "half_height", "frame_multiplier"):
-        if getattr(control, name) != getattr(authority, name):
-            mismatches.append(name)
-    if control.live_bullet_count != len(authority.bullets):
-        mismatches.append("live_bullet_count")
-    if control.laser_count != authority.laser_count:
-        mismatches.append("laser_count")
-    authority_spawners = {spawner.slot: spawner for spawner in authority.spawners}
-    enemy_dimensions = {
-        pointer: (width, height)
-        for pointer, width, height in control.enemy_sprite_dimensions
-    }
-    enemy_record_size = 2 + native.ENEMY_STRIDE
-    for offset in range(0, len(control.raw_enemy_records), enemy_record_size):
-        slot = struct.unpack_from("<H", control.raw_enemy_records, offset)[0]
-        pointer = struct.unpack_from(
-            "<I",
-            control.raw_enemy_records,
-            offset + 2 + native.ANM_VM_SPRITE_OFFSET,
-        )[0]
-        spawner = authority_spawners.get(slot)
-        if spawner is None or enemy_dimensions.get(pointer) != (
-            spawner.sprite_half_width * 2.0,
-            spawner.sprite_half_height * 2.0,
-        ):
-            mismatches.append(f"enemy_sprite_geometry:{slot}")
-    if mismatches:
-        raise RuntimeError(
-            "compact/source safety roots disagree: " + ", ".join(mismatches)
-        )
-    control = replace(
-        control,
-        factual_state_schema=OFFLINE_FACT_SCHEMA,
-        player_attack=authority.player_attack,
-        item_states=authority.item_states,
-        item_next_index=authority.item_next_index,
-        effect_active_upper_bound=authority.effect_active_upper_bound,
-        item_active_upper_bound=authority.item_active_upper_bound,
-        pending_effect_rng_ids=authority.pending_effect_rng_ids,
-        random_item_spawn_index=authority.random_item_spawn_index,
-        random_item_table_index=authority.random_item_table_index,
-        ecl_ex_function_addresses=authority.ecl_ex_function_addresses,
-        timeline_current_message_waits=authority.timeline_current_message_waits,
-        message_active=authority.message_active,
-        timeline_boss_slots=authority.timeline_boss_slots,
-        timeline_time_previous=authority.timeline_time_previous,
-        boss_present=authority.boss_present,
-    )
-    return control, authority
 
 
 def observe_passive_control_clock(process) -> bool:
@@ -1178,18 +1027,6 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
     values.setdefault("random_item_spawn_index", 0)
     values.setdefault("random_item_table_index", 0)
     values.setdefault("enemy_sprite_dimensions", ())
-    values.setdefault("ecl_ex_function_addresses", ())
-    values.setdefault("timeline_current_message_waits", 0)
-    values.setdefault("message_active", False)
-    values.setdefault("timeline_boss_slots", ())
-    values.setdefault("timeline_time_previous", None)
-    values.setdefault("boss_present", None)
-    values.setdefault("repeat_star_state", None)
-    repeat_star_state = values["repeat_star_state"]
-    if isinstance(repeat_star_state, dict):
-        repeat_star_state = dict(repeat_star_state)
-        repeat_star_state["angles"] = tuple(repeat_star_state.get("angles", ()))
-        values["repeat_star_state"] = RepeatStarState(**repeat_star_state)
 
     def decode_dimensions(name: str) -> dict[int, tuple[float, float]]:
         dimensions = {}
@@ -1290,44 +1127,15 @@ def decode_control_snapshot(raw: dict[str, object]) -> ControlSnapshot:
                 0, len(values["raw_enemy_records"]), enemy_record_size
             )
         }
-        ex_addresses = tuple(
-            int(address) for address in values["ecl_ex_function_addresses"]
-        )
-        timeline_boss_slots = tuple(
-            int(slot) for slot in values["timeline_boss_slots"]
-        )
-        values["ecl_ex_function_addresses"] = ex_addresses
-        values["timeline_boss_slots"] = timeline_boss_slots
-        repeat_state = values["repeat_star_state"]
-        repeat_state_complete = bool(
-            isinstance(repeat_state, RepeatStarState)
-            and repeat_state.angles_known
-            and len(repeat_state.angles) == 6
-            and repeat_state.enemy_uncertainty_x == 0.0
-            and repeat_state.enemy_uncertainty_y == 0.0
-            and all(math.isfinite(value) for value in (
-                *repeat_state.angles,
-                repeat_state.enemy_x,
-                repeat_state.enemy_y,
-                repeat_state.player_x,
-                repeat_state.player_y,
-            ))
-        )
         if (
             values["source_record_schema"] != SOURCE_RECORD_SCHEMA
             or values["factual_state_schema"] != OFFLINE_FACT_SCHEMA
             or len(values["raw_enemy_manager_tail"]) != expected_tail
             or enemy_sprite_pointers - set(enemy_dimensions)
-            or len(ex_addresses) != native.ECL_EX_COUNT
-            or any(not 0x10000 <= address < 0x80000000 for address in ex_addresses)
-            or len(timeline_boss_slots) != 8
-            or any(not -1 <= slot < native.ENEMY_COUNT for slot in timeline_boss_slots)
-            or int(values["timeline_current_message_waits"]) < 0
-            or values["timeline_time_previous"] is None
-            or values["boss_present"] is None
-            or not repeat_state_complete
+            or not isinstance(values["player_attack"], PlayerAttackState)
+            or values["item_active_upper_bound"] != len(values["item_states"])
         ):
             raise ValueError(
-                f"{CONTROL_CAPTURE_TIER} source/factual records are incomplete"
+                f"{CONTROL_CAPTURE_TIER} factual records are incomplete"
             )
     return ControlSnapshot(**values)

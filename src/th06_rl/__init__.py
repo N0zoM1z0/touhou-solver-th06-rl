@@ -1,4 +1,4 @@
-"""TH06 reactive baseline and shielded learning package."""
+"""TH06 observed shield, factual corpus, and offline-learning package."""
 
 from .core.model import (
     Action,
@@ -7,22 +7,10 @@ from .core.model import (
     HazardSample,
     Kinematics,
 )
-from .core.planner import (
-    LocalPlanner,
-    LocalPlannerConfig,
-    LocalPlanningRequest,
-    LocalProposal,
-)
-
 __all__ = (
     "Action",
     "Bounds",
     "CertifiedAction",
     "HazardSample",
     "Kinematics",
-    "LocalPlanner",
-    "LocalPlannerConfig",
-    "LocalPlanningRequest",
-    "LocalProposal",
 )
-

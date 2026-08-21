@@ -1,164 +1,130 @@
 # TH06-RL working rules
 
-Read `START_HERE.md` and `docs/WINE_ONLY_AUTONOMOUS_LEARNING.md` before
-changing code. The authoritative source clone is the ignored checkout at
-`reference/GensokyoClub-th06/`. Source and shipped-game claims must be
-traceable to it. Do not use REA or REA-provided tools. Prefer LeanToken for
-bounded repository archaeology and use ordinary tools for edits and runtime
-probes.
+Read `START_HERE.md`, `paper/README.md`, `paper/main.tex`, and
+`docs/ONLINE_OFFLINE_SAFETY_CONTRACT.md` before changing gameplay, corpus, or
+learning code. Prefer LeanToken for bounded repository archaeology and use
+ordinary tools for edits, builds, tests, and runtime probes.
 
-## Wine-only environment boundary
+## Research invariant
+
+The project is **capture-complete, not prediction-complete**.
+
+- Online infra records what original TH06 actually did. It does not attempt to
+  interpret every ECL opcode or predict every future pattern.
+- The online shield has a deliberately narrow claim: it rejects actions whose
+  short-horizon player path intersects already-instantiated bullets, lasers, or
+  enemy bodies under supported observed kinematics.
+- The shield must never label an unobserved future birth as safe. Unknown future
+  behavior is outside its certificate and belongs to the learned policy.
+- Coherent capture, input delivery, observed-object geometry, HIT/Bomb
+  accounting, lifecycle, and dataset linkage must remain exact. Do not weaken
+  these contracts to make a route finish.
+- Do not add stage, boss, spell, ECL, frame, RNG, coordinate, pattern, or
+  counterexample-specific gameplay logic. Poor play with passing infra is a
+  data/learning problem.
+
+The first source question is intentionally small: can a hazard first created
+after one paused decision root damage the player before the next controllable
+root? Record the answer and evidence in `paper/`. If the answer is no, no source
+forecast is needed online. If the answer is yes, add only the smallest general
+one-update birth envelope justified by a reproducer; do not rebuild an ECL
+interpreter.
+
+## Three owned components
+
+1. **Wine fact recorder.** Pause the exact process, capture one coherent state,
+   record the chosen input and its propensity, publish to the exact PID, resume,
+   and link the next factual root. A HIT is an outcome and never ends collection
+   by default. Bomb input is always forbidden.
+2. **Observed-hazard shield.** Fixed bounded work over instantiated physical
+   objects only. A policy may rank or sample only shield-admissible actions, but
+   the shield is not a proof against unknown future births.
+3. **Offline learner/export.** Consume an algorithm-independent episode format.
+   Training may be complex; exported online inference must be immutable,
+   bounded, fast, and unable to widen the shield set.
+
+Every defect must be attributable to exactly one of these components before
+adding complexity. First establish a minimal end-to-end baseline; then add one
+falsifiable learner change at a time.
+
+## Environment and data authority
 
 Original Japanese TH06 1.02h under Wine is the only environment allowed to
-create trajectories, rewards, exploration outcomes, counterfactual branch
-labels, or promotion evidence. Do not use the reconstructed Linux/headless
-runtime for training, evaluation, action proposals, or compatibility claims.
-Tracked headless code has been removed. Historical commits and ignored
-artifacts are quarantine history, not an available backend; do not restore
-them into the active tree.
+create trajectories, rewards, exploration outcomes, canary evidence, or final
+evaluation. The reconstructed source tree and extracted ECL files are
+read-only references and diagnostics, never gameplay or transition generators.
+Do not use REA or REA-provided tools.
 
-Offline code may replay observations captured from original-retail Wine,
-recompute native geometry, construct features, fit models, and score candidate
-policies. Such replay must not invent a successor state for an action that Wine
-did not execute.
+The recorder preserves dense physical facts independently of learner features:
+player state, witnessed input, instantiated bullets/lasers/enemy bodies and
+their stable slots, items, attacks, resources, lifecycle, HITs, timing, policy
+identity, full behavior probabilities, and provenance. Optional source/ECL/RNG
+facts may be retained for forensic analysis but are forbidden actor inputs and
+must not be required to load a learning episode.
 
-Dense physical frames retain the raw state needed to reconstruct collision
-geometry and hazard-producer state plus factual player attacks, items, and
-NMNB resource counters independently of learner features. Any intentional
-omission must be schema-visible and must not be described as a lossless
-full-game state. Same-frame stage/program anchors retain immutable stage/ECL
-graphs; compact roots retain factual occupied bullet, laser, enemy,
-manager, player-attack, item, and resource state. Derived, capped, or lossy
-feature tensors are never audit authority.
+Offline replay may derive features, labels, geometry, and models only from
+executed Wine transitions. It must not invent a successor state for an action
+Wine did not execute. Corpora are immutable assets independent of the algorithm
+that first consumes them; learner features and fitted artifacts are derived,
+versioned products.
 
-Training admission requires `control-v5` and a complete pass through
-`th06_rl.th06.source_dataset`: the first dense frame of every stage has its stage
-root, every live ECL/timeline pointer is covered by the active anchor, and all
-pointed Enemy/bullet geometry remains decodable after Wine exits. Older tiers
-stay quarantined even when their physical route completed.
-The dense root and its same-pause anchor must also agree on the exact shared
-angle and stored enemy/player origins used by retail `EXINSREPEAT(2)`; these
-globals are data, never a learner assumption.
+## Runtime and collection rules
 
-## Runtime boundary
-
-1. pause the exact Wine process and capture one coherent physical snapshot;
-2. construct a source-complete Hard-horizon collision envelope and a native
-   safe first-action set with fixed bounded work;
-3. let an immutable policy rank only that set;
-4. revalidate and publish against that same paused source epoch;
-5. resume only after publishing one action, with Bomb bit `0x02` forbidden in
-   every mode.
-
-Learning never owns collision authority, uncertainty margins, delivery
-coverage, fail-close behavior, source commitments, or the fresh issue check.
-The envelope must include already-observed hazards plus every retail birth,
-body mutation, clamp, and laser mutation possible before the input lease
-expires. Unknown, incoherent, or uncovered source state fails closed. A small,
-bounded, source-verified commitment evaluator belongs to the environment
-adapter; unbounded ECL interpretation and tree/beam search do not belong in the
-resident hot path.
-
-## Learning boundary
-
-The active method is:
-
-`Wine exploration -> grouped offline learning -> immutable candidate -> Wine canary`
-
-Online policy state is immutable. Data collection may make predeclared,
-propensity-recorded randomized choices inside the native-safe set; it may not
-update weights. Split training and validation by complete physical episode,
-never by adjacent frame. A learned policy defaults to the frozen incumbent
-outside supported physical features and abstains on model disagreement.
-
-Failed Generation-1--6 learners and runners have been pruned from the active
-tree. Do not restore them from Git history or ignored artifacts. Their old
-transition-v6/v9/v10 corpora are also training-ineligible: they predate the
-source-complete paused-root authority and lack the current raw source
-commitments needed to recompute or audit safe-set labels. The terminal
-action-centered actor objective was unbounded below under empirical
-optimization; its proof and the successor boundary are recorded in
-`docs/LEARNER_AUDIT_AND_GENERATION7_DECISION.md`. Every successor must use a
-bounded proper objective and pass an extreme-logit anti-exploitation smoke
-before Wine gameplay.
-
-## Autonomous-learning boundary
-
-Gameplay improvement belongs to the fixed learning algorithm and repeated
-Wine data rounds, not to human case-by-case policy edits. Do not tune collection
-eligibility, reward terms, feature thresholds, activation regions, or action
-preferences after inspecting a failure location. Do not add stage, boss, spell,
-frame-window, RNG-seed, bullet-pattern, or counterexample-specific logic.
-
-Humans may change gameplay-facing code only to repair a demonstrated
-infrastructure defect: incoherent capture, incorrect memory semantics, action
-delivery, native geometry/safety, factual label alignment, process isolation,
-or evaluation accounting. Every such repair needs a reproducer and a contract
-test. If contracts pass and play is poor, collect more Wine experience and let
-the unchanged learner update. The unattended round runner, not a human, decides
-when to fit, shadow, canary, evaluate, continue collecting, or stop at a
-predeclared evidence limit.
-
-The learning interface must be game-agnostic: observations, native-safe action
-sets, chosen-action propensities, transitions, episode groups, rewards, and HIT
-outcomes. TH06-specific memory and input details stay in the environment
-adapter. Porting to TH08 should replace that adapter and configuration, not the
-dataset, fitting, validation, or orchestration algorithm.
-
-RNG control and isolated parallel normal-speed Wine workers may accelerate
-training collection; snapshots and first-HIT prefixes are diagnostic only.
-Do not accelerate the game clock for any evidence-producing corpus. Final
-comparison uses normal-speed original Wine, natural full Practice Stages, HIT
-continuation, zero Bomb, immutable policies, and alternating
-incumbent/candidate trials. The per-run physical HIT count is authoritative.
-Parallel width is declared by a generated resource contract and bounded by the
-current host's CPU affinity, free memory, and free storage. Workers must be
-copied from the immutable archive-derived template, never from a game directory
-that Wine has executed. Natural-RNG collection requires an exact fixed-seed
-serial/pool-wide gate bound to the same commit, native build, policy, and pool;
-every concurrent worker must reproduce the serial facts exactly. One worker
-failure rejects and reaps the whole active wave; partial schedules remain
-quarantined and are never outcome-conditionally replaced.
-
-## No scripted play
-
-Do not key movement to a frame number, RNG seed, run ID, counterexample,
-boss name, or handwritten phase state. Difficulty, character, shot type,
-stage, and automatically derived source context are separate scopes. Source
-context may partition evidence but may not select a handwritten route.
-Never manually replace an action or add stage-, boss-, spell-, frame-, or
-coordinate-specific policy branches; avoidance behavior must be learned.
-
-## Physical-run safety
-
-- Armed menu-started play defaults to patched-life HIT continuation through the
-  complete declared Practice Stage or route. A HIT is a factual failure event,
-  never the episode terminal. Stop on source-authority, infrastructure,
-  storage, or Bomb failure; do not relax the online Hard gate to keep playing.
-- First-HIT prefixes require the explicit diagnostic-only `--stop-on-hit`
-  mode. They are incomplete and cannot enter offline training, canary, or
-  promotion evidence.
+- Battle input publication uses one coherent paused root and the exact game PID.
 - Menu/dialogue control stays separate from battle movement.
 - Never launch the Windows game through a PTY.
-- Release every input, stop the exact trial PID, and check for leftover game,
-  controller, display, or high-CPU processes after every run.
-- Do not run canonical promotion trials concurrently or with a modified game
-  clock.
+- Release every input and reap the exact worker after each run.
+- Default runs continue after every HIT through the declared Practice Stage or
+  six-stage route. `--stop-on-hit` is diagnostic-only and its output is not
+  training, canary, or promotion evidence.
+- Zero Bomb is mandatory. A Bomb event invalidates the run.
+- Infrastructure, capture, storage, or action-delivery failure may terminate a
+  run; a physical HIT may not.
+- Training collection may use isolated parallel Wine workers after a serial vs
+  parallel differential gate. Final evaluation uses normal-speed original Wine.
+- Do not change the game clock for evidence until a separate source-backed,
+  normal-speed differential experiment proves the exact equivalence in scope.
 
-## Gensokyo skill attribution
+## Learning and evaluation rules
 
-When a Gensokyo skill materially influences a change, attribute it in every
-corresponding commit with an `Assisted-by:` trailer naming both the character
-and skill. Keep the trailer specific to the help actually used; do not add it
-to unrelated commits. Example:
+Start with the simplest learnability test: whole-episode train/validation split,
+behavior cloning or another transparent supervised baseline, and exact replay
+of factual actions/HIT labels. Only add temporal encoders, IQL, auxiliary
+dynamics losses, ensembles, or OPE after the preceding experiment passes its
+predeclared acceptance criterion.
+
+Reward/cost is physical HIT only (`cost = HIT count`, `gamma = 1`, terminal
+value zero). Clearance, graze, score, route progress, and source identities are
+not reward. Auxiliary factual prediction targets are allowed only when clearly
+separated from reward.
+
+Actor inputs must be portable physical observations and history. Stage ID,
+boss/spell ID, ECL opcode/subroutine, RNG seed, source address, run identity, and
+future facts are forbidden. TH08 porting should replace the environment adapter
+and configuration, not the episode schema, learner protocol, or evaluator.
+
+Split inference and evaluation by complete physical episode, never adjacent
+frames. The authoritative metric is physical HIT count over complete routes;
+NMNB completion rate is the goal metric. Report infra failures separately from
+gameplay HITs.
+
+## Repository and attribution
+
+This repository must not import or execute a historical N0zoM1z0 solver.
+Sibling source and solver trees are read-only references. Portable scripts may
+accept or discover sibling paths, but tracked files must not contain machine
+absolute paths. Do not track game assets, Wine prefixes, corpora, traces, logs,
+caches, binaries, or generated artifacts. The sole generated-artifact exception
+is the canonical research paper at `paper/main.pdf`, which is rebuilt by
+`scripts/build_paper.sh` and intentionally tracked.
+
+Delete obsolete active code and documentation instead of leaving misleading
+routes. Preserve historical rationale only when it is clearly marked retired.
+
+When a Gensokyo skill materially influences a change, every corresponding
+commit must include a truthful trailer such as:
 
 ```text
-Assisted-by: Nitori (gensokyo-skills:nitori-reverse-engineering)
+Assisted-by: Cirno (gensokyo-skills:cirno-radical-simplification)
+Assisted-by: Yukari (gensokyo-skills:yukari-boundary-analysis)
 ```
-
-Sibling source and historical solver trees are read-only references, never
-runtime or import dependencies. Portable setup scripts may discover a sibling
-checkout as a convenience, but must accept an explicit path and must not bake
-absolute workspace paths into tracked files. Do not copy game assets, source
-clones, corpora, traces, logs, caches, binaries, or generated artifacts into
-tracked files.
