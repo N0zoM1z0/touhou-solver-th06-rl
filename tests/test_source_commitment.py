@@ -715,6 +715,71 @@ def test_external_laser_shot_requests_the_mutable_laser_world() -> None:
     assert "laser world" in forecast.reason
 
 
+def _laser_create_instruction(address: int) -> EclInstruction:
+    instruction, raw = _instruction(address, 0, 85, 64)
+    struct.pack_into("<fffff", raw, 0x10, 0.0, 0.0, 0.0, 100.0, 10.0)
+    struct.pack_into("<f", raw, 0x24, 4.0)
+    struct.pack_into("<iiiiii", raw, 0x28, 0, 60, 10, 0, 0, 0)
+    return _with_raw(instruction, raw)
+
+
+def _laser_rotate_instruction(address: int) -> EclInstruction:
+    instruction, raw = _instruction(address, 0, 88, 20)
+    struct.pack_into("<if", raw, 0x0C, 0, 0.1)
+    return _with_raw(instruction, raw)
+
+
+def test_one_laser_world_replays_stale_pointer_reuse_in_source_order() -> None:
+    rotate_missing = _laser_rotate_instruction(0x11140)
+    create = _laser_create_instruction(0x11154)
+    rotate_aliased = _laser_rotate_instruction(0x11194)
+    end, _raw = _instruction(0x111A8, -1, 0)
+    spawner = _spawner(
+        rotate_missing,
+        end,
+        ecl_program=(rotate_missing, create, rotate_aliased, end),
+        laser_slots=(0,) + (-1,) * 31,
+        laser_store=1,
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 400.0),)
+    )
+
+    assert forecast.covered_frames == 1
+    assert forecast.reason == ""
+    assert forecast.laser_births == 1
+    assert forecast.laser_effect_worlds == 1
+    assert forecast.missing_laser_dereferences == (0,)
+    assert forecast.laser_hazards[0][0].angle == pytest.approx(0.1)
+
+
+def test_cross_emitter_stale_pointer_reuse_remains_fail_closed() -> None:
+    create = _laser_create_instruction(0x111A0)
+    creator_end, _raw = _instruction(0x111E0, -1, 0)
+    creator = _spawner(create, creator_end)
+    rotate = _laser_rotate_instruction(0x111EC)
+    stale_end, _raw = _instruction(0x11200, -1, 0)
+    stale = _spawner(
+        rotate,
+        stale_end,
+        slot=1,
+        laser_slots=(0,) + (-1,) * 31,
+    )
+    snapshot = replace(
+        _snapshot(creator),
+        spawners=(creator, stale),
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),))
+
+    assert forecast.covered_frames == 0
+    assert forecast.laser_effect_worlds == 2
+    assert forecast.reason == (
+        "future laser allocation may alias a stale ECL pointer"
+    )
+
+
 def _repeat_star_instruction(address: int, time: int) -> EclInstruction:
     instruction, raw = _instruction(address, time, 122, 16)
     struct.pack_into("<i", raw, 0x0C, 2)

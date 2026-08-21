@@ -20,6 +20,8 @@ from .bullets import (
 )
 from .ecl import (
     HardLaserWorld,
+    OPCODE_LASER_CREATE,
+    OPCODE_LASER_CREATE_AIMED,
     forecast_ecl_births,
     forecast_ecl_forced_kill_all_update,
     source_enemy_template,
@@ -61,6 +63,16 @@ def _program_can_repeat_star(emitter: EnemySpawner) -> bool:
     return False
 
 
+def _program_can_allocate_laser(emitter: EnemySpawner) -> bool:
+    return any(
+        instruction.opcode in (
+            OPCODE_LASER_CREATE,
+            OPCODE_LASER_CREATE_AIMED,
+        )
+        for instruction in emitter.ecl_program
+    )
+
+
 @dataclass(frozen=True)
 class WorldBirthForecast:
     births: tuple[tuple[Bullet, ...], ...]
@@ -89,6 +101,11 @@ class WorldBirthForecast:
     # world layer owns the cross-slot effect; individual emitters may only
     # report the event when their slot order makes that effect replayable.
     enemy_kill_all_frames: tuple[int, ...] = ()
+    # Number of independently replayed mutable laser worlds that observed a
+    # pool or pointer effect.  Pointer reuse inside one world is source-ordered
+    # by HardLaserWorld; only effects split across worlds can be aliased in an
+    # order that the independent envelopes do not represent.
+    laser_effect_worlds: int = 0
 
 
 @dataclass(frozen=True)
@@ -458,6 +475,7 @@ def _forecast_hard_emitter_with_lasers(
                 laser_world.missing_dereferences
             )),
             retired_future_laser=laser_world.retired_created,
+            laser_effect_worlds=int(_laser_world_changed(laser_world)),
             laser_hazards=tuple(map(tuple, lasers)),
             bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
             bullet_release_frames=tuple(sorted(bullet_release_frames)),
@@ -540,6 +558,12 @@ def _forecast_hard_emitter(
     allow_repeat_star: bool = True,
 ) -> WorldBirthForecast:
     """Use the compact mutable world only when a reachable laser op needs it."""
+    # A create-only program can project its own beam geometry without mutable
+    # state, but the allocation still occupies BulletManager's global 64-slot
+    # pool and may alias another enemy's stale Laser*.  Preserve that world
+    # effect even when this emitter never mutates its newly created beam.
+    if laser_world is None and _program_can_allocate_laser(emitter):
+        laser_world = HardLaserWorld(snapshot.lasers)
     if laser_world is None:
         batched = _forecast_hard_emitter_batched(
             snapshot,
@@ -911,6 +935,7 @@ def _forecast_hard_timeline_births(
     mutated_initial_lasers: list[int] = []
     missing_laser_dereferences: list[int] = []
     retired_future_laser = False
+    laser_effect_worlds = 0
     bullet_stop_frames: set[int] = set()
     bullet_release_frames: set[int] = set()
     replaces_live_from_lead: int | None = None
@@ -952,6 +977,7 @@ def _forecast_hard_timeline_births(
                     "unresolved stage timeline boss interrupt opcode 10 "
                     f"at 0x{instruction.address:08x}",
                     tuple(map(tuple, bodies)),
+                    laser_effect_worlds=laser_effect_worlds,
                     bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                     bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
@@ -968,6 +994,7 @@ def _forecast_hard_timeline_births(
                     "invalid stage timeline enemy spawn record "
                     f"at 0x{instruction.address:08x}",
                     tuple(map(tuple, bodies)),
+                    laser_effect_worlds=laser_effect_worlds,
                     bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                     bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
@@ -997,6 +1024,7 @@ def _forecast_hard_timeline_births(
                 "timeline enemy ECL graph is unavailable "
                 f"for sub {spawn.sub_id}",
                 tuple(map(tuple, bodies)),
+                laser_effect_worlds=laser_effect_worlds,
                 bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                 bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
@@ -1058,6 +1086,10 @@ def _forecast_hard_timeline_births(
                 lead,
                 f"timeline emitter {spawn.sub_id}: {inline.reason}",
                 tuple(map(tuple, bodies)),
+                laser_effect_worlds=(
+                    laser_effect_worlds
+                    + int(_laser_world_changed(laser_world))
+                ),
                 bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                 bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
@@ -1087,6 +1119,10 @@ def _forecast_hard_timeline_births(
                     f"timeline emitter {spawn.sub_id} external kill-all: "
                     f"{external.reason}",
                     tuple(map(tuple, bodies)),
+                    laser_effect_worlds=(
+                        laser_effect_worlds
+                        + int(_laser_world_changed(laser_world))
+                    ),
                     bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                     bullet_release_frames=tuple(sorted(
                         bullet_release_frames
@@ -1115,6 +1151,7 @@ def _forecast_hard_timeline_births(
                     laser_world.missing_dereferences
                 )
                 retired_future_laser |= laser_world.retired_created
+                laser_effect_worlds += int(_laser_world_changed(laser_world))
                 continue
             return WorldBirthForecast(
                 tuple(map(tuple, births)),
@@ -1122,6 +1159,10 @@ def _forecast_hard_timeline_births(
                 lead + 1,
                 f"timeline emitter {spawn.sub_id}: {inline.reason}",
                 tuple(map(tuple, bodies)),
+                laser_effect_worlds=(
+                    laser_effect_worlds
+                    + int(_laser_world_changed(laser_world))
+                ),
                 bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                 bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
@@ -1153,6 +1194,10 @@ def _forecast_hard_timeline_births(
                 f"timeline emitter {spawn.sub_id}: interactive newborn "
                 "kill-all death needs a shared ordinary slot replay",
                 tuple(map(tuple, bodies)),
+                laser_effect_worlds=(
+                    laser_effect_worlds
+                    + int(_laser_world_changed(laser_world))
+                ),
                 bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                 bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
@@ -1183,6 +1228,7 @@ def _forecast_hard_timeline_births(
             ordinary.missing_laser_dereferences
         )
         retired_future_laser |= ordinary.retired_future_laser
+        laser_effect_worlds += ordinary.laser_effect_worlds
         bullet_stop_frames.update(ordinary.bullet_stop_frames)
         bullet_release_frames.update(ordinary.bullet_release_frames)
         if ordinary.covered_frames < horizon:
@@ -1192,6 +1238,7 @@ def _forecast_hard_timeline_births(
                 ordinary.covered_frames,
                 f"timeline emitter {spawn.sub_id}: {ordinary.reason}",
                 tuple(map(tuple, bodies)),
+                laser_effect_worlds=laser_effect_worlds,
                 bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                 bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
@@ -1206,6 +1253,7 @@ def _forecast_hard_timeline_births(
             missing_laser_dereferences
         )),
         retired_future_laser=retired_future_laser,
+        laser_effect_worlds=laser_effect_worlds,
         laser_hazards=tuple(map(tuple, lasers)),
         bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
         bullet_release_frames=tuple(sorted(bullet_release_frames)),
@@ -1954,6 +2002,7 @@ def forecast_world_births(
         mutated_initial_lasers: list[int] = []
         missing_laser_dereferences: list[int] = []
         retired_future_laser = False
+        laser_effect_worlds = 0
         bullet_stop_frames: list[int] = []
         bullet_release_frames: list[int] = []
         emitter_failures: list[tuple[int, str, bool]] = []
@@ -1984,6 +2033,7 @@ def forecast_world_births(
                 forecast.missing_laser_dereferences
             )
             retired_future_laser |= forecast.retired_future_laser
+            laser_effect_worlds += forecast.laser_effect_worlds
             bullet_stop_frames.extend(forecast.bullet_stop_frames)
             bullet_release_frames.extend(forecast.bullet_release_frames)
             live_kill_all_frames.extend(forecast.enemy_kill_all_frames)
@@ -2010,6 +2060,7 @@ def forecast_world_births(
             timeline.missing_laser_dereferences
         )
         retired_future_laser |= timeline.retired_future_laser
+        laser_effect_worlds += timeline.laser_effect_worlds
         bullet_stop_frames.extend(timeline.bullet_stop_frames)
         bullet_release_frames.extend(timeline.bullet_release_frames)
         live_replaces_from_lead: int | None = None
@@ -2090,8 +2141,11 @@ def forecast_world_births(
             if slot not in active_laser_slots
         )
         allocated_future_slots = set(sorted(allocated_future_slots)[:laser_births])
-        stale_alias = bool(
-            allocated_future_slots.intersection(missing_laser_dereferences)
+        stale_alias = (
+            laser_effect_worlds > 1
+            and bool(allocated_future_slots.intersection(
+                missing_laser_dereferences
+            ))
         )
         aliased_mutation = (
             len(mutated_initial_lasers)
@@ -2125,6 +2179,7 @@ def forecast_world_births(
                 missing_laser_dereferences
             )),
             retired_future_laser=retired_future_laser,
+            laser_effect_worlds=laser_effect_worlds,
             laser_hazards=tuple(map(tuple, lasers)),
             bullet_stop_frames=tuple(sorted(set(bullet_stop_frames))),
             bullet_release_frames=tuple(sorted(set(bullet_release_frames))),
