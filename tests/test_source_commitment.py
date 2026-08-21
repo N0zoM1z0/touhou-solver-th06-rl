@@ -566,3 +566,354 @@ def test_hard_timeline_child_cannot_own_shared_repeat_star_globals() -> None:
 
     assert forecast.covered_frames == 0
     assert "captured shared globals" in forecast.reason
+
+
+def _set_int_instruction(
+    address: int,
+    time: int,
+    opcode: int,
+    value: int,
+) -> EclInstruction:
+    instruction, raw = _instruction(address, time, opcode, 16)
+    struct.pack_into("<i", raw, 0x0C, value)
+    return _with_raw(instruction, raw)
+
+
+def _timeline_spawn(
+    address: int,
+    time: int,
+    sub_id: int,
+) -> StageTimelineInstruction:
+    raw = bytearray(24)
+    struct.pack_into("<fffhh", raw, 8, 192.0, 128.0, 0.0, 100, -1)
+    return StageTimelineInstruction(
+        address, time, sub_id, 0, len(raw), raw.hex()
+    )
+
+
+def _timeline_kill_all_snapshot(
+    child_program: tuple[EclInstruction, ...],
+    child_subroutines: tuple[int, ...],
+    *,
+    live: EnemySpawner | None = None,
+    prior_spawn: bool = False,
+    target_sub_id: int = 0,
+) -> Snapshot:
+    live_end, _raw = _instruction(0x1A000, -1, 0)
+    root = live if live is not None else _spawner(live_end, live_end)
+    timeline = []
+    if prior_spawn:
+        timeline.append(_timeline_spawn(0x2A000, 1, 0))
+    timeline.append(_timeline_spawn(0x2A018, 3, target_sub_id))
+    timeline.append(
+        StageTimelineInstruction(0x2A030, -1, 0, 0, 8, "00" * 8)
+    )
+    return replace(
+        _snapshot(root),
+        boss_present=False,
+        timeline_instructions=tuple(timeline),
+        timeline_ecl_program=child_program,
+        ecl_subroutines=child_subroutines,
+    )
+
+
+def test_timeline_kill_all_allows_source_ordered_noninteractive_child() -> None:
+    # Stage 4 sub21 has this material ordering: INTERACTABLE(0), KILLALL,
+    # then DEATHCALLBACKSUB.  SpawnEnemy initialized the callback to -1, so
+    # kill-all cannot invoke it; the later non-interactive state also cannot
+    # take the ordinary EnemyManager death path.
+    interact = _set_int_instruction(0x18000, 0, 117, 0)
+    kill_all, _raw = _instruction(0x18010, 0, 96)
+    callback = _set_int_instruction(0x1801C, 0, 108, 1)
+    wait, _raw = _instruction(0x1802C, -1, 0)
+    snapshot = _timeline_kill_all_snapshot(
+        (interact, kill_all, callback, wait),
+        (interact.address, wait.address),
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 5
+
+
+def test_timeline_kill_all_rejects_active_self_callback() -> None:
+    callback = _set_int_instruction(0x18100, 0, 108, 1)
+    kill_all, _raw = _instruction(0x18110, 0, 96)
+    wait, _raw = _instruction(0x1811C, -1, 0)
+    snapshot = _timeline_kill_all_snapshot(
+        (callback, kill_all, wait),
+        (callback.address, wait.address),
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 3
+    assert "active death callback" in forecast.reason
+
+
+def test_timeline_kill_all_rejects_delayed_interactive_callback() -> None:
+    kill_all, _raw = _instruction(0x18200, 0, 96)
+    callback = _set_int_instruction(0x1820C, 0, 108, 1)
+    wait, _raw = _instruction(0x1821C, -1, 0)
+    snapshot = _timeline_kill_all_snapshot(
+        (kill_all, callback, wait),
+        (kill_all.address, wait.address),
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 3
+    assert "assigned later" in forecast.reason
+
+
+def test_timeline_kill_all_rejects_same_call_enemy_creation() -> None:
+    create, raw = _instruction(0x18240, 0, 95, 32)
+    struct.pack_into("<iff", raw, 0x0C, 1, 192.0, 128.0)
+    struct.pack_into("<hh", raw, 0x1C, 100, -1)
+    create = _with_raw(create, raw)
+    kill_all, _raw = _instruction(0x18260, 0, 96)
+    wait, _raw = _instruction(0x1826C, -1, 0)
+    snapshot = _timeline_kill_all_snapshot(
+        (create, kill_all, wait),
+        (create.address, wait.address),
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 3
+    assert "ENEMYCREATE/ENEMYKILLALL" in forecast.reason
+
+
+def test_timeline_kill_all_rejects_live_slot_created_in_prefix() -> None:
+    kill_all, _raw = _instruction(0x18280, 0, 96)
+    child_wait, _raw = _instruction(0x1828C, -1, 0)
+    create, raw = _instruction(0x19280, 0, 95, 32)
+    struct.pack_into("<iff", raw, 0x0C, 1, 192.0, 128.0)
+    struct.pack_into("<hh", raw, 0x1C, 100, -1)
+    create = _with_raw(create, raw)
+    live_wait, _raw = _instruction(0x192A0, -1, 0)
+    live = _spawner(
+        create,
+        live_wait,
+        ecl_program=(create, live_wait),
+        ecl_subroutines=(create.address, live_wait.address),
+    )
+    snapshot = _timeline_kill_all_snapshot(
+        (kill_all, child_wait),
+        (kill_all.address, child_wait.address),
+        live=live,
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 0
+    assert "inserts a live slot" in forecast.reason
+
+
+def test_timeline_kill_all_rejects_active_live_slot_callback() -> None:
+    kill_all, _raw = _instruction(0x18300, 0, 96)
+    wait, _raw = _instruction(0x1830C, -1, 0)
+    live_end, _raw = _instruction(0x19300, -1, 0)
+    live = _spawner(
+        live_end,
+        live_end,
+        life=10_000,
+        death_callback_sub=1,
+        ecl_subroutines=(live_end.address, live_end.address),
+    )
+    snapshot = _timeline_kill_all_snapshot(
+        (kill_all, wait),
+        (kill_all.address, wait.address),
+        live=live,
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 3
+    assert "ENEMYKILLALL" in forecast.reason
+
+
+def test_timeline_kill_all_replays_interactive_callback_on_next_frame() -> None:
+    kill_all, _raw = _instruction(0x18340, 0, 96)
+    child_wait, _raw = _instruction(0x1834C, -1, 0)
+    live_wait, _raw = _instruction(0x19340, -1, 0)
+    callback_shoot, _raw = _instruction(0x1934C, 0, 80)
+    callback_wait, _raw = _instruction(0x19358, -1, 0)
+    pattern = BulletPattern(
+        0, 0.0, 0.0, 1.0, 1.0,
+        (0.0,) * 4, (0,) * 4,
+        1, 1, 0, 0x4, 1.0, 1.0,
+    )
+    live = _spawner(
+        live_wait,
+        callback_wait,
+        life=10_000,
+        interactable=True,
+        has_been_in_bounds=True,
+        death_mode=1,
+        death_callback_sub=1,
+        pattern=pattern,
+        ecl_program=(live_wait, callback_shoot, callback_wait),
+        ecl_subroutines=(live_wait.address, callback_shoot.address),
+    )
+    snapshot = _timeline_kill_all_snapshot(
+        (kill_all, child_wait),
+        (kill_all.address, child_wait.address),
+        live=live,
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 5
+    assert len(forecast.births[3]) == 0
+    assert len(forecast.births[4]) == 1
+
+
+def test_timeline_kill_all_target_ecl_reads_forced_zero_life() -> None:
+    kill_all, _raw = _instruction(0x18380, 0, 96)
+    child_wait, _raw = _instruction(0x1838C, -1, 0)
+    compare, raw = _instruction(0x19380, 3, 27, 20)
+    struct.pack_into("<ii", raw, 0x0C, -10024, 0)
+    compare = _with_raw(compare, raw)
+    jump_not_equal, raw = _instruction(0x19394, 3, 34, 20)
+    struct.pack_into("<ii", raw, 0x0C, 3, 32)
+    jump_not_equal = _with_raw(jump_not_equal, raw)
+    shoot, _raw = _instruction(0x193A8, 3, 80)
+    live_wait, _raw = _instruction(0x193B4, -1, 0)
+    callback_wait, _raw = _instruction(0x193C0, 30, 0)
+    pattern = BulletPattern(
+        0, 0.0, 0.0, 1.0, 1.0,
+        (0.0,) * 4, (0,) * 4,
+        1, 1, 0, 0x4, 1.0, 1.0,
+    )
+    live = _spawner(
+        compare,
+        callback_wait,
+        life=10_000,
+        interactable=True,
+        has_been_in_bounds=True,
+        death_mode=1,
+        death_callback_sub=1,
+        pattern=pattern,
+        ecl_program=(
+            compare,
+            jump_not_equal,
+            shoot,
+            live_wait,
+            callback_wait,
+        ),
+        ecl_subroutines=(compare.address, callback_wait.address),
+    )
+    snapshot = _timeline_kill_all_snapshot(
+        (kill_all, child_wait),
+        (kill_all.address, child_wait.address),
+        live=live,
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 5
+    # The ordinary retained branch sees life 10000 and jumps over SHOOTNOW;
+    # this birth can only come from the exact timeline-forced life-zero path.
+    assert len(forecast.births[3]) == 1
+
+
+def test_timeline_kill_all_rejects_forced_shared_laser_creation() -> None:
+    kill_all, _raw = _instruction(0x183D0, 0, 96)
+    child_wait, _raw = _instruction(0x183DC, -1, 0)
+    laser, raw = _instruction(0x193D0, 3, 85, 64)
+    struct.pack_into("<fffff", raw, 0x10, 0.0, 0.0, 0.0, 100.0, 10.0)
+    struct.pack_into("<f", raw, 0x24, 4.0)
+    struct.pack_into("<iiiiii", raw, 0x28, 0, 60, 10, 0, 0, 0)
+    laser = _with_raw(laser, raw)
+    live_wait, _raw = _instruction(0x19410, -1, 0)
+    live = _spawner(
+        laser,
+        live_wait,
+        life=10_000,
+        interactable=True,
+        has_been_in_bounds=True,
+        ecl_program=(laser, live_wait),
+    )
+    snapshot = _timeline_kill_all_snapshot(
+        (kill_all, child_wait),
+        (kill_all.address, child_wait.address),
+        live=live,
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 3
+    assert "shared laser world" in forecast.reason
+
+
+def test_timeline_kill_all_rejects_live_callback_assigned_in_prefix() -> None:
+    kill_all, _raw = _instruction(0x18400, 0, 96)
+    wait, _raw = _instruction(0x1840C, -1, 0)
+    live_callback = _set_int_instruction(0x19400, 0, 108, 1)
+    live_wait, _raw = _instruction(0x19410, -1, 0)
+    live = _spawner(
+        live_callback,
+        live_wait,
+        life=10_000,
+        ecl_program=(live_callback, live_wait),
+        ecl_subroutines=(live_callback.address, live_wait.address),
+    )
+    snapshot = _timeline_kill_all_snapshot(
+        (kill_all, wait),
+        (kill_all.address, wait.address),
+        live=live,
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 3
+    assert "ENEMYKILLALL" in forecast.reason
+
+
+def test_timeline_kill_all_rejects_prior_compact_timeline_child() -> None:
+    neutral, _raw = _instruction(0x18500, -1, 0)
+    kill_all, _raw = _instruction(0x18510, 0, 96)
+    wait, _raw = _instruction(0x1851C, -1, 0)
+    snapshot = _timeline_kill_all_snapshot(
+        (neutral, kill_all, wait),
+        (neutral.address, kill_all.address),
+        prior_spawn=True,
+        target_sub_id=1,
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 5)
+
+    assert forecast.covered_frames == 3
+    assert "ENEMYKILLALL" in forecast.reason
+
+
+def test_live_kill_all_rejects_callback_assigned_by_another_slot() -> None:
+    callback = _set_int_instruction(0x19600, 0, 108, 1)
+    callback_wait, _raw = _instruction(0x19610, -1, 0)
+    callback_owner = _spawner(
+        callback,
+        callback_wait,
+        slot=0,
+        life=10_000,
+        ecl_program=(callback, callback_wait),
+        ecl_subroutines=(callback.address, callback_wait.address),
+    )
+    kill_all, _raw = _instruction(0x19700, 1, 96)
+    kill_wait, _raw = _instruction(0x1970C, -1, 0)
+    killer = _spawner(
+        kill_all,
+        kill_wait,
+        slot=1,
+        life=10_000,
+        ecl_program=(kill_all, kill_wait),
+    )
+    snapshot = replace(
+        _snapshot(callback_owner),
+        spawners=(callback_owner, killer),
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 4)
+
+    assert forecast.covered_frames == 1
+    assert "ENEMYKILLALL" in forecast.reason

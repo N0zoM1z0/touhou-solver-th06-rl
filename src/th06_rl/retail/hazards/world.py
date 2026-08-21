@@ -18,7 +18,12 @@ from .bullets import (
     hazard_boxes,
     radial_hazard_box,
 )
-from .ecl import HardLaserWorld, forecast_ecl_births, source_enemy_template
+from .ecl import (
+    HardLaserWorld,
+    forecast_ecl_births,
+    forecast_ecl_forced_kill_all_update,
+    source_enemy_template,
+)
 from .lasers import LaserHazard
 from .rng import RngState
 from .timeline import (
@@ -110,6 +115,15 @@ class _NoRngState(RngState):
 
     def u16(self) -> int:
         raise _NominalRngConsumed
+
+
+def _laser_world_changed(world: HardLaserWorld) -> bool:
+    return bool(
+        world.created_count
+        or world.mutated_initial_slots
+        or world.missing_dereferences
+        or world.retired_created
+    )
 
 
 def _project_hazards(
@@ -478,6 +492,335 @@ def _forecast_hard_emitter(
     )
 
 
+def _forecast_live_slots_after_timeline_kill_all(
+    snapshot: Snapshot,
+    player_positions: tuple[tuple[float, float], ...],
+    kill_lead: int,
+) -> WorldBirthForecast:
+    """Replay every pre-existing slot through one timeline kill-all.
+
+    The ordinary hard emitter worlds deliberately retain their no-kill
+    branches.  This second bounded world adds the exact life-zero ECL branch
+    and any later callback hazards.  Unioning both is conservative while
+    keeping the shared timeline/slot transition explicit and fail-closed.
+    """
+    horizon = len(player_positions)
+    births: list[list[Bullet]] = [[] for _ in player_positions]
+    bodies: list[list[tuple[float, float, float, float]]] = [
+        [] for _ in player_positions
+    ]
+    bullet_stop_frames: set[int] = set()
+    bullet_release_frames: set[int] = set()
+
+    def result(covered: int, reason: str = "") -> WorldBirthForecast:
+        return WorldBirthForecast(
+            tuple(map(tuple, births)),
+            _project_hazards(
+                births,
+                True,
+                tuple(sorted(bullet_release_frames)),
+            ),
+            covered,
+            reason,
+            tuple(map(tuple, bodies)),
+            bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+            bullet_release_frames=tuple(sorted(bullet_release_frames)),
+        )
+
+    if not 0 <= kill_lead < horizon:
+        return result(0, "invalid timeline kill-all lead")
+    emitters = tuple(sorted(snapshot.spawners, key=lambda item: item.slot))
+    for emitter in emitters:
+        state: EnemySpawner | None = emitter
+        repeat_star_state = snapshot.repeat_star_state
+        laser_world = HardLaserWorld(snapshot.lasers)
+        enemy_create_frames: set[int] = set()
+        if kill_lead:
+            damage_proof = forecast_ecl_births(
+                emitter,
+                player_positions[:kill_lead],
+                snapshot.difficulty,
+                snapshot.rank,
+                snapshot.bullet_sizes,
+                snapshot.frame_multiplier,
+                allow_player_variables=False,
+                radial_births=True,
+                abstract_rng=True,
+                enemy_kill_all_is_noop=False,
+                # A unique target state is valid only while no candidate
+                # player-damage branch can fire a life/death callback before
+                # the timeline opcode.  The ECL layer unions such branches
+                # and withholds a continuation, making this replay fail
+                # closed instead of selecting the zero-damage state.
+                model_player_damage=True,
+                repeat_star_state=repeat_star_state,
+            )
+            if damage_proof.covered_frames < kill_lead:
+                return result(
+                    damage_proof.covered_frames,
+                    f"slot {emitter.slot} kill-all damage proof: "
+                    f"{damage_proof.reason}",
+                )
+            if damage_proof.created_emitters:
+                return result(
+                    kill_lead,
+                    f"slot {emitter.slot} kill-all prefix creates an enemy",
+                )
+            if any(damage_proof.enemy_kill_all):
+                return result(
+                    kill_lead,
+                    f"slot {emitter.slot} kill-all prefix mutates all slots",
+                )
+            if damage_proof.next_spawner is None:
+                if damage_proof.finished:
+                    continue
+                return result(
+                    kill_lead,
+                    f"slot {emitter.slot} kill-all damage proof has no "
+                    "unique continuation",
+                )
+
+            events_by_lead = {
+                lead: event
+                for lead, event in _scheduled_boss_interrupts(
+                    snapshot, kill_lead
+                )
+                if event is not None
+                and _timeline_interrupt_targets(snapshot, emitter, event)
+            }
+            for prefix_lead in range(kill_lead):
+                event = events_by_lead.get(prefix_lead)
+                if event is not None:
+                    if state is None:
+                        return result(
+                            prefix_lead,
+                            f"timeline interrupt targets finished slot "
+                            f"{emitter.slot}",
+                        )
+                    state = replace(state, run_interrupt=event.interrupt_id)
+                if state is not None:
+                    prefix = forecast_ecl_births(
+                        state,
+                        (player_positions[prefix_lead],),
+                        snapshot.difficulty,
+                        snapshot.rank,
+                        snapshot.bullet_sizes,
+                        snapshot.frame_multiplier,
+                        allow_player_variables=False,
+                        radial_births=True,
+                        abstract_rng=True,
+                        enemy_kill_all_is_noop=False,
+                        model_player_damage=False,
+                        laser_world=laser_world,
+                        repeat_star_state=repeat_star_state,
+                        record_enemy_create=(
+                            lambda frame, offset=prefix_lead: (
+                                enemy_create_frames.add(offset + frame)
+                            )
+                        ),
+                    )
+                    if prefix.covered_frames < 1:
+                        return result(
+                            prefix_lead,
+                            f"slot {emitter.slot} kill-all prefix: "
+                            f"{prefix.reason}",
+                        )
+                    if prefix.created_emitters:
+                        return result(
+                            prefix_lead,
+                            f"slot {emitter.slot} kill-all prefix creates "
+                            "an enemy",
+                        )
+                    if enemy_create_frames:
+                        return result(
+                            prefix_lead,
+                            f"slot {emitter.slot} kill-all prefix inserts "
+                            "a live slot",
+                        )
+                    if any(prefix.enemy_kill_all):
+                        return result(
+                            prefix_lead,
+                            f"slot {emitter.slot} kill-all prefix mutates "
+                            "all slots",
+                        )
+                    state = prefix.next_spawner
+                    repeat_star_state = prefix.repeat_star_state
+                    if state is None and not prefix.finished:
+                        return result(
+                            prefix_lead + 1,
+                            f"slot {emitter.slot} kill-all prefix has no "
+                            "continuation",
+                        )
+                laser_world.advance_hazards()
+                if _laser_world_changed(laser_world):
+                    return result(
+                        prefix_lead,
+                        f"slot {emitter.slot} kill-all prefix changes the "
+                        "shared laser world",
+                    )
+            if state is None:
+                continue
+        if state.is_boss:
+            continue
+
+        try:
+            forced = forecast_ecl_forced_kill_all_update(
+                state,
+                player_positions[kill_lead],
+                snapshot.difficulty,
+                snapshot.rank,
+                snapshot.bullet_sizes,
+                snapshot.frame_multiplier,
+                record_bullet_stop=(
+                    lambda frame, offset=kill_lead: bullet_stop_frames.add(
+                        offset + frame
+                    )
+                ),
+                record_bullet_release=(
+                    lambda frame, offset=kill_lead: bullet_release_frames.add(
+                        offset + frame
+                    )
+                ),
+                repeat_star_state=repeat_star_state,
+                laser_world=laser_world,
+                record_enemy_create=(
+                    lambda frame, offset=kill_lead: enemy_create_frames.add(
+                        offset + frame
+                    )
+                ),
+            )
+        except UnsupportedBirthModel as error:
+            return result(
+                kill_lead,
+                f"slot {emitter.slot} forced kill-all: {error}",
+            )
+        births[kill_lead].extend(forced.births[0])
+        if forced.body_hazards:
+            bodies[kill_lead].extend(forced.body_hazards[0])
+        if forced.covered_frames < 1:
+            return result(
+                kill_lead,
+                f"slot {emitter.slot} forced kill-all: {forced.reason}",
+            )
+        if forced.created_emitters:
+            return result(
+                kill_lead,
+                f"slot {emitter.slot} forced kill-all creates an enemy",
+            )
+        if enemy_create_frames:
+            return result(
+                kill_lead,
+                f"slot {emitter.slot} forced kill-all inserts a live slot",
+            )
+        if any(forced.enemy_kill_all):
+            return result(
+                kill_lead,
+                f"slot {emitter.slot} forced ECL mutates all slots",
+            )
+        laser_world.advance_hazards()
+        if _laser_world_changed(laser_world):
+            return result(
+                kill_lead,
+                f"slot {emitter.slot} forced kill-all changes the shared "
+                "laser world",
+            )
+        state = forced.next_spawner
+        repeat_star_state = forced.repeat_star_state
+        if state is None:
+            if forced.finished:
+                continue
+            return result(
+                kill_lead + 1,
+                f"slot {emitter.slot} forced kill-all has no continuation",
+            )
+        if kill_lead + 1 >= horizon:
+            continue
+
+        future_offset = kill_lead + 1
+        for future_lead in range(future_offset, horizon):
+            if state.interactable:
+                return result(
+                    future_lead,
+                    f"slot {emitter.slot} post-kill continuation becomes "
+                    "interactable",
+                )
+            future = forecast_ecl_births(
+                state,
+                (player_positions[future_lead],),
+                snapshot.difficulty,
+                snapshot.rank,
+                snapshot.bullet_sizes,
+                snapshot.frame_multiplier,
+                allow_player_variables=False,
+                radial_births=True,
+                abstract_rng=True,
+                enemy_kill_all_is_noop=False,
+                model_player_damage=False,
+                laser_world=laser_world,
+                record_enemy_create=(
+                    lambda frame, offset=future_lead: enemy_create_frames.add(
+                        offset + frame
+                    )
+                ),
+                record_bullet_stop=(
+                    lambda frame, offset=future_lead: bullet_stop_frames.add(
+                        offset + frame
+                    )
+                ),
+                record_bullet_release=(
+                    lambda frame, offset=future_lead: bullet_release_frames.add(
+                        offset + frame
+                    )
+                ),
+                repeat_star_state=repeat_star_state,
+            )
+            births[future_lead].extend(future.births[0])
+            if future.body_hazards:
+                bodies[future_lead].extend(future.body_hazards[0])
+            if future.covered_frames < 1:
+                return result(
+                    future_lead,
+                    f"slot {emitter.slot} post-kill callback: "
+                    f"{future.reason}",
+                )
+            if future.created_emitters:
+                return result(
+                    future_lead,
+                    f"slot {emitter.slot} post-kill callback creates an "
+                    "enemy",
+                )
+            if enemy_create_frames:
+                return result(
+                    future_lead,
+                    f"slot {emitter.slot} post-kill callback inserts a "
+                    "live slot",
+                )
+            if any(future.enemy_kill_all):
+                return result(
+                    future_lead,
+                    f"slot {emitter.slot} post-kill callback mutates all "
+                    "slots",
+                )
+            state = future.next_spawner
+            repeat_star_state = future.repeat_star_state
+            laser_world.advance_hazards()
+            if _laser_world_changed(laser_world):
+                return result(
+                    future_lead,
+                    f"slot {emitter.slot} post-kill callback changes the "
+                    "shared laser world",
+                )
+            if state is None:
+                if future.finished:
+                    break
+                return result(
+                    future_lead + 1,
+                    f"slot {emitter.slot} post-kill callback has no "
+                    "continuation",
+                )
+    return result(horizon)
+
+
 def _forecast_hard_timeline_births(
     snapshot: Snapshot,
     player_positions: tuple[tuple[float, float], ...],
@@ -506,6 +849,7 @@ def _forecast_hard_timeline_births(
     # instead of turning current state into unsafe future pruning. ``None`` is
     # an older artifact and likewise keeps the conservative insertion.
     boss_present = snapshot.boss_present
+    earlier_timeline_spawn = False
     for lead, instruction in scheduled_timeline(
         snapshot.timeline_instructions,
         snapshot.timeline_time,
@@ -607,9 +951,12 @@ def _forecast_hard_timeline_births(
             allow_player_variables=False,
             radial_births=True,
             abstract_rng=True,
-            # Other timeline children in this forecast can install callbacks;
-            # do not prove ENEMYKILLALL neutral from only the live root.
-            enemy_kill_all_is_noop=False,
+            # A true flag delegates pre-existing slot effects to the exact
+            # forced-life replay below.  The interpreter still audits the
+            # newborn's own same-call order and records whether kill-all was
+            # reached.  A prior compact timeline child makes that external
+            # replay unavailable because its slot state is not shared here.
+            enemy_kill_all_is_noop=not earlier_timeline_spawn,
             model_player_damage=False,
             laser_world=laser_world,
             spawn_inline=True,
@@ -638,6 +985,38 @@ def _forecast_hard_timeline_births(
                 bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                 bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
+        if any(inline.enemy_kill_all):
+            external = _forecast_live_slots_after_timeline_kill_all(
+                snapshot,
+                player_positions,
+                lead,
+            )
+            for frame_index, frame_births in enumerate(external.births):
+                births[frame_index].extend(frame_births)
+            for frame_index, frame_bodies in enumerate(
+                external.body_hazards
+            ):
+                bodies[frame_index].extend(frame_bodies)
+            bullet_stop_frames.update(external.bullet_stop_frames)
+            bullet_release_frames.update(external.bullet_release_frames)
+            if external.covered_frames < horizon:
+                return WorldBirthForecast(
+                    tuple(map(tuple, births)),
+                    _project_hazards(
+                        births,
+                        True,
+                        tuple(sorted(bullet_release_frames)),
+                    ),
+                    external.covered_frames,
+                    f"timeline emitter {spawn.sub_id} external kill-all: "
+                    f"{external.reason}",
+                    tuple(map(tuple, bodies)),
+                    bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                    bullet_release_frames=tuple(sorted(
+                        bullet_release_frames
+                    )),
+                )
+        earlier_timeline_spawn = True
         births[lead].extend(inline.births[0])
         if inline.next_spawner is None:
             if inline.finished:
@@ -676,6 +1055,26 @@ def _forecast_hard_timeline_births(
                 ),
                 item_drop=spawn.item_drop,
         )
+        if (
+            any(inline.enemy_kill_all)
+            and not child.is_boss
+            and child.interactable
+            and child.life <= 0
+        ):
+            return WorldBirthForecast(
+                tuple(map(tuple, births)),
+                _project_hazards(
+                    births,
+                    True,
+                    tuple(sorted(bullet_release_frames)),
+                ),
+                lead,
+                f"timeline emitter {spawn.sub_id}: interactive newborn "
+                "kill-all death needs a shared ordinary slot replay",
+                tuple(map(tuple, bodies)),
+                bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                bullet_release_frames=tuple(sorted(bullet_release_frames)),
+            )
         if lead == 0 and boss_present is False and child.is_boss:
             # SpawnEnemy executes time-zero BOSSSET inline. A following
             # timeline record at the same timer observes the written byte.
@@ -1443,10 +1842,11 @@ def forecast_world_births(
                 "multiple emitters can overwrite shared repeating-star globals",
                 tuple(tuple(frame) for frame in bodies),
             )
-        enemy_kill_all_is_noop = not any(
-            not emitter.is_boss and emitter.death_callback_sub >= 0
-            for emitter in emitters
-        )
+        # A live emitter's ENEMYKILLALL mutates every later source slot and
+        # cannot be lowered into independent emitter envelopes.  Only the
+        # timeline-child path above owns an exact forced-life replay, so the
+        # ordinary hard worlds always fail closed on this opcode.
+        enemy_kill_all_is_noop = False
         covered_frames = len(player_positions)
         reason = ""
         laser_births = 0

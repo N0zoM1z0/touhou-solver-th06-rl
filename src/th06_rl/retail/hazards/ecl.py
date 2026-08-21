@@ -963,6 +963,9 @@ def _forecast_ecl_births_single(
     record_bullet_stop=None,
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
+    record_death_callback_assignment=None,
+    defer_initial_death: bool = False,
+    record_enemy_create=None,
 ) -> EclForecast:
     """Forecast one emitter until the first unsupported source instruction."""
     horizon = len(player_positions)
@@ -1082,6 +1085,7 @@ def _forecast_ecl_births_single(
     shoot_offset_y: float | FloatInterval = spawner.shoot_offset_y
     abstract_int_cursor = 0
     created_emitters: list[EnemySpawner] = []
+    created_enemy_this_call = False
     death_anm1 = spawner.death_anm1
     death_anm2 = spawner.death_anm2
     death_anm3 = spawner.death_anm3
@@ -1161,6 +1165,12 @@ def _forecast_ecl_births_single(
         )
 
     for frame_index, player in enumerate(player_positions):
+        # ENEMYKILLALL can make this non-boss die after RunEcl.  Hard worlds
+        # may retain the killed emitter only after proving that doing so adds
+        # hazards instead of hiding a death callback.  Track the source-local
+        # ordering inside this one RunEcl call; the proof for other enemy
+        # slots belongs to the world layer.
+        kill_all_self_pending_death = False
         variable_player = player if allow_player_variables else None
         if not spawn_inline:
             if velocity_uncertainty > 0.0:
@@ -1205,7 +1215,13 @@ def _forecast_ecl_births_single(
                     item_births=tuple(tuple(frame) for frame in item_births),
                     enemy_kill_all=tuple(enemy_kill_all),
                 )
-        if not spawn_inline and interactable and not invisible and life <= 0:
+        if (
+            not spawn_inline
+            and not defer_initial_death
+            and interactable
+            and not invisible
+            and life <= 0
+        ):
             # EnemyManager handles an exact non-positive life value after
             # RunEcl in the preceding update.  Unlike life_lower_bound, this
             # is not a possible player-damage time: ENEMYLIFESET can make the
@@ -1264,6 +1280,7 @@ def _forecast_ecl_births_single(
             )
         if (
             not spawn_inline
+            and not defer_initial_death
             and death_callback_sub >= 0
             and life_lower_bound <= 0
         ):
@@ -1777,6 +1794,17 @@ def _forecast_ecl_births_single(
                 death_mode = struct.unpack_from("<i", raw, 0x0C)[0] & 0x07
             elif instruction.opcode == OPCODE_INTERACTABLE_FLAG:
                 interactable = bool(struct.unpack_from("<i", raw, 0x0C)[0])
+                if (
+                    kill_all_self_pending_death
+                    and interactable
+                    and death_callback_sub >= 0
+                ):
+                    return EclForecast(
+                        tuple(map(tuple, births)),
+                        frame_index,
+                        "ENEMYKILLALL can invoke a callback assigned later "
+                        "in the same source update",
+                    )
             elif instruction.opcode == OPCODE_INVISIBLE_FLAG:
                 invisible = bool(struct.unpack_from("<i", raw, 0x0C)[0])
             elif instruction.opcode == OPCODE_HITBOX_SET:
@@ -2254,6 +2282,22 @@ def _forecast_ecl_births_single(
                 life_lower_bound = life
             elif instruction.opcode == OPCODE_DEATH_CALLBACK:
                 death_callback_sub = struct.unpack_from("<i", raw, 0x0C)[0]
+                if (
+                    record_death_callback_assignment is not None
+                    and death_callback_sub >= 0
+                ):
+                    record_death_callback_assignment(frame_index)
+                if (
+                    kill_all_self_pending_death
+                    and interactable
+                    and death_callback_sub >= 0
+                ):
+                    return EclForecast(
+                        tuple(map(tuple, births)),
+                        frame_index,
+                        "ENEMYKILLALL can invoke a callback assigned later "
+                        "in the same source update",
+                    )
             elif instruction.opcode == OPCODE_BOSS_TIMER_SET:
                 boss_timer = struct.unpack_from("<i", raw, 0x0C)[0]
                 boss_timer_subframe = 0.0
@@ -2369,6 +2413,9 @@ def _forecast_ecl_births_single(
                 run_interrupt = struct.unpack_from("<i", raw, 0x0C)[0]
                 continue
             elif instruction.opcode == OPCODE_ENEMY_CREATE:
+                created_enemy_this_call = True
+                if record_enemy_create is not None:
+                    record_enemy_create(frame_index)
                 # SpawnEnemy first runs the newborn's time-zero ECL inline.
                 # A later free slot may then receive its ordinary update in
                 # this same EnemyManager pass.  Fold both slot-order outcomes
@@ -2465,6 +2512,9 @@ def _forecast_ecl_births_single(
                         )
                     ),
                     repeat_star_state=repeat_star_state,
+                    record_death_callback_assignment=(
+                        record_death_callback_assignment
+                    ),
                 )
                 if newborn.covered_frames < 1:
                     return EclForecast(
@@ -2536,6 +2586,9 @@ def _forecast_ecl_births_single(
                             )
                         ),
                         repeat_star_state=repeat_star_state,
+                        record_death_callback_assignment=(
+                            record_death_callback_assignment
+                        ),
                     )
                     if updated.covered_frames < 1:
                         return EclForecast(
@@ -2605,6 +2658,9 @@ def _forecast_ecl_births_single(
                                 )
                             ),
                             repeat_star_state=repeat_star_state,
+                            record_death_callback_assignment=(
+                                record_death_callback_assignment
+                            ),
                         )
                         if future.repeat_star_state != repeat_star_state:
                             return EclForecast(
@@ -3059,7 +3115,25 @@ def _forecast_ecl_births_single(
                     laser_slots = [-1] * 32
             elif instruction.opcode == OPCODE_ENEMY_KILL_ALL:
                 if enemy_kill_all_is_noop:
-                    pass
+                    if created_enemy_this_call:
+                        return EclForecast(
+                            tuple(map(tuple, births)),
+                            frame_index,
+                            "same-frame ENEMYCREATE/ENEMYKILLALL order needs "
+                            "an exact world event stream",
+                        )
+                    if not is_boss:
+                        if death_callback_sub >= 0:
+                            return EclForecast(
+                                tuple(map(tuple, births)),
+                                frame_index,
+                                "ENEMYKILLALL reaches the emitter's active "
+                                "death callback",
+                            )
+                        life = 0
+                        life_lower_bound = 0
+                        kill_all_self_pending_death = True
+                    enemy_kill_all[frame_index] = True
                 elif record_enemy_kill_all:
                     if not is_boss:
                         return EclForecast(
@@ -3613,6 +3687,7 @@ def _forecast_ecl_births_with_death_callbacks(
     record_bullet_stop=None,
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
+    record_death_callback_assignment=None,
 ) -> EclForecast:
     """Union every reachable source death-callback pickup frame."""
     horizon = len(player_positions)
@@ -3649,6 +3724,7 @@ def _forecast_ecl_births_with_death_callbacks(
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
             repeat_star_state=repeat_star_state,
+            record_death_callback_assignment=record_death_callback_assignment,
         )
 
     program = _compiled_program(spawner.ecl_program)
@@ -3680,6 +3756,7 @@ def _forecast_ecl_births_with_death_callbacks(
         record_bullet_stop=record_bullet_stop,
         record_bullet_release=record_bullet_release,
         repeat_star_state=repeat_star_state,
+        record_death_callback_assignment=record_death_callback_assignment,
     )
     births = [list(frame) for frame in no_callback.births]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -3709,6 +3786,9 @@ def _forecast_ecl_births_with_death_callbacks(
                 record_bullet_stop=record_bullet_stop,
                 record_bullet_release=record_bullet_release,
                 repeat_star_state=repeat_star_state,
+                record_death_callback_assignment=(
+                    record_death_callback_assignment
+                ),
             )
             if prefix.covered_frames < callback_frame:
                 if prefix.covered_frames < covered_frames:
@@ -3792,6 +3872,7 @@ def _forecast_ecl_births_with_death_callbacks(
                 )
             ),
             repeat_star_state=callback_star_state,
+            record_death_callback_assignment=record_death_callback_assignment,
         )
         for index, frame_births in enumerate(callback.births, callback_frame):
             births[index].extend(frame_births)
@@ -3828,6 +3909,7 @@ def _forecast_ecl_births_with_life_callbacks(
     record_bullet_stop=None,
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
+    record_death_callback_assignment=None,
 ) -> EclForecast:
     """Forecast an emitter, branching over reachable hard life callbacks."""
     horizon = len(player_positions)
@@ -3865,6 +3947,7 @@ def _forecast_ecl_births_with_life_callbacks(
             record_bullet_stop,
             record_bullet_release,
             repeat_star_state,
+            record_death_callback_assignment,
         )
 
     program = _compiled_program(spawner.ecl_program)
@@ -3897,6 +3980,7 @@ def _forecast_ecl_births_with_life_callbacks(
         record_bullet_stop,
         record_bullet_release,
         repeat_star_state,
+        record_death_callback_assignment,
     )
     births = [list(frame) for frame in no_callback.births]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -3925,6 +4009,7 @@ def _forecast_ecl_births_with_life_callbacks(
                 record_bullet_stop,
                 record_bullet_release,
                 repeat_star_state,
+                record_death_callback_assignment,
             )
             if prefix.covered_frames < callback_frame or prefix.next_spawner is None:
                 branch_coverage = prefix.covered_frames
@@ -3983,6 +4068,7 @@ def _forecast_ecl_births_with_life_callbacks(
                 if callback_frame
                 else repeat_star_state
             ),
+            record_death_callback_assignment,
         )
         for index, frame_births in enumerate(callback.births, callback_frame):
             births[index].extend(frame_births)
@@ -4058,6 +4144,7 @@ def _forecast_abstract_integer_domains(
     record_bullet_stop=None,
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
+    record_death_callback_assignment=None,
 ) -> EclForecast:
     """Union every bounded source integer-RNG control-flow outcome."""
     pending: list[tuple[int, ...]] = [()]
@@ -4088,6 +4175,7 @@ def _forecast_abstract_integer_domains(
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
             repeat_star_state=repeat_star_state,
+            record_death_callback_assignment=record_death_callback_assignment,
         )
         extent = forecast.unresolved_int_extent
         if extent:
@@ -4158,6 +4246,148 @@ def _forecast_abstract_integer_domains(
     )
 
 
+def forecast_ecl_forced_kill_all_update(
+    spawner: EnemySpawner,
+    player_position: tuple[float, float],
+    difficulty: int,
+    rank: int,
+    bullet_sizes: tuple[tuple[float, float], ...],
+    frame_multiplier: float = 1.0,
+    *,
+    record_bullet_stop=None,
+    record_bullet_release=None,
+    repeat_star_state: RepeatStarState | None = None,
+    laser_world=None,
+    record_enemy_create=None,
+) -> EclForecast:
+    """Run one live-slot update after timeline ENEMYKILLALL.
+
+    EnemyManager runs the stage timeline before its slot loop.  The opcode
+    writes life zero first; an interactable victim still performs Move and
+    its original RunEcl before the ordinary death switch installs the death
+    callback context.  CallEclSub does not execute that context until the
+    next slot update.  This helper represents exactly that otherwise unusual
+    phase without changing the ordinary snapshot-boundary interpreter.
+    """
+    empty = ((),)
+    if spawner.is_boss:
+        return EclForecast(empty, 0, "ENEMYKILLALL does not target a boss")
+    if (
+        spawner.life_callback_threshold >= 0
+        or spawner.timer_callback_threshold >= 0
+    ):
+        return EclForecast(
+            empty,
+            0,
+            "forced kill-all update has an active pre-ECL callback threshold",
+        )
+    if not spawner.interactable and spawner.death_callback_sub >= 0:
+        # EclManager invokes this callback immediately inside ENEMYKILLALL,
+        # before the manager reaches the victim's ordinary slot update.  The
+        # compact live-slot proof deliberately does not invent that shared
+        # timeline/slot event ordering.
+        return EclForecast(
+            empty,
+            0,
+            "noninteractive ENEMYKILLALL victim invokes its callback in "
+            "timeline phase",
+        )
+
+    forced = _copy_spawner(spawner, life=0)
+    first = _forecast_ecl_births_single(
+        forced,
+        (player_position,),
+        difficulty,
+        rank,
+        bullet_sizes,
+        frame_multiplier,
+        None,
+        False,
+        True,
+        True,
+        model_player_damage=False,
+        laser_world=laser_world,
+        record_bullet_stop=record_bullet_stop,
+        record_bullet_release=record_bullet_release,
+        repeat_star_state=repeat_star_state,
+        defer_initial_death=True,
+        record_enemy_create=record_enemy_create,
+    )
+    if first.covered_frames < 1 or first.next_spawner is None:
+        return first
+
+    state = first.next_spawner
+    if state.is_boss:
+        return replace(
+            first,
+            covered_frames=0,
+            reason="forced kill-all victim changes boss ownership before death",
+        )
+    if (
+        not state.interactable
+        or state.invisible
+        or not state.has_been_in_bounds
+    ):
+        # The source death block is nested under these exact flags.  Life
+        # remains zero, and an existing callback remains merely armed.
+        return first
+
+    if state.death_mode == 0:
+        return replace(first, next_spawner=None, finished=True)
+    if state.death_mode != 1:
+        # Mode two repeats the death block on later frames; mode three can be
+        # killed again by player contact.  Both need a larger combat branch
+        # model and remain an explicit online boundary.
+        return replace(
+            first,
+            covered_frames=0,
+            reason=f"unsupported forced kill-all death mode {state.death_mode}",
+        )
+
+    state = _copy_spawner(
+        state,
+        interactable=False,
+        life=0,
+        life_callback_threshold=-1,
+        timer_callback_threshold=-1,
+    )
+    if state.death_callback_sub >= 0:
+        if not 0 <= state.death_callback_sub < len(state.ecl_subroutines):
+            return replace(
+                first,
+                covered_frames=0,
+                reason=(
+                    f"death callback subroutine {state.death_callback_sub} "
+                    "is unavailable"
+                ),
+            )
+        program = _compiled_program(state.ecl_program)
+        callback_instruction = program.get(
+            state.ecl_subroutines[state.death_callback_sub]
+        )
+        if callback_instruction is None:
+            return replace(
+                first,
+                covered_frames=0,
+                reason="death callback instruction graph is not captured",
+            )
+        state = _copy_spawner(
+            state,
+            death_callback_sub=-1,
+            next_instruction=callback_instruction,
+            ecl_time=0,
+            ecl_time_float=0.0,
+            ecl_stack=(),
+            bullet_rank_speed_low=-0.5,
+            bullet_rank_speed_high=0.5,
+            bullet_rank_amount1_low=0,
+            bullet_rank_amount1_high=0,
+            bullet_rank_amount2_low=0,
+            bullet_rank_amount2_high=0,
+        )
+    return replace(first, next_spawner=state)
+
+
 def forecast_ecl_births(
     spawner: EnemySpawner,
     player_positions: tuple[tuple[float, float], ...],
@@ -4177,8 +4407,17 @@ def forecast_ecl_births(
     record_bullet_stop=None,
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
+    record_death_callback_assignment=None,
+    record_enemy_create=None,
 ) -> EclForecast:
     """Forecast one emitter and preserve every bounded hard uncertainty."""
+    if (
+        record_enemy_create is not None
+        and not (spawn_inline or record_enemy_kill_all or laser_world is not None)
+    ):
+        raise ValueError(
+            "enemy creation recording requires one direct ECL interpreter"
+        )
     if spawn_inline:
         if len(player_positions) != 1:
             raise ValueError("SpawnEnemy inline ECL is exactly one source call")
@@ -4201,6 +4440,8 @@ def forecast_ecl_births(
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
             repeat_star_state=repeat_star_state,
+            record_death_callback_assignment=record_death_callback_assignment,
+            record_enemy_create=record_enemy_create,
         )
     if record_enemy_kill_all:
         if abstract_rng or model_player_damage or rng is None:
@@ -4227,6 +4468,8 @@ def forecast_ecl_births(
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
             repeat_star_state=repeat_star_state,
+            record_death_callback_assignment=record_death_callback_assignment,
+            record_enemy_create=record_enemy_create,
         )
     if laser_world is not None:
         if len(player_positions) != 1:
@@ -4260,6 +4503,8 @@ def forecast_ecl_births(
             record_bullet_stop=record_bullet_stop,
             record_bullet_release=record_bullet_release,
             repeat_star_state=repeat_star_state,
+            record_death_callback_assignment=record_death_callback_assignment,
+            record_enemy_create=record_enemy_create,
         )
     if (
         abstract_rng
@@ -4290,6 +4535,7 @@ def forecast_ecl_births(
             record_bullet_stop,
             record_bullet_release,
             repeat_star_state,
+            record_death_callback_assignment,
         )
     return _forecast_ecl_births_with_life_callbacks(
         spawner,
@@ -4307,4 +4553,5 @@ def forecast_ecl_births(
         record_bullet_stop,
         record_bullet_release,
         repeat_star_state,
+        record_death_callback_assignment,
     )
