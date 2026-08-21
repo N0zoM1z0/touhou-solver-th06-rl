@@ -70,11 +70,11 @@ not overlap it with a canonical baseline, canary, promotion run, or heavy fit:
 
 ```bash
 .venv/bin/python scripts/gate_parallel_wine.py \
-  --policy-plugin "$TH06_POLICY_PLUGIN" \
-  --policy-state "$TH06_POLICY_STATE" \
+  --policy-plugin src/th06_rl/policies/uniform_shield_exploration.py \
+  --policy-state config/uniform_shield_exploration.json \
   --diagnostic-rng-seed 0x1234 \
   --artifact-root artifacts/parallel-gate \
-  --corpus-root corpus/parallel-gate \
+  --corpus-root corpora/parallel-gate \
   --output artifacts/parallel-gate/gate.json
 ```
 
@@ -84,11 +84,11 @@ of complete natural-RNG routes. Changing the policy requires a new gate:
 ```bash
 .venv/bin/python scripts/collect_route_parallel.py \
   --gate artifacts/parallel-gate/gate.json \
-  --policy-plugin "$TH06_POLICY_PLUGIN" \
-  --policy-state "$TH06_POLICY_STATE" \
+  --policy-plugin src/th06_rl/policies/uniform_shield_exploration.py \
+  --policy-state config/uniform_shield_exploration.json \
   --episodes 12 \
   --artifact-root artifacts/parallel-collection \
-  --corpus-root corpus/parallel-collection \
+  --corpus-root corpora/parallel-collection \
   --output artifacts/parallel-collection/admission.json
 ```
 

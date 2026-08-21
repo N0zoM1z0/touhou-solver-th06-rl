@@ -135,7 +135,6 @@ def build_route_runner_command(
         "--difficulty", "lunatic",
         "--seconds", "0",
         "--complete-route-corpus-root", str(corpus_root),
-        "--max-corpus-gib", str(MAX_CORPUS_GIB),
         "--policy-plugin", str(policy_plugin),
         "--policy-state", str(policy_state),
         "--immutable-policy",

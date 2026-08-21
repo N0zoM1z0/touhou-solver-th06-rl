@@ -7,6 +7,7 @@
 \usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage[numbers,sort&compress]{natbib}
+\usepackage{xurl}
 \usepackage[hidelinks]{hyperref}
 \hypersetup{
   pdftitle={Capture-Complete, Prediction-Incomplete Offline Reinforcement Learning for Transferable Bullet-Hell Control},
@@ -16,6 +17,7 @@
 \newcommand{\system}{\textsc{Touhou-Offline}}
 \newcommand{\openstatus}{\textcolor{red!70!black}{Open}}
 \newcommand{\progressstatus}{\textcolor{blue!70!black}{In progress}}
+\newcommand{\completedstatus}{\textcolor{green!45!black}{Completed}}
 \newcommand{\futurestatus}{\textcolor{black!65}{Future work}}
 \newcommand{\notrunstatus}{\textcolor{red!70!black}{Not run}}
 
@@ -38,9 +40,8 @@ already instantiated hazards over a bounded horizon; and unknown pattern
 dynamics should be inferred from object-centric history by an offline learner.
 This draft specifies the system boundary, immutable data contract, falsifiable
 research questions, and preregistered experiments.  It intentionally reports
-only an audited diagnostic Stage~4 infrastructure result before the reset
-architecture produces a canonical full-route baseline; it reports no learning
-result.
+an audited canonical six-stage infrastructure baseline with 108 retained HITs
+and no infrastructure failure; it reports no learning result.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -224,7 +225,7 @@ separately and never counted as gameplay improvements.
 \toprule
 ID & Decisive question & Status \\
 \midrule
-E0 & Does the reset runner complete Practice 4--6 and one full route? & \progressstatus \\
+E0 & Does the reset runner complete Practice 4--6 and one full route? & \completedstatus \\
 E1 & Can a post-root birth hit before the next controllable root? & \progressstatus \\
 E2 & Do generic loaders preserve facts without ECL streams? & \progressstatus \\
 E3 & Do portable BC features beat action frequency out of episode? & \futurestatus \\
@@ -247,19 +248,60 @@ successors and stored shield decisions replay exactly, every HIT has linked
 before/action/after evidence, and cleanup leaves no worker process.  HIT count
 is measured, not gated.
 
-A diagnostic Stage~4 run at solver commit
-\texttt{0c2872920455db7322102f0ecd109922c6340f26} completed frames 42--26693
-with 26,580 stored roots, 26,579 linked transitions, and 27 physical HITs.
-The offline audit admitted every row, found no integrity or scope error,
-matched 24,928 eligible player successors bit-for-bit, and reproduced all 61
-dense shield samples with no divergence.  The report and audit SHA-256 digests
-are respectively
-\path{e4e193237fc0c09ef3c04d31e91cc8d4d153203cf541d3abbeeb83df8a1a4847}
+At solver commit
+{\footnotesize\path{af9900524520b72934a4c55e2f44118f88094633}}, all three bounded
+Practice runs completed under isolated four-CPU workers after the atomic-input
+cleanup.  Table~\ref{tab:e0-practice} reports their complete audits.  Every
+declared frame and transition loaded, every Bomb/callback/integrity/scope count
+was zero, all checked player successors were bit-exact, and every stored dense
+shield sample reproduced with no unsafe or conservative divergence.  The
+higher Practice observation-gap rates motivated eight CPUs for the canonical
+route and future evidence collection; gap transitions remain explicit and are
+excluded rather than fabricated.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}rrrrrrr@{}}
+\toprule
+Stage & Frames & Transitions & HIT & Gap \% & Successors & Shield \\
+\midrule
+4 & 25,564 & 25,563 & 18 & 0.536 & 24,344 & 58 \\
+5 & 23,129 & 23,128 & 23 & 0.968 & 19,503 & 64 \\
+6 & 30,981 & 30,980 & 34 & 0.507 & 28,763 & 64 \\
+\bottomrule
+\end{tabular}
+\caption{Canonical E0 Practice evidence.  Successor and shield columns are
+checked counts; every mismatch/divergence count is zero.}
+\label{tab:e0-practice}
+\end{table}
+
+The Stage 4--6 run IDs are, respectively,
+\path{20260821T080408Z-471737400},
+\path{20260821T081924Z-372154700}, and
+\path{20260821T080532Z-100425500}; their audit SHA-256 digests are
+\path{c4178c3c9e5b7d88f7a950d8fe18403630a8524320ae72dc0d0ce97c0a26bb2d},
+\path{2677f2b9689c42c5483a2e278d077a6b721623430d89f6c39a41bc92b3c34ebd},
 and
-\path{9cb0e79a4982699449f3dc8b4b0645b300b435f74a0c03f172eb20843867d32e}.
-This is not yet the canonical E0 result: its conservative certificate still
-enumerated impossible partial-key prefixes even though the bridge publishes an
-atomic input mask, so Practice~4--6 must be rerun after that generic cleanup.
+\path{e34bec2844dc7ce92f572326dd262a1e7f718d6798bc9a6c9dd7124692308c17}.
+
+The natural-RNG full route then reached Ending with run ID
+\path{20260821T083303Z-499458600}: 135,561 frames, 135,560 transitions,
+108 physical HITs, zero Bomb, zero dropped record, and zero capture, corpus,
+policy, trace, or other infrastructure failure.  All six Stages were present.
+The audit classified all 108 HITs as observed-shield-empty, reproduced 64 dense
+shield samples without divergence, and matched 126,939 eligible player
+successors bit-for-bit.  Only 28 links were excluded for observation gaps
+(0.0207\%); capture and solve p99 were 8.044 and 0.918 ms respectively.  The
+independent baseline verifier passed every declared check.  The immutable
+SHA-256 digests for report, audit, run metadata, and manifest are respectively
+\path{f2577d31ca5a51108911b4d60a957a7e2e891edda5ba337fbca1f70386e37686},
+\path{8d13d3196261f4f8710d8187cdec898e364b67f024696a8cca1991aff467baa9},
+\path{9f9fbdd75dbe89651c789dc502dab6a50323a93ca488051720538308079e3396},
+and
+\path{8423bae1ef93decd50605a5e47900ee0ded3a6096d6067fb4c0a8eca944ec1d8}.
+E0 is therefore complete; the 108-HIT value is a baseline measurement, not a
+policy-quality claim.
 
 \subsection{E1: immediate-birth boundary}
 
@@ -286,7 +328,10 @@ count and NMNB completion rate online.
 
 Parallel workers are enabled only after E0.  Serial and parallel fixed-seed
 runs must first agree on factual/action traces before independent natural-RNG
-collection begins.  Clock acceleration is a distinct hypothesis and cannot
+collection begins.  The first declared collection policy is an immutable
+20\% mixture of uniform exploration over the observed-shield set and the
+generic reactive baseline, with complete propensities and independent policy
+RNG streams per episode.  Clock acceleration is a distinct hypothesis and cannot
 produce evidence until it passes a normal-speed differential contract.  E6
 replaces only the environment adapter and reports unchanged versus changed
 code/schema surfaces, zero-shot behavior, and fine-tuning sample cost.

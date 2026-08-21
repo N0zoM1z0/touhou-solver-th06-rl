@@ -28,7 +28,9 @@ stage scripts are optional research references described by
 [docs/ECL_REFERENCE_CACHE.md](docs/ECL_REFERENCE_CACHE.md); they are not an
 online dependency.
 
-The current milestone is one complete six-stage Lunatic baseline with HIT
-continuation, zero Bomb, complete factual recording, and zero infrastructure
-failure. Practice Stage 4, 5, and 6 runs are the bounded preflight. Parallel
-collection and offline training begin only after that baseline works.
+The first complete six-stage Lunatic baseline passed at commit
+`af9900524520b72934a4c55e2f44118f88094633`: 108 HITs were retained through
+Ending, with zero Bomb or infrastructure failure and an audited 135,561-frame
+episode. The current milestone is the strict serial/parallel Wine differential,
+followed by independent complete-route collection and the preregistered minimal
+behavior-cloning learnability test.

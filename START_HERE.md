@@ -9,16 +9,19 @@ Read in this order:
 5. `docs/PORTABLE_WINE_RUNTIME.md` — machine-independent Wine setup;
 6. `docs/WINE_RETAIL_VALIDATION.md` — original-game runner details.
 
+E0 is complete at commit
+`af9900524520b72934a4c55e2f44118f88094633`: Practice Stages 4--6 and one
+natural-RNG six-stage Lunatic route all completed and passed their factual
+audits. The full route retained 108 HITs and zero Bomb.
+
 Current execution order:
 
-1. compile and unit-test the minimal recorder/shield;
-2. run natural Practice Stage 4, 5, and 6 to completion, continuing after HIT;
-3. run one complete natural-RNG Lunatic route;
-4. audit factual continuity, zero Bomb, stage coverage, player-input successor,
-   observed-shield replay, and artifact integrity;
-5. freeze that corpus schema;
-6. only then enable isolated parallel Wine collection;
-7. prove a minimal learner can fit factual behavior without leakage before
+1. keep the audited E0 recorder/shield and corpus schema frozen;
+2. run the fixed-seed serial/parallel differential for the declared pool and
+   exploration policy;
+3. collect independent natural-RNG complete routes only after that gate;
+4. freeze a hash-bound whole-episode train/validation/test inventory;
+5. prove a minimal learner can fit factual behavior without leakage before
    introducing a more advanced offline-RL algorithm.
 
 There is no authorized learned candidate yet. A complete route with many HITs

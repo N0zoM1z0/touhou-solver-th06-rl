@@ -1,0 +1,5 @@
+{
+  "exploration_probability": 0.2,
+  "policy_seed": 0,
+  "schema": "th06-rl-uniform-shield-exploration-v1"
+}

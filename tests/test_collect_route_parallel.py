@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+import scripts.run_wine_retail as wine_runner
 from scripts.collect_route_parallel import (
     SCHEDULE_SCHEMA,
     _schedule,
@@ -54,7 +55,9 @@ def test_route_schedule_binds_each_distinct_policy_state() -> None:
         assert row["policy_state_sha256"] == hashlib.sha256(payload).hexdigest()
 
 
-def test_route_runner_never_changes_clock_or_enables_bomb(tmp_path) -> None:
+def test_route_runner_matches_wrapper_cli_and_never_changes_clock_or_enables_bomb(
+    tmp_path, monkeypatch,
+) -> None:
     command = build_route_runner_command(
         worker={
             "game_dir": tmp_path / "game",
@@ -77,3 +80,11 @@ def test_route_runner_never_changes_clock_or_enables_bomb(tmp_path) -> None:
     assert "--diagnostic-rng-seed" not in command
     assert "--stop-on-hit" not in command
     assert all("bomb" not in argument.lower() for argument in command)
+    monkeypatch.setattr(
+        wine_runner.os,
+        "sched_getaffinity",
+        lambda _pid: set(range(16)),
+    )
+    parsed = wine_runner.parse_args(command[2:])
+    assert parsed.start_route is True
+    assert parsed.complete_route_corpus_root == tmp_path / "corpus"

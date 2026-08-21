@@ -6,7 +6,7 @@ repository="$(cd -- "${script_dir}/.." && pwd)"
 python="${repository}/.venv/bin/python"
 label="${TH06_RL_BASELINE_LABEL:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 artifact_dir="${TH06_RL_BASELINE_ARTIFACT_DIR:-${repository}/artifacts/baseline-route-${label}}"
-corpus_root="${TH06_RL_BASELINE_CORPUS_ROOT:-${repository}/corpus/baseline-route-${label}}"
+corpus_root="${TH06_RL_BASELINE_CORPUS_ROOT:-${repository}/corpora/baseline-route-${label}}"
 
 if [[ ! -x "${python}" ]]; then
     echo "missing ${python}; run scripts/bootstrap_wine_runtime.sh first" >&2
