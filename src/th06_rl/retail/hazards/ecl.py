@@ -2581,6 +2581,10 @@ def _forecast_ecl_births_single(
                         frame_index,
                         ENEMY_CREATE_WORLD_REASON,
                     )
+                child = replace(
+                    child,
+                    patchouli_shottype_vars=spawner.patchouli_shottype_vars,
+                )
                 newborn = _forecast_ecl_births_single(
                     child,
                     (player,),
@@ -3317,6 +3321,18 @@ def _forecast_ecl_births_single(
                         return EclForecast(
                             tuple(map(tuple, births)), frame_index, str(error)
                         )
+                elif ex_index == 3:
+                    # ExInsPatchouliShottypeSetVars ignores its instruction
+                    # parameter and writes the exact character/shot table row
+                    # into currentContext.var1..var3.  Later ECL calls branch
+                    # on these values, so missing scope is an authority gap.
+                    if spawner.patchouli_shottype_vars is None:
+                        return EclForecast(
+                            tuple(map(tuple, births)),
+                            frame_index,
+                            "Patchouli shot type ECL variables are unavailable",
+                        )
+                    integers[1:4] = spawner.patchouli_shottype_vars
                 elif ex_index == 12:
                     # ExInsStage4Func12 walks the enemy's first eight laser
                     # pointers and shoots once for every still-in-use laser.

@@ -41,6 +41,25 @@ SOURCE_ENEMY_SLOT_COUNT = 255
 # timeline draw does not add playerMovementAreaTopLeftPos.
 SOURCE_RANDOM_TIMELINE_WIDTH = 368.0
 SOURCE_RANDOM_TIMELINE_HEIGHT = 416.0
+# EnemyEclInstr::g_PatchouliShottypeVars[character][shotType].  EX_CALL 3
+# writes the selected triple into currentContext.var1..var3.
+PATCHOULI_SHOTTYPE_VARS = (
+    ((0, 3, 1), (2, 3, 4)),
+    ((1, 4, 0), (4, 2, 3)),
+)
+
+
+def _patchouli_shottype_vars(
+    snapshot: Snapshot,
+) -> tuple[int, int, int] | None:
+    attack = snapshot.player_attack
+    shot_type = attack.shot_type if attack is not None else None
+    if (
+        snapshot.character not in (0, 1)
+        or shot_type not in (0, 1)
+    ):
+        return None
+    return PATCHOULI_SHOTTYPE_VARS[snapshot.character][shot_type]
 
 
 def _program_can_create_enemy(emitter: EnemySpawner) -> bool:
@@ -1035,6 +1054,7 @@ def _forecast_hard_timeline_births(
             )
         child = replace(
             child,
+            patchouli_shottype_vars=_patchouli_shottype_vars(snapshot),
             forecast_position_uncertainty_x=(
                 SOURCE_RANDOM_TIMELINE_WIDTH / 2.0
                 if spawn.random_x else 0.0
@@ -1659,7 +1679,11 @@ def _forecast_nominal_from_state(
                     f"for sub {spawn.sub_id}",
                     tuple(tuple(frame) for frame in bodies),
                 )
-            child = replace(child, slot=free_slot)
+            child = replace(
+                child,
+                slot=free_slot,
+                patchouli_shottype_vars=_patchouli_shottype_vars(snapshot),
+            )
             inline = forecast_ecl_births(
                 child,
                 (player,),
@@ -1963,6 +1987,14 @@ def forecast_world_births(
         [] for _ in player_positions
     ]
     lasers: list[list[LaserHazard]] = [[] for _ in player_positions]
+    patchouli_vars = _patchouli_shottype_vars(snapshot)
+    snapshot = replace(
+        snapshot,
+        spawners=tuple(
+            replace(emitter, patchouli_shottype_vars=patchouli_vars)
+            for emitter in snapshot.spawners
+        ),
+    )
     emitters = tuple(sorted(snapshot.spawners, key=lambda item: item.slot))
     if rng_mode == "fail-closed":
         star_emitters = tuple(

@@ -399,6 +399,10 @@ class EnemySpawner:
     # reused slot, so pointer identity is physical ECL state, not presentation.
     laser_slots: tuple[int, ...] = (-1,) * 32
     laser_store: int = 0
+    # Exact retail table row consumed by EX_CALL index 3.  The world layer
+    # resolves it from captured character and shot type; old/offline records
+    # without that scope retain None and the ECL interpreter fails closed.
+    patchouli_shottype_vars: tuple[int, int, int] | None = None
     # Forecast-only uncertainty carried by not-yet-born enemies whose source
     # timeline coordinates come from the shared RNG. Physical captures leave
     # both values at zero; Hard forecasts use them to preserve a bounded

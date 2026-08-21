@@ -13,13 +13,17 @@ from th06_rl.retail.model import (
     EnemySpawner,
     FloatInterval,
     Laser,
+    PlayerAttackState,
     RepeatStarState,
     Snapshot,
     StageTimelineInstruction,
 )
 from th06_rl.retail.hazards.ecl import forecast_ecl_births
 from th06_rl.retail.hazards.rng import RngState
-from th06_rl.retail.hazards.world import forecast_world_births
+from th06_rl.retail.hazards.world import (
+    _patchouli_shottype_vars,
+    forecast_world_births,
+)
 from th06_rl.th06.source import AuthorityUnavailable, lower_source_forecast
 
 
@@ -744,6 +748,83 @@ def test_external_laser_shot_requests_the_mutable_laser_world() -> None:
 
     assert forecast.covered_frames == 0
     assert "laser world" in forecast.reason
+
+
+@pytest.mark.parametrize(
+    ("character", "shot_type", "expected"),
+    (
+        (0, 0, (0, 3, 1)),
+        (0, 1, (2, 3, 4)),
+        (1, 0, (1, 4, 0)),
+        (1, 1, (4, 2, 3)),
+    ),
+)
+def test_patchouli_external_call_sets_exact_character_shot_vars(
+    character: int,
+    shot_type: int,
+    expected: tuple[int, int, int],
+) -> None:
+    ex_call, raw = _instruction(0x11120, 0, 121, 20)
+    struct.pack_into("<Ii", raw, 12, 3, 37)
+    ex_call = _with_raw(ex_call, raw)
+    wait, _raw = _instruction(0x11134, 10, 0)
+    attack = PlayerAttackState(
+        shots=(),
+        last_enemy_hit_x=0.0,
+        last_enemy_hit_y=0.0,
+        orb_state=0,
+        is_focus=False,
+        focus_timer_previous=0,
+        focus_timer=0,
+        focus_timer_float=0.0,
+        fire_timer_previous=0,
+        fire_timer=0,
+        fire_timer_float=0.0,
+        orb_positions=((0.0, 0.0), (0.0, 0.0)),
+        shot_type=shot_type,
+        bomb_active=False,
+        spell_active=False,
+    )
+    snapshot = replace(
+        _snapshot(_spawner(ex_call, wait)),
+        character=character,
+        player_attack=attack,
+    )
+    variables = _patchouli_shottype_vars(snapshot)
+    spawner = replace(snapshot.spawners[0], patchouli_shottype_vars=variables)
+
+    forecast = forecast_ecl_births(
+        spawner,
+        ((192.0, 400.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        model_player_damage=False,
+    )
+
+    assert variables == expected
+    assert forecast.covered_frames == 1
+    assert forecast.next_spawner is not None
+    assert forecast.next_spawner.ecl_ints[1:4] == expected
+
+
+def test_patchouli_external_call_fails_without_shot_scope() -> None:
+    ex_call, raw = _instruction(0x11120, 0, 121, 20)
+    struct.pack_into("<Ii", raw, 12, 3, 0)
+    ex_call = _with_raw(ex_call, raw)
+    wait, _raw = _instruction(0x11134, 10, 0)
+
+    forecast = forecast_ecl_births(
+        _spawner(ex_call, wait),
+        ((192.0, 400.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        model_player_damage=False,
+    )
+
+    assert forecast.covered_frames == 0
+    assert "shot type" in forecast.reason
 
 
 def _laser_create_instruction(address: int, *, time: int = 0) -> EclInstruction:
