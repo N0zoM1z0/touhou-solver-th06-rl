@@ -11,16 +11,11 @@ from .model import (
     BUTTON_LEFT,
     BUTTON_RIGHT,
     BUTTON_UP,
-    SafeAction,
 )
 
 
 _CONTROL_MASK = BUTTON_FOCUS | BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT
 INPUT_PICKUP_MAX_FRAMES = 2
-SEND_INPUT_CROSSING_MAX_FRAMES = 1
-BASE_CERTIFIED_DELIVERY_MAX_FRAMES = (
-    INPUT_PICKUP_MAX_FRAMES + SEND_INPUT_CROSSING_MAX_FRAMES
-)
 
 
 def _action_mask(action: Action) -> int:
@@ -36,109 +31,14 @@ def _action_mask(action: Action) -> int:
     return mask
 
 
-def transition_input_masks(current: Action, target: Action) -> tuple[int, ...]:
-    """Control masks observable inside Keyboard's sorted event batch."""
-    current_mask = _action_mask(current)
-    target_mask = _action_mask(target)
-    prefix_mask = current_mask
-    prefixes: list[int] = []
-    control_keys = (
-        BUTTON_DOWN,
-        BUTTON_FOCUS,
-        BUTTON_LEFT,
-        BUTTON_RIGHT,
-        BUTTON_UP,
-    )
-    events = tuple(
-        bit
-        for bit in control_keys
-        if current_mask & bit and not target_mask & bit
-    ) + tuple(
-        bit
-        for bit in control_keys
-        if target_mask & bit and not current_mask & bit
-    )
-    for bit in events:
-        if prefix_mask & bit:
-            prefix_mask &= ~bit
-        else:
-            prefix_mask |= bit
-        if prefix_mask not in (current_mask, target_mask):
-            prefixes.append(prefix_mask)
-    return tuple(prefixes)
-
-
-def bounded_delivery_age(snapshot_frame: int, issue_frame: int) -> int | None:
-    """Return an age still covered by the hard pickup branches."""
-    age = issue_frame - snapshot_frame
-    if 0 <= age <= INPUT_PICKUP_MAX_FRAMES:
-        return age
-    return None
-
-
-def changed_action_delivery_supported(
-    delivery_age: int,
-    current: Action,
-    proposed: Action,
-    certified_max_delay: int = BASE_CERTIFIED_DELIVERY_MAX_FRAMES,
-) -> bool:
-    """Whether publication is covered by the available pickup proof."""
-    return proposed == current or (
-        required_changed_action_delivery_delay(delivery_age)
-        <= certified_max_delay
-    )
-
-
-def required_changed_action_delivery_delay(delivery_age: int) -> int:
-    """Worst snapshot-relative pickup delay for a command sent at this age."""
-    if delivery_age < 0:
-        raise ValueError("delivery age cannot be negative")
-    return (
-        delivery_age
-        + SEND_INPUT_CROSSING_MAX_FRAMES
-        + INPUT_PICKUP_MAX_FRAMES
-    )
-
-
-def covered_current_retry(
-    snapshot_frame: int,
-    observed_frame: int,
-    horizon: int,
-    current: Action,
-    safe_actions: tuple[SafeAction, ...],
-) -> bool:
-    """Whether a late frame is still inside the certified current-input hold."""
-    age = observed_frame - snapshot_frame
-    return (
-        age >= INPUT_PICKUP_MAX_FRAMES + 1
-        and age < horizon
-        and any(candidate.action == current for candidate in safe_actions)
-    )
-
-
 @dataclass(frozen=True)
 class LeaseStatus:
     action: Action | None = None
     timed_out: bool = False
-    # Delivery branches still possible on the next game update.  Once a
-    # release/press prefix from the already-issued SendInput batch is visible,
-    # that batch is known to have crossed the game update and only its settled
-    # target can follow.  Treating the prefix as a fresh command invents a
-    # second pickup window that was never issued.
+    # Whole-mask pickup branches still possible after the paused root.  The
+    # game can retain the prior mask for a bounded number of updates and then
+    # sample the target mask, but it cannot observe a partial key transition.
     delivery_delays: tuple[int, ...] = (0, 1, 2, 3)
-
-
-def _issued_mask(action: Action) -> int:
-    mask = BUTTON_FOCUS if action.focused else 0
-    if action.dx < 0:
-        mask |= BUTTON_LEFT
-    elif action.dx > 0:
-        mask |= BUTTON_RIGHT
-    if action.dy < 0:
-        mask |= BUTTON_UP
-    elif action.dy > 0:
-        mask |= BUTTON_DOWN
-    return mask
 
 
 class InputLease:
@@ -152,7 +52,7 @@ class InputLease:
     def status(self, native_input: int, frame: int) -> LeaseStatus:
         if self.desired is None or self.issued_frame is None:
             return LeaseStatus()
-        if native_input & _CONTROL_MASK == _issued_mask(self.desired):
+        if native_input & _CONTROL_MASK == _action_mask(self.desired):
             self.cleared()
             return LeaseStatus()
         elapsed = frame - self.issued_frame
@@ -161,15 +61,11 @@ class InputLease:
         if self.source is None:
             return LeaseStatus(action=self.desired)
         observed_mask = native_input & _CONTROL_MASK
-        prefixes = transition_input_masks(self.source, self.desired)
-        if observed_mask in prefixes:
-            return LeaseStatus(action=self.desired, delivery_delays=(0,))
-        if observed_mask != _issued_mask(self.source):
+        if observed_mask != _action_mask(self.source):
             return LeaseStatus(timed_out=True)
-        # If the original state is still visible, the next update may retain
-        # it, observe one sorted-key prefix, or observe the settled target.
-        # The issue-age timeout remains separate and fails closed if pickup
-        # has still not completed at its measured boundary.
+        # If the source mask is still visible, the next update may retain that
+        # whole mask or atomically sample the target.  The issue-age timeout is
+        # separate and fails closed at its measured boundary.
         return LeaseStatus(
             action=self.desired,
             delivery_delays=(0, 1),

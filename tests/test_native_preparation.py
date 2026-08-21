@@ -91,3 +91,28 @@ def test_native_collision_margin_keeps_exact_diagonal_boundary() -> None:
 
     assert len(outside) == 1
     assert not inside
+
+
+def test_delivery_delay_uses_only_atomic_source_and_target_masks() -> None:
+    hazards = PackedHazards(
+        # A fabricated key-release prefix would stay at x=192 and collide.
+        # Atomic pickup holds the complete left mask for frame 1 (x=190), then
+        # applies the complete right mask, so the candidate is admissible.
+        aabb_frames=((Aabb(194.0, 383.0, 195.0, 385.0),), (), (), ()),
+        laser_frames=((), (), (), ()),
+    )
+
+    certified = NativeKernel().certify_actions(
+        x=192.0,
+        y=384.0,
+        half_width=2.0,
+        half_height=2.0,
+        kinematics=KINEMATICS,
+        current_action=BY_NAME["left"],
+        hazards=hazards,
+        candidates=(BY_NAME["right"],),
+        delivery_delays=(1,),
+    )
+
+    assert [item.action.name for item in certified] == ["right"]
+    assert math.isclose(certified[0].final_x, 196.0)

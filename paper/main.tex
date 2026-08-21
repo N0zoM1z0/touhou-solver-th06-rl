@@ -38,8 +38,9 @@ already instantiated hazards over a bounded horizon; and unknown pattern
 dynamics should be inferred from object-centric history by an offline learner.
 This draft specifies the system boundary, immutable data contract, falsifiable
 research questions, and preregistered experiments.  It intentionally reports
-no gameplay or learning result before the reset architecture produces an
-audited full-route baseline.
+only an audited diagnostic Stage~4 infrastructure result before the reset
+architecture produces a canonical full-route baseline; it reports no learning
+result.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -70,8 +71,8 @@ transfers to Touhou 8.
 
 \paragraph{RQ1: minimum online semantics.}
 Can a hazard first instantiated after a paused decision root damage the player
-before the next controllable root?  If so, what is the smallest title-general
-one-update envelope that covers it?
+before the next controllable root, and can its action-relative risk be learned
+from physical history without adding title-specific source forecasting online?
 
 \paragraph{RQ2: learnability of unknown dynamics.}
 Does player state plus a short history of unordered physical objects contain
@@ -127,10 +128,16 @@ the source collision geometry.
 
 The claim is deliberately narrow: a returned action is clear of the stored
 projection of hazards observed at root $t$.  The shield makes no claim about a
-hazard born after $t$.  Such births remain ordinary learning outcomes unless
-E1 establishes a general one-update counterexample and justifies a minimal
-envelope.  Empty shield sets are recorded as control dead ends; they are not
-silently widened.
+hazard born after $t$.  The source-order audit at TH06 commit
+\texttt{cc475a0bc3fef38683b0f02224c87ddba0a021d9} establishes this boundary:
+Player update priority 7 precedes EnemyManager priority 9 and BulletManager
+priority 11; enemy execution may instantiate a hazard which BulletManager can
+test for collision in that same update.  The audited definitions are in
+\path{src/ChainPriorities.hpp}, \path{src/EnemyManager.cpp}, and
+\path{src/BulletManager.cpp} of that source revision.  Such births are ordinary
+partially observed learning outcomes, not justification for a title-specific
+online predictor.  Empty shield sets are recorded as control dead ends; they
+are not silently widened.
 
 The online path therefore contains only coherent capture, observed-object
 kinematics, native collision filtering, frozen-policy scoring, and input
@@ -217,8 +224,8 @@ separately and never counted as gameplay improvements.
 \toprule
 ID & Decisive question & Status \\
 \midrule
-E0 & Does the reset runner complete Practice 4--6 and one full route? & \notrunstatus \\
-E1 & Can a post-root birth hit before the next controllable root? & \openstatus \\
+E0 & Does the reset runner complete Practice 4--6 and one full route? & \progressstatus \\
+E1 & Can a post-root birth hit before the next controllable root? & \progressstatus \\
 E2 & Do generic loaders preserve facts without ECL streams? & \progressstatus \\
 E3 & Do portable BC features beat action frequency out of episode? & \futurestatus \\
 E4 & Does offline policy improvement reduce paired route HIT cost? & \futurestatus \\
@@ -240,13 +247,28 @@ successors and stored shield decisions replay exactly, every HIT has linked
 before/action/after evidence, and cleanup leaves no worker process.  HIT count
 is measured, not gated.
 
+A diagnostic Stage~4 run at solver commit
+\texttt{0c2872920455db7322102f0ecd109922c6340f26} completed frames 42--26693
+with 26,580 stored roots, 26,579 linked transitions, and 27 physical HITs.
+The offline audit admitted every row, found no integrity or scope error,
+matched 24,928 eligible player successors bit-for-bit, and reproduced all 61
+dense shield samples with no divergence.  The report and audit SHA-256 digests
+are respectively
+\path{e4e193237fc0c09ef3c04d31e91cc8d4d153203cf541d3abbeeb83df8a1a4847}
+and
+\path{9cb0e79a4982699449f3dc8b4b0645b300b435f74a0c03f172eb20843867d32e}.
+This is not yet the canonical E0 result: its conservative certificate still
+enumerated impossible partial-key prefixes even though the bridge publishes an
+atomic input mask, so Practice~4--6 must be rerun after that generic cleanup.
+
 \subsection{E1: immediate-birth boundary}
 
 Use source update order and adjacent physical roots around every HIT and newly
-observed overlapping object.  The outcome must be either a source-backed
-non-interference argument with Wine witnesses or a reproducible general
-counterexample defining a one-update envelope.  Pattern-specific exceptions
-are forbidden.
+observed overlapping object.  Source order already proves that post-root birth
+and same-update collision are possible.  The remaining experiment links this
+class to adjacent Wine roots and measures whether short physical history
+predicts its action-relative cost.  No source/ECL envelope is added to the
+online shield; pattern-specific exceptions are forbidden.
 
 \subsection{E2--E4: data, learnability, and policy improvement}
 
@@ -296,8 +318,8 @@ shield is a better foundation for transferable bullet-hell offline RL than a
 title-complete hand-written simulator.  The architecture is intentionally
 minimal so that the first full-route baseline can distinguish infrastructure
 failure from learning failure.  The answer remains empirical: E0 establishes
-the data plane, E1 establishes the missing online semantic boundary, and only
-then do E3--E6 evaluate learning and transfer.
+the data plane, E1 establishes the explicit partial-observation boundary, and
+only then do E3--E6 evaluate learning and transfer.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

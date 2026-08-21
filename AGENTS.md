@@ -23,12 +23,12 @@ The project is **capture-complete, not prediction-complete**.
   counterexample-specific gameplay logic. Poor play with passing infra is a
   data/learning problem.
 
-The first source question is intentionally small: can a hazard first created
-after one paused decision root damage the player before the next controllable
-root? Record the answer and evidence in `paper/`. If the answer is no, no source
-forecast is needed online. If the answer is yes, add only the smallest general
-one-update birth envelope justified by a reproducer; do not rebuild an ECL
-interpreter.
+The first source question has a narrow answer: TH06 update order permits a
+hazard created after one paused decision root to enter collision processing
+before the next completed root. This is an explicit partial-observability
+boundary recorded in `paper/`, not a request for an online birth envelope.
+Keep the shield claim restricted to observed hazards and let offline history
+learning model the action-relative risk. Do not rebuild an ECL interpreter.
 
 ## Three owned components
 

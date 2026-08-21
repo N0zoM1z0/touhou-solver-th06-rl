@@ -458,7 +458,7 @@ def run(args: argparse.Namespace) -> int:
                 last_dialogue_delivery = sample
 
         def retain_continuous_stage(kind: str, error: BaseException) -> bool:
-            """Release input and force exact-trial cleanup on authority loss."""
+            """Release input and force exact-trial cleanup on infra failure."""
             nonlocal infrastructure_failure_count
             if keyboard is not None:
                 keyboard.release_all()
@@ -468,7 +468,7 @@ def run(args: argparse.Namespace) -> int:
             infrastructure_failures[kind] = count
             emit_trace({
                 "time": time.time(),
-                "event": "authority-fail-stop",
+                "event": "infrastructure-fail-stop",
                 "kind": kind,
                 "count": count,
                 "error_type": type(error).__name__,
@@ -1001,7 +1001,7 @@ def run(args: argparse.Namespace) -> int:
             resume_decision_pause()
             solve_ms = (time.perf_counter() - solve_started) * 1000.0
             # Policy identity is required in every factual frame, but complete
-            # diagnostic counters are not.  Generation-6 metrics sort a rolling
+            # diagnostic counters are not.  Full metrics sort a rolling
             # latency window and materialize several action dictionaries; doing
             # that on every 60 Hz frame created allocation/scheduler pressure in
             # the same process as the deadline-sensitive scorer.  Sample full

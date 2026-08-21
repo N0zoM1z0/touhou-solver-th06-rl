@@ -14,8 +14,10 @@ events in every decision record. Calling this set globally safe is forbidden.
 
 Unknown ECL behavior is neither interpreted nor silently declared harmless.
 It is outside the shield claim and is handled as future risk by the policy. The
-research question of whether a newly born hazard can hit before the next
-decision root is tested separately as E1 in `paper/main.tex`.
+source-order audit for E1 establishes that a newly born hazard can enter the
+collision chain after player motion and before the next completed root. This is
+an explicit partial-observability boundary, not a mandate for online ECL
+forecasting; the corpus preserves its outcomes for history-based learning.
 
 ## Online sequence
 

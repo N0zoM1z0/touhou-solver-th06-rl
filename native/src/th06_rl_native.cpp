@@ -16,12 +16,6 @@ constexpr float kRight = 376.0f;
 constexpr float kTop = 16.0f;
 constexpr float kBottom = 432.0f;
 
-constexpr std::uint16_t kFocus = 0x04;
-constexpr std::uint16_t kUp = 0x10;
-constexpr std::uint16_t kDown = 0x20;
-constexpr std::uint16_t kLeftButton = 0x40;
-constexpr std::uint16_t kRightButton = 0x80;
-
 struct Action {
     std::int32_t dx;
     std::int32_t dy;
@@ -78,76 +72,6 @@ struct HazardAccumulator {
 
 bool valid_action(std::int32_t action) {
     return 0 <= action && action < kActionCount;
-}
-
-std::int32_t direction_index(std::int32_t dx, std::int32_t dy) {
-    if (dx == 0 && dy == 0) return 0;
-    if (dx == 0 && dy == -1) return 1;
-    if (dx == 0 && dy == 1) return 2;
-    if (dx == -1 && dy == 0) return 3;
-    if (dx == 1 && dy == 0) return 4;
-    if (dx == -1 && dy == -1) return 5;
-    if (dx == 1 && dy == -1) return 6;
-    if (dx == -1 && dy == 1) return 7;
-    return 8;
-}
-
-std::uint16_t action_mask(std::int32_t index) {
-    const auto action = kActions[static_cast<std::size_t>(index)];
-    std::uint16_t mask = action.focused ? kFocus : 0;
-    if (action.dx < 0) mask |= kLeftButton;
-    if (action.dx > 0) mask |= kRightButton;
-    if (action.dy < 0) mask |= kUp;
-    if (action.dy > 0) mask |= kDown;
-    return mask;
-}
-
-std::int32_t action_from_mask(std::uint16_t mask) {
-    std::int32_t dx = 0;
-    std::int32_t dy = 0;
-    if ((mask & kUp) != 0) {
-        dy = -1;
-        if ((mask & kLeftButton) != 0) dx = -1;
-        if ((mask & kRightButton) != 0) dx = 1;
-    } else if ((mask & kDown) != 0) {
-        dy = 1;
-        if ((mask & kLeftButton) != 0) dx = -1;
-        if ((mask & kRightButton) != 0) dx = 1;
-    } else {
-        if ((mask & kLeftButton) != 0) dx = -1;
-        if ((mask & kRightButton) != 0) dx = 1;
-    }
-    return direction_index(dx, dy) + (((mask & kFocus) != 0) ? 0 : 9);
-}
-
-std::vector<std::int32_t> transition_prefix_actions(
-    std::int32_t current,
-    std::int32_t target) {
-    const auto current_mask = action_mask(current);
-    const auto target_mask = action_mask(target);
-    auto prefix_mask = current_mask;
-    std::vector<std::int32_t> result;
-    // Keyboard::_sync sorts these key names for releases and then presses.
-    constexpr std::array<std::uint16_t, 5> event_order{{
-        kDown, kFocus, kLeftButton, kRightButton, kUp,
-    }};
-    for (const bool pressing : {false, true}) {
-        for (const auto bit : event_order) {
-            const bool in_current = (current_mask & bit) != 0;
-            const bool in_target = (target_mask & bit) != 0;
-            if ((!pressing && in_current && !in_target)
-                || (pressing && !in_current && in_target)) {
-                prefix_mask ^= bit;
-                const auto prefix = action_from_mask(prefix_mask);
-                if (prefix != current && prefix != target
-                    && std::find(result.begin(), result.end(), prefix)
-                        == result.end()) {
-                    result.push_back(prefix);
-                }
-            }
-        }
-    }
-    return result;
 }
 
 Position advance(
@@ -395,43 +319,32 @@ int certify_actions_impl(
              ++delay_index) {
             const auto delay = delivery_delays[delay_index];
             if (delay < 0 || delay > horizon) return 2;
-            std::vector<std::int32_t> prefixes{-1};
-            if (delay > 0) {
-                const auto transition = transition_prefix_actions(
-                    current_action,
-                    action);
-                prefixes.insert(
-                    prefixes.end(), transition.begin(), transition.end());
+            Position position{player_x, player_y};
+            for (std::int32_t frame = 1; frame <= horizon; ++frame) {
+                // BackgroundInputBridge publishes one DWORD while the exact
+                // process is suspended.  A game update sees either the prior
+                // complete mask or the target complete mask, never a
+                // release/press prefix.
+                const auto applied = frame <= delay
+                    ? current_action
+                    : action;
+                position = advance(position, applied, kinematics);
+                const auto common = sample_hazards(
+                    hazards,
+                    frame,
+                    position,
+                    player_half_width,
+                    player_half_height,
+                    collision_margin);
+                minimum = std::min(minimum, common.clearance);
+                if (common.collisions > 0) {
+                    valid = false;
+                    break;
+                }
             }
-            for (const auto prefix : prefixes) {
-                Position position{player_x, player_y};
-                for (std::int32_t frame = 1; frame <= horizon; ++frame) {
-                    std::int32_t applied = action;
-                    if (prefix >= 0 && frame == delay) {
-                        applied = prefix;
-                    } else if (frame < delay || (prefix < 0 && frame <= delay)) {
-                        applied = current_action;
-                    }
-                    position = advance(position, applied, kinematics);
-                    const auto common = sample_hazards(
-                        hazards,
-                        frame,
-                        position,
-                        player_half_width,
-                        player_half_height,
-                        collision_margin);
-                    minimum = std::min(minimum, common.clearance);
-                    if (common.collisions > 0) {
-                        valid = false;
-                        break;
-                    }
-                }
-                if (prefix < 0
-                    && delay_index == delivery_delay_count - 1) {
-                    action_final_xy[action * 2] = position.x;
-                    action_final_xy[action * 2 + 1] = position.y;
-                }
-                if (!valid) break;
+            if (delay_index == delivery_delay_count - 1) {
+                action_final_xy[action * 2] = position.x;
+                action_final_xy[action * 2 + 1] = position.y;
             }
         }
         action_min_clearance[action] = minimum;

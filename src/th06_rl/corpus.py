@@ -735,7 +735,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
         "learning_eligible": not learning_exclusions,
         "learning_exclusion_reasons": learning_exclusions,
         # A patched HIT is a failure observation, not the end of the physical
-        # episode. Keep the episode, source option boundary and
+        # episode. Keep the episode, observed phase boundary, and
         # failure signal independent so an offline trainer may choose its own
         # bootstrapping semantics without guessing what legacy `done` meant.
         "episode": {

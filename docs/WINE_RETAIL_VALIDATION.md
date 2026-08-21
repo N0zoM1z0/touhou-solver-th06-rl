@@ -132,21 +132,22 @@ their frame gap is not one. Completion verifies HIT conservation across the
 controller log, trace, manifest outcome, and lossless event stream.
 
 `--seconds 0` means natural completion, not an infinite or arbitrary timeout.
-This native-baseline run is diagnostic because its behavior policy has no
-randomized option propensities; that, not HIT continuation, makes it
-training-ineligible. Declared exploration collection also continues after HIT
-to retain a complete physical episode. Post-HIT invulnerable roots use a
-source-safe deterministic baseline and are excluded only from the NMNB
-actor/critic fit; their factual costs remain in returns and OPE. Bomb is
-unrepresentable in the input bridge. Every artifact directory contains the
-controller/game/GDB logs, a
+The frozen reactive baseline is diagnostic rather than an exploration corpus:
+its deterministic action probabilities do not provide broad behavior support.
+Its physical facts remain valid input to generic loaders and supervised
+baselines. Declared randomized collection records the full action distribution
+and also continues after HIT to retain a complete physical episode. No
+post-HIT movement special case exists; inactive roots are recorded factually
+and excluded only when the generic transition contract says no action was
+executed. Bomb is unrepresentable in the input bridge. Every artifact directory
+contains the controller/game/GDB logs, a
 frame trace, configuration evidence, and `report.json` with process cleanup
 and provenance.
 
 The runner records the explicit policy plug-in and policy-state paths,
 before/after hashes, and the exact controller command. Learning runs use an
-immutable policy plus an explicit propensity-recorded randomized exploration
-policy. Final comparisons require `--immutable-policy` and exploration zero.
+immutable policy plus explicit probabilities for randomized shield actions.
+Final comparisons require `--immutable-policy` and exploration zero.
 
 ## Evidence boundary
 

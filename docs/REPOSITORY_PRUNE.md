@@ -7,7 +7,7 @@ The active tree intentionally excludes:
 - per-stage or per-pattern policy branches;
 - Generation-1 through Generation-7 fitted learners, OPE, candidate wrappers,
   and native rankers whose action-relative benefit was not established;
-- option-level aggregation before dense episode linkage is validated.
+- hand-designed action abstraction before dense episode linkage is validated.
 
 Git history preserves those experiments. Do not restore them into the runtime
 or training path without a new predeclared experiment showing why the minimal

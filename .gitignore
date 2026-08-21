@@ -12,6 +12,7 @@ dist/
 # Physical artifacts never belong in Git.
 artifacts/
 corpus/
+corpora/
 logs/
 traces/
 reference/
