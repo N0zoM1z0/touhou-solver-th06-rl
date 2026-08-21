@@ -318,6 +318,37 @@ def test_hard_unions_future_player_comparison_branches() -> None:
     assert above.births[0] == ()
 
 
+def test_unreached_laser_graph_keeps_world_comparison_branch_union() -> None:
+    compare, raw = _instruction(0x10280, 0, 28, 20)
+    struct.pack_into("<ff", raw, 12, -10019.0, 200.0)
+    compare = _with_raw(compare, raw)
+    jump_greater, raw = _instruction(0x10294, 0, 32, 20)
+    struct.pack_into("<ii", raw, 12, 0, 0x40)
+    jump_greater = _with_raw(jump_greater, raw)
+    shoot, raw = _instruction(0x102A8, 0, 67, 44)
+    struct.pack_into("<hhii", raw, 12, 0, 0, 1, 1)
+    struct.pack_into("<ffffI", raw, 24, 1.0, 1.0, 0.0, 0.0, 0)
+    shoot = _with_raw(shoot, raw)
+    wait, _raw = _instruction(0x102D4, 10, 0)
+    create = _laser_create_instruction(0x102E0, time=10)
+    end, _raw = _instruction(0x10320, -1, 0)
+    spawner = _spawner(
+        compare,
+        end,
+        shooting_disabled=False,
+        ecl_program=(compare, jump_greater, shoot, wait, create, end),
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 300.0),) * 4
+    )
+
+    assert forecast.covered_frames == 4
+    assert forecast.reason == ""
+    assert forecast.laser_births == 0
+    assert forecast.laser_effect_worlds == 0
+
+
 def test_nonabstract_future_player_comparison_fails_closed() -> None:
     compare, raw = _instruction(0x10300, 0, 28, 20)
     struct.pack_into("<ff", raw, 12, -10019.0, 200.0)
@@ -715,8 +746,8 @@ def test_external_laser_shot_requests_the_mutable_laser_world() -> None:
     assert "laser world" in forecast.reason
 
 
-def _laser_create_instruction(address: int) -> EclInstruction:
-    instruction, raw = _instruction(address, 0, 85, 64)
+def _laser_create_instruction(address: int, *, time: int = 0) -> EclInstruction:
+    instruction, raw = _instruction(address, time, 85, 64)
     struct.pack_into("<fffff", raw, 0x10, 0.0, 0.0, 0.0, 100.0, 10.0)
     struct.pack_into("<f", raw, 0x24, 4.0)
     struct.pack_into("<iiiiii", raw, 0x28, 0, 60, 10, 0, 0, 0)

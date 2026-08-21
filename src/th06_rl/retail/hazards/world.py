@@ -20,8 +20,6 @@ from .bullets import (
 )
 from .ecl import (
     HardLaserWorld,
-    OPCODE_LASER_CREATE,
-    OPCODE_LASER_CREATE_AIMED,
     forecast_ecl_births,
     forecast_ecl_forced_kill_all_update,
     source_enemy_template,
@@ -61,16 +59,6 @@ def _program_can_repeat_star(emitter: EnemySpawner) -> bool:
         ) == 2:
             return True
     return False
-
-
-def _program_can_allocate_laser(emitter: EnemySpawner) -> bool:
-    return any(
-        instruction.opcode in (
-            OPCODE_LASER_CREATE,
-            OPCODE_LASER_CREATE_AIMED,
-        )
-        for instruction in emitter.ecl_program
-    )
 
 
 @dataclass(frozen=True)
@@ -291,6 +279,7 @@ def _forecast_hard_emitter_batched(
     start_lead: int = 0,
     enemy_kill_all_is_noop: bool,
     allow_repeat_star: bool,
+    record_laser_create=None,
 ) -> WorldBirthForecast:
     """Advance one emitter across source timeline interrupt boundaries."""
     horizon = len(player_positions)
@@ -347,6 +336,13 @@ def _forecast_hard_emitter_batched(
                     ),
                     record_bullet_release=(
                         lambda frame, offset=cursor: bullet_release_frames.add(
+                            offset + frame
+                        )
+                    ),
+                    record_laser_create=(
+                        None
+                        if record_laser_create is None
+                        else lambda frame, offset=cursor: record_laser_create(
                             offset + frame
                         )
                     ),
@@ -558,13 +554,8 @@ def _forecast_hard_emitter(
     allow_repeat_star: bool = True,
 ) -> WorldBirthForecast:
     """Use the compact mutable world only when a reachable laser op needs it."""
-    # A create-only program can project its own beam geometry without mutable
-    # state, but the allocation still occupies BulletManager's global 64-slot
-    # pool and may alias another enemy's stale Laser*.  Preserve that world
-    # effect even when this emitter never mutates its newly created beam.
-    if laser_world is None and _program_can_allocate_laser(emitter):
-        laser_world = HardLaserWorld(snapshot.lasers)
     if laser_world is None:
+        laser_create_frames: set[int] = set()
         batched = _forecast_hard_emitter_batched(
             snapshot,
             emitter,
@@ -572,13 +563,23 @@ def _forecast_hard_emitter(
             start_lead=start_lead,
             enemy_kill_all_is_noop=enemy_kill_all_is_noop,
             allow_repeat_star=allow_repeat_star,
+            record_laser_create=laser_create_frames.add,
         )
-        if (
+        if laser_create_frames:
+            # Static Hard projection already enclosed each beam's geometry,
+            # but a reachable allocation also changes the global 64-slot pool
+            # and may alias another emitter's stale Laser*. Re-run only this
+            # source-reachable window in the mutable world; unrelated laser
+            # subroutines elsewhere in the captured graph do not suppress
+            # bounded RNG/comparison branch unions.
+            laser_world = HardLaserWorld(snapshot.lasers)
+        elif (
             batched.covered_frames == len(player_positions)
             or "laser" not in batched.reason.lower()
         ):
             return batched
-        laser_world = HardLaserWorld(snapshot.lasers)
+        else:
+            laser_world = HardLaserWorld(snapshot.lasers)
     return _forecast_hard_emitter_with_lasers(
         snapshot,
         emitter,

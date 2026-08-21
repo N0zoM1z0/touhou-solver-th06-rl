@@ -992,6 +992,7 @@ def _forecast_ecl_births_single(
     record_death_callback_assignment=None,
     defer_initial_death: bool = False,
     record_enemy_create=None,
+    record_laser_create=None,
     initial_life_uncertain: bool = False,
 ) -> EclForecast:
     """Forecast one emitter until the first unsupported source instruction."""
@@ -2614,6 +2615,7 @@ def _forecast_ecl_births_single(
                     record_death_callback_assignment=(
                         record_death_callback_assignment
                     ),
+                    record_laser_create=record_laser_create,
                 )
                 if newborn.covered_frames < 1:
                     return EclForecast(
@@ -2688,6 +2690,7 @@ def _forecast_ecl_births_single(
                         record_death_callback_assignment=(
                             record_death_callback_assignment
                         ),
+                        record_laser_create=record_laser_create,
                     )
                     if updated.covered_frames < 1:
                         return EclForecast(
@@ -2760,6 +2763,7 @@ def _forecast_ecl_births_single(
                             record_death_callback_assignment=(
                                 record_death_callback_assignment
                             ),
+                            record_laser_create=record_laser_create,
                         )
                         if future.repeat_star_state != repeat_star_state:
                             return EclForecast(
@@ -2870,6 +2874,8 @@ def _forecast_ecl_births_single(
                             tuple(map(tuple, births)), frame_index,
                             "invalid future ECL laser creation request",
                         )
+                    if record_laser_create is not None:
+                        record_laser_create(frame_index)
                     aimed = instruction.opcode == OPCODE_LASER_CREATE_AIMED
                     laser_angle = _f32(laser_angle)
                     if aimed:
@@ -3042,6 +3048,8 @@ def _forecast_ecl_births_single(
                             uncertainty_x=uncertainty_x,
                             uncertainty_y=uncertainty_y,
                         )
+                    if record_laser_create is not None:
+                        record_laser_create(frame_index)
                     laser_slots[laser_store] = laser_slot
             elif instruction.opcode == OPCODE_LASER_INDEX:
                 laser_store = _int_var(
@@ -3851,6 +3859,7 @@ def _forecast_ecl_births_with_death_callbacks(
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
     record_death_callback_assignment=None,
+    record_laser_create=None,
 ) -> EclForecast:
     """Union every reachable source death-callback pickup frame."""
     horizon = len(player_positions)
@@ -3888,6 +3897,7 @@ def _forecast_ecl_births_with_death_callbacks(
             record_bullet_release=record_bullet_release,
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
+            record_laser_create=record_laser_create,
         )
 
     program = _compiled_program(spawner.ecl_program)
@@ -3920,6 +3930,7 @@ def _forecast_ecl_births_with_death_callbacks(
         record_bullet_release=record_bullet_release,
         repeat_star_state=repeat_star_state,
         record_death_callback_assignment=record_death_callback_assignment,
+        record_laser_create=record_laser_create,
     )
     births = [list(frame) for frame in no_callback.births]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -3953,6 +3964,7 @@ def _forecast_ecl_births_with_death_callbacks(
                 record_death_callback_assignment=(
                     record_death_callback_assignment
                 ),
+                record_laser_create=record_laser_create,
             )
             if prefix.covered_frames < callback_frame:
                 if prefix.covered_frames < covered_frames:
@@ -4044,6 +4056,7 @@ def _forecast_ecl_births_with_death_callbacks(
             ),
             repeat_star_state=callback_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
+            record_laser_create=record_laser_create,
         )
         for index, frame_births in enumerate(callback.births, callback_frame):
             births[index].extend(frame_births)
@@ -4083,6 +4096,7 @@ def _forecast_ecl_births_with_life_callbacks(
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
     record_death_callback_assignment=None,
+    record_laser_create=None,
 ) -> EclForecast:
     """Forecast an emitter, branching over reachable hard life callbacks."""
     horizon = len(player_positions)
@@ -4121,6 +4135,7 @@ def _forecast_ecl_births_with_life_callbacks(
             record_bullet_release,
             repeat_star_state,
             record_death_callback_assignment,
+            record_laser_create=record_laser_create,
         )
 
     program = _compiled_program(spawner.ecl_program)
@@ -4154,6 +4169,7 @@ def _forecast_ecl_births_with_life_callbacks(
         record_bullet_release,
         repeat_star_state,
         record_death_callback_assignment,
+        record_laser_create=record_laser_create,
     )
     births = [list(frame) for frame in no_callback.births]
     bodies: list[list[tuple[float, float, float, float]]] = [
@@ -4184,6 +4200,7 @@ def _forecast_ecl_births_with_life_callbacks(
                 record_bullet_release,
                 repeat_star_state,
                 record_death_callback_assignment,
+                record_laser_create=record_laser_create,
             )
             if prefix.covered_frames < callback_frame:
                 branch_coverage = prefix.covered_frames
@@ -4251,6 +4268,7 @@ def _forecast_ecl_births_with_life_callbacks(
                 else repeat_star_state
             ),
             record_death_callback_assignment,
+            record_laser_create=record_laser_create,
         )
         for index, frame_births in enumerate(callback.births, callback_frame):
             births[index].extend(frame_births)
@@ -4329,6 +4347,7 @@ def _forecast_abstract_source_domains(
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
     record_death_callback_assignment=None,
+    record_laser_create=None,
     model_player_damage: bool = True,
     initial_life_uncertain: bool = False,
 ) -> EclForecast:
@@ -4362,6 +4381,7 @@ def _forecast_abstract_source_domains(
             record_bullet_release=record_bullet_release,
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
+            record_laser_create=record_laser_create,
             model_player_damage=model_player_damage,
             initial_life_uncertain=initial_life_uncertain,
         )
@@ -4453,6 +4473,7 @@ def _forecast_single_with_abstract_source_domains(
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
     record_death_callback_assignment=None,
+    record_laser_create=None,
     initial_life_uncertain: bool = False,
 ) -> EclForecast:
     """Expand bounded source choices inside one physical callback branch."""
@@ -4471,6 +4492,7 @@ def _forecast_single_with_abstract_source_domains(
             record_bullet_release,
             repeat_star_state,
             record_death_callback_assignment,
+            record_laser_create,
             model_player_damage,
             initial_life_uncertain,
         )
@@ -4491,6 +4513,7 @@ def _forecast_single_with_abstract_source_domains(
         record_bullet_release=record_bullet_release,
         repeat_star_state=repeat_star_state,
         record_death_callback_assignment=record_death_callback_assignment,
+        record_laser_create=record_laser_create,
         initial_life_uncertain=initial_life_uncertain,
     )
 
@@ -4658,6 +4681,7 @@ def forecast_ecl_births(
     repeat_star_state: RepeatStarState | None = None,
     record_death_callback_assignment=None,
     record_enemy_create=None,
+    record_laser_create=None,
     initial_life_uncertain: bool = False,
 ) -> EclForecast:
     """Forecast one emitter and preserve every bounded hard uncertainty."""
@@ -4692,6 +4716,7 @@ def forecast_ecl_births(
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
             record_enemy_create=record_enemy_create,
+            record_laser_create=record_laser_create,
             initial_life_uncertain=initial_life_uncertain,
         )
     if record_enemy_kill_all:
@@ -4721,6 +4746,7 @@ def forecast_ecl_births(
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
             record_enemy_create=record_enemy_create,
+            record_laser_create=record_laser_create,
             initial_life_uncertain=initial_life_uncertain,
         )
     if laser_world is not None:
@@ -4757,6 +4783,7 @@ def forecast_ecl_births(
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
             record_enemy_create=record_enemy_create,
+            record_laser_create=record_laser_create,
             initial_life_uncertain=initial_life_uncertain,
         )
     if initial_life_uncertain:
@@ -4796,6 +4823,7 @@ def forecast_ecl_births(
             record_bullet_release,
             repeat_star_state,
             record_death_callback_assignment,
+            record_laser_create,
             model_player_damage=model_player_damage,
             initial_life_uncertain=initial_life_uncertain,
         )
@@ -4816,4 +4844,5 @@ def forecast_ecl_births(
         record_bullet_release,
         repeat_star_state,
         record_death_callback_assignment,
+        record_laser_create=record_laser_create,
     )
