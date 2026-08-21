@@ -488,6 +488,79 @@ def test_source_commitment_encloses_random_area_external_shot() -> None:
     assert first.bottom >= 450.0
 
 
+def test_source_commitment_replays_external_shots_from_live_laser_angles() -> None:
+    ex_call, raw = _instruction(0x11000, 0, 121, 20)
+    # ExInsStage4Func12 ignores its instruction parameter.
+    struct.pack_into("<Ii", raw, 12, 12, 37)
+    ex_call = _with_raw(ex_call, raw)
+    end, _raw = _instruction(0x11014, -1, 0)
+    pattern = BulletPattern(
+        0, 0.0, 0.0, 1.0, 1.0,
+        (0.0,) * 4, (0,) * 4,
+        1, 1, 0, 0x4, 1.0, 1.0,
+    )
+    spawner = _spawner(
+        ex_call,
+        end,
+        pattern=pattern,
+        # Duplicate pointers shoot twice; slot 1 is a stale pointer and is
+        # skipped because no in-use laser occupies it.
+        laser_slots=(0, 0, 1) + (-1,) * 29,
+    )
+    angle = math.pi / 4.0
+    laser = Laser(
+        192.0, 100.0, angle, 0.0, 100.0, 100.0, 8.0, 0.0,
+        0, 0, 100, 10, 0, 10, 10.0, 0, 1, slot=0,
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner, lasers=(laser,)), ((192.0, 400.0),)
+    )
+
+    assert forecast.covered_frames == 1
+    assert forecast.reason == ""
+    assert len(forecast.births[0]) == 2
+    cosine = struct.unpack("<f", struct.pack("<f", math.cos(angle)))[0]
+    sine = struct.unpack("<f", struct.pack("<f", math.sin(angle)))[0]
+    offset_x = struct.unpack("<f", struct.pack("<f", cosine * 64.0))[0]
+    offset_y = struct.unpack("<f", struct.pack("<f", -sine * offset_x))[0]
+    assert all(
+        (bullet.x, bullet.y)
+        == pytest.approx((192.0 + offset_x, 400.0 + offset_y))
+        for bullet in forecast.births[0]
+    )
+
+
+def test_external_laser_shot_requests_the_mutable_laser_world() -> None:
+    ex_call, raw = _instruction(0x11100, 0, 121, 20)
+    struct.pack_into("<Ii", raw, 12, 12, 0)
+    ex_call = _with_raw(ex_call, raw)
+    end, _raw = _instruction(0x11114, -1, 0)
+    pattern = BulletPattern(
+        0, 0.0, 0.0, 1.0, 1.0,
+        (0.0,) * 4, (0,) * 4,
+        1, 1, 0, 0x4, 1.0, 1.0,
+    )
+
+    forecast = forecast_ecl_births(
+        _spawner(
+            ex_call,
+            end,
+            pattern=pattern,
+            laser_slots=(0,) + (-1,) * 31,
+        ),
+        ((192.0, 400.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        radial_births=True,
+        abstract_rng=True,
+    )
+
+    assert forecast.covered_frames == 0
+    assert "laser world" in forecast.reason
+
+
 def _repeat_star_instruction(address: int, time: int) -> EclInstruction:
     instruction, raw = _instruction(address, time, 122, 16)
     struct.pack_into("<i", raw, 0x0C, 2)

@@ -294,6 +294,13 @@ class HardLaserWorld:
         state = self._states.get(slot)
         return state.laser if state is not None else None
 
+    def laser_angle_at(self, slot: int) -> tuple[float, bool] | None:
+        """Return the live source angle and whether Hard only knows its support."""
+        state = self._states.get(slot)
+        if state is None:
+            return None
+        return state.laser.angle, state.angle_unconstrained
+
     def observe_laser_dereference(self, slot: int, present: bool) -> None:
         if slot >= 0 and not present:
             self.missing_dereferences.add(slot)
@@ -3229,6 +3236,66 @@ def _forecast_ecl_births_single(
                             ),
                             player,
                         ))
+                    except UnsupportedBirthModel as error:
+                        return EclForecast(
+                            tuple(map(tuple, births)), frame_index, str(error)
+                        )
+                elif ex_index == 12:
+                    # ExInsStage4Func12 walks the enemy's first eight laser
+                    # pointers and shoots once for every still-in-use laser.
+                    # The instruction parameter is unused.  Its in-place
+                    # utils::Rotate call writes x before reading it for y, so
+                    # preserve that source ordering here as well.
+                    if laser_world is None:
+                        return EclForecast(
+                            tuple(map(tuple, births)),
+                            frame_index,
+                            "ECL external instruction 12 requires laser world",
+                        )
+                    if pattern is None:
+                        return EclForecast(
+                            tuple(map(tuple, births)),
+                            frame_index,
+                            "ECL external instruction 12 requires bullet pattern",
+                        )
+                    enemy_origin = uncertain_enemy()
+                    try:
+                        for pointer_slot in laser_slots[:8]:
+                            if pointer_slot < 0:
+                                continue
+                            angle_state = laser_world.laser_angle_at(pointer_slot)
+                            if angle_state is None:
+                                # A non-null enemy pointer can outlive the
+                                # laser occupying its pool slot; source tests
+                                # laser->inUse and skips that pointer.
+                                continue
+                            laser_angle, angle_unconstrained = angle_state
+                            if angle_unconstrained:
+                                offset_x: float | FloatInterval = FloatInterval(
+                                    -64.0, 64.0
+                                )
+                                # With aliased input/output, Rotate's y is
+                                # -64*sin(a)*cos(a), whose exact support is
+                                # [-32, 32].
+                                offset_y: float | FloatInterval = FloatInterval(
+                                    -32.0, 32.0
+                                )
+                            else:
+                                sine = _f32(math.sin(laser_angle))
+                                cosine = _f32(math.cos(laser_angle))
+                                offset_x = _f32(cosine * 64.0)
+                                offset_y = _f32(-sine * offset_x)
+                            origin_x = _float_add(enemy_origin[0], offset_x)
+                            origin_y = _float_add(enemy_origin[1], offset_y)
+                            if isinstance(origin_x, float):
+                                origin_x = _f32(origin_x)
+                            if isinstance(origin_y, float):
+                                origin_y = _f32(origin_y)
+                            births[frame_index].extend(emit(
+                                pattern,
+                                (origin_x, origin_y),
+                                player,
+                            ))
                     except UnsupportedBirthModel as error:
                         return EclForecast(
                             tuple(map(tuple, births)), frame_index, str(error)
