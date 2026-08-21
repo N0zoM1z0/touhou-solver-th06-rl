@@ -55,6 +55,30 @@ requires a newly recorded resource contract and compatibility gate. Any
 mismatch disables parallel collection and starts an infra investigation; it
 never relaxes equality, alters the learner, or selects different gameplay data.
 
+## Shared-host scheduling
+
+On a host that is already running important CPU or I/O work, constrain the
+entire pool command to an explicit CPU set and inherit the lowest ordinary CFS
+priority plus idle I/O priority.  Generate the machine-local pool under the
+same affinity that will run its gate:
+
+```bash
+TH06_CPU_SET=32-47
+ionice -c 3 nice -n 19 taskset -c "$TH06_CPU_SET" \
+  .venv/bin/python scripts/prepare_wine_workers.py \
+  --worker-root reference/wine-workers-v2-shared-host \
+  --workers 2 --cpus-per-worker 8
+```
+
+Launch the gate and any later collector through the same
+`ionice`/`nice`/`taskset` prefix.  The generated worker CPU partitions remain
+disjoint, and normal-priority background work wins scheduler contention.  Do
+not use `SCHED_IDLE` for evidence production: a recorded negative Stage 4
+serial run completed without semantic mismatch but produced an observation-gap
+rate of 3.62%, above the unchanged 0.5% gate.  Host courtesy does not justify
+admitting discontinuous data; change only the host scheduling mode and rerun
+the exact gate.
+
 ## Implemented commands
 
 Prepare a resource-bounded pool. The portable default remains two workers;
