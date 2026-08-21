@@ -111,27 +111,26 @@ def test_wine_worker_rejects_mutated_template(tmp_path: Path) -> None:
         )
 
 
-def test_two_worker_allocation_is_disjoint_and_bounded() -> None:
+def test_multi_worker_allocation_is_disjoint_and_resource_bounded() -> None:
     rows = allocate_worker_specifications(
-        available_cpus=tuple(range(40)), workers=2, cpus_per_worker=8,
+        available_cpus=tuple(range(64)), workers=8, cpus_per_worker=8,
     )
 
-    assert rows == [
-        {
-            "worker": 0,
-            "directory": "wine-0",
-            "display": ":107",
-            "game_cpu_list": "0,1,2,3",
-            "controller_cpu_list": "4,5,6,7",
-        },
-        {
-            "worker": 1,
-            "directory": "wine-1",
-            "display": ":108",
-            "game_cpu_list": "8,9,10,11",
-            "controller_cpu_list": "12,13,14,15",
-        },
-    ]
+    assert len(rows) == 8
+    assert rows[0] == {
+        "worker": 0,
+        "directory": "wine-0",
+        "display": ":107",
+        "game_cpu_list": "0,1,2,3",
+        "controller_cpu_list": "4,5,6,7",
+    }
+    assert rows[-1] == {
+        "worker": 7,
+        "directory": "wine-7",
+        "display": ":114",
+        "game_cpu_list": "56,57,58,59",
+        "controller_cpu_list": "60,61,62,63",
+    }
 
 
 def test_worker_contract_rejects_cross_worker_cpu_and_display_overlap() -> None:
@@ -150,7 +149,7 @@ def test_worker_contract_rejects_cross_worker_cpu_and_display_overlap() -> None:
         validate_worker_specifications(rows)
 
 
-def test_worker_contract_rejects_path_escape_and_cpu_cap() -> None:
+def test_worker_contract_rejects_path_escape_and_insufficient_cpu() -> None:
     row = allocate_worker_specifications(
         available_cpus=tuple(range(8)), workers=1, cpus_per_worker=8,
     )[0]
@@ -160,5 +159,14 @@ def test_worker_contract_rejects_path_escape_and_cpu_cap() -> None:
 
     with pytest.raises(ValueError, match="bounded"):
         allocate_worker_specifications(
-            available_cpus=tuple(range(64)), workers=2, cpus_per_worker=17,
+            available_cpus=tuple(range(64)), workers=4, cpus_per_worker=17,
         )
+
+
+def test_worker_contract_rejects_noncanonical_identity() -> None:
+    rows = allocate_worker_specifications(
+        available_cpus=tuple(range(16)), workers=2, cpus_per_worker=8,
+    )
+    rows[1]["worker"] = 2
+    with pytest.raises(ValueError, match="contiguous"):
+        validate_worker_specifications(rows)

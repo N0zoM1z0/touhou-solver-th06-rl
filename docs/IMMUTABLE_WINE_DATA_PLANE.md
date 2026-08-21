@@ -84,11 +84,12 @@ forbidden.
 
 ## Parallel collection boundary
 
-Parallel Wine workers may append facts only after the fixed-seed serial versus
-two-worker compatibility gate passes exactly. Each worker owns its game copy,
-Wine prefix, display, CPU partition, artifact root, and corpus root. A worker
-failure cancels and reaps the complete batch; only individually audited,
-immutable complete routes can enter the next inventory. Corpus workers use
+Parallel Wine workers may append facts only after every worker in the declared
+pool passes the fixed-seed serial-versus-concurrent compatibility gate exactly.
+Each worker owns its game copy, Wine prefix, display, CPU partition, artifact
+root, and corpus root. A worker failure cancels and reaps the complete batch;
+only individually audited, immutable complete routes can enter the next
+inventory. Corpus workers use
 coherent debugger suspension and therefore preserve retail update semantics,
 not 60 Hz wall-clock throughput. Canary and promotion require a separate
 sequential, non-suspending real-time gate.

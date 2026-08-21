@@ -69,7 +69,7 @@ separate non-suspending end-to-end latency gate is required before promotion.
 
 Parallel collection is fail-closed and policy-bound: prepare workers only from
 the attested archive template with `scripts/prepare_wine_workers.py`, then run
-the fixed-seed serial/two-worker differential with
+the fixed-seed serial/pool-wide differential with
 `scripts/gate_parallel_wine.py`. `scripts/collect_route_parallel.py` accepts only
 that exact commit/pool/native/policy gate and publishes an admission ledger only
 after every predeclared complete natural-RNG route passes the full source audit.

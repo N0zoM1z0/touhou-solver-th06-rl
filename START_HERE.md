@@ -42,7 +42,7 @@ Read in this order:
   attacks, items, and NMNB resource counters separately from capped learner
   features; features never replace authority evidence.
 - Concurrent Wine collection remains disabled until the exact fixed-seed
-  serial/two-worker differential passes.
+  serial/pool-wide differential passes for every declared worker.
 
 ## Active layout
 

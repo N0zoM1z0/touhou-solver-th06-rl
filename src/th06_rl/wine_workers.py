@@ -328,8 +328,8 @@ def _cpu_set(value: str) -> set[int]:
 def validate_worker_specifications(
     specifications: list[dict[str, object]],
 ) -> None:
-    if not specifications or len(specifications) > 2:
-        raise ValueError("normal-speed collection currently allows one or two workers")
+    if not specifications:
+        raise ValueError("normal-speed collection requires at least one worker")
     identities: set[int] = set()
     directories: set[str] = set()
     displays: set[str] = set()
@@ -359,8 +359,20 @@ def validate_worker_specifications(
         directories.add(directory)
         displays.add(display)
         assigned_cpus.update(game_cpus | controller_cpus)
-    if len(assigned_cpus) > 32:
-        raise ValueError("Wine worker CPU assignment exceeds the 32-CPU host cap")
+    if identities != set(range(len(specifications))):
+        raise ValueError("Wine worker identities must be contiguous from zero")
+
+
+def assigned_worker_cpus(
+    specifications: list[dict[str, object]],
+) -> frozenset[int]:
+    """Return the exact disjoint CPU ownership after structural validation."""
+    validate_worker_specifications(specifications)
+    assigned: set[int] = set()
+    for row in specifications:
+        assigned.update(_cpu_set(str(row["game_cpu_list"])))
+        assigned.update(_cpu_set(str(row["controller_cpu_list"])))
+    return frozenset(assigned)
 
 
 def allocate_worker_specifications(
@@ -372,9 +384,8 @@ def allocate_worker_specifications(
 ) -> list[dict[str, object]]:
     """Allocate deterministic disjoint game/controller ownership."""
     if (
-        workers not in (1, 2)
+        workers < 1
         or cpus_per_worker < 4
-        or workers * cpus_per_worker > 32
         or display_base < 1
         or len(set(available_cpus)) != len(available_cpus)
         or tuple(sorted(available_cpus)) != available_cpus

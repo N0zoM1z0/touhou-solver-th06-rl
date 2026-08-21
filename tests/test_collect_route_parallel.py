@@ -34,9 +34,9 @@ def test_episode_policy_streams_are_distinct_replayable_and_canonical() -> None:
 
 
 def test_route_schedule_binds_each_distinct_policy_state() -> None:
-    workers = [{"worker": 0}, {"worker": 1}]
+    workers = [{"worker": index} for index in range(8)]
     schedule = _schedule(
-        episodes=4,
+        episodes=10,
         workers=workers,
         base_state=_state(),
         gate_sha256="a" * 64,
@@ -45,8 +45,8 @@ def test_route_schedule_binds_each_distinct_policy_state() -> None:
 
     assert schedule["schema"] == SCHEDULE_SCHEMA
     rows = schedule["episodes"]
-    assert [row["worker"] for row in rows] == [0, 1, 0, 1]
-    assert len({row["policy_seed"] for row in rows}) == 4
+    assert [row["worker"] for row in rows] == [0, 1, 2, 3, 4, 5, 6, 7, 0, 1]
+    assert len({row["policy_seed"] for row in rows}) == 10
     for row in rows:
         state = derive_episode_policy_state(_state(), episode=row["episode"])
         payload = (json.dumps(

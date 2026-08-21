@@ -50,3 +50,8 @@ def test_worker_pool_defaults_are_repo_relative_and_bounded() -> None:
     assert args.cpus_per_worker == 8
     assert args.archive.name == "th06.rar"
     assert args.worker_root.name == "wine-workers-v2"
+
+
+def test_worker_pool_accepts_resource_bounded_parallel_width() -> None:
+    args = parse_args(["--workers", "8"])
+    assert args.workers == 8

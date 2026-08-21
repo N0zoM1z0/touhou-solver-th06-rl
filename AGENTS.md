@@ -111,12 +111,14 @@ Do not accelerate the game clock for any evidence-producing corpus. Final
 comparison uses normal-speed original Wine, natural full Practice Stages, HIT
 continuation, zero Bomb, immutable policies, and alternating
 incumbent/candidate trials. The per-run physical HIT count is authoritative.
-Parallel collection currently has a two-worker/32-CPU ceiling. Workers must be
+Parallel width is declared by a generated resource contract and bounded by the
+current host's CPU affinity, free memory, and free storage. Workers must be
 copied from the immutable archive-derived template, never from a game directory
 that Wine has executed. Natural-RNG collection requires an exact fixed-seed
-serial/two-worker gate bound to the same commit, native build, policy, and pool.
-One worker failure rejects and reaps the whole active wave; partial schedules
-remain quarantined and are never outcome-conditionally replaced.
+serial/pool-wide gate bound to the same commit, native build, policy, and pool;
+every concurrent worker must reproduce the serial facts exactly. One worker
+failure rejects and reaps the whole active wave; partial schedules remain
+quarantined and are never outcome-conditionally replaced.
 
 ## No scripted play
 
@@ -124,6 +126,8 @@ Do not key movement to a frame number, RNG seed, run ID, counterexample,
 boss name, or handwritten phase state. Difficulty, character, shot type,
 stage, and automatically derived source context are separate scopes. Source
 context may partition evidence but may not select a handwritten route.
+Never manually replace an action or add stage-, boss-, spell-, frame-, or
+coordinate-specific policy branches; avoidance behavior must be learned.
 
 ## Physical-run safety
 

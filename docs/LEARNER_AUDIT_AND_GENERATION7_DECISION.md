@@ -135,7 +135,7 @@ first-order bottleneck, although set encoding remains a useful ablation.
   fixed-seed differential changed HIT counts (`28` serial versus `30` and
   `26` concurrently), frame/boundary counts, and digests. The replacement may
   collect concurrently only with isolated, preinitialized workers after the
-  exact commit/pool/native/policy serial-versus-two-worker gate passes; offline
+  exact commit/pool/native/policy serial-versus-pool gate passes; offline
   fitting and replay may parallelize independently.
 
 ## Generation-7 architecture decision

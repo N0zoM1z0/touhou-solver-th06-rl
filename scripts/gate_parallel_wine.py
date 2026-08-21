@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Require exact fixed-seed serial/two-worker original-Wine compatibility."""
+"""Require exact fixed-seed serial/pool-wide original-Wine compatibility."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
@@ -17,6 +19,8 @@ from typing import Any
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
+if str(REPOSITORY) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY))
 if str(REPOSITORY / "src") not in sys.path:
     sys.path.insert(0, str(REPOSITORY / "src"))
 
@@ -24,13 +28,19 @@ from th06_rl.corpus import FRAME_SCHEMA  # noqa: E402
 from th06_rl.corpus_digest import normalized_factual_digest  # noqa: E402
 from th06_rl.wine_workers import (  # noqa: E402
     RETAIL_EXECUTABLE_SHA256,
+    assigned_worker_cpus,
     validate_wine_worker,
     validate_worker_specifications,
 )
+from scripts.prepare_wine_workers import (  # noqa: E402
+    GIB,
+    linux_mem_available_bytes,
+    require_host_capacity,
+)
 
 
-POOL_SCHEMA = "th06-rl-normal-speed-wine-pool-v1"
-GATE_SCHEMA = "th06-rl-exact-parallel-wine-gate-v1"
+POOL_SCHEMA = "th06-rl-normal-speed-wine-pool-v2"
+GATE_SCHEMA = "th06-rl-exact-parallel-wine-gate-v2"
 _CLEAN_FIELDS = (
     "background_reactivations",
     "capture_failures",
@@ -97,15 +107,70 @@ def _pool(path: Path) -> dict[str, Any]:
         )
     } for row in workers if isinstance(row, dict)]
     validate_worker_specifications(specifications)
-    if len(workers) != 2 or len(specifications) != 2:
-        raise ValueError("parallel compatibility gate requires exactly two workers")
+    if len(workers) < 2 or len(specifications) != len(workers):
+        raise ValueError("parallel compatibility gate requires at least two workers")
+    resource = pool.get("resource_contract")
+    memory_reserve = (
+        resource.get("minimum_memory_gib_per_worker")
+        if isinstance(resource, dict) else None
+    )
+    disk_reserve = (
+        resource.get("minimum_disk_gib_per_worker")
+        if isinstance(resource, dict) else None
+    )
+    per_worker_counts = [
+        len(assigned_worker_cpus([{
+            **row,
+            "worker": 0,
+        }]))
+        for row in specifications
+    ]
+    if (
+        not isinstance(resource, dict)
+        or resource.get("game_clock") != "original-retail-normal-speed"
+        or resource.get("worker_count") != len(workers)
+        or not isinstance(resource.get("cpus_per_worker"), int)
+        or resource.get("cpus_per_worker") < 4
+        or any(count != resource["cpus_per_worker"] for count in per_worker_counts)
+        or resource.get("assigned_total_cpus")
+        != len(assigned_worker_cpus(specifications))
+        or isinstance(memory_reserve, bool)
+        or not isinstance(memory_reserve, (int, float))
+        or not math.isfinite(memory_reserve)
+        or memory_reserve <= 0
+        or isinstance(disk_reserve, bool)
+        or not isinstance(disk_reserve, (int, float))
+        or not math.isfinite(disk_reserve)
+        or disk_reserve <= 0
+    ):
+        raise ValueError("Wine worker resource contract differs")
     validated = [validate_wine_worker(row) for row in workers]
     game_dirs = {str(row["game_dir"]) for row in validated}
     prefixes = {str(row["wine_prefix"]) for row in validated}
     sources = {str(row["source_game_dir"]) for row in validated}
-    if len(game_dirs) != 2 or len(prefixes) != 2 or len(sources) != 1:
+    if (
+        len(game_dirs) != len(workers)
+        or len(prefixes) != len(workers)
+        or len(sources) != 1
+    ):
         raise ValueError("Wine worker filesystem ownership overlaps or differs")
     return pool
+
+
+def _gate_rows(
+    workers: list[dict[str, Any]],
+) -> list[tuple[str, dict[str, Any]]]:
+    """Build one serial reference plus one simultaneous run for every worker."""
+    ordered = sorted(workers, key=lambda row: int(row["worker"]))
+    if len(ordered) < 2:
+        raise ValueError("parallel compatibility gate requires at least two workers")
+    return [
+        ("serial-worker-0", ordered[0]),
+        *[
+            (f"concurrent-worker-{int(worker['worker'])}", worker)
+            for worker in ordered
+        ],
+    ]
 
 
 def build_runner_command(
@@ -397,11 +462,25 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         if path.exists():
             raise FileExistsError(path)
 
-    rows = [
-        ("serial-worker-0", workers[0]),
-        ("concurrent-worker-0", workers[0]),
-        ("concurrent-worker-1", workers[1]),
-    ]
+    specifications = [{
+        key: row[key] for key in (
+            "worker", "directory", "display", "game_cpu_list",
+            "controller_cpu_list",
+        )
+    } for row in workers]
+    assigned_cpus = assigned_worker_cpus(specifications)
+    if not assigned_cpus.issubset(os.sched_getaffinity(0)):
+        raise RuntimeError("Wine worker CPU ownership is outside current host affinity")
+    resource = pool["resource_contract"]
+    require_host_capacity(
+        workers=len(workers),
+        memory_available=linux_mem_available_bytes(),
+        disk_available=shutil.disk_usage(corpus_root.parent).free,
+        memory_per_worker=int(resource["minimum_memory_gib_per_worker"] * GIB),
+        disk_per_worker=int(resource["minimum_disk_gib_per_worker"] * GIB),
+    )
+
+    rows = _gate_rows(workers)
     commands = {}
     for name, worker in rows:
         commands[name] = build_runner_command(
@@ -418,9 +497,10 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         "serial-worker-0", commands["serial-worker-0"],
         artifact_root / "serial-worker-0-launcher.log",
     )])
+    concurrent_names = [name for name, _worker in rows if name.startswith("concurrent-")]
     run_batch([(
         name, commands[name], artifact_root / f"{name}-launcher.log",
-    ) for name in ("concurrent-worker-0", "concurrent-worker-1")])
+    ) for name in concurrent_names])
 
     evidence = {}
     for name, _worker in rows:
@@ -440,7 +520,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             "digest": normalized_factual_digest(run_dir),
         }
     reference = evidence["serial-worker-0"]
-    for name in ("concurrent-worker-0", "concurrent-worker-1"):
+    for name in concurrent_names:
         candidate = evidence[name]
         if (
             candidate["physical_hits"] != reference["physical_hits"]
@@ -466,6 +546,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         ),
         "practice_stage": args.practice_stage,
         "diagnostic_rng_seed": args.diagnostic_rng_seed,
+        "worker_count": len(workers),
+        "assigned_total_cpus": len(assigned_cpus),
         "game_clock": "original-retail-normal-speed",
         "evidence": evidence,
     }

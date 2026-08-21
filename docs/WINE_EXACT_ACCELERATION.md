@@ -41,26 +41,28 @@ partial or duplicate runs fail closed.
 ## Compatibility gate
 
 Before parallel data becomes eligible, run the same frozen behavior contract
-once sequentially and simultaneously on two isolated workers. The differential
-uses the same fixed retail RNG and immutable policy state. Physical HIT count
-and a normalized factual digest must match exactly; changing startup or capture
-timing is a semantic failure, not training diversity. The gate also compares
-executable/native hashes, schemas, complete-Stage lifecycle, zero drops/
-failures/Bomb, option/propensity invariants, frame/decision sequence, and exact
-cleanup.
+once sequentially and simultaneously on every isolated worker declared by the
+pool. The differential uses the same fixed retail RNG and immutable policy
+state. Every worker's physical HIT count and normalized factual digest must
+match the serial reference exactly; changing startup or capture timing is a
+semantic failure, not training diversity. The gate also compares executable/
+native hashes, schemas, complete-Stage lifecycle, zero drops/failures/Bomb,
+option/propensity invariants, frame/decision sequence, and exact cleanup.
 
-Only after both concurrent workers reproduce the serial reference exactly may
-ordinary natural-RNG collection use two workers. Expansion beyond two requires
-a separately recorded resource and compatibility gate. Any mismatch disables
-parallel collection and starts an infra investigation; it never relaxes
-equality, alters the learner, or selects different gameplay data.
+Only after every concurrent worker reproduces the serial reference exactly may
+ordinary natural-RNG collection use that pool. Changing pool width or ownership
+requires a newly recorded resource contract and compatibility gate. Any
+mismatch disables parallel collection and starts an infra investigation; it
+never relaxes equality, alters the learner, or selects different gameplay data.
 
 ## Implemented commands
 
-Prepare the bounded two-worker pool (16 CPUs by default, hard ceiling 32):
+Prepare a resource-bounded pool. The portable default remains two workers;
+choose a larger width explicitly when the current CPU affinity, memory, and
+storage preflight can satisfy every worker (for example eight workers):
 
 ```bash
-.venv/bin/python scripts/prepare_wine_workers.py
+.venv/bin/python scripts/prepare_wine_workers.py --workers 8
 ```
 
 After freezing a collection policy, run the non-evidence fixed-seed gate. Do

@@ -6,6 +6,7 @@ import sys
 import pytest
 
 from scripts.gate_parallel_wine import (
+    _gate_rows,
     _pool,
     build_runner_command,
     run_batch,
@@ -189,7 +190,7 @@ def test_pool_validates_real_worker_markers_and_filesystem_ownership(
         executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
     )
     specifications = allocate_worker_specifications(
-        available_cpus=tuple(range(16)), workers=2, cpus_per_worker=8,
+        available_cpus=tuple(range(32)), workers=4, cpus_per_worker=8,
     )
     workers = prepare_wine_workers(
         root=tmp_path / "workers",
@@ -205,16 +206,43 @@ def test_pool_validates_real_worker_markers_and_filesystem_ownership(
         for worker, specification in zip(workers, specifications, strict=True)
     ]
     pool_path = tmp_path / "pool.json"
+    resource_contract = {
+        "worker_count": 4,
+        "assigned_total_cpus": 32,
+        "cpus_per_worker": 8,
+        "minimum_memory_gib_per_worker": 8.0,
+        "minimum_disk_gib_per_worker": 8.0,
+        "game_clock": "original-retail-normal-speed",
+    }
     pool_path.write_text(json.dumps({
-        "schema": "th06-rl-normal-speed-wine-pool-v1",
+        "schema": "th06-rl-normal-speed-wine-pool-v2",
         "workers": rows,
+        "resource_contract": resource_contract,
     }))
-    assert len(_pool(pool_path)["workers"]) == 2
+    assert len(_pool(pool_path)["workers"]) == 4
+    assert [name for name, _worker in _gate_rows(rows)] == [
+        "serial-worker-0",
+        "concurrent-worker-0",
+        "concurrent-worker-1",
+        "concurrent-worker-2",
+        "concurrent-worker-3",
+    ]
+
+    resource_contract["assigned_total_cpus"] = 31
+    pool_path.write_text(json.dumps({
+        "schema": "th06-rl-normal-speed-wine-pool-v2",
+        "workers": rows,
+        "resource_contract": resource_contract,
+    }))
+    with pytest.raises(ValueError, match="resource contract"):
+        _pool(pool_path)
+    resource_contract["assigned_total_cpus"] = 32
 
     rows[1]["game_dir"] = rows[0]["game_dir"]
     pool_path.write_text(json.dumps({
-        "schema": "th06-rl-normal-speed-wine-pool-v1",
+        "schema": "th06-rl-normal-speed-wine-pool-v2",
         "workers": rows,
+        "resource_contract": resource_contract,
     }))
     with pytest.raises(ValueError, match="integrity differs"):
         _pool(pool_path)

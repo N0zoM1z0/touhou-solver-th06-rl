@@ -26,7 +26,7 @@ from th06_rl.wine_workers import (  # noqa: E402
 )
 
 
-POOL_SCHEMA = "th06-rl-normal-speed-wine-pool-v1"
+POOL_SCHEMA = "th06-rl-normal-speed-wine-pool-v2"
 PREFIX_SCHEMA = "th06-rl-isolated-wine-prefix-v1"
 SCORE_SHA256 = "54cd436d5d8a7a904190c792a977bf270ab1cb759fd72101e51e94d26b749c71"
 GIB = 1024**3
@@ -197,13 +197,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--worker-root", type=Path,
         default=REPOSITORY / "reference/wine-workers-v2",
     )
-    parser.add_argument("--workers", type=int, choices=(1, 2), default=2)
+    parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--cpus-per-worker", type=int, default=8)
     parser.add_argument("--display-base", type=int, default=107)
     parser.add_argument("--min-memory-gib-per-worker", type=float, default=8.0)
     parser.add_argument("--min-disk-gib-per-worker", type=float, default=8.0)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
+    if args.workers < 1:
+        parser.error("--workers must be positive")
     if args.cpus_per_worker < 4:
         parser.error("--cpus-per-worker must be at least 4")
     if args.min_memory_gib_per_worker <= 0 or args.min_disk_gib_per_worker <= 0:
@@ -269,7 +271,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         "score_template_sha256": _sha256(score_template),
         "workers": rows,
         "resource_contract": {
-            "maximum_total_cpus": 32,
+            "worker_count": args.workers,
+            "assigned_total_cpus": args.workers * args.cpus_per_worker,
             "cpus_per_worker": args.cpus_per_worker,
             "minimum_memory_gib_per_worker": args.min_memory_gib_per_worker,
             "minimum_disk_gib_per_worker": args.min_disk_gib_per_worker,

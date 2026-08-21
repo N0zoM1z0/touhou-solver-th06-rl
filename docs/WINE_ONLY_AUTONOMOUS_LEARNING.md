@@ -70,7 +70,7 @@ atomically:
 
 1. **Collect** original-Wine episodes with a frozen behavior policy and
    algorithmic propensity-recorded exploration inside the native-safe set.
-   Collection is sequential until the exact two-worker gate passes.
+   Collection is sequential until the exact pool-wide gate passes.
 2. **Validate** provenance, complete transition windows, propensities, zero
    Bomb, capture/delivery contracts, and exact process cleanup. Contract failure
    stops as `infra_failure`; policy failure does not.

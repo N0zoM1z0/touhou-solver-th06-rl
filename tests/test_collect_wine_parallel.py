@@ -6,10 +6,7 @@ from scripts.collect_wine_parallel import _schedule, _stages, parse_args
 
 
 def _workers():
-    return [
-        {"worker": 0},
-        {"worker": 1},
-    ]
+    return [{"worker": index} for index in range(4)]
 
 
 def test_collection_schedule_is_outcome_independent_and_round_robin(
@@ -22,7 +19,7 @@ def test_collection_schedule_is_outcome_independent_and_round_robin(
         gate_sha256="a" * 64,
         commit="commit",
     )
-    assert [row["worker"] for row in schedule["episodes"]] == [0, 1, 0, 1, 0, 1, 0]
+    assert [row["worker"] for row in schedule["episodes"]] == [0, 1, 2, 3, 0, 1, 2]
     assert [row["stage"] for row in schedule["episodes"]] == [1, 2, 3, 4, 5, 6, 1]
     assert schedule["natural_rng"] is True
 

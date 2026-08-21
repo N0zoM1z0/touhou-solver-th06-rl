@@ -19,8 +19,8 @@ training. Historical failure analysis and performance evidence remain in
    after every HIT and never using Bomb.
 2. Require clean lifecycle/HIT conservation, comprehensive factual roots,
    dense native parity, and zero uncovered causal successor hazards.
-3. Establish the exact fixed-seed serial/two-worker compatibility gate using
-   isolated normal-speed Wine workers.
+3. Establish the exact fixed-seed serial/pool-wide compatibility gate using
+   a host-resource-bounded pool of isolated normal-speed Wine workers.
 4. Admit only newly collected source-complete episodes, split them by complete
    episode, and begin the frozen offline learner.
 
