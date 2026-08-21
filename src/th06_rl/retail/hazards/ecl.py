@@ -161,8 +161,14 @@ OPCODE_BOSS_TIMER_CLEAR = 133
 OPCODE_LASER_CLEAR_ALL = 134
 OPCODE_SPELL_TIMEOUT_FLAG = 135
 ECL_OPCODE_COUNT = 136
-MAX_ABSTRACT_INTEGER_RNG_BRANCHES = 64
-MAX_ABSTRACT_INTEGER_RNG_EVALUATIONS = 256
+MAX_ABSTRACT_SOURCE_BRANCHES = 64
+MAX_ABSTRACT_SOURCE_EVALUATIONS = 256
+# GameManager initializes these bounds and Player::HandlePlayerInputs clamps
+# the center coordinate after every movement update.
+PLAYER_MIN_X = 8.0
+PLAYER_MAX_X = 376.0
+PLAYER_MIN_Y = 16.0
+PLAYER_MAX_Y = 432.0
 ENEMY_CREATE_WORLD_REASON = "future ECL enemy creation needs a world-emitter insertion"
 EFFECT_RANDOM_SPRITE_IDS = frozenset((*range(4, 12), 19))
 
@@ -458,7 +464,7 @@ class EclForecast:
     next_spawner: EnemySpawner | None = None
     body_hazards: tuple[tuple[tuple[float, float, float, float], ...], ...] = ()
     finished: bool = False
-    unresolved_int_extent: int = 0
+    unresolved_choices: tuple[int, ...] = ()
     created_emitters: tuple[EnemySpawner, ...] = ()
     effect_spawns: tuple[tuple[int, ...], ...] = ()
     item_spawns: tuple[int, ...] = ()
@@ -716,11 +722,11 @@ def _float_var(
         return enemy[1]
     if value == -10018:
         if player is None:
-            raise UnsupportedBirthModel("ECL reads future player x")
+            return FloatInterval(PLAYER_MIN_X, PLAYER_MAX_X)
         return player[0]
     if value == -10019:
         if player is None:
-            raise UnsupportedBirthModel("ECL reads future player y")
+            return FloatInterval(PLAYER_MIN_Y, PLAYER_MAX_Y)
         return player[1]
     if value == -10021:
         if player is None:
@@ -974,7 +980,7 @@ def _forecast_ecl_births_single(
     radial_births: bool = False,
     abstract_rng: bool = False,
     enemy_kill_all_is_noop: bool = False,
-    abstract_int_choices: tuple[int, ...] = (),
+    abstract_choices: tuple[int, ...] = (),
     model_player_damage: bool = True,
     allow_enemy_create_audit: bool = True,
     record_enemy_kill_all: bool = False,
@@ -1105,7 +1111,7 @@ def _forecast_ecl_births_single(
     timed_move_next_progress = 0.0
     shoot_offset_x: float | FloatInterval = spawner.shoot_offset_x
     shoot_offset_y: float | FloatInterval = spawner.shoot_offset_y
-    abstract_int_cursor = 0
+    abstract_choice_cursor = 0
     created_emitters: list[EnemySpawner] = []
     created_enemy_in_forecast = False
     death_anm1 = spawner.death_anm1
@@ -1504,16 +1510,16 @@ def _forecast_ecl_births_single(
                             )
                         if extent == 0:
                             value = 0
-                        elif abstract_int_cursor >= len(abstract_int_choices):
+                        elif abstract_choice_cursor >= len(abstract_choices):
                             return EclForecast(
                                 tuple(map(tuple, births)),
                                 frame_index,
                                 "integer RNG needs bounded branch expansion",
-                                unresolved_int_extent=extent,
+                                unresolved_choices=tuple(range(extent)),
                             )
                         else:
-                            value = abstract_int_choices[abstract_int_cursor]
-                            abstract_int_cursor += 1
+                            value = abstract_choices[abstract_choice_cursor]
+                            abstract_choice_cursor += 1
                             if not 0 <= value < extent:
                                 return EclForecast(
                                     tuple(map(tuple, births)),
@@ -1697,6 +1703,9 @@ def _forecast_ecl_births_single(
                     lhs_raw, rhs_raw = struct.unpack_from("<ii", raw, 0x0C)
                     lhs = _int_var(lhs_raw, integers, difficulty, rank, life)
                     rhs = _int_var(rhs_raw, integers, difficulty, rank, life)
+                    compare_register = (
+                        0 if lhs == rhs else -1 if lhs < rhs else 1
+                    )
                 else:
                     lhs = _float_var(
                         raw[0x0C:0x10], integers, floats, difficulty, rank,
@@ -1707,16 +1716,76 @@ def _forecast_ecl_births_single(
                         life, enemy, variable_player,
                     )
                     if isinstance(lhs, FloatInterval) or isinstance(rhs, FloatInterval):
-                        return EclForecast(
-                            tuple(map(tuple, births)),
-                            frame_index,
-                            "float interval reaches ECL comparison",
+                        lhs_low, lhs_high = (
+                            (lhs.low, lhs.high)
+                            if isinstance(lhs, FloatInterval)
+                            else (lhs, lhs)
                         )
-                    if not math.isfinite(lhs) or not math.isfinite(rhs):
-                        return EclForecast(
-                            tuple(map(tuple, births)), frame_index, "non-finite ECL comparison"
+                        rhs_low, rhs_high = (
+                            (rhs.low, rhs.high)
+                            if isinstance(rhs, FloatInterval)
+                            else (rhs, rhs)
                         )
-                compare_register = 0 if lhs == rhs else -1 if lhs < rhs else 1
+                        if (
+                            not all(math.isfinite(value) for value in (
+                                lhs_low, lhs_high, rhs_low, rhs_high
+                            ))
+                            or lhs_low > lhs_high
+                            or rhs_low > rhs_high
+                        ):
+                            return EclForecast(
+                                tuple(map(tuple, births)), frame_index,
+                                "invalid float interval reaches ECL comparison",
+                            )
+                        possible = tuple(
+                            outcome for outcome, condition in (
+                                (-1, lhs_low < rhs_high),
+                                (
+                                    0,
+                                    max(lhs_low, rhs_low)
+                                    <= min(lhs_high, rhs_high),
+                                ),
+                                (1, lhs_high > rhs_low),
+                            )
+                            if condition
+                        )
+                        if not possible:
+                            return EclForecast(
+                                tuple(map(tuple, births)), frame_index,
+                                "invalid float interval reaches ECL comparison",
+                            )
+                        if len(possible) == 1:
+                            compare_register = possible[0]
+                        elif not abstract_rng:
+                            return EclForecast(
+                                tuple(map(tuple, births)), frame_index,
+                                "uncertain ECL comparison needs a hard branch union",
+                            )
+                        elif abstract_choice_cursor >= len(abstract_choices):
+                            return EclForecast(
+                                tuple(map(tuple, births)), frame_index,
+                                "abstract ECL comparison choice required",
+                                unresolved_choices=possible,
+                            )
+                        else:
+                            compare_register = abstract_choices[
+                                abstract_choice_cursor
+                            ]
+                            abstract_choice_cursor += 1
+                            if compare_register not in possible:
+                                return EclForecast(
+                                    tuple(map(tuple, births)), frame_index,
+                                    "ECL comparison branch is outside its support",
+                                )
+                    else:
+                        if not math.isfinite(lhs) or not math.isfinite(rhs):
+                            return EclForecast(
+                                tuple(map(tuple, births)), frame_index,
+                                "non-finite ECL comparison",
+                            )
+                        compare_register = (
+                            0 if lhs == rhs else -1 if lhs < rhs else 1
+                        )
             elif OPCODE_JUMP_LESS <= instruction.opcode <= OPCODE_JUMP_NOT_EQUAL:
                 take_jump = (
                     compare_register < 0 if instruction.opcode == OPCODE_JUMP_LESS
@@ -3802,7 +3871,7 @@ def _forecast_ecl_births_with_death_callbacks(
         and earliest_callback < horizon
     )
     if not should_branch:
-        return _forecast_single_with_abstract_integer_domains(
+        return _forecast_single_with_abstract_source_domains(
             spawner,
             player_positions,
             difficulty,
@@ -3834,7 +3903,7 @@ def _forecast_ecl_births_with_death_callbacks(
     # Zero damage remains physically possible.  Keeping this branch alive is
     # conservative; it also provides the state prefix for each death frame.
     no_callback_spawner = _copy_spawner(spawner, death_callback_sub=-1)
-    no_callback = _forecast_single_with_abstract_integer_domains(
+    no_callback = _forecast_single_with_abstract_source_domains(
         no_callback_spawner,
         player_positions,
         difficulty,
@@ -3865,7 +3934,7 @@ def _forecast_ecl_births_with_death_callbacks(
     for callback_frame in range(earliest_callback, horizon):
         callback_star_state = repeat_star_state
         if callback_frame:
-            prefix = _forecast_single_with_abstract_integer_domains(
+            prefix = _forecast_single_with_abstract_source_domains(
                 no_callback_spawner,
                 player_positions[:callback_frame],
                 difficulty,
@@ -3946,7 +4015,7 @@ def _forecast_ecl_births_with_death_callbacks(
             bullet_rank_amount2_low=0,
             bullet_rank_amount2_high=0,
         )
-        callback = _forecast_single_with_abstract_integer_domains(
+        callback = _forecast_single_with_abstract_source_domains(
             callback_source,
             player_positions[callback_frame:],
             difficulty,
@@ -4246,7 +4315,7 @@ def _death_callback_can_branch(
     )
 
 
-def _forecast_abstract_integer_domains(
+def _forecast_abstract_source_domains(
     spawner: EnemySpawner,
     player_positions: tuple[tuple[float, float], ...],
     difficulty: int,
@@ -4263,18 +4332,18 @@ def _forecast_abstract_integer_domains(
     model_player_damage: bool = True,
     initial_life_uncertain: bool = False,
 ) -> EclForecast:
-    """Union every bounded source integer-RNG control-flow outcome."""
+    """Union every bounded source RNG/comparison control-flow outcome."""
     pending: list[tuple[int, ...]] = [()]
     leaves: list[EclForecast] = []
     evaluated = 0
     while pending:
         choices = pending.pop()
         evaluated += 1
-        if evaluated > MAX_ABSTRACT_INTEGER_RNG_EVALUATIONS:
+        if evaluated > MAX_ABSTRACT_SOURCE_EVALUATIONS:
             return EclForecast(
                 tuple(() for _ in player_positions),
                 0,
-                "integer RNG branch budget exhausted",
+                "abstract source branch budget exhausted",
             )
         forecast = _forecast_ecl_births_single(
             spawner,
@@ -4296,16 +4365,16 @@ def _forecast_abstract_integer_domains(
             model_player_damage=model_player_damage,
             initial_life_uncertain=initial_life_uncertain,
         )
-        extent = forecast.unresolved_int_extent
-        if extent:
-            future_branch_count = len(pending) + len(leaves) + extent
-            if future_branch_count > MAX_ABSTRACT_INTEGER_RNG_BRANCHES:
+        domain = forecast.unresolved_choices
+        if domain:
+            future_branch_count = len(pending) + len(leaves) + len(domain)
+            if future_branch_count > MAX_ABSTRACT_SOURCE_BRANCHES:
                 return EclForecast(
                     tuple(() for _ in player_positions),
                     0,
-                    f"integer RNG domain {extent} exceeds branch budget",
+                    f"source domain {domain!r} exceeds branch budget",
                 )
-            pending.extend(choices + (value,) for value in range(extent))
+            pending.extend(choices + (value,) for value in domain)
         else:
             leaves.append(forecast)
 
@@ -4366,7 +4435,7 @@ def _forecast_abstract_integer_domains(
     )
 
 
-def _forecast_single_with_abstract_integer_domains(
+def _forecast_single_with_abstract_source_domains(
     spawner: EnemySpawner,
     player_positions: tuple[tuple[float, float], ...],
     difficulty: int,
@@ -4386,9 +4455,9 @@ def _forecast_single_with_abstract_integer_domains(
     record_death_callback_assignment=None,
     initial_life_uncertain: bool = False,
 ) -> EclForecast:
-    """Expand bounded integer RNG inside one physical callback branch."""
+    """Expand bounded source choices inside one physical callback branch."""
     if abstract_rng and rng is None:
-        return _forecast_abstract_integer_domains(
+        return _forecast_abstract_source_domains(
             spawner,
             player_positions,
             difficulty,
@@ -4713,7 +4782,7 @@ def forecast_ecl_births(
             )
         )
     ):
-        return _forecast_abstract_integer_domains(
+        return _forecast_abstract_source_domains(
             spawner,
             player_positions,
             difficulty,

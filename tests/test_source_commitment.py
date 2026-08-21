@@ -264,6 +264,84 @@ def test_exact_forecast_rejects_random_bullet_effect_support() -> None:
     assert forecast.reason == "uncertain bullet effects need a hard envelope"
 
 
+def test_hard_unions_future_player_comparison_branches() -> None:
+    compare, raw = _instruction(0x10200, 0, 28, 20)
+    struct.pack_into("<ff", raw, 12, -10019.0, 200.0)
+    compare = _with_raw(compare, raw)
+    jump_greater, raw = _instruction(0x10214, 0, 32, 20)
+    struct.pack_into("<ii", raw, 12, 0, 0x40)
+    jump_greater = _with_raw(jump_greater, raw)
+    shoot, raw = _instruction(0x10228, 0, 67, 44)
+    struct.pack_into("<hhii", raw, 12, 0, 0, 1, 1)
+    struct.pack_into("<ffffI", raw, 24, 1.0, 1.0, 0.0, 0.0, 0)
+    shoot = _with_raw(shoot, raw)
+    wait, _raw = _instruction(0x10254, 10, 0)
+    spawner = _spawner(
+        compare,
+        wait,
+        shooting_disabled=False,
+        ecl_program=(compare, jump_greater, shoot, wait),
+    )
+
+    hard = forecast_ecl_births(
+        spawner,
+        ((192.0, 300.0),) * 4,
+        3,
+        0,
+        ((1.0, 1.0),),
+        allow_player_variables=False,
+        radial_births=True,
+        abstract_rng=True,
+        model_player_damage=False,
+    )
+    below = forecast_ecl_births(
+        spawner,
+        ((192.0, 100.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        model_player_damage=False,
+    )
+    above = forecast_ecl_births(
+        spawner,
+        ((192.0, 300.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        model_player_damage=False,
+    )
+
+    assert hard.covered_frames == 4
+    assert hard.reason == ""
+    assert len(hard.births[0]) == 1
+    assert len(below.births[0]) == 1
+    assert above.births[0] == ()
+
+
+def test_nonabstract_future_player_comparison_fails_closed() -> None:
+    compare, raw = _instruction(0x10300, 0, 28, 20)
+    struct.pack_into("<ff", raw, 12, -10019.0, 200.0)
+    compare = _with_raw(compare, raw)
+    wait, _raw = _instruction(0x10314, 10, 0)
+    spawner = _spawner(compare, wait, ecl_program=(compare, wait))
+
+    forecast = forecast_ecl_births(
+        spawner,
+        ((192.0, 300.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        allow_player_variables=False,
+        radial_births=True,
+        model_player_damage=False,
+    )
+
+    assert forecast.covered_frames == 0
+    assert forecast.reason == (
+        "uncertain ECL comparison needs a hard branch union"
+    )
+
+
 def test_hard_stops_before_ecl_reads_damage_uncertain_life() -> None:
     compare, raw = _instruction(0x10100, 1, 27, 20)
     struct.pack_into("<ii", raw, 0x0C, -10024, 100)
