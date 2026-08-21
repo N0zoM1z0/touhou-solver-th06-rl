@@ -998,6 +998,32 @@ def test_timeline_kill_all_rejects_live_callback_assigned_in_prefix() -> None:
     assert "ENEMYKILLALL" in forecast.reason
 
 
+def test_timeline_kill_all_does_not_hide_later_boss_coverage_failure() -> None:
+    child_kill_all, _raw = _instruction(0x18440, 0, 96)
+    child_wait, _raw = _instruction(0x1844C, -1, 0)
+    unsupported, raw = _instruction(0x19440, 4, 122, 20)
+    struct.pack_into("<Ii", raw, 0x0C, 99, 0)
+    unsupported = _with_raw(unsupported, raw)
+    boss = _spawner(
+        unsupported,
+        unsupported,
+        life=10_000,
+        is_boss=True,
+        boss_id=0,
+        ecl_program=(unsupported,),
+    )
+    snapshot = _timeline_kill_all_snapshot(
+        (child_kill_all, child_wait),
+        (child_kill_all.address, child_wait.address),
+        live=boss,
+    )
+
+    forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 6)
+
+    assert forecast.covered_frames == 4
+    assert "emitter 0" in forecast.reason
+
+
 def test_timeline_kill_all_rejects_prior_compact_timeline_child() -> None:
     neutral, _raw = _instruction(0x18500, -1, 0)
     kill_all, _raw = _instruction(0x18510, 0, 96)
@@ -1061,6 +1087,43 @@ def test_live_boss_kill_all_is_exact_noop_without_external_target() -> None:
 
     forecast = forecast_world_births(
         _snapshot(boss),
+        ((192.0, 400.0),) * 4,
+    )
+
+    assert forecast.covered_frames == 4
+    assert forecast.reason == ""
+
+
+def test_first_live_slot_boss_kill_all_replays_later_simple_targets() -> None:
+    kill_all, _raw = _instruction(0x19840, 1, 96)
+    boss_wait, _raw = _instruction(0x1984C, -1, 0)
+    target_wait, _raw = _instruction(0x19880, -1, 0)
+    boss = _spawner(
+        kill_all,
+        boss_wait,
+        slot=0,
+        life=10_000,
+        is_boss=True,
+        boss_id=0,
+        ecl_program=(kill_all, boss_wait),
+    )
+    target = _spawner(
+        target_wait,
+        target_wait,
+        slot=1,
+        life=2_000,
+        interactable=True,
+        has_been_in_bounds=True,
+        death_mode=0,
+        death_callback_sub=-1,
+    )
+    snapshot = replace(
+        _snapshot(boss),
+        spawners=(boss, target),
+    )
+
+    forecast = forecast_world_births(
+        snapshot,
         ((192.0, 400.0),) * 4,
     )
 

@@ -85,6 +85,10 @@ class WorldBirthForecast:
     # their prefix and conservative hazards, but not suffix coverage failures
     # from a physically impossible no-transition branch.
     replaces_live_from_lead: int | None = None
+    # Leads at which this live-emitter envelope reached ENEMYKILLALL.  The
+    # world layer owns the cross-slot effect; individual emitters may only
+    # report the event when their slot order makes that effect replayable.
+    enemy_kill_all_frames: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -279,6 +283,7 @@ def _forecast_hard_emitter_batched(
     ]
     bullet_stop_frames: set[int] = set()
     bullet_release_frames: set[int] = set()
+    enemy_kill_all_frames: set[int] = set()
     events = tuple(
         (lead, event)
         for lead, event in _scheduled_boss_interrupts(snapshot, horizon)
@@ -347,6 +352,11 @@ def _forecast_hard_emitter_batched(
                 forecast.body_hazards, cursor
             ):
                 bodies[offset].extend(frame_bodies)
+            enemy_kill_all_frames.update(
+                cursor + offset
+                for offset, reached in enumerate(forecast.enemy_kill_all)
+                if reached
+            )
             if forecast.covered_frames < boundary - cursor:
                 return WorldBirthForecast(
                     tuple(map(tuple, births)),
@@ -392,6 +402,7 @@ def _forecast_hard_emitter_batched(
         body_hazards=tuple(map(tuple, bodies)),
         bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
         bullet_release_frames=tuple(sorted(bullet_release_frames)),
+        enemy_kill_all_frames=tuple(sorted(enemy_kill_all_frames)),
     )
 
 
@@ -414,6 +425,7 @@ def _forecast_hard_emitter_with_lasers(
     lasers: list[list[LaserHazard]] = [[] for _ in player_positions]
     bullet_stop_frames: set[int] = set()
     bullet_release_frames: set[int] = set()
+    enemy_kill_all_frames: set[int] = set()
     events_by_lead = {
         lead: event
         for lead, event in _scheduled_boss_interrupts(snapshot, horizon)
@@ -449,6 +461,7 @@ def _forecast_hard_emitter_with_lasers(
             laser_hazards=tuple(map(tuple, lasers)),
             bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
             bullet_release_frames=tuple(sorted(bullet_release_frames)),
+            enemy_kill_all_frames=tuple(sorted(enemy_kill_all_frames)),
         )
 
     for frame_index in range(start_lead, horizon):
@@ -492,6 +505,8 @@ def _forecast_hard_emitter_with_lasers(
             births[frame_index].extend(forecast.births[0])
             if forecast.body_hazards:
                 bodies[frame_index].extend(forecast.body_hazards[0])
+            if forecast.enemy_kill_all and forecast.enemy_kill_all[0]:
+                enemy_kill_all_frames.add(frame_index)
             if forecast.covered_frames < 1:
                 return result(frame_index, forecast.reason)
             if enemy_kill_all_is_noop and forecast.created_emitters:
@@ -551,12 +566,12 @@ def _forecast_hard_emitter(
     )
 
 
-def _forecast_live_slots_after_timeline_kill_all(
+def _forecast_live_slots_after_kill_all(
     snapshot: Snapshot,
     player_positions: tuple[tuple[float, float], ...],
     kill_lead: int,
 ) -> WorldBirthForecast:
-    """Replay every pre-existing slot through one timeline kill-all.
+    """Replay every pre-existing slot through one pre-slot kill-all event.
 
     The ordinary hard emitter worlds deliberately retain their no-kill
     branches.  This second bounded world adds the exact life-zero ECL branch
@@ -1046,7 +1061,7 @@ def _forecast_hard_timeline_births(
                 bullet_release_frames=tuple(sorted(bullet_release_frames)),
             )
         if any(inline.enemy_kill_all):
-            external = _forecast_live_slots_after_timeline_kill_all(
+            external = _forecast_live_slots_after_kill_all(
                 snapshot,
                 player_positions,
                 lead,
@@ -1917,6 +1932,20 @@ def forecast_world_births(
             snapshot,
             len(player_positions),
         )
+        # A boss in the first occupied slot executes before every possible
+        # ENEMYKILLALL target.  In that one source-proven ordering, the
+        # existing pre-slot forced-life replay also models the live ECL event.
+        # Any earlier occupied slot keeps the old fail-closed behavior.
+        live_kill_all_issuer = (
+            emitters[0]
+            if (
+                len(emitters) > 1
+                and emitters[0].is_boss
+                and snapshot.timeline_complete
+            )
+            else None
+        )
+        live_kill_all_frames: list[int] = []
         covered_frames = len(player_positions)
         reason = ""
         laser_births = 0
@@ -1926,13 +1955,16 @@ def forecast_world_births(
         retired_future_laser = False
         bullet_stop_frames: list[int] = []
         bullet_release_frames: list[int] = []
-        emitter_failures: list[tuple[int, str]] = []
+        emitter_failures: list[tuple[int, str, bool]] = []
         for emitter in emitters:
             forecast = _forecast_hard_emitter(
                 snapshot,
                 emitter,
                 player_positions,
-                enemy_kill_all_is_noop=enemy_kill_all_is_noop,
+                enemy_kill_all_is_noop=(
+                    enemy_kill_all_is_noop
+                    or emitter is live_kill_all_issuer
+                ),
             )
             emitter_coverage = forecast.covered_frames
             emitter_reason = forecast.reason
@@ -1953,10 +1985,12 @@ def forecast_world_births(
             retired_future_laser |= forecast.retired_future_laser
             bullet_stop_frames.extend(forecast.bullet_stop_frames)
             bullet_release_frames.extend(forecast.bullet_release_frames)
+            live_kill_all_frames.extend(forecast.enemy_kill_all_frames)
             if emitter_coverage < len(player_positions):
                 emitter_failures.append((
                     emitter_coverage,
                     f"emitter {emitter.slot}: {emitter_reason}",
+                    emitter.is_boss,
                 ))
         timeline = _forecast_hard_timeline_births(
             snapshot,
@@ -1977,10 +2011,69 @@ def forecast_world_births(
         retired_future_laser |= timeline.retired_future_laser
         bullet_stop_frames.extend(timeline.bullet_stop_frames)
         bullet_release_frames.extend(timeline.bullet_release_frames)
-        for emitter_coverage, emitter_reason in emitter_failures:
+        live_replaces_from_lead: int | None = None
+        if live_kill_all_frames:
+            kill_lead = min(live_kill_all_frames)
+            prior_timeline_spawn = next((
+                lead
+                for lead, instruction in scheduled_timeline(
+                    snapshot.timeline_instructions,
+                    snapshot.timeline_time,
+                    stage=snapshot.stage,
+                    difficulty=snapshot.difficulty,
+                    character=snapshot.character,
+                    message_delays=snapshot.timeline_message_delays,
+                    current_message_waits=snapshot.timeline_current_message_waits,
+                )
+                if lead <= kill_lead and 0 <= instruction.opcode <= 7
+            ), None)
+            if prior_timeline_spawn is not None:
+                covered_frames = min(covered_frames, kill_lead)
+                reason = (
+                    "live ENEMYKILLALL follows a timeline-created target "
+                    "inside the source window"
+                )
+            elif timeline.replaces_live_from_lead is not None:
+                covered_frames = min(covered_frames, kill_lead)
+                reason = "multiple kill-all world transitions share one source window"
+            else:
+                external = _forecast_live_slots_after_kill_all(
+                    snapshot,
+                    player_positions,
+                    kill_lead,
+                )
+                for frame_index, frame_births in enumerate(external.births):
+                    births[frame_index].extend(frame_births)
+                for frame_index, frame_bodies in enumerate(
+                    external.body_hazards
+                ):
+                    bodies[frame_index].extend(frame_bodies)
+                bullet_stop_frames.extend(external.bullet_stop_frames)
+                bullet_release_frames.extend(external.bullet_release_frames)
+                if external.covered_frames < len(player_positions):
+                    covered_frames = min(
+                        covered_frames,
+                        external.covered_frames,
+                    )
+                    reason = (
+                        "live emitter external kill-all: "
+                        f"{external.reason}"
+                    )
+                else:
+                    live_replaces_from_lead = kill_lead
+        for emitter_coverage, emitter_reason, emitter_is_boss in emitter_failures:
+            replacement_leads = tuple(
+                lead
+                for lead in (
+                    timeline.replaces_live_from_lead,
+                    live_replaces_from_lead,
+                )
+                if lead is not None
+            )
             if (
-                timeline.replaces_live_from_lead is not None
-                and emitter_coverage >= timeline.replaces_live_from_lead
+                not emitter_is_boss
+                and replacement_leads
+                and emitter_coverage >= min(replacement_leads)
             ):
                 continue
             if emitter_coverage < covered_frames:
