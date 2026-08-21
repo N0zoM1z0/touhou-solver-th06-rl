@@ -34,6 +34,38 @@ Admission verifies facts and provenance, not the quality of the behavior policy
 and not coverage of future source semantics. Data from old schemas stays
 immutable but is not silently upgraded.
 
+## Derived causal learner views
+
+The raw episode is frame-linked because that is the factual recording unit. It
+is not permission to treat every frame as a fresh policy intervention. Input
+publication can remain in a lease until the game witnesses pickup.
+
+The first learner dataset derives one decision row from an actual immutable
+policy invocation to the next invocation or physical episode terminal. Each row
+must retain:
+
+- the starting and next factual root references;
+- the published command and its full behavior distribution, or an explicit
+  no-publication marker and exclusion;
+- proposed, published, sampled, and executed action identity without aliases;
+- elapsed game frames and input-lease/publication evidence;
+- the exact sum of physical HIT events between decision roots;
+- lifecycle, observation-gap, and learning-exclusion evidence;
+- a versioned portable history and shield mask built without future facts.
+
+Decision-row HIT totals must sum exactly to the raw complete-episode HIT total.
+Rows with no policy intervention are context inside an interval, not new
+behavior-policy samples. A policy invocation with no publication remains an
+accounting/exclusion row rather than an action-conditioned sample. An
+unexecuted action never receives a factual successor.
+
+The same immutable episode may also produce a pre-first-HIT or time-since-HIT
+diagnostic view and a complete physical auxiliary-learning view. These views
+may measure survival-conditioned coverage or predict factual future events, but
+the initial task view remains the complete route with every HIT. The first HIT
+is not relabeled as the physical episode terminal, and diagnostic stop-on-HIT
+runs remain inadmissible for training.
+
 ## Algorithm separation
 
 A corpus inventory contains episode identities, provenance, hashes, and split
@@ -41,6 +73,12 @@ groups. A learner names an inventory plus a feature/target schema. A fitted
 artifact names both. Replacing BC with IQL, CQL, or another method must not
 require recollecting an otherwise valid factual corpus.
 
+The goal metric is complete-route NMNB probability. The initial optimization
+target is expected undiscounted physical HIT count over complete episodes. A
+fitted artifact must state which claim it optimizes; HIT reduction must not be
+reported as NMNB-probability improvement without complete Wine evidence.
+
 Splits use complete episodes. Adjacent frames from one route never cross a
-train/validation/test boundary. Offline evaluation and final Wine evaluation
-are separate evidence classes.
+train/validation/test boundary; the initial learnability experiment uses only a
+frozen train/validation split. Offline evaluation and final Wine evaluation are
+separate evidence classes.

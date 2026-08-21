@@ -68,6 +68,14 @@ Wine did not execute. Corpora are immutable assets independent of the algorithm
 that first consumes them; learner features and fitted artifacts are derived,
 versioned products.
 
+The raw corpus is frame-linked, but a new policy intervention does not occur on
+every frame. Derived learner data must preserve the input lease and distinguish
+proposed, published, sampled, and physically executed actions. A decision-epoch
+view may join one actual policy invocation to the next invocation or physical
+episode terminal and aggregate factual HIT cost and elapsed game frames between
+them; it must conserve complete-route HIT count and may not manufacture an
+unexecuted transition.
+
 ## Runtime and collection rules
 
 - Battle input publication uses one coherent paused root and the exact game PID.
@@ -93,10 +101,18 @@ of factual actions/HIT labels. Only add temporal encoders, IQL, auxiliary
 dynamics losses, ensembles, or OPE after the preceding experiment passes its
 predeclared acceptance criterion.
 
-Reward/cost is physical HIT only (`cost = HIT count`, `gamma = 1`, terminal
-value zero). Clearance, graze, score, route progress, and source identities are
-not reward. Auxiliary factual prediction targets are allowed only when clearly
-separated from reward.
+The scientific goal metric is NMNB completion probability. The first
+optimization target is expected physical HIT count over complete routes
+(`cost = HIT count`, `gamma = 1`, terminal value zero). These are not claimed
+to rank policies identically: the first learner may claim expected HIT
+reduction, not NMNB improvement. Reward-maximizing code uses `reward = -cost`;
+the sign may not be inferred or changed inside a learner. Clearance, graze,
+score, route progress, and
+source identities are not reward. A first-HIT survival view and multi-horizon
+HIT labels may be diagnostics or auxiliary factual targets, but the initial
+task learner must not relabel the first HIT as the physical episode terminal.
+Any later survival or distributional objective requires its own predeclared
+experiment and adequate nondegenerate coverage.
 
 Actor inputs must be portable physical observations and history. Stage ID,
 boss/spell ID, ECL opcode/subroutine, RNG seed, source address, run identity, and
@@ -107,6 +123,17 @@ Split inference and evaluation by complete physical episode, never adjacent
 frames. The authoritative metric is physical HIT count over complete routes;
 NMNB completion rate is the goal metric. Report infra failures separately from
 gameplay HITs.
+
+The active learner ladder is strictly sequential: causal decision-row audit,
+one frozen serial complete-episode inventory with unchanged retail-clock
+semantics from the declared uniform-shield mixture, action-frequency/reactive
+controls, current-observation
+behavior cloning, one short-history ablation, and only then one offline value
+method. Deep Sets, recurrent encoders, CQL after IQL, survival critics,
+ensembles, active collection, learned dynamics/MPC, or real-Wine branch
+acquisition are deferred until a named simpler experiment fails for the reason
+the added mechanism addresses. Exact-prefix branching is not available unless
+a serial factual and input-delivery digest gate first proves it.
 
 ## Repository and attribution
 

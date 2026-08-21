@@ -154,13 +154,20 @@ Final comparisons require `--immutable-policy` and exploration zero.
 Passing this runner proves that the original retail executable accepted the
 controller's background input, exposed coherent live state, counted physical
 HITs, completed a Practice stage, or reached the original Ending state. It does
-not prove policy quality by itself. Promotion follows the complete-Stage
-alternating HIT-count contract in `WINE_ONLY_AUTONOMOUS_LEARNING.md`.
+not prove policy quality by itself. Candidate admission and promotion follow
+the frozen ladder in `WINE_ONLY_AUTONOMOUS_LEARNING.md`,
+`ONLINE_OFFLINE_SAFETY_CONTRACT.md`, and `paper/main.tex`. The first policy
+claim is lower expected physical HIT count on predeclared complete serial
+routes; complete-route NMNB probability is reported separately and remains the
+scientific goal metric.
 
 Likewise, an offline training artifact cannot be supplied directly as
-`--policy-state`. Online authorization additionally requires held-out OPE,
-bit-for-bit offline/online distribution parity, a latency measurement under the
-bundled Windows Python runtime, and an original-retail Wine shadow result, all
-bound to the candidate digest and target KL limit. Accelerated or suspended
-collection is corpus evidence only; final gameplay validation remains at the
-original 60 Hz timing.
+`--policy-state`. Online authorization requires a versioned immutable export,
+bit-for-bit offline/online feature and action-distribution parity, a latency
+measurement under the bundled Windows Python runtime, and an original-retail
+Wine shadow result, all bound to the candidate digest and its frozen feature
+schema. Held-out OPE, a target-KL constraint, or another conservative statistic
+is required only if a later admitted experiment makes the corresponding
+support or update-size claim; none can replace complete original-Wine policy
+evaluation. Accelerated or suspended collection is corpus evidence only; final
+gameplay validation remains at the original 60 Hz timing.

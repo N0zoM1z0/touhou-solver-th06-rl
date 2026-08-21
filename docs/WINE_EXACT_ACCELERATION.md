@@ -9,11 +9,13 @@ retail per-update order and `frame_multiplier == 1.0`, but deliberately makes
 wall-clock playback slower than 60 Hz. Scaling Wine timers or removing waits
 would change the control process and is not admitted.
 
-Training throughput instead scales horizontally: multiple isolated copies of
-the unchanged original executable run concurrently under the same coherent
-suspension contract. A final online candidate must additionally pass a
-single-instance, non-suspending, real-time 60 Hz end-to-end gate; paused corpus
-evidence cannot satisfy that gate.
+If an exact compatibility gate eventually passes, later collection throughput
+may scale horizontally through isolated copies of the unchanged original
+executable under the same coherent suspension contract. The first learning
+inventory remains serial, and the recorded E5 gate currently disables all
+parallel evidence collection. A final online candidate must additionally pass
+a single-instance, non-suspending, real-time 60 Hz end-to-end gate; paused
+corpus evidence cannot satisfy that gate.
 
 ## Required worker isolation
 
@@ -138,9 +140,10 @@ Offline work is semantically exact and can exploit the host aggressively:
   outputs;
 - encode each factual object history once and score every shield-admissible
   candidate action from that shared representation;
-- fit whole-episode population members concurrently while bounding total CPU
-  threads;
-- retain all population members and benchmark the exact native online scorer;
+- run preregistered fits concurrently where doing so changes no data, seed, or
+  acceptance contract, while bounding total CPU threads;
+- retain every declared fit artifact and benchmark the exact exported online
+  scorer;
 - resume only from hash-bound atomic checkpoints.
 
 Acceleration never changes reward, successor state, RNG eligibility, action

@@ -47,3 +47,21 @@ contract: factual original-Wine transitions only, physical HIT-only cost,
 native-safe actions, episode-grouped validation, and full Wine canary/final
 evaluation. Any formula implemented here is independently written and covered
 by repository tests.
+
+## Active use order
+
+None of the cached RL implementations is an active learner dependency. The
+first fitted model is transparent behavior cloning written and tested in this
+repository. IQL is the first value-learning candidate only after the causal
+decision-row and representation gates pass. CQL is not a parallel hyperparameter
+arm; it is admitted only if the IQL experiment demonstrates unsupported-action
+overestimation. SPIBB, fitted evaluation, and doubly robust OPE remain references
+for a later measured support problem and cannot replace complete original-Wine
+evaluation.
+
+The cache does not establish that pure offline learning will suffice, that
+long-horizon OPE will have usable variance, or that adaptive collection is
+needed. Those are empirical questions in the paper's L3--L5 ladder. Likewise,
+no cached method changes the exact objective distinction: the scientific goal
+is NMNB probability, while the first optimization claim is expected
+undiscounted physical HIT reduction.

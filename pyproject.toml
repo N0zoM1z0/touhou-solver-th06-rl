@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "touhou-solver-th06-rl"
 version = "0.1.0"
-description = "Wine-grounded offline-RL research agent for Touhou"
+description = "Wine-grounded learning research agent for Touhou"
 requires-python = ">=3.11"
 dependencies = []
 

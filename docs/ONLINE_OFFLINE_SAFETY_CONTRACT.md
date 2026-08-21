@@ -36,11 +36,21 @@ Learned value, support, confidence, ECL coverage, and source prediction are not.
 
 ## Offline freedom
 
-Offline code may use long observation histories, object-set encoders, auxiliary
-factual prediction, IQL or another algorithm, ensembles, and expensive
-validation. It consumes only executed transitions and may never manufacture a
-counterfactual successor. Its exported policy is immutable and cannot add an
-action rejected by the online shield.
+Offline code consumes only executed transitions and may never manufacture a
+counterfactual successor. It may derive decision epochs, portable histories,
+auxiliary factual targets, and fitted scores while preserving raw linkage and
+complete-episode HIT accounting. Its exported policy is immutable and cannot
+add an action rejected by the online shield.
+
+Algorithmic freedom is sequential rather than simultaneous. The active order
+is causal decision-row audit, one frozen serial complete-episode inventory,
+action-frequency/reactive controls, current-observation behavior cloning, one
+short-history ablation, and then one offline expected-HIT value method.
+Object-set/recurrent encoders, alternative survival objectives, CQL after IQL,
+ensembles, OPE, active collection, learned dynamics/MPC, and real-Wine branch
+acquisition require separate evidence gates. A learned prediction scores
+unknown future risk; it never turns the absence of a predicted birth into an
+online safety certificate.
 
 Privileged facts such as stage, spell, ECL, RNG, and addresses may be used to
 audit splits or diagnose leakage. They are forbidden deployable actor inputs.

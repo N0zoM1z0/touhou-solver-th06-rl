@@ -4,13 +4,16 @@
 \usepackage[T1]{fontenc}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{array}
 \usepackage{booktabs}
 \usepackage{xcolor}
+\usepackage{float}
 \usepackage[numbers,sort&compress]{natbib}
 \usepackage{xurl}
 \usepackage[hidelinks]{hyperref}
 \hypersetup{
-  pdftitle={Capture-Complete, Prediction-Incomplete Offline Reinforcement Learning for Transferable Bullet-Hell Control},
+  pdftitle={Capture-Complete Learning for Transferable Bullet-Hell Control},
   pdfauthor={Touhou Solver Research Project}
 }
 
@@ -22,8 +25,7 @@
 \newcommand{\futurestatus}{\textcolor{black!65}{Future work}}
 \newcommand{\notrunstatus}{\textcolor{red!70!black}{Not run}}
 
-\title{Capture-Complete, Prediction-Incomplete Offline Reinforcement Learning\\
-for Transferable Bullet-Hell Control}
+\title{Capture-Complete Learning for Transferable Bullet-Hell Control}
 \author{Touhou Solver Research Project}
 \date{Working draft --- \today}
 
@@ -31,66 +33,152 @@ for Transferable Bullet-Hell Control}
 \maketitle
 
 \begin{abstract}
-We study an offline reinforcement-learning agent for the original Japanese
-Touhou 6 version 1.02h under Wine, targeting a complete Lunatic no-miss,
-no-bomb route and eventual transfer to Touhou 8.  The central hypothesis is
-that the runtime need not predict every script instruction or future bullet
-birth.  Instead, the environment adapter should capture complete, coherent
-physical facts; a small online shield should reject actions that collide with
-already instantiated hazards over a bounded horizon; and unknown pattern
-dynamics should be inferred from object-centric history by an offline learner.
-This draft specifies the system boundary, immutable data contract, falsifiable
-research questions, and preregistered experiments.  It intentionally reports
-an audited canonical six-stage infrastructure baseline with 108 retained HITs
-and no infrastructure failure.  A strict two-worker differential subsequently
-rejected parallel collection because fixed-seed factual trajectories differed,
-despite every individual run passing its audit.  No learning run was started.
+We study control of the original Japanese Touhou 6 version 1.02h under Wine,
+with the scientific goal of completing a Lunatic no-miss, no-bomb route and
+eventually transferring the learning protocol to Touhou 8.  The system is
+capture-complete but prediction-incomplete: it records coherent physical facts,
+filters only actions that intersect already-instantiated hazards over a fixed
+short horizon, and leaves action-relative future risk to a learned scorer.  We
+separate the goal metric, no-miss completion probability, from the first
+optimization target, expected undiscounted physical HIT count over complete
+episodes.
+The latter is a dense surrogate and is not claimed to rank policies identically
+to the goal metric.  The initial learner is deliberately limited to a causal
+decision-epoch dataset, a transparent supervised baseline, and immutable Wine
+evaluation.  History encoders, offline value learning, uncertainty, adaptive
+collection, learned dynamics, and exact-prefix branching are admitted one at a
+time only after a simpler preregistered experiment exposes a concrete failure.
+The paper reports an audited six-stage infrastructure baseline with 108 HITs
+and a negative serial/parallel equivalence gate.  No model has been trained and
+no learned candidate has been evaluated online.
 \end{abstract}
 
 \section{Motivation and Scope}
 
 Bullet-hell control combines dense continuous geometry, discrete input,
-partially observed pattern state, long episodes, and sparse but unambiguous
-failure events.  A tempting engineering strategy is to reconstruct every game
-script opcode and predict every future hazard.  That strategy couples the
-controller to one title, creates a large second implementation of the game,
-and makes failures difficult to attribute: a HIT may come from the controller,
-the learned policy, or the hand-written simulator.
+delayed input pickup, partially observed pattern state, long episodes, and
+sparse but unambiguous failure events.  A tempting engineering strategy is to
+combine a large object encoder, recurrent policy, offline value learner,
+ensemble uncertainty estimator, active collector, and learned world model at
+the outset.  Such a stack cannot reveal whether a failure came from factual
+capture, causal action linkage, representation, value learning, exploration,
+or online inference.
 
 \system{} instead adopts a \emph{capture-complete, prediction-incomplete}
 boundary.  The adapter records what physically exists at each coherent root,
-while offline learning is responsible for regularities not encoded by the
-minimal shield.  The immediate target is a complete Touhou 6 Lunatic route
-with HIT continuation and zero Bomb.  The research target is Lunatic NMNB.  A
-second title, Touhou 8, is reserved as a transfer test rather than a source of
+while learning is responsible for regularities not encoded by the minimal
+observed-hazard filter.  The immediate engineering target is a complete Touhou
+6 Lunatic route with HIT continuation and zero Bomb.  The scientific target is
+Lunatic NMNB.  Touhou 8 is reserved as a transfer test rather than a source of
 training-time identifiers.
 
 This is a working protocol, not a result paper.  In particular, we do not yet
 claim that the observed-hazard shield prevents all HITs, that object history is
 sufficient to infer unknown births, that offline RL improves the behavior
-policy, that accelerated Wine is evidence-equivalent, or that the method
-transfers to Touhou 8.
+policy, that a fixed corpus is sufficient, that exact-prefix branching is
+possible, that accelerated or parallel Wine is evidence-equivalent, or that
+the method transfers to Touhou 8.
+
+\subsection{Frozen outcome and non-goals}
+
+The required outcome is one immutable policy that reduces physical HIT count
+on complete normal-speed original-Wine routes without Bomb, infrastructure
+failure, forbidden actor input, or widening the observed-hazard action set.
+Every promoted result must also report NMNB completion rate.  The first result
+need not complete NMNB; it must establish a correctly attributed improvement.
+
+The initial baseline does not attempt online ECL interpretation, global safety
+proof, exact future-birth prediction, stage or spell routing, policy updates
+during a run, parallel collection, counterfactual simulation, or a novelty
+claim.  These are non-goals unless a named experiment later earns one of them.
+
+\section{Objective and Causal Unit}
+
+For a complete physical episode $\tau$, define
+\begin{equation}
+  c_t = \mathbf{1}[\text{a physical life loss is observed on transition }t],
+  \qquad
+  C(\tau)=\sum_{t=0}^{T-1} c_t.
+\end{equation}
+Bomb is forbidden and infrastructure failures are reported separately rather
+than converted into reward.  Clearance, graze, score, power, rank, route
+progress, stage identity, and source identities are not reward.
+
+On the declared evaluation population of complete, infrastructure-valid,
+zero-Bomb routes, the scientific goal metric is
+\begin{equation}
+  J_{\mathrm{NMNB}}(\pi)
+  = \Pr_{\pi}[C(\tau)=0].
+\end{equation}
+The first optimization target is
+\begin{equation}
+  J_{\mathrm{HIT}}(\pi)=\mathbb{E}_{\pi}[C(\tau)],
+  \qquad \gamma=1,
+\end{equation}
+with terminal value zero only at the declared physical episode terminal.  The
+two objectives are not interchangeable: equal expected HIT count can hide very
+different NMNB probabilities.  Nevertheless, because $C$ is a nonnegative
+integer,
+\begin{equation}
+  1-J_{\mathrm{NMNB}}(\pi)
+  = \Pr_{\pi}[C(\tau)\geq 1]
+  \leq \mathbb{E}_{\pi}[C(\tau)]
+\end{equation}
+on that population.  HIT count therefore supplies a dense initial surrogate
+whose claim is exactly ``fewer expected HITs,'' not ``higher NMNB
+probability.''  Incomplete or invalid trials are never removed silently: their
+rates and causes are a separate promotion gate.  A survival or distributional
+objective is a separate candidate experiment and may not be introduced
+silently.
+
+The raw corpus remains frame-linked, but the policy intervention is not every
+raw frame.  A command can remain in an input lease until Wine witnesses its
+pickup.  A derived learner row must therefore join one policy invocation to the
+next or to the physical episode terminal and contain the published command, its
+complete behavior probability, witnessed sampled/executed actions, elapsed game
+frames, accumulated physical HIT cost, the next decision root or terminal, and
+all exclusion reasons.  This
+decision-epoch view is a causal projection of factual Wine rows, not a simulated
+successor or a hand-designed gameplay option.
+
+For reward-maximizing implementations the only task reward is
+$r_k=-C_k$, so maximizing $\mathbb{E}[\sum_k r_k]$ is exactly minimizing
+$J_{\mathrm{HIT}}$; a cost-form implementation may minimize $C_k$ directly.
+There is no discount, stage-boundary terminal, first-HIT terminal, or shaped
+progress term hidden in either convention.
+
+Post-HIT roots remain in the complete episode and in the primary HIT-count
+view.  Separate pre-first-HIT and time-since-HIT views may measure
+survival-conditioned coverage or train auxiliary factual predictors, but the
+initial task learner may not relabel the first HIT as the episode terminal.
 
 \section{Research Questions}
 
-\paragraph{RQ1: minimum online semantics.}
-Can a hazard first instantiated after a paused decision root damage the player
-before the next controllable root, and can its action-relative risk be learned
-from physical history without adding title-specific source forecasting online?
+\paragraph{RQ1: portable representation.}
+After exact decision-epoch reconstruction, do current portable physical facts
+predict factual behavior and future HIT risk on held-out complete episodes, and
+does a short physical/action history improve them without privileged identity?
 
-\paragraph{RQ2: learnability of unknown dynamics.}
-Does player state plus a short history of unordered physical objects contain
-enough information to predict action-relative future HIT cost on held-out
-complete episodes?
+\paragraph{RQ2: minimal policy improvement.}
+On one frozen representation and corpus, does the smallest justified offline
+value learner reduce complete-route expected HIT count relative to the behavior
+and behavior-cloning baselines under original Wine?
 
-\paragraph{RQ3: data longevity.}
-Can the same immutable physical episode corpus train materially different
-offline algorithms without recollection and without source-script features?
+\paragraph{RQ3: coverage and interaction.}
+If the fixed-corpus learner fails, is the demonstrated cause inadequate
+action/state support, survival-conditioned occupancy, representation, or value
+estimation; and does one frozen-policy batch of additional Wine data resolve
+that named failure more efficiently than uniform collection?
 
 \paragraph{RQ4: transfer.}
-Can the episode schema, feature contract, learner, exporter, and evaluator
-remain unchanged when only the Touhou 6 memory/input adapter is replaced by a
-Touhou 8 adapter?
+Can the episode schema, causal learner view, feature contract, objective,
+exporter, and evaluator remain unchanged when only the Touhou 6 environment
+adapter and configuration are replaced by a Touhou 8 adapter?
+
+The source-order question is no longer an open architecture choice.  TH06
+permits a hazard born after one paused root to enter collision processing before
+the next completed root.  Linking and predicting this class in Wine remains an
+experiment, but it cannot justify an online birth envelope or ECL interpreter.
 
 \section{System Boundary}
 
@@ -109,10 +197,10 @@ The system has three independently testable components.
 
 There is no mandatory online ECL interpreter, stage route, spell rule, boss
 rule, frame window, coordinate target, or pattern exception.  Extracted source
-scripts may support forensic analysis of RQ1, but source identities are not
-actor inputs and their successful decoding is not a corpus-admission
-condition.  HIT is an observed cost and does not terminate data collection;
-Bomb is forbidden.
+scripts may support forensic analysis of the immediate-birth boundary, but
+source identities are not actor inputs and their successful decoding is not a
+corpus-admission condition.  HIT is an observed cost and does not terminate
+data collection; Bomb is forbidden.
 
 \section{Minimal Online Shield}
 
@@ -158,11 +246,25 @@ An episode is an immutable sequence
 \end{equation}
 where $o_t$ contains factual physical state, $a_t$ distinguishes proposed,
 published, sampled, and physically witnessed execution, $\mu_t(a)$ is the
-complete behavior distribution over the admissible actions, $c_t$ contains
-physical HIT and resource deltas, and $b_t$ records lifecycle boundaries and
+complete behavior distribution over the admissible actions, $c_t$ is the
+physical HIT cost, and $b_t$ records resource deltas, lifecycle boundaries, and
 infrastructure exclusions.  Frames and transitions are joined by immutable
 references and shard hashes.  A complete episode has exactly one fewer
 transition than frame.
+
+The learner derives decision epochs $k$ without changing the raw episode:
+\begin{equation}
+  d_k=(h_k,u_k,\mu_k,\Delta_k,C_k,h_{k+1},e_k).
+\end{equation}
+Here $h_k$ is a versioned portable history ending at a root where the immutable
+policy was invoked, $u_k$ is the published command or $\bot$ when publication
+did not occur, $\Delta_k$ is elapsed game frames to the next invocation or the
+episode terminal, $C_k$ is the sum of factual HIT indicators over that interval,
+and $e_k$ contains
+publication, pickup, observation-gap, and learning-exclusion evidence.  A
+$\bot$ row is retained for accounting but is not an action-conditioned training
+sample.  Commanded, sampled, and executed actions remain distinct.  The
+decision rows must conserve complete-episode HIT count exactly.
 
 The canonical raw layer retains measured player state; occupied bullet, laser,
 enemy, player-shot, and item records; visual and collision geometry; resource
@@ -170,6 +272,20 @@ counters; input state; clocks; capture retries; and executable, native,
 policy, and schema provenance.  Derived tensors are versioned products rather
 than replacements for raw shards.  This permits multiple feature builders and
 RL algorithms to consume identical episode identities.
+
+The same admitted episode may expose three non-authoritative derived views:
+
+\begin{enumerate}
+  \item the complete decision-epoch HIT-cost view used by the initial task;
+  \item a pre-first-HIT or time-since-HIT diagnostic view used only to measure
+        survival-conditioned coverage and factual prediction;
+  \item a complete physical view, including post-HIT roots, used for auxiliary
+        representation and dynamics targets.
+\end{enumerate}
+
+Every view names the same episode and raw hashes.  No view may invent a next
+state, turn an unexecuted action into a transition, or admit a diagnostic
+stop-on-HIT run as training evidence.
 
 Deployable features may contain normalized player state, unordered physical
 object primitives, action history, declared portable resources, and the shield
@@ -179,49 +295,150 @@ motivate permutation-invariant encoders such as Deep Sets
 \citep{zaheer2017deepsets}, but this complexity is admitted only after a
 transparent vector baseline passes.
 
-\section{Offline Learning Ladder}
+\section{Minimal Learning Architecture}
 
-Complexity is added only after the preceding rung produces a decisive signal.
+The strongest simple baseline has exactly three independently changeable parts:
 
 \begin{enumerate}
-  \item Validate schema, linkage, propensity, HIT conservation, and forbidden
-        feature leakage; report an action-frequency baseline.
-  \item Fit transparent behavior cloning (BC) on current portable
-        observations,
+  \item a deterministic builder that converts complete factual episodes into
+        audited decision rows and whole-episode splits;
+  \item a transparent current-observation behavior-cloning scorer,
         \begin{equation}
           \mathcal{L}_{\mathrm{BC}}(\theta)
-          = -\sum_{i,t}\log \pi_\theta(a_t\mid o_t,
-                                      A_t^{\mathrm{shield}}).
+          = -\sum_{i,k}\log \pi_\theta(u_k\mid h_k,
+                                      A_k^{\mathrm{shield}});
         \end{equation}
-  \item Add only a short factual observation/action history and measure the
-        held-out improvement as an ablation.
-  \item If needed, add a permutation-invariant object encoder and then a small
-        temporal model.
-  \item Only after representation learnability, compare BC with the smallest
-        justified offline value learner.  IQL is one candidate because its
-        critic update avoids direct evaluation of out-of-dataset actions and
-        its actor is extracted with advantage-weighted BC
-        \citep{kostrikov2022iql}.  CQL is a separate conservative baseline
-        \citep{kumar2020cql}; neither is assumed superior in advance.
-  \item Add uncertainty abstention or auxiliary factual dynamics objectives
-        only as separately measured ablations.
+  \item an immutable exporter that reproduces the offline action distribution
+        bit-for-bit, ranks only observed-shield-admissible actions, and is
+        evaluated on complete original-Wine episodes.
 \end{enumerate}
 
-Sequence-modeling methods such as Decision Transformer
-\citep{chen2021decisiontransformer} are explicitly deferred.  A larger model
-does not repair a broken capture contract, leakage, unsupported actions, or
-episode-level train/test contamination.  The primary cost is physical HIT
-count with undiscounted episodic accounting; auxiliary predictions never
-change reward.
+Action frequency and the existing reactive policy are non-fitted controls.
+BC is a plumbing and representation test, not a policy-improvement claim.  The
+first known constraint is that the current online policy API exposes scalar
+player facts, object counts, and shield summaries but not the physical object
+history contemplated by RQ1.  The baseline intentionally uses that smaller
+surface first.  An API expansion is earned only after an offline held-out
+experiment shows that a precisely specified additional portable history
+improves a factual target and after offline/online feature parity is testable.
+
+\section{Candidate Ladder and Admission Gates}
+
+Only one rung may change at a time.  Every rung freezes its corpus inventory,
+whole-episode split, feature schema, target schema, seeds, acceptance statistic,
+and artifact hashes before fitting.
+
+\paragraph{L0: causal data audit (active next step).}
+Build and test decision-epoch rows.  Admission requires exact raw linkage,
+command/sample/execution separation, propensity normalization, interval and
+episode HIT conservation, exclusion replay, forbidden-feature rejection, and
+two materially different feature builders reading the same episode identities.
+No model result is meaningful before L0 passes.
+
+\paragraph{L1: transparent supervised baseline.}
+After L0, collect the initial training inventory serially, with unchanged retail
+clock/update semantics, coherent capture suspension, the frozen declared 20\%
+uniform observed-shield mixture, and complete episodes;
+this is non-adaptive baseline collection, not L5.  Freeze the episode count and
+split before fitting.  Report per-admissible-mask action frequency, the reactive
+behavior baseline, and current-observation BC.  BC passes the learnability test
+only if its held-out complete-episode negative log likelihood improves over
+action frequency with a preregistered episode-bootstrap interval and its
+calibration does not regress beyond a frozen tolerance.  Accuracy alone is
+insufficient.
+
+\paragraph{L2: one representation change.}
+Add a short, fixed physical/action history and simple factual heads for HIT
+within fixed horizons and observed-hazard-set shrinkage or empty-set events.
+History is retained only if it improves held-out log loss or another frozen
+proper score over L1 with an episode-level interval.  Deep Sets
+\citep{zaheer2017deepsets} are considered only if a transparent bounded vector
+summary fails; a recurrent encoder is considered only if history has already
+shown value.  Auxiliary heads remain separate from reward.
+
+\paragraph{L3: one offline value method.}
+Only after L1--L2 establish a usable representation may BC be compared with
+one expected-HIT value learner on the identical data.  IQL is the first
+candidate because its critic avoids directly evaluating unseen actions and its
+actor remains advantage-weighted behavior cloning
+\citep{kostrikov2022iql}.  CQL is not run in parallel; it is admitted only if
+the IQL experiment identifies unsupported-action overestimation that its
+conservatism is designed to address \citep{kumar2020cql}.  Offline metrics can
+reject a candidate but cannot promote it without complete Wine evaluation.
+
+\paragraph{L4: objective alternatives.}
+A bounded survival or distributional HIT model is admitted only when the
+corpus contains enough late no-HIT prefixes or zero-HIT episodes to avoid a
+degenerate all-failure target, or when policies with similar expected HIT count
+show a measured difference in NMNB probability.  Until then, first-HIT
+survival is a diagnostic, not the task terminal or deployment score.
+
+\paragraph{L5: interaction and uncertainty.}
+Frozen-policy batch collection is admitted only after L3 demonstrates either
+policy improvement or a measured support failure.  The first additional batch
+comparison repeats the declared uniform-shield mixture at a fixed interaction
+budget.  Ensemble uncertainty, active collection, OPE, or baseline
+bootstrapping may each be tested later against one named support or calibration
+failure.  A positive action-probability floor does not by itself establish
+state coverage or reliable long-horizon OPE.
+
+\paragraph{L6: learned dynamics and exact-prefix branching.}
+Learned birth models or risk-aware MPC are considered only if model-free value
+learning fails while held-out future-hazard prediction succeeds.  Predictions
+remain scores and never extend the shield certificate.  Real-Wine branching is
+considered only after a serial same-seed, same-policy, exact-action-prefix gate
+reaches a target root with identical factual and input-delivery digests.  The
+negative parallel gate does not establish this ability.  Every training branch
+must still be a complete admitted Wine episode.
+
+Decision Transformer \citep{chen2021decisiontransformer}, large recurrent
+world models, simultaneous IQL/CQL sweeps, and the proposed SABER-RL composite
+(survival critic, recurrent belief, ensemble uncertainty, active collection,
+and Wine branching) are not active candidates.  SABER-RL is decomposed across
+L2 and L4--L6; neither the name nor the combination is a novelty claim.  These
+methods add independent failure modes before the baseline has exposed a
+constraint they solve.
+
+\subsection{Algorithm and policy record}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.22\linewidth}
+                    >{\raggedright\arraybackslash}p{0.20\linewidth}
+                    >{\raggedright\arraybackslash}p{0.50\linewidth}@{}}
+\toprule
+Policy or method & Status & Evidence or admission condition \\
+\midrule
+Reactive scorer & Executed control & E0 completed one route with 108 HITs; this is infrastructure evidence, not a learned-policy result. \\
+20\% uniform-shield mixture & Executed diagnostic & E5 Stage 4 runs had 16, 10, and 13 HITs, but factual equivalence failed; no training inventory or policy claim was admitted. \\
+Action frequency & Not run & First non-fitted L1 comparator after L0 and initial serial inventory. \\
+Current-observation BC & Not run & First fitted candidate; requires the L1 held-out likelihood and calibration gate. \\
+Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
+IQL & Not run & First L3 value candidate after representation learnability. \\
+CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
+Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
+Deep Sets, recurrence, ensembles, active collection, learned MPC, branching & Not run & Each requires its distinct L2, L5, or L6 gate; none is active architecture. \\
+SABER-RL composite & Not admitted & Its survival, recurrence, uncertainty, collection, and branching claims must each pass their separate rung before a combined-method experiment exists. \\
+\bottomrule
+\end{tabular}
+\caption{Algorithm record at this checkpoint.  ``Not run'' means no fit and no
+online learned candidate, not an unreported negative result.}
+\label{tab:algorithm-record}
+\end{table}
 
 \section{Experimental Protocol}
 
 Every result must name the Git commit, executable hash, policy hash, schema,
 full command, complete episode IDs, and artifact paths.  Splits are by complete
 episode.  Negative results are retained.  Infrastructure failures are reported
-separately and never counted as gameplay improvements.
+separately and never counted as gameplay improvements.  Before a fit, the
+experiment must additionally freeze its corpus inventory, split-group hashes,
+decision-row schema, feature and target schemas, seeds, comparator, acceptance
+statistic, and stopping rule.  A post-hoc metric may be reported but cannot
+promote the candidate.
 
-\begin{table}[ht]
+\begin{table}[H]
 \centering
 \small
 \begin{tabular}{@{}lll@{}}
@@ -230,11 +447,12 @@ ID & Decisive question & Status \\
 \midrule
 E0 & Does the reset runner complete Practice 4--6 and one full route? & \completedstatus \\
 E1 & Can a post-root birth hit before the next controllable root? & \progressstatus \\
-E2 & Do generic loaders preserve facts without ECL streams? & \progressstatus \\
-E3 & Do portable BC features beat action frequency out of episode? & \futurestatus \\
-E4 & Does offline policy improvement reduce paired route HIT cost? & \futurestatus \\
-E5 & Are parallel/accelerated collectors factually equivalent? & \negativestatus \\
-E6 & Which surfaces change under a Touhou 8 adapter? & \futurestatus \\
+E2 & Does the causal learner view preserve actions, propensities, and HITs? & \progressstatus \\
+E3 & Do portable supervised baselines generalize by episode? & \notrunstatus \\
+E4 & Does one offline value learner reduce complete-route HIT cost? & \notrunstatus \\
+E5 & Does shared-host parallel collection preserve exact facts? & \negativestatus \\
+E6 & Does a new frozen Wine batch resolve a measured coverage failure? & \notrunstatus \\
+E7 & Which surfaces change under a Touhou 8 adapter? & \notrunstatus \\
 \bottomrule
 \end{tabular}
 \caption{Preregistered experiment ledger.  Status changes require immutable artifacts.}
@@ -244,7 +462,8 @@ E6 & Which surfaces change under a Touhou 8 adapter? & \futurestatus \\
 \subsection{E0: infrastructure baseline}
 
 Run natural Lunatic Practice Stages 4, 5, and 6 and then one natural six-stage
-route on original Wine at normal timing with the frozen baseline policy.  HIT
+route on original Wine with unchanged retail update semantics, coherent capture
+suspension, and the frozen baseline policy.  HIT
 continuation and zero Bomb are mandatory.  Accept only if every declared run
 completes, frames equal transitions plus one, no record is dropped, player
 successors and stored shield decisions replay exactly, every HIT has linked
@@ -315,17 +534,43 @@ class to adjacent Wine roots and measures whether short physical history
 predicts its action-relative cost.  No source/ECL envelope is added to the
 online shield; pattern-specific exceptions are forbidden.
 
-\subsection{E2--E4: data, learnability, and policy improvement}
+\subsection{E2: causal learner view}
 
-E2 removes optional source/ECL material and requires the generic loader to
-reproduce action sequences, HIT totals, episode grouping, and hashes while two
-different feature builders consume the same raw episodes.  E3 compares action
-frequency, current-observation BC, and short-history BC using held-out negative
-log likelihood, accuracy, calibration, action support, and episode bootstrap
-intervals.  E4 begins only if E3 passes.  It compares BC against one offline
-value method at a time, with held-out factual HIT-cost prediction and
-action-relative discrimination offline, followed by paired complete-route HIT
-count and NMNB completion rate online.
+The existing generic loader already admits complete E0 episodes and enforces
+frame/transition linkage.  E2 is not complete until it also removes optional
+source/ECL material, derives decision epochs from policy invocations and input
+leases, reproduces proposed/published/sampled/executed action sequences,
+conserves interval and episode HIT totals, validates complete propensities and
+exclusions, and lets two different feature builders consume the same raw
+episode identities.  A feature-parity fixture must prove that the online
+exporter receives exactly the versioned values produced by offline replay.
+E2 changes no policy and collects no new gameplay evidence.
+
+\subsection{E3: supervised representation baselines}
+
+After E2, collect the initial inventory serially with unchanged retail
+clock/update semantics, coherent capture suspension, and the frozen 20\%
+uniform observed-shield mixture; its episode count, seeds, and stopping rule are
+declared before the first run.  Then freeze its whole-episode train/validation
+split and compare the per-admissible-mask action-frequency
+control with current-observation BC.  Only if the preregistered held-out
+negative-log-likelihood and calibration gate passes may one short fixed history
+be added.  The same split may then support simple executed-action factual probes
+for HIT within fixed horizons and future observed-shield collapse.  These
+probes test information content; they do not define reward, infer unexecuted
+successors, or constitute policy improvement.
+
+\subsection{E4: minimal offline policy improvement}
+
+E4 begins only after E3 identifies one frozen portable representation.  It
+compares BC with one offline expected-HIT method, initially IQL, on the same
+decision rows.  Offline validation reports proper cost-prediction scores,
+calibration, action support, and episode-bootstrap intervals.  Promotion then
+requires normal-speed original-Wine complete routes, zero Bomb, passing
+infrastructure contracts, lower HIT count under a preregistered serial
+comparison, and reported NMNB rate.  Exact paired claims are allowed only if a
+separate exact-prefix replay gate passes; otherwise independent complete-route
+episode intervals are used.  No offline estimate alone can promote a scorer.
 
 \subsection{E5: collection equivalence}
 
@@ -335,12 +580,13 @@ collection begins.  The first declared collection policy is an immutable
 20\% mixture of uniform exploration over the observed-shield set and the
 generic reactive baseline, with complete propensities and independent policy
 RNG streams per episode.  Clock acceleration is a distinct hypothesis and cannot
-produce evidence until it passes a normal-speed differential contract.
+produce evidence until it passes an unchanged-retail-clock differential contract.
 
 At commit
 \path{76782a4f37e0d12a9a2384561b53e68ceaf998ae}, the first declared shared-host
 test used two workers with eight logical CPUs each, disjoint game/controller
-partitions, original-speed retail Wine, fixed retail seed \texttt{0x1234}, and
+partitions, retail frame multiplier 1.0 with coherent capture suspension, fixed
+retail seed \texttt{0x1234}, and
 the immutable 20\% uniform-shield policy.  The outer process tree used
 \texttt{SCHED\_OTHER} nice 19 and idle I/O priority so normal-priority
 background proof jobs retained scheduling precedence.  The exact command was:
@@ -405,22 +651,46 @@ its serial run completed with zero semantic mismatch but 883 observation gaps
 (3.62\%), above the unchanged 0.5\% limit.  Its audit digest is
 \path{00a5a1f8fab26fac909c4f0d421ba9ece13c418b25bc81ccdefdfc9c2a68da12}.
 
-\subsection{E6: transfer}
+\subsection{E6: frozen-batch interaction}
 
-E6 replaces only the environment adapter and reports unchanged versus changed
-code/schema surfaces, zero-shot behavior, and fine-tuning sample cost.  It was
-not run.  This checkpoint intentionally stops after E0 and the negative E5;
-there was no additional corpus collection, fit, or learned online candidate.
+E6 is admitted only if E4 records a specific coverage failure or an improved
+candidate whose remaining error is support-limited.  One immutable policy is
+used for each complete Wine run; parameters never update or reload within a
+run.  The first additional collection comparator is the declared 20\% uniform
+observed-shield mixture.  Any uncertainty- or novelty-guided collector is a
+separate later arm with a minimum action-probability floor and the identical
+Wine interaction budget.  All episodes remain complete, immutable, and linked
+to their behavior distributions.  E6 was not run.
+
+\subsection{E7: transfer}
+
+E7 replaces only the environment adapter and configuration and reports
+unchanged versus changed code/schema surfaces, zero-shot behavior, and
+fine-tuning sample cost.  It was not run.
+
+This documentation checkpoint follows E0 and the negative E5.  The only active
+next implementation is E2/L0 causal learner-view work.  No new corpus
+collection, model fit, policy-API expansion, or learned online candidate has
+yet been authorized as evidence.
 
 \section{Threats to Validity}
 
 The shield horizon may be too short, and unknown births may violate its narrow
-claim.  Behavior support may be insufficient for action-relative learning;
-complete-route episodes may be too few for reliable uncertainty estimates;
-Wine scheduling may introduce observation gaps; and Touhou 6--specific memory
-facts may leak through an apparently generic feature builder.  E0 and E2 are
-therefore prerequisites, not housekeeping.  The transfer claim is falsified
-if downstream learner or corpus semantics require title-specific branches.
+claim.  Expected HIT count is only a surrogate for NMNB probability and may
+rank nonzero-HIT policies differently.  HIT continuation changes later
+physical occupancy through lifecycle, resources, rank, bullet clearing, and
+invulnerability; complete-route training and survival-conditioned diagnostics
+must therefore be reported separately.  Behavior action support does not
+guarantee support for histories reached by a stronger no-HIT policy, and a
+positive propensity floor does not prevent long-horizon OPE variance.
+
+Complete-route episodes may be too few for stable episode-level intervals,
+future-HIT prediction, or uncertainty estimates.  Wine scheduling may
+introduce observation gaps; command pickup may be mistaken for a new policy
+decision; and Touhou 6--specific memory facts may leak through an apparently
+generic feature builder.  E0 and E2 are therefore prerequisites, not
+housekeeping.  The transfer claim is falsified if downstream learner, corpus,
+objective, or evaluator semantics require title-specific branches.
 
 \section{Artifact and Reproducibility Contract}
 
@@ -434,14 +704,21 @@ experiment claims must point to immutable hashes rather than mutable filenames.
 
 \section{Conclusion}
 
-The project asks whether correct physical capture plus a small observed-hazard
-shield is a better foundation for transferable bullet-hell offline RL than a
-title-complete hand-written simulator.  The architecture is intentionally
-minimal so that the first full-route baseline can distinguish infrastructure
-failure from learning failure.  E0 establishes a correct serial data plane;
-E5 shows that individually valid parallel episodes are not yet evidence of an
-equivalent collector.  The current pool therefore remains disabled, and this
-checkpoint makes no learning or transfer claim.
+The project asks how much complete-route HIT reduction can be learned from
+portable physical history when exact Wine interaction is costly, input pickup
+is delayed, future births are partially observed, and the online filter covers
+only instantiated hazards.  The goal is NMNB; the first optimization claim is
+strictly expected undiscounted HIT reduction.  The initial learner has three
+parts: an audited decision-epoch view, transparent BC, and immutable
+shield-constrained Wine evaluation.  Every additional representation,
+algorithm, objective, uncertainty mechanism, or collection strategy must solve
+one measured failure of that baseline.
+
+E0 establishes the serial factual data plane, while E5 rejects the current
+parallel pool.  E2 causal learner reconstruction is the next active step.  No
+model has been fit, no learned policy has run online, exact-prefix branching is
+not established, and this checkpoint makes no learning, NMNB, or transfer
+claim.
 
 \bibliographystyle{plainnat}
 \bibliography{references}
