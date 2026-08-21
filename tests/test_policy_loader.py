@@ -101,3 +101,20 @@ def test_incomplete_behavior_distribution_falls_back_and_is_counted(tmp_path) ->
     assert decision.policy_id == "reactive-baseline-policy-error"
     assert decision.behavior_probabilities == (("stay", 1.0),)
     assert loader.status(include_metrics=False)["policy_failures"] == 1
+
+
+def test_policy_state_plugin_digest_binding_fails_closed(tmp_path) -> None:
+    plugin = tmp_path / "policy.py"
+    state = tmp_path / "state.json"
+    plugin.write_bytes(POLICY)
+    state.write_text(json.dumps({
+        "token": "frozen",
+        "provenance": {"policy_plugin_sha256": "0" * 64},
+    }), encoding="utf-8")
+
+    try:
+        ImmutablePolicy(plugin, state_path=state)
+    except ValueError as error:
+        assert "different plugin digest" in str(error)
+    else:
+        raise AssertionError("mismatched policy/plugin binding was accepted")

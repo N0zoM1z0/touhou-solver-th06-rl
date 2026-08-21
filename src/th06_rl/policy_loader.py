@@ -26,6 +26,11 @@ class ImmutablePolicy:
         value = json.loads(self.state_path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise ValueError("policy state root must be an object")
+        provenance = value.get("provenance")
+        if isinstance(provenance, dict):
+            bound_digest = provenance.get("policy_plugin_sha256")
+            if bound_digest is not None and bound_digest != self.digest:
+                raise ValueError("policy state is bound to a different plugin digest")
         return value
 
     def _load(self, source: bytes, state: dict[str, object]):
