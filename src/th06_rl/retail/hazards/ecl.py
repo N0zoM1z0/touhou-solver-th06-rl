@@ -33,6 +33,18 @@ def _f32(value: float) -> float:
     return struct.unpack("<f", struct.pack("<f", value))[0]
 
 
+_LIFE_INT_OPERAND = struct.pack("<i", -10024)
+_LIFE_FLOAT_OPERAND = struct.pack("<f", -10024.0)
+
+
+def _instruction_may_read_life(raw: bytes) -> bool:
+    """Conservatively detect an executed source operand for enemy life."""
+    return any(
+        raw[offset:offset + 4] in (_LIFE_INT_OPERAND, _LIFE_FLOAT_OPERAND)
+        for offset in range(0x0C, len(raw) - 3, 4)
+    )
+
+
 OPCODE_NOP = 0
 OPCODE_JUMP = 2
 OPCODE_JUMPDEC = 3
@@ -445,6 +457,7 @@ class EclForecast:
     item_births: tuple[tuple[EclItemBirth, ...], ...] = ()
     enemy_kill_all: tuple[bool, ...] = ()
     repeat_star_state: RepeatStarState | None = None
+    life_uncertain: bool = False
 
 
 @dataclass(frozen=True)
@@ -966,6 +979,7 @@ def _forecast_ecl_births_single(
     record_death_callback_assignment=None,
     defer_initial_death: bool = False,
     record_enemy_create=None,
+    initial_life_uncertain: bool = False,
 ) -> EclForecast:
     """Forecast one emitter until the first unsupported source instruction."""
     horizon = len(player_positions)
@@ -1012,6 +1026,7 @@ def _forecast_ecl_births_single(
     call_stack_disabled = spawner.call_stack_disabled
     life = spawner.life
     life_lower_bound = spawner.life
+    life_uncertain = initial_life_uncertain
     damageable = spawner.damageable
     death_mode = spawner.death_mode
     is_boss = spawner.is_boss
@@ -1268,6 +1283,7 @@ def _forecast_ecl_births_single(
                 rank_amount2_low = rank_amount2_high = 0
                 death_callback_sub = -1
             life_lower_bound = life
+            life_uncertain = False
         if (
             not spawn_inline
             and life_callback_threshold >= 0
@@ -1381,6 +1397,12 @@ def _forecast_ecl_births_single(
             if not execute or instruction.opcode == OPCODE_NOP:
                 instruction_address = next_address
                 continue
+            if life_uncertain and _instruction_may_read_life(raw):
+                return EclForecast(
+                    tuple(map(tuple, births)),
+                    frame_index,
+                    "ECL reads life after candidate player damage",
+                )
             if instruction.opcode == 1:
                 # RunEcl returns ZUN_ERROR; EnemyManager immediately despawns
                 # this emitter before body collision or its periodic shot.
@@ -2280,6 +2302,7 @@ def _forecast_ecl_births_single(
             elif instruction.opcode == OPCODE_LIFE_SET:
                 life = struct.unpack_from("<i", raw, 0x0C)[0]
                 life_lower_bound = life
+                life_uncertain = False
             elif instruction.opcode == OPCODE_DEATH_CALLBACK:
                 death_callback_sub = struct.unpack_from("<i", raw, 0x0C)[0]
                 if (
@@ -3132,6 +3155,7 @@ def _forecast_ecl_births_single(
                             )
                         life = 0
                         life_lower_bound = 0
+                        life_uncertain = False
                         kill_all_self_pending_death = True
                     enemy_kill_all[frame_index] = True
                 elif record_enemy_kill_all:
@@ -3561,9 +3585,11 @@ def _forecast_ecl_births_single(
             # collidable non-boss can additionally lose 10 from kill-box
             # contact. This lower bound decides only whether an asynchronous
             # life callback is reachable; it never removes a hazard.
-            life_lower_bound -= (70 if damageable else 0) + (
+            damage_bound = (70 if damageable else 0) + (
                 10 if collidable and not is_boss else 0
             )
+            life_lower_bound -= damage_bound
+            life_uncertain |= damage_bound > 0
         time_subframe += frame_multiplier
         while time_subframe >= 1.0:
             current_time += 1
@@ -3668,6 +3694,7 @@ def _forecast_ecl_births_single(
         item_births=tuple(tuple(frame) for frame in item_births),
         enemy_kill_all=tuple(enemy_kill_all),
         repeat_star_state=repeat_star_state,
+        life_uncertain=life_uncertain,
     )
 
 
@@ -4243,6 +4270,7 @@ def _forecast_abstract_integer_domains(
         body_hazards=tuple(tuple(frame) for frame in bodies),
         finished=bool(leaves) and all(forecast.finished for forecast in leaves),
         repeat_star_state=common_star_state,
+        life_uncertain=any(forecast.life_uncertain for forecast in leaves),
     )
 
 
@@ -4409,6 +4437,7 @@ def forecast_ecl_births(
     repeat_star_state: RepeatStarState | None = None,
     record_death_callback_assignment=None,
     record_enemy_create=None,
+    initial_life_uncertain: bool = False,
 ) -> EclForecast:
     """Forecast one emitter and preserve every bounded hard uncertainty."""
     if (
@@ -4442,6 +4471,7 @@ def forecast_ecl_births(
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
             record_enemy_create=record_enemy_create,
+            initial_life_uncertain=initial_life_uncertain,
         )
     if record_enemy_kill_all:
         if abstract_rng or model_player_damage or rng is None:
@@ -4470,6 +4500,7 @@ def forecast_ecl_births(
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
             record_enemy_create=record_enemy_create,
+            initial_life_uncertain=initial_life_uncertain,
         )
     if laser_world is not None:
         if len(player_positions) != 1:
@@ -4505,6 +4536,14 @@ def forecast_ecl_births(
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
             record_enemy_create=record_enemy_create,
+            initial_life_uncertain=initial_life_uncertain,
+        )
+    if initial_life_uncertain:
+        return EclForecast(
+            tuple(() for _ in player_positions),
+            0,
+            "damage-uncertain life requires a framewise hard world",
+            life_uncertain=True,
         )
     if (
         abstract_rng

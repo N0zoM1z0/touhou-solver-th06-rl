@@ -80,6 +80,11 @@ class WorldBirthForecast:
     # observed in one branch is not assumed to occur in every branch.
     bullet_stop_frames: tuple[int, ...] = ()
     bullet_release_frames: tuple[int, ...] = ()
+    # A source-exact timeline transition can replace every pre-existing live
+    # slot from this lead onward. Independent live envelopes still contribute
+    # their prefix and conservative hazards, but not suffix coverage failures
+    # from a physically impossible no-transition branch.
+    replaces_live_from_lead: int | None = None
 
 
 @dataclass(frozen=True)
@@ -253,6 +258,7 @@ def _forecast_hard_emitter_batched(
     repeat_star_state = (
         snapshot.repeat_star_state if allow_repeat_star else None
     )
+    life_uncertain = False
     for boundary, event in (*events, (horizon, None)):
         if state is None:
             if event is not None:
@@ -290,6 +296,7 @@ def _forecast_hard_emitter_batched(
                         )
                     ),
                     repeat_star_state=repeat_star_state,
+                    initial_life_uncertain=life_uncertain,
                 )
             except UnsupportedBirthModel as error:
                 return WorldBirthForecast(
@@ -319,6 +326,7 @@ def _forecast_hard_emitter_batched(
                 )
             state = forecast.next_spawner
             repeat_star_state = forecast.repeat_star_state
+            life_uncertain = forecast.life_uncertain
             if state is None and not forecast.finished:
                 return WorldBirthForecast(
                     tuple(map(tuple, births)),
@@ -374,6 +382,7 @@ def _forecast_hard_emitter_with_lasers(
     repeat_star_state = (
         snapshot.repeat_star_state if allow_repeat_star else None
     )
+    life_uncertain = False
 
     def result(covered: int, reason: str = "") -> WorldBirthForecast:
         return WorldBirthForecast(
@@ -433,6 +442,7 @@ def _forecast_hard_emitter_with_lasers(
                         )
                     ),
                     repeat_star_state=repeat_star_state,
+                    initial_life_uncertain=life_uncertain,
                 )
             except UnsupportedBirthModel as error:
                 return result(frame_index, str(error))
@@ -443,6 +453,7 @@ def _forecast_hard_emitter_with_lasers(
                 return result(frame_index, forecast.reason)
             state = forecast.next_spawner
             repeat_star_state = forecast.repeat_star_state
+            life_uncertain = forecast.life_uncertain
             if state is None and not forecast.finished:
                 return result(
                     frame_index + 1,
@@ -838,6 +849,7 @@ def _forecast_hard_timeline_births(
     retired_future_laser = False
     bullet_stop_frames: set[int] = set()
     bullet_release_frames: set[int] = set()
+    replaces_live_from_lead: int | None = None
     known_boss_ids = {
         emitter.boss_id
         for emitter in snapshot.spawners
@@ -1016,6 +1028,11 @@ def _forecast_hard_timeline_births(
                         bullet_release_frames
                     )),
                 )
+            replaces_live_from_lead = (
+                lead
+                if replaces_live_from_lead is None
+                else min(replaces_live_from_lead, lead)
+            )
         earlier_timeline_spawn = True
         births[lead].extend(inline.births[0])
         if inline.next_spawner is None:
@@ -1128,6 +1145,7 @@ def _forecast_hard_timeline_births(
         laser_hazards=tuple(map(tuple, lasers)),
         bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
         bullet_release_frames=tuple(sorted(bullet_release_frames)),
+        replaces_live_from_lead=replaces_live_from_lead,
     )
 
 
@@ -1856,6 +1874,7 @@ def forecast_world_births(
         retired_future_laser = False
         bullet_stop_frames: list[int] = []
         bullet_release_frames: list[int] = []
+        emitter_failures: list[tuple[int, str]] = []
         for emitter in emitters:
             forecast = _forecast_hard_emitter(
                 snapshot,
@@ -1882,9 +1901,11 @@ def forecast_world_births(
             retired_future_laser |= forecast.retired_future_laser
             bullet_stop_frames.extend(forecast.bullet_stop_frames)
             bullet_release_frames.extend(forecast.bullet_release_frames)
-            if emitter_coverage < covered_frames:
-                covered_frames = emitter_coverage
-                reason = f"emitter {emitter.slot}: {emitter_reason}"
+            if emitter_coverage < len(player_positions):
+                emitter_failures.append((
+                    emitter_coverage,
+                    f"emitter {emitter.slot}: {emitter_reason}",
+                ))
         timeline = _forecast_hard_timeline_births(
             snapshot,
             player_positions,
@@ -1904,6 +1925,15 @@ def forecast_world_births(
         retired_future_laser |= timeline.retired_future_laser
         bullet_stop_frames.extend(timeline.bullet_stop_frames)
         bullet_release_frames.extend(timeline.bullet_release_frames)
+        for emitter_coverage, emitter_reason in emitter_failures:
+            if (
+                timeline.replaces_live_from_lead is not None
+                and emitter_coverage >= timeline.replaces_live_from_lead
+            ):
+                continue
+            if emitter_coverage < covered_frames:
+                covered_frames = emitter_coverage
+                reason = emitter_reason
         if timeline.covered_frames < covered_frames:
             covered_frames = timeline.covered_frames
             reason = timeline.reason

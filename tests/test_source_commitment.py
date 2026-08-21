@@ -188,6 +188,80 @@ def test_math_normalize_angle_reads_its_integer_variable_id() -> None:
     assert all(math.isfinite(value) for value in forecast.next_spawner.ecl_floats)
 
 
+def test_hard_stops_before_ecl_reads_damage_uncertain_life() -> None:
+    compare, raw = _instruction(0x10100, 1, 27, 20)
+    struct.pack_into("<ii", raw, 0x0C, -10024, 100)
+    compare = _with_raw(compare, raw)
+    end, _raw = _instruction(0x10114, -1, 0)
+    spawner = _spawner(
+        compare,
+        end,
+        interactable=True,
+        damageable=True,
+        life=100,
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 400.0),) * 2
+    )
+
+    assert forecast.covered_frames == 1
+    assert "candidate player damage" in forecast.reason
+
+
+def test_framewise_laser_world_keeps_damage_uncertainty() -> None:
+    rotate, raw = _instruction(0x10120, 0, 88, 28)
+    struct.pack_into("<i", raw, 0x0C, 0)
+    struct.pack_into("<f", raw, 0x10, 0.0)
+    rotate = _with_raw(rotate, raw)
+    compare, raw = _instruction(0x1013C, 1, 27, 20)
+    struct.pack_into("<ii", raw, 0x0C, -10024, 100)
+    compare = _with_raw(compare, raw)
+    end, _raw = _instruction(0x10150, -1, 0)
+    spawner = _spawner(
+        rotate,
+        end,
+        interactable=True,
+        damageable=True,
+        life=100,
+        laser_slots=(0,) + (-1,) * 31,
+        ecl_program=(rotate, compare, end),
+    )
+    laser = Laser(
+        192.0, 100.0, 0.0, 0.0, 100.0, 100.0, 8.0, 0.0,
+        0, 0, 100, 10, 0, 10, 10.0, 0, 1, slot=0,
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner, lasers=(laser,)), ((192.0, 400.0),) * 2
+    )
+
+    assert forecast.covered_frames == 1
+    assert "candidate player damage" in forecast.reason
+
+
+def test_exact_life_set_clears_damage_uncertainty_before_ecl_read() -> None:
+    life_set = _set_int_instruction(0x10140, 1, 111, 123)
+    compare, raw = _instruction(0x10150, 1, 27, 20)
+    struct.pack_into("<ii", raw, 0x0C, -10024, 123)
+    compare = _with_raw(compare, raw)
+    end, _raw = _instruction(0x10164, -1, 0)
+    spawner = _spawner(
+        life_set,
+        end,
+        interactable=True,
+        damageable=True,
+        life=100,
+        ecl_program=(life_set, compare, end),
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 400.0),) * 2
+    )
+
+    assert forecast.covered_frames == 2
+
+
 def test_source_commitment_contains_same_frame_enemy_teleport() -> None:
     move, raw = _instruction(0x10000, 0, 43, 24)
     struct.pack_into("<fff", raw, 12, 192.0, 400.0, 0.0)
