@@ -102,6 +102,14 @@ not overlap it with a canonical baseline, canary, promotion run, or heavy fit:
   --output artifacts/parallel-gate/gate.json
 ```
 
+The first declared two-worker shared-host gate was run at commit
+`76782a4f37e0d12a9a2384561b53e68ceaf998ae` with fixed retail seed `0x1234`
+and the 20% uniform-shield policy. Every serial/concurrent episode passed its
+individual audit, but their HIT counts were 16/10/13 and their normalized
+factual trajectories differed. The gate rejected the pool exactly as required;
+there is no admitted parallel collector at this checkpoint. Do not proceed to
+the command below unless a future unchanged-criterion gate passes.
+
 Only the exact bound policy/commit/pool may then collect a predeclared schedule
 of complete natural-RNG routes. Changing the policy requires a new gate:
 

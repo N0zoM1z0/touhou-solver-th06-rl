@@ -14,16 +14,18 @@ E0 is complete at commit
 natural-RNG six-stage Lunatic route all completed and passed their factual
 audits. The full route retained 108 HITs and zero Bomb.
 
-Current execution order:
+Current checkpoint:
 
 1. keep the audited E0 recorder/shield and corpus schema frozen;
-2. run the fixed-seed serial/parallel differential for the declared pool and
-   exploration policy;
-3. collect independent natural-RNG complete routes only after that gate;
-4. freeze a hash-bound whole-episode train/validation/test inventory;
-5. prove a minimal learner can fit factual behavior without leakage before
-   introducing a more advanced offline-RL algorithm.
+2. retain the negative fixed-seed serial/parallel differential from commit
+   `76782a4f37e0d12a9a2384561b53e68ceaf998ae`: every run passed its own audit,
+   but exact factual/HIT equality failed, so no parallel pool is admitted;
+3. stop here. No additional route collection, train/validation/test inventory,
+   behavior cloning, offline RL, or online learned candidate is authorized in
+   this checkpoint.
 
 There is no authorized learned candidate yet. A complete route with many HITs
 is still a successful infrastructure baseline when the factual and control
-contracts pass. Do not edit gameplay logic in response to a failure location.
+contracts pass. If work resumes, investigate the generic capture/root boundary
+before reconsidering parallel collection; do not relax exact equality or edit
+gameplay logic in response to a failure location.

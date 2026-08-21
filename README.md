@@ -31,6 +31,9 @@ online dependency.
 The first complete six-stage Lunatic baseline passed at commit
 `af9900524520b72934a4c55e2f44118f88094633`: 108 HITs were retained through
 Ending, with zero Bomb or infrastructure failure and an audited 135,561-frame
-episode. The current milestone is the strict serial/parallel Wine differential,
-followed by independent complete-route collection and the preregistered minimal
-behavior-cloning learnability test.
+episode. The strict shared-host serial/parallel differential was then executed
+at commit `76782a4f37e0d12a9a2384561b53e68ceaf998ae`. All three Stage 4 runs passed
+their individual audits, but their fixed-seed trajectories and HIT counts
+differed, so the exact gate correctly rejected the pool. Parallel collection is
+disabled. This checkpoint stops at validated serial infrastructure and baseline
+evidence; no corpus expansion or learning run was started.

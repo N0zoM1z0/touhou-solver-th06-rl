@@ -18,6 +18,7 @@
 \newcommand{\openstatus}{\textcolor{red!70!black}{Open}}
 \newcommand{\progressstatus}{\textcolor{blue!70!black}{In progress}}
 \newcommand{\completedstatus}{\textcolor{green!45!black}{Completed}}
+\newcommand{\negativestatus}{\textcolor{orange!80!black}{Negative result}}
 \newcommand{\futurestatus}{\textcolor{black!65}{Future work}}
 \newcommand{\notrunstatus}{\textcolor{red!70!black}{Not run}}
 
@@ -41,7 +42,9 @@ dynamics should be inferred from object-centric history by an offline learner.
 This draft specifies the system boundary, immutable data contract, falsifiable
 research questions, and preregistered experiments.  It intentionally reports
 an audited canonical six-stage infrastructure baseline with 108 retained HITs
-and no infrastructure failure; it reports no learning result.
+and no infrastructure failure.  A strict two-worker differential subsequently
+rejected parallel collection because fixed-seed factual trajectories differed,
+despite every individual run passing its audit.  No learning run was started.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -230,7 +233,7 @@ E1 & Can a post-root birth hit before the next controllable root? & \progresssta
 E2 & Do generic loaders preserve facts without ECL streams? & \progressstatus \\
 E3 & Do portable BC features beat action frequency out of episode? & \futurestatus \\
 E4 & Does offline policy improvement reduce paired route HIT cost? & \futurestatus \\
-E5 & Are parallel/accelerated collectors factually equivalent? & \futurestatus \\
+E5 & Are parallel/accelerated collectors factually equivalent? & \negativestatus \\
 E6 & Which surfaces change under a Touhou 8 adapter? & \futurestatus \\
 \bottomrule
 \end{tabular}
@@ -324,7 +327,7 @@ value method at a time, with held-out factual HIT-cost prediction and
 action-relative discrimination offline, followed by paired complete-route HIT
 count and NMNB completion rate online.
 
-\subsection{E5--E6: collection equivalence and transfer}
+\subsection{E5: collection equivalence}
 
 Parallel workers are enabled only after E0.  Serial and parallel fixed-seed
 runs must first agree on factual/action traces before independent natural-RNG
@@ -332,9 +335,82 @@ collection begins.  The first declared collection policy is an immutable
 20\% mixture of uniform exploration over the observed-shield set and the
 generic reactive baseline, with complete propensities and independent policy
 RNG streams per episode.  Clock acceleration is a distinct hypothesis and cannot
-produce evidence until it passes a normal-speed differential contract.  E6
-replaces only the environment adapter and reports unchanged versus changed
-code/schema surfaces, zero-shot behavior, and fine-tuning sample cost.
+produce evidence until it passes a normal-speed differential contract.
+
+At commit
+\path{76782a4f37e0d12a9a2384561b53e68ceaf998ae}, the first declared shared-host
+test used two workers with eight logical CPUs each, disjoint game/controller
+partitions, original-speed retail Wine, fixed retail seed \texttt{0x1234}, and
+the immutable 20\% uniform-shield policy.  The outer process tree used
+\texttt{SCHED\_OTHER} nice 19 and idle I/O priority so normal-priority
+background proof jobs retained scheduling precedence.  The exact command was:
+
+\begin{verbatim}
+ionice -c 3 nice -n 19 taskset -c 32-47 \
+  .venv/bin/python scripts/gate_parallel_wine.py \
+  --pool reference/wine-workers-v2-zklean-safe/pool.json \
+  --policy-plugin src/th06_rl/policies/uniform_shield_exploration.py \
+  --policy-state config/uniform_shield_exploration.json \
+  --practice-stage 4 --diagnostic-rng-seed 0x1234 \
+  --artifact-root artifacts/parallel-gate-exp02-76782a4-zklean-safe-nice19 \
+  --corpus-root corpora/parallel-gate-exp02-76782a4-zklean-safe-nice19 \
+  --output artifacts/parallel-gate-exp02-76782a4-zklean-safe-nice19/gate.json
+\end{verbatim}
+
+The retail executable, native kernel, policy plugin, policy state, and worker
+pool SHA-256 digests were respectively
+\path{9f76483c46256804792399296619c1274363c31cd8f1775fafb55106fb852245},
+\path{d26439f01400121a99137ff7d411b4bb6a2ff480daaaf1195e85a1b6cb671673},
+\path{c70a2ad0a03bb189a01baabb62f6f404f6c4c91aa0e16c86645bfc0925f3e805},
+\path{a63fbbb0b6d5886d327eb28b4b3d683cc13c6c759bffde8f9b2f554649068ef1},
+and
+\path{76fe8c634855a2a9f11f4a5b83ab0c3498eb914df384ed40f206f199750447ad}.
+The pool and audit schemas were \path{th06-rl-normal-speed-wine-pool-v2} and
+\path{th06-rl-infra-audit-v2}.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Run & Frames & Transitions & HIT & Gaps (\%) & Successors & Shield \\
+\midrule
+Serial 0 & 25,106 & 25,105 & 16 & 0.0159 & 24,125 & 62 \\
+Concurrent 0 & 23,154 & 23,153 & 10 & 0.0346 & 22,535 & 64 \\
+Concurrent 1 & 25,455 & 25,454 & 13 & 0.1729 & 24,617 & 64 \\
+\bottomrule
+\end{tabular}
+\caption{E5 fixed-seed differential.  Every row individually completed with
+zero Bomb, successor mismatch, unsafe divergence, conservative divergence,
+drop, callback failure, integrity error, or leftover process.}
+\label{tab:e5}
+\end{table}
+
+The run IDs were \path{20260821T101125Z-298490100},
+\path{20260821T102110Z-520526700}, and
+\path{20260821T102110Z-450384400}; their audit SHA-256 digests were
+\path{5393077138d1a769e12a703e35e3cae11201e79859529acfcf52b40231153366},
+\path{8a07cabb6ca93b897853c79ede1fc7cd24151f0a356b8390981cb2d498ba8aaf},
+and
+\path{8bfaff06bc25ec808f258cc0e5d1b576627741e5b53928461b639fdd43035e4d}.
+Capture p99 was 8.420, 8.340, and 8.692 ms; solve p99 was 0.815, 0.784,
+and 0.895 ms.  Thus every run passed its individual latency and semantic
+checks, but both HIT count and normalized factual digest failed exact equality.
+The gate rejected \path{concurrent-worker-0} and emitted no admission ledger.
+This is a negative E5 result, not permission to weaken equality: parallel
+collection remains disabled.
+
+An earlier \texttt{SCHED\_IDLE} attempt is retained as a scheduling negative:
+its serial run completed with zero semantic mismatch but 883 observation gaps
+(3.62\%), above the unchanged 0.5\% limit.  Its audit digest is
+\path{00a5a1f8fab26fac909c4f0d421ba9ece13c418b25bc81ccdefdfc9c2a68da12}.
+
+\subsection{E6: transfer}
+
+E6 replaces only the environment adapter and reports unchanged versus changed
+code/schema surfaces, zero-shot behavior, and fine-tuning sample cost.  It was
+not run.  This checkpoint intentionally stops after E0 and the negative E5;
+there was no additional corpus collection, fit, or learned online candidate.
 
 \section{Threats to Validity}
 
@@ -362,9 +438,10 @@ The project asks whether correct physical capture plus a small observed-hazard
 shield is a better foundation for transferable bullet-hell offline RL than a
 title-complete hand-written simulator.  The architecture is intentionally
 minimal so that the first full-route baseline can distinguish infrastructure
-failure from learning failure.  The answer remains empirical: E0 establishes
-the data plane, E1 establishes the explicit partial-observation boundary, and
-only then do E3--E6 evaluate learning and transfer.
+failure from learning failure.  E0 establishes a correct serial data plane;
+E5 shows that individually valid parallel episodes are not yet evidence of an
+equivalent collector.  The current pool therefore remains disabled, and this
+checkpoint makes no learning or transfer claim.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

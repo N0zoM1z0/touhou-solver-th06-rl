@@ -14,8 +14,17 @@ Treat gameplay HITs as baseline measurements. Fix only demonstrated generic
 capture, geometry, timing, action-delivery, corpus-integrity, or accounting
 defects. Everything about where and how to dodge belongs to data and learning.
 
-The immediate deliverable is now the fixed-seed serial/parallel Wine
-differential for the frozen 20% uniform-shield exploration policy. Only after
-that exact gate passes may the bound pool collect independent natural-RNG full
-episodes. Then freeze an algorithm-independent inventory and run the smallest
-learnability experiment preregistered in `paper/main.tex`.
+The fixed-seed serial/parallel Wine differential for the frozen 20%
+uniform-shield exploration policy was executed at commit
+`76782a4f37e0d12a9a2384561b53e68ceaf998ae`. All three Stage 4 episodes passed
+their individual integrity, geometry, latency, and cleanup audits, but the
+serial and concurrent HIT counts were 16, 10, and 13 and their factual
+trajectories differed. The exact gate therefore rejected the pool. Do not use
+it for parallel collection and do not reinterpret individually valid episodes
+as proof of equivalence.
+
+This checkpoint intentionally stops here: no additional corpus collection or
+training was started. If the project resumes, the next infra question is the
+generic coherent-root/capture determinism boundary. Preserve the negative
+result, keep the equality criterion unchanged, and do not add stage-specific
+gameplay logic.
