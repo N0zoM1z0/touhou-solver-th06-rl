@@ -50,8 +50,10 @@ collection, learned dynamics, and exact-prefix branching are admitted one at a
 time only after a simpler preregistered experiment exposes a concrete failure.
 The paper reports an audited six-stage infrastructure baseline with 108 HITs,
 a completed causal learner-view audit, a negative serial/parallel equivalence
-gate, and the frozen Stage~4 supervised-baseline preregistration.  No research
-model has been trained and no learned candidate has been evaluated online.
+gate, and a completed negative Stage~4 supervised-baseline gate.  The fitted
+current-observation behavior clone improved held-out action log loss over
+action frequency but failed the separately frozen calibration criterion; it
+was not evaluated online.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -274,6 +276,63 @@ policy, and schema provenance.  Derived tensors are versioned products rather
 than replacements for raw shards.  This permits multiple feature builders and
 RL algorithms to consume identical episode identities.
 
+The data contract has four distinct planes.  The authoritative Wine plane is a
+dense title-specific capture; the factual-transition plane binds policy and
+input delivery to the next observed root; the portable plane exposes only
+actor-admissible physical observations; and derived features, histories,
+labels, and models are reproducible products.  A recorded field is therefore
+not automatically an actor input, reward, or auxiliary target.
+
+Current control roots retain subpixel player position and hitbox, movement
+constants and witnessed input; raw bullet-pool tails and visual mappings; raw
+laser, enemy, enemy-manager, and spawn-bullet records; decoded physical enemy
+bodies, lasers, items, and player attacks; resource and lifecycle counters; and
+capture integrity.  Decision evidence retains the exact four-frame observed
+hazard primitives, collision margin, complete admissible mask, and each
+action's bounded clearance and final player position.  Transition evidence
+keeps baseline, proposed, published, commanded, sampled, and executed actions
+distinct and stores the complete behavior distribution, factual successor,
+elapsed frames, HIT/Bomb/resource outcomes, and every exclusion reason.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.18\linewidth}
+                    >{\raggedright\arraybackslash}p{0.34\linewidth}
+                    >{\raggedright\arraybackslash}p{0.38\linewidth}@{}}
+\toprule
+Data plane & Representative retained facts & Authority and use \\
+\midrule
+Wine root & Player/hitbox, raw and decoded instantiated objects, attacks,
+items, resources, lifecycle & Physical evidence, shield input, parity replay,
+and later bounded portable representations \\
+Decision and input & Shield primitives and mask, policy identities, all action
+witnesses, complete propensities & Temporal/action alignment, BC targets,
+calibration, support, and later OPE \\
+Transition outcome & Linked successor, elapsed frames, HIT, Bomb, deltas,
+boundaries, exclusions & Factual dynamics/risk labels and undiscounted physical
+HIT cost; never counterfactual successors \\
+Integrity and provenance & Shard hashes, executable/native/policy hashes, schemas,
+latency, gaps, drops, completion and cleanup & Corpus admission and attribution;
+never gameplay features \\
+\bottomrule
+\end{tabular}
+\caption{Separation of recorded facts from actor-visible and derived data.
+Recorder richness supports auditing and future falsifiable projections; it is
+not permission to expose privileged identity to the policy.}
+\label{tab:data-planes}
+\end{table}
+
+The first actor projection is deliberately much smaller: player position,
+power, bullet/laser and admissible-action counts, current action, and for each
+of 18 actions its shield legality, clearance-known bit, clearance, and final
+position.  This gives 114 scalar features.  Dense object facts may support one
+later bounded object-set experiment, but raw addresses, stage/boss/spell/ECL or
+RNG identity, run or absolute-frame identity, and future outcomes are forbidden
+actor inputs.  Score, graze, clearance, and route progress are not reward;
+clearance is retained only as action-conditioned observation and parity
+evidence.
+
 The same admitted episode may expose three non-authoritative derived views:
 
 \begin{enumerate}
@@ -337,7 +396,7 @@ two materially different feature builders reading the same episode identities.
 No model result is meaningful before L0 passes.  The implementation and E0
 replay evidence described in E2 satisfy this gate.
 
-\paragraph{L1: transparent supervised baseline.}
+\paragraph{L1: transparent supervised baseline (completed negative).}
 After L0, collect the initial training inventory serially, with unchanged retail
 clock/update semantics, coherent capture suspension, the frozen declared 20\%
 uniform observed-shield mixture, and complete episodes;
@@ -347,7 +406,9 @@ behavior baseline, and current-observation BC.  BC passes the learnability test
 only if its held-out complete-episode negative log likelihood improves over
 action frequency with a preregistered episode-bootstrap interval and its
 calibration does not regress beyond a frozen tolerance.  Accuracy alone is
-insufficient.
+insufficient.  E3 passed the likelihood condition but failed calibration, so
+L1 emitted no online candidate and does not admit L2 without a new transparent
+preregistration.
 
 \paragraph{L2: one representation change.}
 Add a short, fixed physical/action history and simple factual heads for HIT
@@ -413,9 +474,9 @@ constraint they solve.
 Policy or method & Status & Evidence or admission condition \\
 \midrule
 Reactive scorer & Executed control & E0 completed one route with 108 HITs; this is infrastructure evidence, not a learned-policy result. \\
-20\% uniform-shield mixture & L1 collection preregistered & E5 Stage 4 runs had 16, 10, and 13 HITs, but parallel factual equivalence failed.  E3 therefore uses 12 new serial episodes only. \\
-Action frequency & Preregistered, not run & Frozen non-fitted comparator for the eight-train/four-validation Stage 4 split. \\
-Current-observation BC & Preregistered, not run & First fitted candidate; exact hyperparameters and held-out likelihood/calibration gate are frozen before collection. \\
+20\% uniform-shield mixture & Executed collection & Twelve new serial Stage 4 episodes completed on attempt 1 with 139 factual HITs; this is a training inventory, not policy-improvement evidence. \\
+Action frequency & Evaluated comparator & Validation NLL 2.286394 and ECE 0.008749 on the frozen four-episode split. \\
+Current-observation BC & Negative held-out gate & Validation NLL 2.014976 beat action frequency, but ECE 0.124251 exceeded the frozen 0.028749 bound; no Wine canary ran. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -450,7 +511,7 @@ ID & Decisive question & Status \\
 E0 & Does the reset runner complete Practice 4--6 and one full route? & \completedstatus \\
 E1 & Can a post-root birth hit before the next controllable root? & \progressstatus \\
 E2 & Does the causal learner view preserve actions, propensities, and HITs? & \completedstatus \\
-E3 & Do portable supervised baselines generalize by episode? & \progressstatus \\
+E3 & Do portable supervised baselines generalize by episode? & \negativestatus \\
 E4 & Does one offline value learner reduce complete-route HIT cost? & \notrunstatus \\
 E5 & Does shared-host parallel collection preserve exact facts? & \negativestatus \\
 E6 & Does a new frozen Wine batch resolve a measured coverage failure? & \notrunstatus \\
@@ -595,6 +656,46 @@ Laplace action-frequency NLL is below zero and ten-bin ECE is no more than
 passing artifact earns one complete natural-RNG Stage~4 online integration
 canary; that canary is excluded from training and makes no HIT-reduction claim.
 
+At solver commit
+\path{559572a8f3699c06eb41080e6061e579a1156c33}, all 12 slots completed and
+passed admission on attempt 1 with no Bomb, rejection, retry, stale input,
+drop, semantic/parity failure, or leftover Wine worker.  The inventory contains
+296,667 authoritative roots, 296,655 transitions, 794 events, 287,545 decision
+epochs, 287,493 eligible rows, 139 conserved HITs, and 643 observed-shield
+control dead ends.  All HITs remained in eligible decision intervals.  Capture
+p99 ranged from 8.018 to 8.421 ms and solve p99 from 0.764 to 0.897 ms.
+
+The manifest-declared corpus occupies 4,583,135,878 compressed bytes for
+36,491,160,547 canonical uncompressed bytes, a 7.962-fold ratio.  A post-hoc,
+non-promotional codec diagnostic streamed one fixed 157,969,806-byte frame
+shard: current gzip-3 used 17,178,795 bytes, gzip-9 14,779,903, zstd-3
+7,327,695, and zstd-9 5,871,707.  No shard was changed.  L1 therefore retains
+the existing format; a future codec migration requires a versioned manifest
+and content-equivalence audit, while a compact derived decision cache is
+admitted only if repeated fitting is measured to be decode-bound.
+
+The fit used 193,331 training rows and 94,162 validation rows.  Validation BC
+NLL was 2.014976 versus 2.286394 for action frequency; the 2,000-draw
+episode-bootstrap interval for their difference was
+$[-0.287520,-0.254559]$, so the likelihood criterion passed.  Validation
+ten-bin ECE was 0.124251, while the frozen comparator-plus-tolerance bound was
+$0.008749+0.02=0.028749$.  Calibration therefore failed and the joint gate
+rejected policy \path{linear-behavior-clone-v1:cdb68b242791738d}.  The result
+artifact decision is \path{stop-l1-bc-learnability}; no Wine canary, HIT
+comparison, or NMNB claim exists.  The collection ledger, model, and result
+SHA-256 digests are respectively
+\path{614e44b1eab047041337a5ebcee01af3ef672d01a265d856d0dd58c530dc4c87},
+\path{7b47fee4c261eb8dbde77e3e13391a49cc5771d27e9c4d3d546f6abb695cd245},
+and
+\path{75810a82c9bf3ec0a1063b0d53e6814243afc08b3319268800a2eaff5ef5bae3}.
+
+The result establishes learnable current-observation signal relative to action
+frequency but not an admissible behavior distribution.  A read-only
+reliability decomposition may diagnose the frozen artifact; any refit,
+temperature calibration, optimizer change, or representation change is a new
+preregistered experiment.  E4 and online learned-policy evaluation remain
+blocked.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -703,10 +804,12 @@ E7 replaces only the environment adapter and configuration and reports
 unchanged versus changed code/schema surfaces, zero-shot behavior, and
 fine-tuning sample cost.  It was not run.
 
-This documentation checkpoint follows E0, completed E2, and the negative E5.
-The only active experiment is the preregistered serial Stage~4 E3/L1 baseline.
-No L1 episode has yet been collected, no research model has been fitted, and no
-learned online candidate has been evaluated.
+This documentation checkpoint follows E0, completed E2, and negative E3 and E5
+gates.  E3 collected its complete serial Stage~4 inventory and fitted one
+research model.  That model improved held-out likelihood but failed calibration
+and was never executed online.  There is no authorized learned candidate; the
+next decision is a bounded calibration diagnosis before any new
+preregistration.
 
 \section{Threats to Validity}
 
@@ -750,11 +853,11 @@ algorithm, objective, uncertainty mechanism, or collection strategy must solve
 one measured failure of that baseline.
 
 E0 establishes the serial factual data plane, E2 establishes the causal learner
-projection and first exporter, and E5 rejects the current parallel pool.  E3's
-serial Stage~4 inventory and supervised gate are now preregistered but not yet
-run.  No research model has been fit, no learned policy has run online,
-exact-prefix branching is not established, and this checkpoint makes no policy
-improvement, NMNB, or transfer claim.
+projection and first exporter, and E5 rejects the current parallel pool.  E3
+completed its serial Stage~4 inventory and one frozen supervised fit; improved
+held-out likelihood but failed calibration, so it emitted no online candidate.
+No learned policy has run online, exact-prefix branching is not established,
+and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

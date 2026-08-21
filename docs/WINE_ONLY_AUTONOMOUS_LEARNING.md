@@ -59,17 +59,14 @@ before fitting.
    action/propensity reconstruction, HIT conservation, exclusions,
    forbidden-feature rejection, and offline/online feature parity. No model
    result is meaningful before this passes.
-2. **L1 — transparent supervised baseline (active).** After L0, predeclare and collect
-   the first training inventory serially with unchanged retail clock/update
-   semantics, coherent capture suspension, the frozen 20% uniform
-   observed-shield mixture, and complete episodes. Freeze its episode
-   count, seeds, stopping rule, and split before the first fit. Compare an
-   admissible-mask action-frequency control, the reactive control, and a
-   current-observation behavior clone. The fitted baseline must beat action
-   frequency on held-out complete-episode log loss with a frozen
-   episode-bootstrap criterion and acceptable calibration. Accuracy alone is
-   insufficient.
-3. **L2 — one representation ablation.** Add one fixed short physical/action
+2. **L1 — transparent supervised baseline (completed negative).** The frozen
+   serial inventory contains 12 complete episodes split eight/four before
+   collection. The current-observation BC beat action frequency on held-out
+   complete-episode log loss, but failed the separately frozen calibration
+   criterion. It was not exported to Wine and the withheld canary was not run.
+   A refit or calibration method is a new preregistered L1 experiment, not a
+   reinterpretation of this result.
+3. **L2 — one representation ablation (blocked).** Add one fixed short physical/action
    history and simple factual HIT-horizon or observed-shield-collapse probes.
    Retain it only after a preregistered held-out proper-score improvement. A
    bounded object-set encoder is considered only if a transparent vector
@@ -106,11 +103,14 @@ feature and a parity test.
 - E2/L0 passed at commit `2818861f4079bebfbd8443638ed0cb34236bd5e0`.
   Canonical E0 Stage 4 and complete-route replay conserved 18/18 and 108/108
   physical HITs respectively while retaining every excluded decision row.
-- E3/L1 is preregistered in `experiments/l1-stage4-bc-v1.json`: 12 serial
-  complete natural-RNG Lunatic Practice Stage 4 episodes, eight train and four
-  validation, under independent streams of the frozen 20% uniform observed-
-  shield mixture. No L1 episode has yet been collected, no research model has
-  been fitted, and no learned online candidate has been evaluated.
+- E3/L1 completed at commit `559572a8f3699c06eb41080e6061e579a1156c33`.
+  All 12 serial complete natural-RNG Lunatic Practice Stage 4 episodes passed
+  admission on attempt 1, yielding 193,331 training and 94,162 validation
+  rows. Validation BC NLL was 2.014976 versus 2.286394 for action frequency;
+  the episode-bootstrap delta interval was `[-0.287520, -0.254559]`. Validation
+  ECE was 0.124251 versus the admissible bound 0.028749, so the joint gate
+  failed. The result is `stop-l1-bc-learnability`; no Wine canary was run and
+  there is no authorized learned candidate.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final
