@@ -37,16 +37,19 @@ Current checkpoint:
    under-confident, the frozen train gradient remains 19.1% of its initial
    norm, portable roots reproduce the reactive baseline exactly, and a real
    floating ECE-bin defect is far too small to change the negative decision;
-5. run only the frozen offline L1b convergence follow-up in
-   `experiments/l1b-stage4-bc-convergence-v1.json`. It reuses the exact L1
-   corpus and split, changes no representation or model class, and admits no
-   Wine canary inside L1b. IQL, history, object encoders, and parallel Wine
-   collection remain disabled.
+5. retain the completed inconclusive offline L1b convergence follow-up from
+   commit `7285ee76fe36eda1470844b3635eaddd64292d23`. It reused the exact L1
+   corpus and split and improved every held-out score, but exhausted 2,000
+   updates at gradient ratio 0.0196 rather than the frozen 0.01 threshold;
+6. do not reinterpret L1b as a representation failure or run its withheld Wine
+   canary. Any convergence-suitable optimizer or larger timebox is a new
+   preregistration. IQL, history, object encoders, and parallel Wine collection
+   remain disabled.
 
-One research model has been fitted, but it failed its preregistered promotion
-gate and is not an authorized learned candidate. No learned policy has been run
-online. A complete route with many HITs is still a successful infrastructure
-baseline when the factual and control contracts pass.
+Two research models have been fitted, but neither passed its preregistered
+promotion gate or is an authorized learned candidate. No learned policy has
+been run online. A complete route with many HITs is still a successful
+infrastructure baseline when the factual and control contracts pass.
 
 The research goal is complete-route Lunatic NMNB probability. The first value
 optimization target is expected undiscounted physical HIT count over complete
@@ -54,9 +57,10 @@ episodes; it is a dense surrogate and is not claimed equivalent to the goal
 metric. The completed current-observation BC improved held-out action NLL over
 action frequency but failed calibration. The bounded diagnosis attributes the
 first unresolved boundary to optimization convergence rather than missing
-capture or validation drift. L1b therefore refits the identical model from
-zero with a train-only relative-gradient stop and corrected, versioned ECE.
-Short history and offline value learning remain blocked by that decision.
+capture or validation drift. L1b then improved validation NLL from 2.014976 to
+1.720755 and ECE from 0.124251 to 0.055148, but its gradient ratio 0.0196 did
+not reach the frozen 0.01 convergence requirement. The result is inconclusive;
+short history and offline value learning remain blocked.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.

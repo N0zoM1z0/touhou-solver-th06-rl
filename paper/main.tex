@@ -50,10 +50,11 @@ collection, learned dynamics, and exact-prefix branching are admitted one at a
 time only after a simpler preregistered experiment exposes a concrete failure.
 The paper reports an audited six-stage infrastructure baseline with 108 HITs,
 a completed causal learner-view audit, a negative serial/parallel equivalence
-gate, and a completed negative Stage~4 supervised-baseline gate.  The fitted
-current-observation behavior clone improved held-out action log loss over
-action frequency but failed the separately frozen calibration criterion; it
-was not evaluated online.
+gate, a completed negative Stage~4 supervised-baseline gate, and an
+inconclusive optimization-only follow-up.  The fitted current-observation
+behavior clones improved held-out action log loss over action frequency but
+did not pass their separately frozen convergence and calibration requirements;
+neither was evaluated online.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -415,6 +416,8 @@ exactly, train and validation show the same under-confidence, and the frozen
 train gradient is not stationary.  L1b therefore changes only the train-only
 stopping rule and corrects the ECE implementation; it does not change data,
 split, representation, target, model class, regularization, or comparator.
+L1b exhausted its frozen update timebox before convergence and is inconclusive,
+so it still does not admit L2.
 
 \paragraph{L2: one representation change.}
 Add a short, fixed physical/action history and simple factual heads for HIT
@@ -483,7 +486,7 @@ Reactive scorer & Executed control & E0 completed one route with 108 HITs; this 
 20\% uniform-shield mixture & Executed collection & Twelve new serial Stage 4 episodes completed on attempt 1 with 139 factual HITs; this is a training inventory, not policy-improvement evidence. \\
 Action frequency & Evaluated comparator & Validation NLL 2.286394 and ECE 0.008749 on the frozen four-episode split. \\
 Current-observation BC & Negative held-out gate & Validation NLL 2.014976 beat action frequency, but ECE 0.124251 exceeded the frozen 0.028749 bound; no Wine canary ran. \\
-Current-observation BC convergence follow-up & Preregistered, not run & Reuse the exact L1 corpus and split; require train-only relative-gradient convergence before applying the corrected NLL-plus-ECE gate. \\
+Current-observation BC convergence follow-up & Inconclusive & Validation NLL improved to 1.720755 and ECE to 0.055148, but 2,000 updates ended at gradient ratio 0.0196 rather than the frozen 0.01 threshold; no canary ran. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -740,6 +743,31 @@ and comparator-plus-0.02 calibration conditions are unchanged.  L1b collects
 no data and runs no Wine canary; a joint pass only admits a separately executed
 Stage~4 integration canary.
 
+L1b ran at solver commit
+\path{7285ee76fe36eda1470844b3635eaddd64292d23}.  It exhausted all 2,000
+updates with final train gradient L2 0.020297, or 0.019566 of the initial
+1.037370, and therefore missed the required 0.01 ratio.  The optimization gate
+failed and the preregistered result is
+\path{inconclusive-l1b-optimization-not-converged}; this is not evidence that
+the linear representation failed.
+
+Optimization nevertheless moved every descriptive held-out metric in the
+expected direction.  Validation NLL fell from the L1 value 2.014976 to
+1.720755, Brier from 0.728516 to 0.647767, ECE from 0.124251 to 0.055148, and
+accuracy rose from 0.461290 to 0.528111.  The corrected action-frequency NLL
+and ECE were 2.286394 and 0.008732; the episode-bootstrap NLL-difference
+interval was $[-0.578257,-0.552904]$.  The proper-score gate passed, but ECE
+remained above the corrected 0.028732 bound, so calibration also failed.  Train
+NLL and ECE were 1.707485 and 0.054720, close to validation.  No online canary
+ran and no HIT or NMNB claim exists.  The plan, model, and result SHA-256
+digests are respectively
+\path{d972fbda8b26cf37fe69438fc81423714c92f652652ba1667e5c27830bcdb592},
+\path{22254afd55d97a740889e76c44617fd408d3354566a550abc3f74feb9b497ae5},
+and
+\path{0d814a6f20036175e16a507256e79c3195ce4b48193b73c3fc51b7cc33d1d336}.
+Any convergence-suitable optimizer or larger timebox is another frozen L1
+experiment; validation may not select it.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -851,9 +879,10 @@ fine-tuning sample cost.  It was not run.
 This documentation checkpoint follows E0, completed E2, and negative E3 and E5
 gates.  E3 collected its complete serial Stage~4 inventory and fitted one
 research model.  That model improved held-out likelihood but failed calibration
-and was never executed online.  The bounded diagnosis is complete and the
-offline-only L1b convergence follow-up is preregistered but not run.  There is
-no authorized learned candidate.
+and was never executed online.  The bounded diagnosis is complete; the
+offline-only L1b follow-up improved held-out metrics but did not converge within
+its frozen timebox and is inconclusive.  There is no authorized learned
+candidate.
 
 \section{Threats to Validity}
 
@@ -901,9 +930,10 @@ projection and first exporter, and E5 rejects the current parallel pool.  E3
 completed its serial Stage~4 inventory and one frozen supervised fit; improved
 held-out likelihood but failed calibration, so it emitted no online candidate.
 The diagnosis localized the next test to convergence of that same transparent
-fit, and L1b is frozen without a representation or online change.  No learned
-policy has run online, exact-prefix branching is not established, and this
-checkpoint makes no policy-improvement, NMNB, or transfer claim.
+fit.  L1b improved held-out likelihood and calibration without a representation
+change but exhausted its optimizer timebox before the frozen gradient gate.
+No learned policy has run online, exact-prefix branching is not established,
+and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

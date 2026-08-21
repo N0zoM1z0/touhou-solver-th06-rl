@@ -70,9 +70,11 @@ before fitting.
    under-confidence: validation accuracy was 0.461290 while mean top
    confidence was 0.337672, and the frozen train gradient remained 19.1% of
    its initial norm. Portable roots reproduced every recorded reactive
-   baseline, so missing capture is not the failure. L1b is the only active
-   follow-up: it reuses the exact corpus/split and changes only train-only
-   optimization convergence plus a corrected ECE implementation.
+   baseline, so missing capture is not the failure. L1b reused the exact
+   corpus/split and changed only train-only optimization convergence plus a
+   corrected ECE implementation. It exhausted the frozen 2,000-update timebox
+   at gradient ratio 0.0196 rather than 0.01, so its result is inconclusive and
+   does not admit L2.
 3. **L2 — one representation ablation (blocked).** Add one fixed short physical/action
    history and simple factual HIT-horizon or observed-shield-collapse probes.
    Retain it only after a preregistered held-out proper-score improvement. A
@@ -127,12 +129,15 @@ feature and a parity test.
   locally reduced train NLL. A floating ECE edge omitted exact confidence 0.6,
   but corrected binning changed the comparator ECE by only 0.000017 and left
   the L1 decision negative.
-- `experiments/l1b-stage4-bc-convergence-v1.json` freezes the only active
-  follow-up. It reuses all 12 episode identities and the eight/four split,
-  starts the same masked linear softmax from zero, and stops after the first
-  train-only gradient ratio at or below 0.01 following at least 100 updates, or
-  inconclusively after 2,000 updates. Validation is evaluated once at the end.
-  L1b itself performs no Wine run.
+- L1b ran from commit `7285ee76fe36eda1470844b3635eaddd64292d23` and
+  reused all 12 episode identities and the eight/four split. It reached all
+  2,000 full-batch updates with final/initial train gradient ratio 0.019566,
+  missing the frozen 0.01 threshold. Validation NLL, Brier, accuracy, and ECE
+  improved to 1.720755, 0.647767, 0.528111, and 0.055148 respectively. The
+  corrected action-frequency ECE was 0.008732, so calibration still exceeded
+  the 0.028732 bound. Proper-score passed, optimization and calibration failed,
+  and the exact decision is `inconclusive-l1b-optimization-not-converged`.
+  L1b performed no Wine run and created no authorized learned candidate.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final
