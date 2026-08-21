@@ -21,6 +21,7 @@ from th06_rl.learning_features import (
     causal_tree_feature_names,
 )
 from th06_rl.offline_options import (
+    NMNB_FORCED_EXCLUSION,
     ActorState,
     OfflineOptionTransition,
     validate_offline_episode,
@@ -123,7 +124,7 @@ def build_critic_dataset(
     *,
     reference_epsilon: float,
 ) -> CriticDataset:
-    """Build factual MC targets while retaining every excluded interval's HIT."""
+    """Build on-policy MC targets while retaining shared post-HIT costs."""
     examples = []
     excluded = Counter()
     episode_ids = []
@@ -133,6 +134,18 @@ def build_critic_dataset(
         episode_ids.append(options[0].episode_id)
         for option in options:
             if not option.eligible:
+                behavior = dict(option.behavior_probabilities)
+                if (
+                    option.exclusion_reasons != (NMNB_FORCED_EXCLUSION,)
+                    or option.state.legal_actions
+                    != (option.state.baseline_action,)
+                    or option.action != option.state.baseline_action
+                    or behavior != {option.state.baseline_action: 1.0}
+                    or option.behavior_probability != 1.0
+                ):
+                    raise ValueError(
+                        "critic input has an unsupported ineligible continuation"
+                    )
                 excluded.update(option.exclusion_reasons or ("ineligible",))
                 continue
             reference = reference_distribution(
@@ -140,6 +153,23 @@ def build_critic_dataset(
                 option.state.baseline_action,
                 epsilon=reference_epsilon,
             )
+            behavior = dict(option.behavior_probabilities)
+            reference_by_action = dict(reference)
+            if (
+                set(behavior) != set(reference_by_action)
+                or any(
+                    not math.isclose(
+                        behavior[action],
+                        reference_by_action[action],
+                        rel_tol=1e-12,
+                        abs_tol=1e-12,
+                    )
+                    for action in reference_by_action
+                )
+            ):
+                raise ValueError(
+                    "critic Monte-Carlo reference differs from behavior policy"
+                )
             candidates = tuple(
                 (
                     action,

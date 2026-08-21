@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 pytest.importorskip("numpy")
@@ -15,7 +17,11 @@ from th06_rl.g7_learner import (
     whole_episode_folds,
 )
 from th06_rl.hazard_representation import HISTORY_FEATURE_NAMES
-from th06_rl.offline_options import ActorState, OfflineOptionTransition
+from th06_rl.offline_options import (
+    NMNB_FORCED_EXCLUSION,
+    ActorState,
+    OfflineOptionTransition,
+)
 from th06_rl.th06.learning_adapter import (
     ACTION_FEATURE_NAMES,
     OBSERVATION_FEATURE_NAMES,
@@ -78,24 +84,52 @@ def _option(
 
 
 def test_cost_to_go_keeps_hits_from_excluded_future_intervals() -> None:
-    episode = (
-        _option("episode-a", 0, "left", 0, terminal=False),
-        _option(
-            "episode-a",
-            1,
-            "stay",
-            1,
-            terminal=True,
-            eligible=False,
-        ),
+    normal_state = _state()
+    forced_state = replace(
+        normal_state,
+        action_features=(("stay", dict(normal_state.action_features)["stay"]),),
+        legal_actions=("stay",),
     )
+    eligible = replace(
+        _option("episode-a", 0, "left", 0, terminal=False),
+        next_state=forced_state,
+    )
+    forced = replace(
+        _option("episode-a", 1, "stay", 1, terminal=True, eligible=False),
+        state=forced_state,
+        behavior_probability=1.0,
+        behavior_probabilities=(("stay", 1.0),),
+        exclusion_reasons=(NMNB_FORCED_EXCLUSION,),
+    )
+    episode = (eligible, forced)
 
     dataset = build_critic_dataset((episode,), reference_epsilon=1.0)
 
     assert len(dataset.examples) == 1
     assert dataset.examples[0].target_cost_to_go == 1.0
     assert dataset.excluded_options == 1
-    assert dataset.exclusion_reasons == (("fixture-exclusion", 1),)
+    assert dataset.exclusion_reasons == ((NMNB_FORCED_EXCLUSION, 1),)
+
+
+def test_critic_rejects_non_hit_ineligible_continuation() -> None:
+    option = _option(
+        "episode-a",
+        0,
+        "stay",
+        1,
+        terminal=True,
+        eligible=False,
+    )
+
+    with pytest.raises(ValueError, match="unsupported ineligible"):
+        build_critic_dataset(((option,),), reference_epsilon=1.0)
+
+
+def test_critic_rejects_reference_behavior_mismatch() -> None:
+    option = _option("episode-a", 0, "left", 0, terminal=True)
+
+    with pytest.raises(ValueError, match="reference differs from behavior"):
+        build_critic_dataset(((option,),), reference_epsilon=0.2)
 
 
 def test_episode_folds_are_deterministic_disjoint_assignments() -> None:
