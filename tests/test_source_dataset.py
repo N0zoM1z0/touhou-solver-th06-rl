@@ -5,9 +5,15 @@ import struct
 
 import pytest
 
+from th06_rl.corpus import CorpusRecorder, FrameEvidence, RunMetadata
 from th06_rl.retail import native
 from th06_rl.retail.model import PlayerAttackState, RepeatStarState, Snapshot
-from th06_rl.th06.source_dataset import SourceDatasetError, validate_frame_authority
+from th06_rl.th06.source_dataset import (
+    SourceDatasetError,
+    iter_source_diagnostic_frames,
+    iter_source_frames,
+    validate_frame_authority,
+)
 from th06_rl.th06.control_capture import (
     CONTROL_CAPTURE_TIER,
     OFFLINE_FACT_SCHEMA,
@@ -124,6 +130,90 @@ def _pair() -> tuple[ControlSnapshot, Snapshot]:
     return control, anchor
 
 
+def _source_run(
+    tmp_path,
+    *,
+    episode_complete: bool,
+    route: bool = False,
+    authority_valid: bool = True,
+):
+    control, anchor = _pair()
+    if not authority_valid:
+        assert anchor.repeat_star_state is not None
+        anchor = replace(
+            anchor,
+            repeat_star_state=replace(anchor.repeat_star_state, enemy_x=193.0),
+        )
+    planner = {
+        "algorithm": "source-hard4-paused-publication-v2",
+        "source_commitment": "source-complete-hard-v1",
+        "publication_epoch": "source-root-process-suspended-v1",
+        "factual_state_schema": OFFLINE_FACT_SCHEMA,
+        "hard_horizon": 4,
+        "learner_feature_horizon": 4,
+        "minimum_collision_margin": 0.35,
+        "zero_margin_fallback": False,
+    }
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata(
+            "test",
+            native.TARGET_SHA256,
+            "native",
+            "test",
+            3,
+            0,
+            0,
+            1,
+            planner,
+            episode_unit="route" if route else "practice-stage",
+            expected_stages=tuple(range(1, 7)) if route else (1,),
+        ),
+    )
+    evidence = FrameEvidence(
+        phase_id=control.source_context,
+        current_action="stay",
+        hard_actions=(("stay", None, control.x, control.y),),
+        baseline_action="stay",
+        locally_admissible_actions=("stay",),
+        proposed_action="stay",
+        published_action=None,
+        behavior_probability=1.0,
+        policy_id="fixture",
+        policy_generation=1,
+        policy_sha256="abc",
+        effort_horizon=4,
+        plan_min_clearance=None,
+        cumulative_risk=None,
+        terminal_x=control.x,
+        terminal_y=control.y,
+        endpoint_count=1,
+        continuation_action_count=1,
+        capture_ms=0.0,
+        solve_ms=0.0,
+        reason="ok",
+        snapshot_tier=CONTROL_CAPTURE_TIER,
+        hard_collision_margin=0.35,
+    )
+    snapshot_ref = recorder.record(control, evidence)
+    recorder.record_anchor(
+        anchor,
+        phase_id=control.source_context,
+        reason="stage-root",
+        control_snapshot_ref=snapshot_ref,
+    )
+    return recorder.close({
+        "stage_completed": episode_complete,
+        "termination_reason": (
+            "route-complete"
+            if route and episode_complete
+            else "practice-stage-complete"
+            if episode_complete
+            else "authority-stop"
+        ),
+    })
+
+
 def test_control_v5_frame_is_self_contained_after_wine_exit() -> None:
     control, anchor = _pair()
 
@@ -178,3 +268,50 @@ def test_source_dataset_accepts_dense_repeat_globals_after_anchor_pause() -> Non
     )
 
     validate_frame_authority(control, anchor, same_pause=False)
+
+
+def test_training_iterator_rejects_retained_incomplete_episode(tmp_path) -> None:
+    run_dir = _source_run(tmp_path, episode_complete=False)
+
+    with pytest.raises(SourceDatasetError, match="completely observed"):
+        tuple(iter_source_frames(run_dir))
+
+
+def test_diagnostic_iterator_retains_valid_nontraining_prefix(tmp_path) -> None:
+    run_dir = _source_run(tmp_path, episode_complete=False)
+
+    rows = tuple(iter_source_diagnostic_frames(run_dir))
+
+    assert len(rows) == 1
+    assert rows[0].frame.control.frame == 10
+    assert rows[0].storage_complete is True
+    assert rows[0].trajectory_complete is False
+    assert rows[0].episode_complete is False
+    assert rows[0].training_eligible is False
+
+
+def test_diagnostic_iterator_still_rejects_invalid_authority(tmp_path) -> None:
+    run_dir = _source_run(
+        tmp_path,
+        episode_complete=False,
+        authority_valid=False,
+    )
+
+    with pytest.raises(SourceDatasetError, match="repeating-star globals"):
+        tuple(iter_source_diagnostic_frames(run_dir))
+
+
+def test_training_iterator_accepts_complete_practice_episode(tmp_path) -> None:
+    run_dir = _source_run(tmp_path, episode_complete=True)
+
+    rows = tuple(iter_source_frames(run_dir))
+
+    assert len(rows) == 1
+    assert rows[0].control.frame == 10
+
+
+def test_training_iterator_requires_all_declared_route_stages(tmp_path) -> None:
+    run_dir = _source_run(tmp_path, episode_complete=True, route=True)
+
+    with pytest.raises(SourceDatasetError, match="declared physical episode stages"):
+        tuple(iter_source_frames(run_dir))

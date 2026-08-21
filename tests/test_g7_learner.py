@@ -54,7 +54,7 @@ def _option(
     return OfflineOptionTransition(
         schema="th06-rl-causal-options-v3",
         episode_id=episode,
-        episode_unit="complete-route",
+        episode_unit="route",
         behavior_policy_id="safe-option-exploration-v2",
         option_id=f"{episode}:option-{index}",
         start_sequence=index,

@@ -44,7 +44,7 @@ def _option(index: int) -> OfflineOptionTransition:
     return OfflineOptionTransition(
         "th06-rl-causal-options-v3",
         f"episode-{index:03d}",
-        "complete-route",
+        "route",
         "safe-option-exploration-v2",
         f"{index:016x}:00000001",
         0,

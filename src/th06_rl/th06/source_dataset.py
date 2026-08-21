@@ -46,6 +46,17 @@ class SourceFrameBundle:
     decision: dict[str, object]
 
 
+@dataclass(frozen=True)
+class DiagnosticSourceFrameBundle:
+    """One validated frame carried through a non-training inspection API."""
+
+    frame: SourceFrameBundle
+    storage_complete: bool
+    trajectory_complete: bool
+    episode_complete: bool
+    training_eligible: bool = False
+
+
 def _stream_paths(
     run_dir: Path,
     manifest: dict[str, object],
@@ -231,17 +242,38 @@ def validate_frame_authority(
         )
 
 
-def iter_source_frames(run_dir: Path) -> Iterator[SourceFrameBundle]:
-    """Yield validated dense frames with the exact active source anchor."""
+def _source_run_contract(
+    run_dir: Path,
+) -> tuple[Path, dict[str, object], dict[str, object]]:
     run_dir = run_dir.resolve()
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    if manifest.get("complete") is not True:
-        raise SourceDatasetError("incomplete corpus cannot enter training")
     run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict) or not isinstance(run, dict):
+        raise SourceDatasetError("source run metadata is not an object")
     metadata = run.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        raise SourceDatasetError("source run metadata is not an object")
     planner = metadata.get("planner") or {}
+    episode = manifest.get("episode") or {}
+    if not isinstance(planner, dict) or not isinstance(episode, dict):
+        raise SourceDatasetError("source run contract is not an object")
+    expected_stages = metadata.get("expected_stages")
+    stage = metadata.get("stage")
+    unit = metadata.get("episode_unit")
+    episode_scope_is_valid = (
+        unit == "route" and expected_stages == [1, 2, 3, 4, 5, 6]
+    ) or (
+        unit == "practice-stage"
+        and isinstance(stage, int)
+        and not isinstance(stage, bool)
+        and 1 <= stage <= 6
+        and expected_stages == [stage]
+    )
     if (
         run.get("run_id") != manifest.get("run_id")
+        or episode.get("id") != run.get("run_id")
+        or episode.get("unit") != unit
+        or not episode_scope_is_valid
         or metadata.get("executable_sha256") != native.TARGET_SHA256
         or planner.get("algorithm") != "source-hard4-paused-publication-v2"
         or planner.get("source_commitment") != "source-complete-hard-v1"
@@ -253,6 +285,41 @@ def iter_source_frames(run_dir: Path) -> Iterator[SourceFrameBundle]:
         or planner.get("zero_margin_fallback") is not False
     ):
         raise SourceDatasetError("run metadata does not bind the current authority contract")
+    return run_dir, manifest, metadata
+
+
+def _require_complete_physical_episode(
+    manifest: dict[str, object],
+    metadata: dict[str, object],
+) -> None:
+    episode = manifest.get("episode") or {}
+    outcome = manifest.get("run_outcome") or {}
+    unit = metadata.get("episode_unit")
+    expected_reason = {
+        "route": "route-complete",
+        "practice-stage": "practice-stage-complete",
+    }.get(unit)
+    if (
+        not isinstance(episode, dict)
+        or not isinstance(outcome, dict)
+        or manifest.get("complete") is not True
+        or manifest.get("dropped_records") != 0
+        or manifest.get("stage_trajectory_complete") is not True
+        or episode.get("complete") is not True
+        or outcome.get("stage_completed") is not True
+        or outcome.get("termination_reason") != expected_reason
+    ):
+        raise SourceDatasetError(
+            "source training input is not one completely observed physical episode"
+        )
+
+
+def _iter_validated_source_frames(
+    run_dir: Path,
+    manifest: dict[str, object],
+    *,
+    required_stages: frozenset[int] | None,
+) -> Iterator[SourceFrameBundle]:
     objects = {
         str(row["object_id"]): row["payload"]
         for row in _rows(_stream_paths(run_dir, manifest, "objects"))
@@ -305,4 +372,55 @@ def iter_source_frames(run_dir: Path) -> Iterator[SourceFrameBundle]:
             anchor_reason,
             dict(row.get("scope") or {}),
             dict(row.get("decision") or {}),
+        )
+    if required_stages is not None and seen_stage != required_stages:
+        raise SourceDatasetError(
+            "source frames do not cover the declared physical episode stages"
+        )
+
+
+def iter_source_frames(run_dir: Path) -> Iterator[SourceFrameBundle]:
+    """Yield source-authoritative frames from one fully observed episode.
+
+    This is the only source-frame iterator intended for offline dataset
+    construction.  Algorithm-specific admission (for example Lunatic,
+    zero-Bomb, immutable-policy complete routes) remains the trainer's
+    separate responsibility.
+    """
+    run_dir, manifest, metadata = _source_run_contract(run_dir)
+    _require_complete_physical_episode(manifest, metadata)
+    required_stages = frozenset(int(stage) for stage in metadata["expected_stages"])
+    yield from _iter_validated_source_frames(
+        run_dir,
+        manifest,
+        required_stages=required_stages,
+    )
+
+
+def iter_source_diagnostic_frames(
+    run_dir: Path,
+) -> Iterator[DiagnosticSourceFrameBundle]:
+    """Inspect valid retained prefixes without making them training inputs.
+
+    The returned wrapper is deliberately incompatible with
+    :class:`SourceFrameBundle` consumers and is always marked
+    ``training_eligible=False``.  Available rows still undergo the exact shard,
+    source-anchor and live-pointer authority checks.
+    """
+    run_dir, manifest, _metadata = _source_run_contract(run_dir)
+    episode = manifest.get("episode") or {}
+    assert isinstance(episode, dict)
+    for frame in _iter_validated_source_frames(
+        run_dir,
+        manifest,
+        required_stages=None,
+    ):
+        yield DiagnosticSourceFrameBundle(
+            frame=frame,
+            storage_complete=(
+                manifest.get("complete") is True
+                and manifest.get("dropped_records") == 0
+            ),
+            trajectory_complete=manifest.get("stage_trajectory_complete") is True,
+            episode_complete=episode.get("complete") is True,
         )

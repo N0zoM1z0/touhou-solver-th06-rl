@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +10,7 @@ from th06_rl.hazard_representation import HISTORY_FEATURE_NAMES
 from th06_rl.offline_options import (
     OfflineOptionError,
     iter_offline_options,
+    validate_offline_episode,
     whole_episode_split,
 )
 from th06_rl.th06.learning_adapter import (
@@ -70,7 +72,7 @@ def _transition(
         },
         "learning_eligible": True,
         "learning_exclusion_reasons": [],
-        "episode": {"id": "episode-1", "unit": "complete-route"},
+        "episode": {"id": "episode-1", "unit": "route"},
     }
 
 
@@ -161,6 +163,13 @@ def test_option_aggregation_stops_at_termination_and_skips_forced_gap(monkeypatc
     assert second.elapsed_frames == 1
     assert second.next_state is None
     assert second.terminal is True
+
+    validate_offline_episode((first, second))
+    with pytest.raises(OfflineOptionError, match="physical route"):
+        validate_offline_episode(tuple(
+            replace(option, episode_unit="complete-route")
+            for option in (first, second)
+        ))
 
 
 def test_option_treatment_is_command_intent_not_pickup_sample(monkeypatch) -> None:

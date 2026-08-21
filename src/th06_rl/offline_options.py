@@ -461,8 +461,11 @@ def validate_offline_episode(
         raise OfflineOptionError("option sequence mixes physical episodes")
     if any(option.schema != OPTION_DATASET_SCHEMA for option in options):
         raise OfflineOptionError("option sequence uses an unsupported schema")
-    if any(option.episode_unit != "complete-route" for option in options):
-        raise OfflineOptionError("option sequence is not one complete route")
+    # ``route`` is the factual unit written by CorpusRecorder.  Whether that
+    # route is complete is a separate manifest/admission fact and must never
+    # be smuggled into the unit label.
+    if any(option.episode_unit != "route" for option in options):
+        raise OfflineOptionError("option sequence is not one physical route")
     if len({option.behavior_policy_id for option in options}) != 1:
         raise OfflineOptionError("option sequence mixes behavior policies")
     if len({option.option_id for option in options}) != len(options):
