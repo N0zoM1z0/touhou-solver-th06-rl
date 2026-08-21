@@ -11,6 +11,7 @@ from th06_rl.retail.model import (
     BulletPattern,
     EclInstruction,
     EnemySpawner,
+    FloatInterval,
     Laser,
     RepeatStarState,
     Snapshot,
@@ -186,6 +187,81 @@ def test_math_normalize_angle_reads_its_integer_variable_id() -> None:
     assert len(forecast.births[0]) == 1
     assert forecast.next_spawner is not None
     assert all(math.isfinite(value) for value in forecast.next_spawner.ecl_floats)
+
+
+def test_hard_carries_random_bullet_effect_support_across_frames() -> None:
+    random_rotation, raw = _instruction(0x10000, 0, 9, 24)
+    struct.pack_into("<iff", raw, 12, -10005, math.pi, -math.pi / 2.0)
+    random_rotation = _with_raw(random_rotation, raw)
+    effects, raw = _instruction(0x10018, 0, 82, 44)
+    struct.pack_into("<iiii", raw, 12, 90, 1, -1, -1)
+    struct.pack_into("<ffff", raw, 28, -10005.0, 1.8, -1.0, -1.0)
+    effects = _with_raw(effects, raw)
+    shoot_random, raw = _instruction(0x10044, 0, 75, 44)
+    struct.pack_into("<hhii", raw, 12, 1, 0, 12, 1)
+    struct.pack_into("<ffffI", raw, 24, 2.4, 1.0, math.pi, 0.0, 0x43)
+    shoot_random = _with_raw(shoot_random, raw)
+    shoot_now, _raw = _instruction(0x10070, 1, 80)
+    end, _raw = _instruction(0x1007C, -1, 0)
+    spawner = _spawner(
+        random_rotation,
+        end,
+        shooting_disabled=False,
+        ecl_program=(random_rotation, effects, shoot_random, shoot_now, end),
+    )
+
+    forecast = forecast_ecl_births(
+        spawner,
+        ((192.0, 400.0),) * 2,
+        3,
+        0,
+        ((1.0, 1.0), (8.0, 8.0)),
+        radial_births=True,
+        abstract_rng=True,
+        model_player_damage=False,
+    )
+
+    assert forecast.covered_frames == 2
+    assert forecast.reason == ""
+    assert len(forecast.births[0]) == 1
+    assert len(forecast.births[1]) == 1
+    bullet = forecast.births[1][0]
+    assert bullet.turn_speed == pytest.approx(1.8)
+    assert bullet.direction_rotation == 0.0
+    assert forecast.next_spawner is not None
+    support = forecast.next_spawner.bullet_effect_floats[0]
+    assert isinstance(support, FloatInterval)
+    assert support.low == pytest.approx(-math.pi / 2.0)
+    assert support.high == pytest.approx(math.pi / 2.0)
+
+
+def test_exact_forecast_rejects_random_bullet_effect_support() -> None:
+    random_rotation, raw = _instruction(0x10100, 0, 9, 24)
+    struct.pack_into("<iff", raw, 12, -10005, math.pi, -math.pi / 2.0)
+    random_rotation = _with_raw(random_rotation, raw)
+    effects, raw = _instruction(0x10118, 0, 82, 44)
+    struct.pack_into("<iiii", raw, 12, 90, 1, -1, -1)
+    struct.pack_into("<ffff", raw, 28, -10005.0, 1.8, -1.0, -1.0)
+    effects = _with_raw(effects, raw)
+    end, _raw = _instruction(0x10144, -1, 0)
+    spawner = _spawner(
+        random_rotation,
+        end,
+        ecl_program=(random_rotation, effects, end),
+    )
+
+    forecast = forecast_ecl_births(
+        spawner,
+        ((192.0, 400.0),),
+        3,
+        0,
+        ((1.0, 1.0),),
+        abstract_rng=True,
+        model_player_damage=False,
+    )
+
+    assert forecast.covered_frames == 0
+    assert forecast.reason == "uncertain bullet effects need a hard envelope"
 
 
 def test_hard_stops_before_ecl_reads_damage_uncertain_life() -> None:

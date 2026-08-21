@@ -20,6 +20,7 @@ from ..model import (
     EnemyEclContext,
     EnemySpawner,
     EclInstruction,
+    FloatInterval,
     Laser,
     RepeatStarState,
 )
@@ -467,12 +468,6 @@ class EclForecast:
     life_uncertain: bool = False
 
 
-@dataclass(frozen=True)
-class FloatInterval:
-    low: float
-    high: float
-
-
 def _add_normalize_angle(left: float, right: float) -> float:
     """Mirror source ``utils::AddNormalizeAngle`` at f32 stores."""
     value = _f32(left + right)
@@ -874,7 +869,12 @@ def _set_local_from_source_bits(
 def _resolved_pattern(
     instruction: EclInstruction,
     spawner: EnemySpawner,
-    effect_floats: tuple[float, float, float, float],
+    effect_floats: tuple[
+        float | FloatInterval,
+        float | FloatInterval,
+        float | FloatInterval,
+        float | FloatInterval,
+    ],
     effect_ints: tuple[int, int, int, int],
     integers: list[int],
     floats: list[float | FloatInterval],
@@ -2245,7 +2245,7 @@ def _forecast_ecl_births_single(
                 if any(
                     isinstance(value, FloatInterval)
                     for value in resolved_effect_floats
-                ):
+                ) and not radial_births:
                     return EclForecast(
                         tuple(map(tuple, births)),
                         frame_index,

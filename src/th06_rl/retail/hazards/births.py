@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 
-from ..model import Bullet, BulletPattern, EnemySpawner
+from ..model import Bullet, BulletPattern, EnemySpawner, FloatInterval
 from .bullets import hazard_box
 from .enemies import future_positions
 from .rng import RngState
@@ -94,6 +94,8 @@ def _spawned_bullet(
     origin_y: float,
     angle: float,
     speed: float,
+    *,
+    effect_envelope: bool = False,
 ) -> Bullet:
     if not 0 <= pattern.sprite < len(SOURCE_BULLET_SPRITE_HALF_SIZES):
         raise UnsupportedBirthModel(
@@ -111,28 +113,89 @@ def _spawned_bullet(
     direction_rotation = 0.0
     direction_interval = 0
     direction_max_times = 0
+
+    def checked_interval(value: FloatInterval) -> FloatInterval:
+        if (
+            not math.isfinite(value.low)
+            or not math.isfinite(value.high)
+            or value.low > value.high
+        ):
+            raise UnsupportedBirthModel("invalid uncertain bullet effect")
+        return value
+
+    def exact_effect(index: int) -> float:
+        value = pattern.ex_floats[index]
+        if isinstance(value, FloatInterval):
+            if not effect_envelope:
+                raise UnsupportedBirthModel(
+                    "uncertain bullet effects need a hard envelope"
+                )
+            checked_interval(value)
+            # Directional effect values do not enlarge a radial position
+            # union. Their speed/acceleration magnitudes are bounded below.
+            return 0.0
+        return value
+
+    def effect_magnitude(index: int) -> float:
+        value = pattern.ex_floats[index]
+        if isinstance(value, FloatInterval):
+            if not effect_envelope:
+                raise UnsupportedBirthModel(
+                    "uncertain bullet effects need a hard envelope"
+                )
+            value = checked_interval(value)
+            return max(abs(value.low), abs(value.high))
+        return abs(value)
+
+    def conditional_speed(index: int) -> float:
+        value = pattern.ex_floats[index]
+        if isinstance(value, FloatInterval):
+            if not effect_envelope:
+                raise UnsupportedBirthModel(
+                    "uncertain bullet effects need a hard envelope"
+                )
+            value = checked_interval(value)
+            possible = [abs(speed)] if value.low < 0.0 else []
+            if value.high >= 0.0:
+                possible.extend((max(0.0, value.low), value.high))
+            return max(possible)
+        return value if value >= 0.0 else speed
+
     if pattern.flags & 0x10:
-        acceleration_angle = (
-            angle if pattern.ex_floats[1] <= -999.0 else pattern.ex_floats[1]
-        )
-        acceleration_x = math.cos(acceleration_angle) * pattern.ex_floats[0]
-        acceleration_y = math.sin(acceleration_angle) * pattern.ex_floats[0]
+        acceleration_value = pattern.ex_floats[0]
+        acceleration_angle_value = pattern.ex_floats[1]
+        if effect_envelope and (
+            isinstance(acceleration_value, FloatInterval)
+            or isinstance(acceleration_angle_value, FloatInterval)
+        ):
+            acceleration_x = effect_magnitude(0)
+            acceleration_y = 0.0
+        else:
+            acceleration_angle = exact_effect(1)
+            if acceleration_angle <= -999.0:
+                acceleration_angle = angle
+            acceleration = exact_effect(0)
+            acceleration_x = math.cos(acceleration_angle) * acceleration
+            acceleration_y = math.sin(acceleration_angle) * acceleration
         acceleration_duration = (
             pattern.ex_ints[0] if pattern.ex_ints[0] > 0 else 99999
         )
     elif pattern.flags & 0x20:
-        curve_speed = pattern.ex_floats[0]
-        curve_angular = pattern.ex_floats[1]
+        curve_speed = (
+            effect_magnitude(0)
+            if effect_envelope
+            and isinstance(pattern.ex_floats[0], FloatInterval)
+            else exact_effect(0)
+        )
+        curve_angular = exact_effect(1)
         acceleration_duration = pattern.ex_ints[0]
     if pattern.flags & 0x1C0:
-        direction_rotation = pattern.ex_floats[0]
-        turn_speed = (
-            pattern.ex_floats[1] if pattern.ex_floats[1] >= 0.0 else speed
-        )
+        direction_rotation = exact_effect(0)
+        turn_speed = conditional_speed(1)
         direction_interval = pattern.ex_ints[0]
         direction_max_times = pattern.ex_ints[1]
     elif pattern.flags & 0xC00:
-        turn_speed = pattern.ex_floats[0] if pattern.ex_floats[0] >= 0.0 else speed
+        turn_speed = conditional_speed(0)
         direction_max_times = pattern.ex_ints[0]
     state = 2 if pattern.flags & 0x02 else 3 if pattern.flags & 0x04 else 4 if pattern.flags & 0x08 else 1
     return Bullet(
@@ -229,7 +292,16 @@ def spawn_pattern_envelope(
     if pattern.count1 <= 0 or pattern.count2 <= 0:
         raise ValueError("resolved bullet counts must be positive")
     speed = max(abs(pattern.speed1), abs(pattern.speed2))
-    return (_spawned_bullet(pattern, origin[0], origin[1], 0.0, speed),)
+    return (
+        _spawned_bullet(
+            pattern,
+            origin[0],
+            origin[1],
+            0.0,
+            speed,
+            effect_envelope=True,
+        ),
+    )
 
 
 def periodic_births(

@@ -214,6 +214,14 @@ class EnemyBody:
 
 
 @dataclass(frozen=True)
+class FloatInterval:
+    """Closed finite support used only by bounded source forecasts."""
+
+    low: float
+    high: float
+
+
+@dataclass(frozen=True)
 class BulletPattern:
     """Runtime-resolved EnemyBulletShooter plus its copied collision size."""
 
@@ -222,7 +230,12 @@ class BulletPattern:
     angle2: float
     speed1: float
     speed2: float
-    ex_floats: tuple[float, float, float, float]
+    ex_floats: tuple[
+        float | FloatInterval,
+        float | FloatInterval,
+        float | FloatInterval,
+        float | FloatInterval,
+    ]
     ex_ints: tuple[int, int, int, int]
     count1: int
     count2: int
@@ -363,7 +376,12 @@ class EnemySpawner:
     is_boss: bool = False
     timeout_spell: bool = False
     damageable: bool = True
-    bullet_effect_floats: tuple[float, float, float, float] = (0.0,) * 4
+    bullet_effect_floats: tuple[
+        float | FloatInterval,
+        float | FloatInterval,
+        float | FloatInterval,
+        float | FloatInterval,
+    ] = (0.0,) * 4
     bullet_effect_ints: tuple[int, int, int, int] = (0,) * 4
     death_mode: int = 0
     boss_id: int = -1
