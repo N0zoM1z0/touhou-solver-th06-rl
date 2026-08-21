@@ -262,6 +262,59 @@ def test_exact_life_set_clears_damage_uncertainty_before_ecl_read() -> None:
     assert forecast.covered_frames == 2
 
 
+def test_life_callback_union_expands_integer_rng_in_no_callback_path() -> None:
+    random_int, raw = _instruction(0x10180, 3, 6, 20)
+    struct.pack_into("<ii", raw, 0x0C, -10001, 3)
+    random_int = _with_raw(random_int, raw)
+    main_end, _raw = _instruction(0x10194, -1, -1)
+    callback_end, _raw = _instruction(0x10200, -1, -1)
+    spawner = _spawner(
+        random_int,
+        main_end,
+        ecl_program=(random_int, main_end, callback_end),
+        ecl_subroutines=(0x10180, 0x10200),
+        life=950,
+        interactable=True,
+        damageable=True,
+        life_callback_threshold=900,
+        life_callback_sub=1,
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 400.0),) * 4
+    )
+
+    assert forecast.covered_frames == 4
+    assert forecast.reason == ""
+
+
+def test_callback_prefix_rejects_divergent_rng_continuations() -> None:
+    random_int, raw = _instruction(0x10220, 0, 6, 20)
+    struct.pack_into("<ii", raw, 0x0C, -10001, 3)
+    random_int = _with_raw(random_int, raw)
+    wait, _raw = _instruction(0x10234, 10, 0)
+    main_end, _raw = _instruction(0x10240, -1, -1)
+    callback_end, _raw = _instruction(0x10300, -1, -1)
+    spawner = _spawner(
+        random_int,
+        main_end,
+        ecl_program=(random_int, wait, main_end, callback_end),
+        ecl_subroutines=(0x10220, 0x10300),
+        life=950,
+        interactable=True,
+        damageable=True,
+        life_callback_threshold=900,
+        life_callback_sub=1,
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 400.0),) * 2
+    )
+
+    assert forecast.covered_frames == 1
+    assert "unrepresentable live continuations" in forecast.reason
+
+
 def test_source_commitment_contains_same_frame_enemy_teleport() -> None:
     move, raw = _instruction(0x10000, 0, 43, 24)
     struct.pack_into("<fff", raw, 12, 192.0, 400.0, 0.0)

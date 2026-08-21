@@ -3735,7 +3735,7 @@ def _forecast_ecl_births_with_death_callbacks(
         and earliest_callback < horizon
     )
     if not should_branch:
-        return _forecast_ecl_births_single(
+        return _forecast_single_with_abstract_integer_domains(
             spawner,
             player_positions,
             difficulty,
@@ -3767,7 +3767,7 @@ def _forecast_ecl_births_with_death_callbacks(
     # Zero damage remains physically possible.  Keeping this branch alive is
     # conservative; it also provides the state prefix for each death frame.
     no_callback_spawner = _copy_spawner(spawner, death_callback_sub=-1)
-    no_callback = _forecast_ecl_births_single(
+    no_callback = _forecast_single_with_abstract_integer_domains(
         no_callback_spawner,
         player_positions,
         difficulty,
@@ -3793,11 +3793,12 @@ def _forecast_ecl_births_with_death_callbacks(
         bodies[index].extend(frame_bodies)
     covered_frames = no_callback.covered_frames
     reason = no_callback.reason
+    life_uncertain = no_callback.life_uncertain
 
     for callback_frame in range(earliest_callback, horizon):
         callback_star_state = repeat_star_state
         if callback_frame:
-            prefix = _forecast_ecl_births_single(
+            prefix = _forecast_single_with_abstract_integer_domains(
                 no_callback_spawner,
                 player_positions[:callback_frame],
                 difficulty,
@@ -3825,8 +3826,15 @@ def _forecast_ecl_births_with_death_callbacks(
             callback_source = prefix.next_spawner
             callback_star_state = prefix.repeat_star_state
             if callback_source is None:
-                # The main ECL already despawned this branch before damage
-                # could invoke its callback.
+                if not prefix.finished and callback_frame < covered_frames:
+                    covered_frames = callback_frame
+                    reason = (
+                        prefix.reason
+                        or "death callback prefix has unrepresentable live continuations"
+                    )
+                # A finished prefix really despawned before damage.  A live
+                # abstract union with no scalar continuation is fail-closed
+                # above instead of being mistaken for that despawn.
                 continue
         else:
             callback_source = no_callback_spawner
@@ -3871,7 +3879,7 @@ def _forecast_ecl_births_with_death_callbacks(
             bullet_rank_amount2_low=0,
             bullet_rank_amount2_high=0,
         )
-        callback = _forecast_ecl_births_single(
+        callback = _forecast_single_with_abstract_integer_domains(
             callback_source,
             player_positions[callback_frame:],
             difficulty,
@@ -3908,6 +3916,7 @@ def _forecast_ecl_births_with_death_callbacks(
         ):
             bodies[index].extend(frame_bodies)
         branch_coverage = callback_frame + callback.covered_frames
+        life_uncertain |= callback.life_uncertain
         if branch_coverage < covered_frames:
             covered_frames = branch_coverage
             reason = callback.reason
@@ -3917,6 +3926,7 @@ def _forecast_ecl_births_with_death_callbacks(
         covered_frames,
         reason if covered_frames < horizon else "",
         body_hazards=tuple(tuple(frame) for frame in bodies),
+        life_uncertain=life_uncertain,
     )
 
 
@@ -4017,6 +4027,7 @@ def _forecast_ecl_births_with_life_callbacks(
         bodies[index].extend(frame_bodies)
     covered_frames = no_callback.covered_frames
     reason = no_callback.reason
+    life_uncertain = no_callback.life_uncertain
 
     for callback_frame in range(earliest_callback, horizon):
         if callback_frame:
@@ -4038,11 +4049,19 @@ def _forecast_ecl_births_with_life_callbacks(
                 repeat_star_state,
                 record_death_callback_assignment,
             )
-            if prefix.covered_frames < callback_frame or prefix.next_spawner is None:
+            if prefix.covered_frames < callback_frame:
                 branch_coverage = prefix.covered_frames
                 if branch_coverage < covered_frames:
                     covered_frames = branch_coverage
                     reason = prefix.reason
+                continue
+            if prefix.next_spawner is None:
+                if not prefix.finished and callback_frame < covered_frames:
+                    covered_frames = callback_frame
+                    reason = (
+                        prefix.reason
+                        or "life callback prefix has unrepresentable live continuations"
+                    )
                 continue
             callback_source = prefix.next_spawner
         else:
@@ -4102,6 +4121,7 @@ def _forecast_ecl_births_with_life_callbacks(
         for index, frame_bodies in enumerate(callback.body_hazards, callback_frame):
             bodies[index].extend(frame_bodies)
         branch_coverage = callback_frame + callback.covered_frames
+        life_uncertain |= callback.life_uncertain
         if branch_coverage < covered_frames:
             covered_frames = branch_coverage
             reason = callback.reason
@@ -4111,6 +4131,7 @@ def _forecast_ecl_births_with_life_callbacks(
         covered_frames,
         reason if covered_frames < horizon else "",
         body_hazards=tuple(tuple(frame) for frame in bodies),
+        life_uncertain=life_uncertain,
     )
 
 
@@ -4172,6 +4193,8 @@ def _forecast_abstract_integer_domains(
     record_bullet_release=None,
     repeat_star_state: RepeatStarState | None = None,
     record_death_callback_assignment=None,
+    model_player_damage: bool = True,
+    initial_life_uncertain: bool = False,
 ) -> EclForecast:
     """Union every bounded source integer-RNG control-flow outcome."""
     pending: list[tuple[int, ...]] = [()]
@@ -4203,6 +4226,8 @@ def _forecast_abstract_integer_domains(
             record_bullet_release=record_bullet_release,
             repeat_star_state=repeat_star_state,
             record_death_callback_assignment=record_death_callback_assignment,
+            model_player_damage=model_player_damage,
+            initial_life_uncertain=initial_life_uncertain,
         )
         extent = forecast.unresolved_int_extent
         if extent:
@@ -4271,6 +4296,66 @@ def _forecast_abstract_integer_domains(
         finished=bool(leaves) and all(forecast.finished for forecast in leaves),
         repeat_star_state=common_star_state,
         life_uncertain=any(forecast.life_uncertain for forecast in leaves),
+    )
+
+
+def _forecast_single_with_abstract_integer_domains(
+    spawner: EnemySpawner,
+    player_positions: tuple[tuple[float, float], ...],
+    difficulty: int,
+    rank: int,
+    bullet_sizes: tuple[tuple[float, float], ...],
+    frame_multiplier: float,
+    rng: RngState | None,
+    allow_player_variables: bool,
+    radial_births: bool,
+    abstract_rng: bool,
+    enemy_kill_all_is_noop: bool,
+    *,
+    model_player_damage: bool = True,
+    record_bullet_stop=None,
+    record_bullet_release=None,
+    repeat_star_state: RepeatStarState | None = None,
+    record_death_callback_assignment=None,
+    initial_life_uncertain: bool = False,
+) -> EclForecast:
+    """Expand bounded integer RNG inside one physical callback branch."""
+    if abstract_rng and rng is None:
+        return _forecast_abstract_integer_domains(
+            spawner,
+            player_positions,
+            difficulty,
+            rank,
+            bullet_sizes,
+            frame_multiplier,
+            allow_player_variables,
+            radial_births,
+            enemy_kill_all_is_noop,
+            record_bullet_stop,
+            record_bullet_release,
+            repeat_star_state,
+            record_death_callback_assignment,
+            model_player_damage,
+            initial_life_uncertain,
+        )
+    return _forecast_ecl_births_single(
+        spawner,
+        player_positions,
+        difficulty,
+        rank,
+        bullet_sizes,
+        frame_multiplier,
+        rng,
+        allow_player_variables,
+        radial_births,
+        abstract_rng,
+        enemy_kill_all_is_noop,
+        model_player_damage=model_player_damage,
+        record_bullet_stop=record_bullet_stop,
+        record_bullet_release=record_bullet_release,
+        repeat_star_state=repeat_star_state,
+        record_death_callback_assignment=record_death_callback_assignment,
+        initial_life_uncertain=initial_life_uncertain,
     )
 
 
@@ -4575,6 +4660,8 @@ def forecast_ecl_births(
             record_bullet_release,
             repeat_star_state,
             record_death_callback_assignment,
+            model_player_damage=model_player_damage,
+            initial_life_uncertain=initial_life_uncertain,
         )
     return _forecast_ecl_births_with_life_callbacks(
         spawner,
