@@ -552,6 +552,8 @@ def _forecast_hard_emitter(
     enemy_kill_all_is_noop: bool,
     laser_world: HardLaserWorld | None = None,
     allow_repeat_star: bool = True,
+    force_mutable_laser_pool: bool = False,
+    record_laser_create=None,
 ) -> WorldBirthForecast:
     """Use the compact mutable world only when a reachable laser op needs it."""
     if laser_world is None:
@@ -565,13 +567,15 @@ def _forecast_hard_emitter(
             allow_repeat_star=allow_repeat_star,
             record_laser_create=laser_create_frames.add,
         )
-        if laser_create_frames:
+        if record_laser_create is not None:
+            for frame in sorted(laser_create_frames):
+                record_laser_create(frame)
+        if laser_create_frames and force_mutable_laser_pool:
             # Static Hard projection already enclosed each beam's geometry,
             # but a reachable allocation also changes the global 64-slot pool
             # and may alias another emitter's stale Laser*. Re-run only this
-            # source-reachable window in the mutable world; unrelated laser
-            # subroutines elsewhere in the captured graph do not suppress
-            # bounded RNG/comparison branch unions.
+            # source-reachable window in the mutable world when another
+            # independent laser-effect owner makes pool ordering observable.
             laser_world = HardLaserWorld(snapshot.lasers)
         elif (
             batched.covered_frames == len(player_positions)
@@ -2007,7 +2011,15 @@ def forecast_world_births(
         bullet_stop_frames: list[int] = []
         bullet_release_frames: list[int] = []
         emitter_failures: list[tuple[int, str, bool]] = []
+        timeline = _forecast_hard_timeline_births(
+            snapshot,
+            player_positions,
+        )
+        emitter_forecasts: list[
+            tuple[EnemySpawner, WorldBirthForecast, bool]
+        ] = []
         for emitter in emitters:
+            reachable_laser_creates: set[int] = set()
             forecast = _forecast_hard_emitter(
                 snapshot,
                 emitter,
@@ -2016,7 +2028,46 @@ def forecast_world_births(
                     enemy_kill_all_is_noop
                     or emitter is live_kill_all_issuer
                 ),
+                record_laser_create=reachable_laser_creates.add,
             )
+            emitter_forecasts.append((
+                emitter,
+                forecast,
+                bool(reachable_laser_creates),
+            ))
+        # A lone create-only world is already conservatively enclosed by the
+        # branch-unioned static beam projection; its pool identity cannot be
+        # observed elsewhere.  With two independent owners, allocation order
+        # becomes source-visible, so every statically projected creator must
+        # be replayed through its mutable pool before cross-world validation.
+        independent_laser_owners = (
+            timeline.laser_effect_worlds
+            + sum(
+                int(has_create or forecast.laser_effect_worlds > 0)
+                for _emitter, forecast, has_create in emitter_forecasts
+            )
+        )
+        if independent_laser_owners > 1:
+            emitter_forecasts = [
+                (
+                    emitter,
+                    _forecast_hard_emitter(
+                        snapshot,
+                        emitter,
+                        player_positions,
+                        enemy_kill_all_is_noop=(
+                            enemy_kill_all_is_noop
+                            or emitter is live_kill_all_issuer
+                        ),
+                        force_mutable_laser_pool=True,
+                    ),
+                    has_create,
+                )
+                if has_create and forecast.laser_effect_worlds == 0
+                else (emitter, forecast, has_create)
+                for emitter, forecast, has_create in emitter_forecasts
+            ]
+        for emitter, forecast, _has_create in emitter_forecasts:
             emitter_coverage = forecast.covered_frames
             emitter_reason = forecast.reason
             for frame_index, frame_births in enumerate(forecast.births):
@@ -2044,10 +2095,6 @@ def forecast_world_births(
                     f"emitter {emitter.slot}: {emitter_reason}",
                     emitter.is_boss,
                 ))
-        timeline = _forecast_hard_timeline_births(
-            snapshot,
-            player_positions,
-        )
         for frame_index, frame_births in enumerate(timeline.births):
             births[frame_index].extend(frame_births)
         for frame_index, frame_bodies in enumerate(timeline.body_hazards):

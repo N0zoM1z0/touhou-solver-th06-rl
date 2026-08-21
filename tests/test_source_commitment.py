@@ -785,6 +785,36 @@ def test_one_laser_world_replays_stale_pointer_reuse_in_source_order() -> None:
     assert forecast.laser_hazards[0][0].angle == pytest.approx(0.1)
 
 
+def test_one_create_only_world_keeps_candidate_damage_branch_union() -> None:
+    create = _laser_create_instruction(0x111B0)
+    wait, _raw = _instruction(0x111F0, 10, 0)
+    callback_wait, _raw = _instruction(0x111FC, 10, 0)
+    spawner = _spawner(
+        create,
+        wait,
+        life=100,
+        interactable=True,
+        damageable=True,
+        life_callback_threshold=99,
+        life_callback_sub=1,
+        ecl_program=(create, wait, callback_wait),
+        ecl_subroutines=(create.address, callback_wait.address),
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 400.0),) * 4
+    )
+
+    assert forecast.covered_frames == 4
+    assert forecast.reason == ""
+    # With no second owner, the source-conservative static beam union is
+    # sufficient; forcing one shared mutable state would erase the valid
+    # candidate-damage callback branches.
+    assert forecast.laser_births == 0
+    assert forecast.laser_effect_worlds == 0
+    assert any(forecast.body_hazards)
+
+
 def test_cross_emitter_stale_pointer_reuse_remains_fail_closed() -> None:
     create = _laser_create_instruction(0x111A0)
     creator_end, _raw = _instruction(0x111E0, -1, 0)
