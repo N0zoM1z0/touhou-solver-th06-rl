@@ -605,6 +605,10 @@ def _forecast_live_slots_after_kill_all(
         return result(0, "invalid timeline kill-all lead")
     emitters = tuple(sorted(snapshot.spawners, key=lambda item: item.slot))
     for emitter in emitters:
+        # ENEMYKILLALL explicitly skips bosses.  Their independent envelope
+        # remains authoritative and must neither be replayed nor replaced.
+        if emitter.is_boss:
+            continue
         state: EnemySpawner | None = emitter
         repeat_star_state = snapshot.repeat_star_state
         laser_world = HardLaserWorld(snapshot.lasers)
@@ -734,9 +738,6 @@ def _forecast_live_slots_after_kill_all(
                     )
             if state is None:
                 continue
-        if state.is_boss:
-            continue
-
         try:
             forced = forecast_ecl_forced_kill_all_update(
                 state,
