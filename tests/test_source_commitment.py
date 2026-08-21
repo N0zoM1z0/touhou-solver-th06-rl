@@ -477,7 +477,7 @@ def test_life_callback_union_expands_integer_rng_in_no_callback_path() -> None:
     assert forecast.reason == ""
 
 
-def test_callback_prefix_rejects_divergent_rng_continuations() -> None:
+def test_life_callback_prefix_unions_divergent_rng_continuations() -> None:
     random_int, raw = _instruction(0x10220, 0, 6, 20)
     struct.pack_into("<ii", raw, 0x0C, -10001, 3)
     random_int = _with_raw(random_int, raw)
@@ -500,8 +500,35 @@ def test_callback_prefix_rejects_divergent_rng_continuations() -> None:
         _snapshot(spawner), ((192.0, 400.0),) * 2
     )
 
-    assert forecast.covered_frames == 1
-    assert "unrepresentable live continuations" in forecast.reason
+    assert forecast.covered_frames == 2
+    assert forecast.reason == ""
+
+
+def test_death_callback_prefix_unions_divergent_rng_continuations() -> None:
+    random_int, raw = _instruction(0x10320, 0, 6, 20)
+    struct.pack_into("<ii", raw, 0x0C, -10001, 3)
+    random_int = _with_raw(random_int, raw)
+    wait, _raw = _instruction(0x10334, 10, 0)
+    main_end, _raw = _instruction(0x10340, -1, -1)
+    callback_end, _raw = _instruction(0x10400, -1, -1)
+    spawner = _spawner(
+        random_int,
+        main_end,
+        ecl_program=(random_int, wait, main_end, callback_end),
+        ecl_subroutines=(0x10320, 0x10400),
+        life=70,
+        interactable=True,
+        damageable=True,
+        death_callback_sub=1,
+        death_mode=1,
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(spawner), ((192.0, 400.0),) * 2
+    )
+
+    assert forecast.covered_frames == 2
+    assert forecast.reason == ""
 
 
 def test_source_commitment_contains_same_frame_enemy_teleport() -> None:

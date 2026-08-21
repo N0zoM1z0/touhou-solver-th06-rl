@@ -472,6 +472,33 @@ class EclForecast:
     enemy_kill_all: tuple[bool, ...] = ()
     repeat_star_state: RepeatStarState | None = None
     life_uncertain: bool = False
+    # Alternative live states are correlated with RepeatStar's mutable
+    # accumulator.  ``next_spawner`` remains the exact common scalar state
+    # for callers that cannot consume a branch union; callback composition
+    # uses this lossless form instead.
+    source_continuations: tuple[
+        tuple[EnemySpawner, RepeatStarState | None], ...
+    ] = ()
+
+
+def _source_continuations(
+    forecast: EclForecast,
+) -> tuple[tuple[EnemySpawner, RepeatStarState | None], ...]:
+    if forecast.source_continuations:
+        return forecast.source_continuations
+    if forecast.next_spawner is not None:
+        return ((forecast.next_spawner, forecast.repeat_star_state),)
+    return ()
+
+
+def _unique_source_continuations(
+    continuations: list[tuple[EnemySpawner, RepeatStarState | None]],
+) -> tuple[tuple[EnemySpawner, RepeatStarState | None], ...]:
+    unique: list[tuple[EnemySpawner, RepeatStarState | None]] = []
+    for continuation in continuations:
+        if continuation not in unique:
+            unique.append(continuation)
+    return tuple(unique)
 
 
 def _add_normalize_angle(left: float, right: float) -> float:
@@ -3957,9 +3984,9 @@ def _forecast_ecl_births_with_death_callbacks(
     covered_frames = no_callback.covered_frames
     reason = no_callback.reason
     life_uncertain = no_callback.life_uncertain
+    source_continuations = list(_source_continuations(no_callback))
 
     for callback_frame in range(earliest_callback, horizon):
-        callback_star_state = repeat_star_state
         if callback_frame:
             prefix = _forecast_single_with_abstract_source_domains(
                 no_callback_spawner,
@@ -3987,9 +4014,8 @@ def _forecast_ecl_births_with_death_callbacks(
                     covered_frames = prefix.covered_frames
                     reason = prefix.reason
                 continue
-            callback_source = prefix.next_spawner
-            callback_star_state = prefix.repeat_star_state
-            if callback_source is None:
+            callback_sources = _source_continuations(prefix)
+            if not callback_sources:
                 if not prefix.finished and callback_frame < covered_frames:
                     covered_frames = callback_frame
                     reason = (
@@ -4001,90 +4027,96 @@ def _forecast_ecl_births_with_death_callbacks(
                 # above instead of being mistaken for that despawn.
                 continue
         else:
-            callback_source = no_callback_spawner
+            callback_sources = ((no_callback_spawner, repeat_star_state),)
 
-        # EnemyManager applies the death-mode state transition before
-        # CallEclSub.  Mode zero removes the slot, so the newly assigned
-        # context is never executed on a later update.
-        if callback_source.death_mode == 0:
-            continue
-        if callback_source.death_mode == 1:
+        for callback_source, callback_star_state in callback_sources:
+            # EnemyManager applies the death-mode state transition before
+            # CallEclSub.  Mode zero removes the slot, so the newly assigned
+            # context is never executed on a later update.
+            if callback_source.death_mode == 0:
+                continue
+            if callback_source.death_mode == 1:
+                callback_source = _copy_spawner(
+                    callback_source,
+                    interactable=False,
+                    life=0,
+                )
+            elif callback_source.death_mode == 3:
+                callback_source = _copy_spawner(
+                    callback_source,
+                    life=1,
+                    damageable=False,
+                    death_mode=0,
+                )
+            else:
+                # Mode two and the source switch's unused values retain the
+                # slot and interactability.  Keeping both is conservative
+                # while the callback ECL decides what happens next.
+                callback_source = _copy_spawner(callback_source, life=0)
+
             callback_source = _copy_spawner(
                 callback_source,
-                interactable=False,
-                life=0,
+                death_callback_sub=-1,
+                life_callback_threshold=-1,
+                timer_callback_threshold=-1,
+                next_instruction=callback_instruction,
+                ecl_time=0,
+                ecl_time_float=0.0,
+                ecl_stack=(),
+                bullet_rank_speed_low=-0.5,
+                bullet_rank_speed_high=0.5,
+                bullet_rank_amount1_low=0,
+                bullet_rank_amount1_high=0,
+                bullet_rank_amount2_low=0,
+                bullet_rank_amount2_high=0,
             )
-        elif callback_source.death_mode == 3:
-            callback_source = _copy_spawner(
+            callback = _forecast_single_with_abstract_source_domains(
                 callback_source,
-                life=1,
-                damageable=False,
-                death_mode=0,
+                player_positions[callback_frame:],
+                difficulty,
+                rank,
+                bullet_sizes,
+                frame_multiplier,
+                None,
+                allow_player_variables,
+                radial_births,
+                abstract_rng,
+                enemy_kill_all_is_noop,
+                model_player_damage=model_player_damage,
+                record_bullet_stop=(
+                    None
+                    if record_bullet_stop is None
+                    else lambda frame, offset=callback_frame: record_bullet_stop(
+                        offset + frame
+                    )
+                ),
+                record_bullet_release=(
+                    None
+                    if record_bullet_release is None
+                    else lambda frame, offset=callback_frame: record_bullet_release(
+                        offset + frame
+                    )
+                ),
+                repeat_star_state=callback_star_state,
+                record_death_callback_assignment=(
+                    record_death_callback_assignment
+                ),
+                record_laser_create=record_laser_create,
             )
-        else:
-            # Mode two and the source switch's unused values retain the slot
-            # and interactability.  Keeping both is the conservative hazard
-            # state while the callback ECL decides what happens next.
-            callback_source = _copy_spawner(callback_source, life=0)
-
-        callback_source = _copy_spawner(
-            callback_source,
-            death_callback_sub=-1,
-            life_callback_threshold=-1,
-            timer_callback_threshold=-1,
-            next_instruction=callback_instruction,
-            ecl_time=0,
-            ecl_time_float=0.0,
-            ecl_stack=(),
-            bullet_rank_speed_low=-0.5,
-            bullet_rank_speed_high=0.5,
-            bullet_rank_amount1_low=0,
-            bullet_rank_amount1_high=0,
-            bullet_rank_amount2_low=0,
-            bullet_rank_amount2_high=0,
-        )
-        callback = _forecast_single_with_abstract_source_domains(
-            callback_source,
-            player_positions[callback_frame:],
-            difficulty,
-            rank,
-            bullet_sizes,
-            frame_multiplier,
-            None,
-            allow_player_variables,
-            radial_births,
-            abstract_rng,
-            enemy_kill_all_is_noop,
-            model_player_damage=model_player_damage,
-            record_bullet_stop=(
-                None
-                if record_bullet_stop is None
-                else lambda frame, offset=callback_frame: record_bullet_stop(
-                    offset + frame
-                )
-            ),
-            record_bullet_release=(
-                None
-                if record_bullet_release is None
-                else lambda frame, offset=callback_frame: record_bullet_release(
-                    offset + frame
-                )
-            ),
-            repeat_star_state=callback_star_state,
-            record_death_callback_assignment=record_death_callback_assignment,
-            record_laser_create=record_laser_create,
-        )
-        for index, frame_births in enumerate(callback.births, callback_frame):
-            births[index].extend(frame_births)
-        for index, frame_bodies in enumerate(
-            callback.body_hazards, callback_frame
-        ):
-            bodies[index].extend(frame_bodies)
-        branch_coverage = callback_frame + callback.covered_frames
-        life_uncertain |= callback.life_uncertain
-        if branch_coverage < covered_frames:
-            covered_frames = branch_coverage
-            reason = callback.reason
+            for index, frame_births in enumerate(
+                callback.births, callback_frame
+            ):
+                births[index].extend(frame_births)
+            for index, frame_bodies in enumerate(
+                callback.body_hazards, callback_frame
+            ):
+                bodies[index].extend(frame_bodies)
+            source_continuations.extend(_source_continuations(callback))
+            branch_coverage = callback_frame + callback.covered_frames
+            life_uncertain |= callback.life_uncertain
+            if branch_coverage < covered_frames:
+                covered_frames = branch_coverage
+                reason = callback.reason
 
     return EclForecast(
         tuple(tuple(frame) for frame in births),
@@ -4092,6 +4124,9 @@ def _forecast_ecl_births_with_death_callbacks(
         reason if covered_frames < horizon else "",
         body_hazards=tuple(tuple(frame) for frame in bodies),
         life_uncertain=life_uncertain,
+        source_continuations=_unique_source_continuations(
+            source_continuations
+        ),
     )
 
 
@@ -4196,6 +4231,7 @@ def _forecast_ecl_births_with_life_callbacks(
     covered_frames = no_callback.covered_frames
     reason = no_callback.reason
     life_uncertain = no_callback.life_uncertain
+    source_continuations = list(_source_continuations(no_callback))
 
     for callback_frame in range(earliest_callback, horizon):
         if callback_frame:
@@ -4224,7 +4260,8 @@ def _forecast_ecl_births_with_life_callbacks(
                     covered_frames = branch_coverage
                     reason = prefix.reason
                 continue
-            if prefix.next_spawner is None:
+            callback_sources = _source_continuations(prefix)
+            if not callback_sources:
                 if not prefix.finished and callback_frame < covered_frames:
                     covered_frames = callback_frame
                     reason = (
@@ -4232,69 +4269,70 @@ def _forecast_ecl_births_with_life_callbacks(
                         or "life callback prefix has unrepresentable live continuations"
                     )
                 continue
-            callback_source = prefix.next_spawner
         else:
-            callback_source = no_callback_spawner
-        callback_source = _copy_spawner(
-            callback_source,
-            life=spawner.life_callback_threshold,
-            life_callback_threshold=-1,
-            next_instruction=callback_instruction,
-            ecl_time=0,
-            ecl_time_float=0.0,
-            ecl_stack=(),
-            timer_callback_sub=callback_source.death_callback_sub,
-            bullet_rank_speed_low=-0.5,
-            bullet_rank_speed_high=0.5,
-            bullet_rank_amount1_low=0,
-            bullet_rank_amount1_high=0,
-            bullet_rank_amount2_low=0,
-            bullet_rank_amount2_high=0,
-        )
-        callback = _forecast_ecl_births_with_death_callbacks(
-            callback_source,
-            player_positions[callback_frame:],
-            difficulty,
-            rank,
-            bullet_sizes,
-            frame_multiplier,
-            None,
-            allow_player_variables,
-            radial_births,
-            abstract_rng,
-            enemy_kill_all_is_noop,
-            model_player_damage,
-            (
-                None
-                if record_bullet_stop is None
-                else lambda frame, offset=callback_frame: record_bullet_stop(
-                    offset + frame
-                )
-            ),
-            (
-                None
-                if record_bullet_release is None
-                else lambda frame, offset=callback_frame: record_bullet_release(
-                    offset + frame
-                )
-            ),
-            (
-                prefix.repeat_star_state
-                if callback_frame
-                else repeat_star_state
-            ),
-            record_death_callback_assignment,
-            record_laser_create=record_laser_create,
-        )
-        for index, frame_births in enumerate(callback.births, callback_frame):
-            births[index].extend(frame_births)
-        for index, frame_bodies in enumerate(callback.body_hazards, callback_frame):
-            bodies[index].extend(frame_bodies)
-        branch_coverage = callback_frame + callback.covered_frames
-        life_uncertain |= callback.life_uncertain
-        if branch_coverage < covered_frames:
-            covered_frames = branch_coverage
-            reason = callback.reason
+            callback_sources = ((no_callback_spawner, repeat_star_state),)
+        for callback_source, callback_star_state in callback_sources:
+            callback_source = _copy_spawner(
+                callback_source,
+                life=spawner.life_callback_threshold,
+                life_callback_threshold=-1,
+                next_instruction=callback_instruction,
+                ecl_time=0,
+                ecl_time_float=0.0,
+                ecl_stack=(),
+                timer_callback_sub=callback_source.death_callback_sub,
+                bullet_rank_speed_low=-0.5,
+                bullet_rank_speed_high=0.5,
+                bullet_rank_amount1_low=0,
+                bullet_rank_amount1_high=0,
+                bullet_rank_amount2_low=0,
+                bullet_rank_amount2_high=0,
+            )
+            callback = _forecast_ecl_births_with_death_callbacks(
+                callback_source,
+                player_positions[callback_frame:],
+                difficulty,
+                rank,
+                bullet_sizes,
+                frame_multiplier,
+                None,
+                allow_player_variables,
+                radial_births,
+                abstract_rng,
+                enemy_kill_all_is_noop,
+                model_player_damage,
+                (
+                    None
+                    if record_bullet_stop is None
+                    else lambda frame, offset=callback_frame: record_bullet_stop(
+                        offset + frame
+                    )
+                ),
+                (
+                    None
+                    if record_bullet_release is None
+                    else lambda frame, offset=callback_frame: record_bullet_release(
+                        offset + frame
+                    )
+                ),
+                callback_star_state,
+                record_death_callback_assignment,
+                record_laser_create=record_laser_create,
+            )
+            for index, frame_births in enumerate(
+                callback.births, callback_frame
+            ):
+                births[index].extend(frame_births)
+            for index, frame_bodies in enumerate(
+                callback.body_hazards, callback_frame
+            ):
+                bodies[index].extend(frame_bodies)
+            source_continuations.extend(_source_continuations(callback))
+            branch_coverage = callback_frame + callback.covered_frames
+            life_uncertain |= callback.life_uncertain
+            if branch_coverage < covered_frames:
+                covered_frames = branch_coverage
+                reason = callback.reason
 
     return EclForecast(
         tuple(tuple(frame) for frame in births),
@@ -4302,6 +4340,9 @@ def _forecast_ecl_births_with_life_callbacks(
         reason if covered_frames < horizon else "",
         body_hazards=tuple(tuple(frame) for frame in bodies),
         life_uncertain=life_uncertain,
+        source_continuations=_unique_source_continuations(
+            source_continuations
+        ),
     )
 
 
@@ -4459,6 +4500,11 @@ def _forecast_abstract_source_domains(
         )
         else None
     )
+    source_continuations: list[
+        tuple[EnemySpawner, RepeatStarState | None]
+    ] = []
+    for forecast in leaves:
+        source_continuations.extend(_source_continuations(forecast))
     return EclForecast(
         tuple(tuple(frame) for frame in births),
         covered_frames,
@@ -4468,6 +4514,9 @@ def _forecast_abstract_source_domains(
         finished=bool(leaves) and all(forecast.finished for forecast in leaves),
         repeat_star_state=common_star_state,
         life_uncertain=any(forecast.life_uncertain for forecast in leaves),
+        source_continuations=_unique_source_continuations(
+            source_continuations
+        ),
     )
 
 
