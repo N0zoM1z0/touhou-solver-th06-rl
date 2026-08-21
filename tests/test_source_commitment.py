@@ -1033,6 +1033,8 @@ def test_live_kill_all_rejects_callback_assigned_by_another_slot() -> None:
         kill_wait,
         slot=1,
         life=10_000,
+        is_boss=True,
+        boss_id=0,
         ecl_program=(kill_all, kill_wait),
     )
     snapshot = replace(
@@ -1041,6 +1043,110 @@ def test_live_kill_all_rejects_callback_assigned_by_another_slot() -> None:
     )
 
     forecast = forecast_world_births(snapshot, ((192.0, 400.0),) * 4)
+
+    assert forecast.covered_frames == 1
+    assert "ENEMYKILLALL" in forecast.reason
+
+
+def test_live_boss_kill_all_is_exact_noop_without_external_target() -> None:
+    kill_all, _raw = _instruction(0x19800, 1, 96)
+    wait, _raw = _instruction(0x1980C, -1, 0)
+    boss = _spawner(
+        kill_all,
+        wait,
+        is_boss=True,
+        boss_id=0,
+        ecl_program=(kill_all, wait),
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(boss),
+        ((192.0, 400.0),) * 4,
+    )
+
+    assert forecast.covered_frames == 4
+    assert forecast.reason == ""
+
+
+def test_live_boss_kill_all_rejects_same_call_created_target() -> None:
+    create, raw = _instruction(0x19900, 1, 95, 32)
+    struct.pack_into("<iff", raw, 0x0C, 1, 192.0, 128.0)
+    struct.pack_into("<hh", raw, 0x1C, 100, -1)
+    create = _with_raw(create, raw)
+    kill_all, _raw = _instruction(0x19920, 1, 96)
+    wait, _raw = _instruction(0x1992C, -1, 0)
+    boss = _spawner(
+        create,
+        wait,
+        is_boss=True,
+        boss_id=0,
+        ecl_program=(create, kill_all, wait),
+        ecl_subroutines=(create.address, wait.address),
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(boss),
+        ((192.0, 400.0),) * 4,
+    )
+
+    assert forecast.covered_frames == 1
+    assert "ENEMYCREATE/ENEMYKILLALL" in forecast.reason
+
+
+def test_live_boss_kill_all_rejects_prior_update_created_target() -> None:
+    create, raw = _instruction(0x19940, 0, 95, 32)
+    struct.pack_into("<iff", raw, 0x0C, 1, 192.0, 128.0)
+    struct.pack_into("<hh", raw, 0x1C, 100, -1)
+    create = _with_raw(create, raw)
+    kill_all, _raw = _instruction(0x19960, 1, 96)
+    wait, _raw = _instruction(0x1996C, -1, 0)
+    boss = _spawner(
+        create,
+        wait,
+        is_boss=True,
+        boss_id=0,
+        ecl_program=(create, kill_all, wait),
+        ecl_subroutines=(create.address, wait.address),
+    )
+
+    forecast = forecast_world_births(
+        _snapshot(boss),
+        ((192.0, 400.0),) * 4,
+    )
+
+    assert forecast.covered_frames == 1
+    assert "ENEMYCREATE/ENEMYKILLALL" in forecast.reason
+
+
+def test_live_boss_kill_all_rejects_timeline_created_target() -> None:
+    kill_all, _raw = _instruction(0x19A00, 1, 96)
+    wait, _raw = _instruction(0x19A0C, -1, 0)
+    child_wait, _raw = _instruction(0x19B00, -1, 0)
+    boss = _spawner(
+        kill_all,
+        wait,
+        is_boss=True,
+        boss_id=0,
+        ecl_program=(kill_all, wait),
+    )
+    timeline_end = StageTimelineInstruction(
+        0x2B018, -1, 0, 0, 8, "00" * 8
+    )
+    snapshot = replace(
+        _snapshot(boss),
+        boss_present=False,
+        timeline_instructions=(
+            _timeline_spawn(0x2B000, 0, 0),
+            timeline_end,
+        ),
+        timeline_ecl_program=(child_wait,),
+        ecl_subroutines=(child_wait.address,),
+    )
+
+    forecast = forecast_world_births(
+        snapshot,
+        ((192.0, 400.0),) * 4,
+    )
 
     assert forecast.covered_frames == 1
     assert "ENEMYKILLALL" in forecast.reason

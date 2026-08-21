@@ -192,6 +192,39 @@ def _scheduled_boss_interrupts(
     return tuple(result)
 
 
+def _live_kill_all_has_no_external_target(
+    snapshot: Snapshot,
+    horizon: int,
+) -> bool:
+    """Prove that a live boss cannot see a non-boss slot in this window.
+
+    RunEclTimeline precedes the EnemyManager slot loop, so even a same-lead
+    timeline child would be a target. ECL-created children are checked at the
+    interpreter boundary by callers using ``enemy_kill_all_is_noop``.
+    """
+    if (
+        horizon <= 0
+        or not snapshot.timeline_complete
+        or len(snapshot.spawners) != 1
+        or not snapshot.spawners[0].is_boss
+    ):
+        return False
+    for lead, instruction in scheduled_timeline(
+        snapshot.timeline_instructions,
+        snapshot.timeline_time,
+        stage=snapshot.stage,
+        difficulty=snapshot.difficulty,
+        character=snapshot.character,
+        message_delays=snapshot.timeline_message_delays,
+        current_message_waits=snapshot.timeline_current_message_waits,
+    ):
+        if lead >= horizon:
+            break
+        if 0 <= instruction.opcode <= 7:
+            return False
+    return True
+
+
 def _timeline_interrupt_targets(
     snapshot: Snapshot,
     emitter: EnemySpawner,
@@ -324,6 +357,16 @@ def _forecast_hard_emitter_batched(
                     bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
                     bullet_release_frames=tuple(sorted(bullet_release_frames)),
                 )
+            if enemy_kill_all_is_noop and forecast.created_emitters:
+                return WorldBirthForecast(
+                    tuple(map(tuple, births)),
+                    _project_hazards(births, True),
+                    cursor,
+                    "live kill-all no-target proof ended at ENEMYCREATE",
+                    tuple(map(tuple, bodies)),
+                    bullet_stop_frames=tuple(sorted(bullet_stop_frames)),
+                    bullet_release_frames=tuple(sorted(bullet_release_frames)),
+                )
             state = forecast.next_spawner
             repeat_star_state = forecast.repeat_star_state
             life_uncertain = forecast.life_uncertain
@@ -451,6 +494,11 @@ def _forecast_hard_emitter_with_lasers(
                 bodies[frame_index].extend(forecast.body_hazards[0])
             if forecast.covered_frames < 1:
                 return result(frame_index, forecast.reason)
+            if enemy_kill_all_is_noop and forecast.created_emitters:
+                return result(
+                    frame_index,
+                    "live kill-all no-target proof ended at ENEMYCREATE",
+                )
             state = forecast.next_spawner
             repeat_star_state = forecast.repeat_star_state
             life_uncertain = forecast.life_uncertain
@@ -1860,11 +1908,15 @@ def forecast_world_births(
                 "multiple emitters can overwrite shared repeating-star globals",
                 tuple(tuple(frame) for frame in bodies),
             )
-        # A live emitter's ENEMYKILLALL mutates every later source slot and
-        # cannot be lowered into independent emitter envelopes.  Only the
-        # timeline-child path above owns an exact forced-life replay, so the
-        # ordinary hard worlds always fail closed on this opcode.
-        enemy_kill_all_is_noop = False
+        # Independent emitter envelopes may only record a live boss's
+        # ENEMYKILLALL when the capture and stage timeline prove there is no
+        # external non-boss target. ECL-created children revoke that proof
+        # inside the emitter forecaster. Every other world keeps the ordinary
+        # fail-closed opcode behavior.
+        enemy_kill_all_is_noop = _live_kill_all_has_no_external_target(
+            snapshot,
+            len(player_positions),
+        )
         covered_frames = len(player_positions)
         reason = ""
         laser_births = 0

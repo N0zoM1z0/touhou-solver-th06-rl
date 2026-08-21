@@ -1100,7 +1100,7 @@ def _forecast_ecl_births_single(
     shoot_offset_y: float | FloatInterval = spawner.shoot_offset_y
     abstract_int_cursor = 0
     created_emitters: list[EnemySpawner] = []
-    created_enemy_this_call = False
+    created_enemy_in_forecast = False
     death_anm1 = spawner.death_anm1
     death_anm2 = spawner.death_anm2
     death_anm3 = spawner.death_anm3
@@ -2436,7 +2436,7 @@ def _forecast_ecl_births_single(
                 run_interrupt = struct.unpack_from("<i", raw, 0x0C)[0]
                 continue
             elif instruction.opcode == OPCODE_ENEMY_CREATE:
-                created_enemy_this_call = True
+                created_enemy_in_forecast = True
                 if record_enemy_create is not None:
                     record_enemy_create(frame_index)
                 # SpawnEnemy first runs the newborn's time-zero ECL inline.
@@ -3138,11 +3138,11 @@ def _forecast_ecl_births_single(
                     laser_slots = [-1] * 32
             elif instruction.opcode == OPCODE_ENEMY_KILL_ALL:
                 if enemy_kill_all_is_noop:
-                    if created_enemy_this_call:
+                    if created_enemy_in_forecast:
                         return EclForecast(
                             tuple(map(tuple, births)),
                             frame_index,
-                            "same-frame ENEMYCREATE/ENEMYKILLALL order needs "
+                            "ENEMYCREATE/ENEMYKILLALL order needs "
                             "an exact world event stream",
                         )
                     if not is_boss:
