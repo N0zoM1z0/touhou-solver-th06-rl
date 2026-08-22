@@ -70,6 +70,12 @@ action scorer then exhausted its optimization timebox and was worse than the
 MLP on both splits, with zero final-tie agreement.  This exposes a deeper
 mismatch between compensatory pointwise scores and the known non-compensatory
 collector rule; no learned policy was run online.
+A subsequent preregistered offline factual-probe pilot found exact
+publication/execution alignment and held-out current-root signal for
+observed-shield contraction and physical HIT at supported 16- and 64-frame
+horizons.  This is representation evidence, not a causal action-effect or
+gameplay-improvement result, and it admits neither history nor a learned
+policy.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -527,7 +533,7 @@ L1c residual decomposition & Completed & Train-only scaling remained miscalibrat
 Small current-observation MLP & Negative held-out gate & The fixed 114--32--18 model converged and improved validation NLL to 1.568672, but ECE 0.076007 exceeded the unchanged 0.028732 limit; no canary ran. \\
 L1d target-contract diagnosis & Completed & All propensities were exact; paired train-only continuations rejected sampled-label noise, stopping, and discarded full propensities as sufficient explanations, selecting one structured current-observation scorer. \\
 Shared action-conditioned BC & Inconclusive & Exhausted 10,000 updates at gradient ratio 0.011684; validation KL 0.986686 and reactive agreement 0.655371 were worse than L1d, with zero final-tie agreement. \\
-Current-observation dynamics and factual risk probes & Preregistered, not run & Frozen offline pilot on the L1 8/4 episode split: executed one-frame motion plus shield contraction and HIT at 1, 4, 16, and 64 game frames; no history or policy fit. \\
+Current-observation dynamics and factual risk probes & Positive diagnostic & Published and first executed actions agreed on all 94,162 validation roots; motion MSE ratio was 0.00732. Shield contraction passed at all four horizons and HIT passed at supported 16/64-frame horizons; no history or policy fit. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1102,6 +1108,42 @@ attribution among event scarcity, transparent current-root model
 misspecification, and temporal ambiguity; a positive result leaves history
 unsupported.
 
+The pilot ran at solver commit
+\path{2c2af520b041804cf3a4036adc4d8fd0c3fe4175}.  The train-only fit was
+serialized before the first validation load; the stored result has SHA-256
+\path{4f1bad0d7f6720b4da55dda4927855b88f0249cf7f0ee95ff842255bb3b5ed07},
+and an idempotent rerun reproduced that digest.  The alignment view contained
+193,331 train and 94,162 validation rows.  Published action equaled the first
+witnessed executed action on every validation row.  Executed-action
+$\Delta x,\Delta y$ joint MSE was 0.099123 versus 13.545947 for the global
+mean, a ratio of 0.007318; the decision-root current-action comparator remained
+at 12.486304.  This both passes the frozen gate and rejects a one-frame
+action-label offset as an explanation of the earlier learner results.
+
+The 1-frame HIT target had no positives and the 4-frame target had only 10
+train and 3 validation positives, so both are insufficient rather than failed.
+At 16 frames the 542 validation positives yielded Brier 0.005573 versus
+0.005737 for the train-prevalence constant, with a complete-episode
+candidate-minus-constant 95\% interval of
+$[-0.0002393,-0.0001032]$.  At 64 frames the corresponding 2,748 positives,
+Brier scores, and interval were 0.027221, 0.028629, and
+$[-0.0022318,-0.0008485]$.  Thus both supported HIT horizons pass.  All four
+shield-contraction horizons pass: their candidate-minus-constant interval
+upper endpoints are $-0.012667$, $-0.040741$, $-0.092585$, and $-0.096139$
+at 1, 4, 16, and 64 frames respectively.  The frozen decision is
+\texttt{proceed-current-observation-factual-signal}.
+
+This result rejects only the claim that the portable current root lacks useful
+held-out factual risk signal for this transparent probe.  Window labels
+overlap, so their positive counts are not unique HIT totals.  Prediction under
+the logged action is not a counterfactual action-effect estimate, and the
+joint feature result does not yet isolate incremental action information from
+state information.  The probe is not calibrated for deployment, is not an
+actor or critic, and has not run in Wine.  The next bounded analysis should
+therefore decompose calibration, lifecycle/support, and state-only versus
+incremental action signal before freezing one confirmatory risk model; history
+and IQL remain unadmitted.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1224,9 +1266,10 @@ propensities and localized the residual to flat-model misspecification after
 its other frozen explanations missed their materiality thresholds.  The
 selected shared-action scorer then failed to converge and was worse than L1d
 on both splits, exposing additive-score mismatch with the lexicographic rule.
-The current-observation execution/dynamics and factual-risk pilot is now
-preregistered but has not yet inspected its held-out episodes; there is no
-authorized learned candidate.
+The current-observation execution/dynamics and factual-risk pilot then passed
+its frozen diagnostic gate at supported horizons.  This establishes portable
+current-root factual signal but neither causal action value nor an authorized
+learned candidate.
 
 \section{Threats to Validity}
 
@@ -1288,10 +1331,11 @@ and localized the residual to the flat model's handling of a reconstructible
 action-conditioned lexicographic rule.  The selected shared additive scorer
 then exhausted its timebox and performed worse, with zero agreement on the
 final tie strata.  The known collector distribution remains an exact
-data-plane control.  The next learner evidence is the frozen offline
-current-observation execution/dynamics and factual HIT-risk pilot.  History is
-not admitted by that pilot alone and still requires a separately measured
-temporal-ambiguity attribution.
+data-plane control.  The frozen offline current-observation execution/dynamics
+and factual HIT-risk pilot then passed at its supported horizons.  Its next
+boundary is incremental action signal and calibrated/support-aware factual
+risk, not history or value learning.  History still requires separately
+measured temporal ambiguity.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

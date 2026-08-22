@@ -73,14 +73,17 @@ Current checkpoint:
     agreement 65.5%, and zero focused/lexical final-tie agreement. Its formal
     decision is `inconclusive-l1e-shared-action-optimization-not-converged`;
     no Wine canary is admitted. Do not extend or repair it post hoc.
-11. the next experiment is frozen in
-    `experiments/l2-stage4-factual-probes-v1.json`. It reuses the immutable
-    L1 8/4 whole-episode split and runs no Wine. It first checks one-frame
-    executed-action delta-x/delta-y alignment, then tests current-root
-    action-conditioned observed-shield contraction and exact physical HIT at
-    1, 4, 16, and 64 game-frame horizons with a transparent ridge linear
-    probability probe and complete-episode Brier bootstrap. This pilot never
-    admits history by itself and fits no deployable policy.
+11. retain the completed positive offline L2 factual-probe pilot run at commit
+    `2c2af520b041804cf3a4036adc4d8fd0c3fe4175`. It reused the immutable L1
+    8/4 whole-episode split and ran no Wine. On 94,162 held-out roots,
+    published and first executed actions agreed exactly and the executed-action
+    delta-x/delta-y MSE was 0.00732 times the global comparator. HIT had
+    insufficient support at 1 and 4 frames but passed the complete-episode
+    Brier gate at 16 and 64 frames; observed-shield contraction passed at all
+    four horizons. The decision is
+    `proceed-current-observation-factual-signal`. This is predictive
+    representation evidence only: it admits neither history nor a deployable
+    policy, value learner, Wine canary, or gameplay claim.
 
 Four preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -131,14 +134,17 @@ known from capture and portable current features. They should remain data-plane
 controls rather than forcing a sequence of larger BC models. The next bounded
 question is factual action/execution and HIT-risk learnability, not another
 collector-imitation architecture.
-The frozen factual-probe pilot is the smallest executable form of that
+The completed factual-probe pilot is the smallest executable form of that
 question. Its immediate movement label comes from the first contiguous raw
 Wine transition and its witnessed `executed_action`, not from an aggregated
 decision interval. Its risk labels use fixed game-frame windows and factual
-`life_lost` outcomes only. A negative current-root linear probe must first be
-attributed to event scarcity, transparent-model insufficiency, or temporal
-ambiguity under a separate preregistration; it does not automatically justify
-history, an object encoder, or IQL.
+`life_lost` outcomes only. The successful current-root probe shows that a
+portable transparent vector contains held-out factual risk signal. It does not
+show that current observation is sufficient for optimal control or that the
+action features, rather than state features, cause the improvement. The next
+bounded work should decompose calibration, lifecycle/support, and incremental
+action signal before selecting one confirmatory risk model. History, an object
+encoder, IQL, and Wine evaluation remain unadmitted.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.
