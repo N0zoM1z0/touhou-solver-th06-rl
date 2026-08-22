@@ -1,0 +1,104 @@
+{
+  "auxiliary_targets": [],
+  "comparators": [
+    "frozen-converged-l1c-linear-bc",
+    "per-admissible-mask-laplace-action-frequency-v1"
+  ],
+  "data": {
+    "reuse_without_mutation": true,
+    "source_experiment_id": "l1-stage4-bc-v1",
+    "train_episode_indices": [0, 1, 3, 4, 6, 7, 9, 10],
+    "validation_episode_indices": [2, 5, 8, 11]
+  },
+  "decision": "Does exactly one fixed 32-unit ReLU layer learn the nonlinear current-observation collector rule better than the converged L1c linear model while satisfying the unchanged calibration and train-only convergence gates?",
+  "diagnostic_basis": {
+    "frozen_l1c_decision": "stop-l1c-linear-current-observation",
+    "frozen_l1c_validation_ece": 0.059713330051735285,
+    "frozen_l1c_validation_nll": 1.6916635245653728,
+    "residual_selection": "small-current-observation-mlp",
+    "residual_selection_used_transformed_validation": false,
+    "selection_rationale": "A train-only scalar scale did not meet the calibration limit, while the same 114 current features exactly reconstructed the reactive collector and the remaining 20 percent action draw was declared independent uniform exploration."
+  },
+  "experiment_id": "l1d-stage4-bc-mlp-v1",
+  "fit": {
+    "bootstrap_samples": 2000,
+    "calibration_schema": "th06-rl-top-label-ece-10-equal-width-v2",
+    "calibration_tolerance": 0.02,
+    "decision_epoch_schema": "th06-rl-decision-epoch-v1",
+    "feature_schema": "th06-rl-current-observation-features-v1",
+    "hidden_width": 32,
+    "initialization": "fixed-seed-he-normal",
+    "initialization_rationale": "Zero initialization would make all hidden units symmetric; fixed-seed He-normal weights and zero biases are the minimum deterministic initialization required to test a ReLU hidden layer and are not separately tuned.",
+    "initialization_rng": "numpy-pcg64",
+    "l2": 0.0001,
+    "learning_rate": 0.05,
+    "max_rows_per_split": 400000,
+    "maximum_updates": 10000,
+    "minimum_updates": 100,
+    "model": "masked-one-hidden-relu-softmax",
+    "optimizer": "full-batch-gradient-descent",
+    "relative_gradient_l2_tolerance": 0.01,
+    "seed": 0,
+    "target_schema": "th06-rl-published-executed-action-target-v1",
+    "validation_use": "evaluate exactly once after the train-only stopping rule; never select an update, tolerance, temperature, or optimizer"
+  },
+  "gate": {
+    "calibration": "MLP validation corrected ECE-10 must be no more than corrected action-frequency ECE-10 plus 0.02",
+    "minimum_validation_episodes": 4,
+    "optimization": "after at least 100 updates, final train gradient L2 must be no more than 0.01 times its fixed-seed He initialization value",
+    "optimization_convergence_required": true,
+    "primary_comparator": "frozen-converged-l1c-linear-bc",
+    "proper_score": "the upper endpoint of the 2000-draw whole-episode bootstrap 95% interval for MLP minus frozen L1c validation NLL must be below zero",
+    "secondary_report_only": "also report MLP minus action-frequency validation NLL and its episode-bootstrap interval; it cannot substitute for the direct L1c gate",
+    "timebox": "stop immediately when the train-only gradient criterion passes, or after 10000 full-batch updates; failure to converge is inconclusive and does not reject the representation"
+  },
+  "hypothesis": "The L1c residual is caused by nonlinear current-observation tie-breaking rather than a global probability scale or temporal ambiguity. A single fixed 32-unit ReLU layer over the unchanged portable 114 features will therefore converge, improve held-out complete-episode NLL over frozen L1c with a strictly negative bootstrap upper endpoint, and satisfy the unchanged frequency-plus-0.02 calibration limit.",
+  "non_goals": [
+    "no new Wine collection or online execution",
+    "no mutation, resampling, or frame-wise split of the L1 corpus",
+    "no baseline_action, stage, boss, spell, ECL, RNG, run identity, future fact, or other privileged actor input",
+    "no width, depth, seed, optimizer, learning-rate, L2, update-budget, temperature, or gate sweep",
+    "no history, recurrent model, object-set encoder, auxiliary target, IQL, reward change, or value learning",
+    "no warm start from L1c and no HIT-reduction or NMNB claim"
+  ],
+  "online_canary": {
+    "run_in_this_experiment": false,
+    "run_only_after_joint_gate": true,
+    "scope_if_later_admitted": "one separately preregistered complete natural-RNG original-Wine Lunatic Practice Stage 4 integration run; not training or policy-improvement evidence"
+  },
+  "paths": {
+    "artifact_root": "artifacts/l1d-stage4-bc-mlp-v1",
+    "bc_policy_plugin": "src/th06_rl/policies/small_mlp_behavior_clone.py",
+    "bc_training_module": "src/th06_rl/mlp_bc_training.py",
+    "experiment_plan": "artifacts/l1d-stage4-bc-mlp-v1/experiment-plan.json",
+    "experiment_result": "artifacts/l1d-stage4-bc-mlp-v1/experiment-result.json",
+    "fit_artifact": "artifacts/l1d-stage4-bc-mlp-v1/model/small-mlp-bc.json",
+    "fit_cli": "scripts/fit_small_mlp_behavior_clone.py",
+    "l1d_runner": "scripts/run_l1d_stage4.py",
+    "source_collection_ledger": "artifacts/l1-stage4-bc-v1/collection-ledger.json",
+    "source_corpus_root": "corpora/l1-stage4-bc-v1",
+    "source_diagnosis_preregistration": "experiments/l1c-stage4-residual-diagnosis-v1.json",
+    "source_diagnosis_result": "artifacts/l1c-stage4-residual-diagnosis-v1/diagnosis.json",
+    "source_l1_model": "artifacts/l1-stage4-bc-v1/model/linear-bc.json",
+    "source_l1_result": "artifacts/l1-stage4-bc-v1/experiment-result.json",
+    "source_l1c_model": "artifacts/l1c-stage4-bc-timebox-v1/model/linear-bc.json",
+    "source_l1c_preregistration": "experiments/l1c-stage4-bc-timebox-v1.json",
+    "source_l1c_result": "artifacts/l1c-stage4-bc-timebox-v1/experiment-result.json",
+    "work_log_root": "work_log"
+  },
+  "schema": "th06-rl-l1d-stage4-bc-mlp-prereg-v1",
+  "sha256_bindings": {
+    "bc_policy_plugin": "7d5a63e78eef95f2ab7572cf6b21a90a13b7e8590179b9a38c8d92879f3f1eab",
+    "bc_training_module": "0c52d14d4fb7aca1fe4f26c484c7da1dd4eb7c411209e292b2bcb5cc1c2d28bf",
+    "fit_cli": "e405afead093948a9908d86dcb01927d7dc7a29869c3ee6e881e6f0e0b77bcc8",
+    "l1d_runner": "7989e6230858bc27b25900eea64f20c6707d32a26928df0aeaa6018dfa943f3a",
+    "source_collection_ledger": "614e44b1eab047041337a5ebcee01af3ef672d01a265d856d0dd58c530dc4c87",
+    "source_diagnosis_preregistration": "8e23fcbb813d24b843f0264976be67db63e5f9519ca9bfd37821becefcad8842",
+    "source_diagnosis_result": "e3c25c844c9ec6fdd47388fb3a9690375dcc77c2c7963d30ebfa180eaccce8ce",
+    "source_l1_model": "7b47fee4c261eb8dbde77e3e13391a49cc5771d27e9c4d3d546f6abb695cd245",
+    "source_l1_result": "75810a82c9bf3ec0a1063b0d53e6814243afc08b3319268800a2eaff5ef5bae3",
+    "source_l1c_model": "b7e350ff86103ee803a6c2a856f5509b1a29b5080c02e78e5825de9a9cca16b9",
+    "source_l1c_preregistration": "7a4a2f9b0ea2007664977f6356680e8aed3c01757a48296647c94f9ded7d7a6b",
+    "source_l1c_result": "fac6fd06cd57f93ed276a6c5afa5a3c6c8da9bf8dd42935fac6b876ffe3dc1a1"
+  }
+}

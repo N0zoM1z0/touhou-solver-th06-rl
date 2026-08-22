@@ -50,10 +50,15 @@ Current checkpoint:
    failed the calibration limit, current features reconstructed the reactive
    collector exactly, and the frozen linear model reproduced only 66--67% of
    its choices; the selected ablation is one small current-observation MLP;
-8. preregister that MLP before fitting and keep its corpus, split, 114 inputs,
-   target, comparator, and held-out gate unchanged. Do not add temperature,
-   history, auxiliary targets, IQL, object encoders, or Wine to the same
-   experiment.
+8. retain the preregistered offline L1d experiment in
+   `experiments/l1d-stage4-bc-mlp-v1.json`. It changes only the necessary
+   representation from the linear scorer to a fixed 114--32--18 ReLU MLP and
+   its deterministic He initialization. The corpus, whole-episode split,
+   target, mask, optimizer, learning rate, L2, seed, timebox, train-only stop,
+   and calibration bound remain frozen. Its primary held-out gate is direct
+   episode-bootstrap NLL improvement over converged L1c; fit it once before
+   considering any Wine canary. Do not add temperature, history, auxiliary
+   targets, IQL, object encoders, or Wine to the same experiment.
 
 Three research models have been fitted, but none passed its preregistered
 promotion gate or is an authorized learned candidate. No learned policy has

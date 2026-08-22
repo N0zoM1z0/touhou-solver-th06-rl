@@ -864,6 +864,31 @@ The immutable plan and diagnosis SHA-256 digests are respectively
 and
 \path{e3c25c844c9ec6fdd47388fb3a9690375dcc77c2c7963d30ebfa180eaccce8ce}.
 
+The selected L1d representation ablation is frozen before fitting in
+\path{experiments/l1d-stage4-bc-mlp-v1.json}.  It reuses the immutable 12
+episodes, eight/four whole-episode split, 114 current-observation features,
+shield mask, published executed-action target, learning rate 0.05, L2
+$10^{-4}$, full-batch gradient descent, seed 0, 10,000-update ceiling, and the
+same train-only 0.01 relative-gradient stop.  Its sole representational change
+is a fixed 114--32--18 network with one ReLU hidden layer.  All-zero weights
+would leave the hidden units symmetric, so the one necessary companion change
+is fixed-seed He-normal weights with zero biases; initialization, width, and
+depth are not swept.  There is no history, temperature, auxiliary target,
+privileged collector action, value loss, or new Wine data.
+
+L1d's primary proper-score test is deliberately harder than the original L1
+frequency comparison: the upper endpoint of a 2,000-draw complete-episode
+bootstrap interval for MLP-minus-frozen-L1c validation NLL must be below zero.
+It must also converge under the unchanged train-only criterion and keep
+validation ECE no greater than action-frequency ECE plus 0.02.  Improvement
+over action frequency remains report-only and cannot replace direct evidence
+against the converged linear model.  Validation is evaluated once after the
+train-only stop.  Non-convergence is inconclusive; convergence followed by a
+failed direct-NLL or calibration gate rejects this small current-observation
+MLP.  This offline fit runs no Wine canary and makes no HIT, value-learning, or
+NMNB claim.  Only the joint supervised gate may admit a separately
+preregistered Stage~4 integration canary.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
