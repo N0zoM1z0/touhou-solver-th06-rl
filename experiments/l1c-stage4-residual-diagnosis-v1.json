@@ -1,0 +1,64 @@
+{
+  "data": {
+    "reuse_without_mutation": true,
+    "source_experiment_id": "l1-stage4-bc-v1",
+    "train_episode_indices": [0, 1, 3, 4, 6, 7, 9, 10],
+    "validation_episode_indices": [2, 5, 8, 11]
+  },
+  "decision": "Is the converged L1c calibration residual explained by one global probability scale, nonlinear current-observation tie-breaking, or temporal ambiguity in the collector target?",
+  "diagnosis": {
+    "bootstrap_samples": 2000,
+    "bootstrap_seed": 0,
+    "calibration_limit": 0.02873176278051103,
+    "evaluate_scaled_validation": false,
+    "exploration_probability": 0.2,
+    "fit_deployable_model": false,
+    "global_scale_fit": "minimize unregularized NLL over one positive scalar using training episodes only",
+    "reliability_bins": 10
+  },
+  "experiment_id": "l1c-stage4-residual-diagnosis-v1",
+  "hypothesis": "If the only failed L1c gate is caused by a global probability-scale residual, one train-only positive logit scale will improve training NLL and bring training ECE below the already frozen 0.0287317628 limit without changing any argmax; otherwise exact feature-only reconstruction of the reactive collector will select one small current-observation nonlinear ablation rather than history.",
+  "non_goals": [
+    "no Wine collection or execution",
+    "no mutation of the corpus or frozen L1c artifact",
+    "no deployable fit, promotion decision, HIT-reduction claim, or NMNB claim",
+    "no scaled-validation evaluation before the next ablation is selected and preregistered",
+    "no MLP, temperature export, history, auxiliary head, or IQL in this diagnosis",
+    "no privileged baseline_action actor input"
+  ],
+  "paths": {
+    "artifact_root": "artifacts/l1c-stage4-residual-diagnosis-v1",
+    "bc_diagnostics_module": "src/th06_rl/bc_residual_diagnostics.py",
+    "bc_features_module": "src/th06_rl/bc_features.py",
+    "bc_training_module": "src/th06_rl/bc_training.py",
+    "diagnosis_result": "artifacts/l1c-stage4-residual-diagnosis-v1/diagnosis.json",
+    "diagnosis_runner": "scripts/diagnose_l1c_residuals.py",
+    "experiment_plan": "artifacts/l1c-stage4-residual-diagnosis-v1/experiment-plan.json",
+    "source_collection_ledger": "artifacts/l1-stage4-bc-v1/collection-ledger.json",
+    "source_corpus_root": "corpora/l1-stage4-bc-v1",
+    "source_l1c_model": "artifacts/l1c-stage4-bc-timebox-v1/model/linear-bc.json",
+    "source_l1c_preregistration": "experiments/l1c-stage4-bc-timebox-v1.json",
+    "source_l1c_result": "artifacts/l1c-stage4-bc-timebox-v1/experiment-result.json",
+    "work_log_root": "work_log"
+  },
+  "schema": "th06-rl-l1c-residual-diagnosis-prereg-v1",
+  "selection_rule": {
+    "history_for_behavior_target": false,
+    "invariant_failure": "stop and repair feature-only reactive reconstruction before any ablation",
+    "nonlinear_branch": "small-current-observation-mlp",
+    "nonlinear_condition": "the global-scale condition fails while current features reconstruct the reactive collector exactly",
+    "scale_branch": "train-only-scalar-calibration",
+    "scale_condition": "the train-only optimum improves train NLL and train ECE is at most the frozen 0.0287317628 limit",
+    "selection_uses_transformed_validation": false
+  },
+  "sha256_bindings": {
+    "bc_diagnostics_module": "76560a48d7efdc751f45b36bc2c977c9cb566f1743e9536f7e584f5afe70ebd7",
+    "bc_features_module": "e9fa01e65fd728cc3d5f9172c3c9591c192ca313b144bea41e5d2ae3aa095182",
+    "bc_training_module": "20b2d3a2a9796e2f16967461beb80b5caf8e64c1ab52757d6da6016367cf320a",
+    "diagnosis_runner": "39776e000b88c7e18949a3fb48ecf558af9db6dd3e93ba6f46436cf08d9aa52d",
+    "source_collection_ledger": "614e44b1eab047041337a5ebcee01af3ef672d01a265d856d0dd58c530dc4c87",
+    "source_l1c_model": "b7e350ff86103ee803a6c2a856f5509b1a29b5080c02e78e5825de9a9cca16b9",
+    "source_l1c_preregistration": "7a4a2f9b0ea2007664977f6356680e8aed3c01757a48296647c94f9ded7d7a6b",
+    "source_l1c_result": "fac6fd06cd57f93ed276a6c5afa5a3c6c8da9bf8dd42935fac6b876ffe3dc1a1"
+  }
+}

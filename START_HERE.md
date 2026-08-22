@@ -45,10 +45,14 @@ Current checkpoint:
    `171d92b95c55331ab23bec73226b6b81de6f64cf`. It changed only the maximum
    update count, reached the same train-only 0.01 gradient-ratio criterion at
    update 4,631, passed held-out NLL, and failed the unchanged calibration gate;
-7. do not run a Wine canary or continue optimizing the same fit. The next
-   action is a read-only residual decomposition followed by one separately
-   preregistered representation ablation. IQL, combined history/architecture
-   changes, object encoders, and parallel Wine collection remain disabled.
+7. run only the frozen read-only L1c residual diagnosis next. Its branch
+   selection fits one positive logit scale on training episodes only and never
+   evaluates scaled validation; otherwise exact current-feature reconstruction
+   selects one small nonlinear current-observation ablation. It fits no
+   deployable model and runs no Wine;
+8. do not run a Wine canary or continue optimizing the same fit. IQL, combined
+   history/architecture changes, object encoders, and parallel Wine collection
+   remain disabled.
 
 Three research models have been fitted, but none passed its preregistered
 promotion gate or is an authorized learned candidate. No learned policy has

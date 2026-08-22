@@ -426,7 +426,15 @@ evaluating validation exactly once after stopping.  No optimizer,
 hyperparameter, representation, comparator, or gate changes.  L1c reached the
 gradient gate and failed calibration, rejecting this linear current-observation
 candidate under the frozen joint gate.  A read-only residual decomposition may
-choose one subsequent representation ablation; L2 is not yet admitted.
+choose one subsequent representation ablation; L2 is not yet admitted.  That
+diagnosis is frozen before execution: it may fit one positive global logit scale
+on training episodes only, but it does not evaluate the scaled validation
+distribution or fit a deployable model.  If train calibration is repaired, it
+selects a scalar-calibration experiment; otherwise exact feature-only reactive
+reconstruction selects one small current-observation nonlinear model.  History
+is not a candidate for this behavior target because the declared collector
+distribution is a current-root reactive choice plus an independent uniform
+draw.
 
 \paragraph{L2: one representation change.}
 Add a short, fixed physical/action history and simple factual heads for HIT
@@ -497,6 +505,7 @@ Action frequency & Evaluated comparator & Validation NLL 2.286394 and ECE 0.0087
 Current-observation BC & Negative held-out gate & Validation NLL 2.014976 beat action frequency, but ECE 0.124251 exceeded the frozen 0.028749 bound; no Wine canary ran. \\
 Current-observation BC convergence follow-up & Inconclusive & Validation NLL improved to 1.720755 and ECE to 0.055148, but 2,000 updates ended at gradient ratio 0.0196 rather than the frozen 0.01 threshold; no canary ran. \\
 Current-observation BC timebox extension & Negative held-out gate & The identical fit converged at update 4,631 and validation NLL improved to 1.691664, but ECE 0.059713 exceeded the unchanged 0.028732 limit; no canary ran. \\
+L1c residual decomposition & Preregistered, not run & Read-only train-selected discrimination among global scale, nonlinear current-root ranking, and temporal ambiguity; no scaled-validation evaluation or deployable fit. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -820,6 +829,18 @@ nonlinear current-observation expressivity from missing temporal information.
 One read-only residual decomposition and then one separately frozen
 representation ablation are admissible; continued optimization of the same fit,
 an online canary, combined history/architecture changes, and IQL are not.
+
+The residual protocol is frozen in
+\path{experiments/l1c-stage4-residual-diagnosis-v1.json}.  It binds the L1c
+model and result, replays the same eight/four whole-episode split, and first
+reproduces all frozen metrics.  A one-dimensional positive logit scale is fit
+by training NLL only.  Branch selection uses its training NLL and ECE plus an
+exact reconstruction of the reactive baseline from the 114 current features;
+the scaled validation distribution remains unread.  A successful train-only
+scale selects one separately preregistered scalar-calibration validation.
+Otherwise, exact current-feature reconstruction selects one small nonlinear
+current-observation model.  Failure of the reconstruction invariant stops the
+ladder rather than silently selecting history.  This diagnosis has not yet run.
 
 \subsection{E4: minimal offline policy improvement}
 
