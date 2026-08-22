@@ -153,13 +153,17 @@ Current checkpoint:
     rate by `0.003094`. Its decision is
     `reject-observed-primitive-set-h16-hazard`; no fresh confirmation, Wine,
     policy, or value fit occurred.
-20. before fitting another representation or value method, freeze one L2j
-    probability-optimization test. It must retain the exact L2i data, tokens,
-    architecture, initialization, minibatch order, optimizer, epochs,
-    comparators, and evaluation gates, changing only direct sigmoid Brier to
-    unweighted BCE-with-logits. This tests the observed rare-positive
-    vanishing-gradient/saturation mechanism; it is not scalar calibration,
-    class weighting, a loss sweep, or evidence that the object set works.
+20. retain the frozen, not-yet-run L2j loss-only experiment in
+    `experiments/l2j-logscore-primitive-hazard-v1.json`. It retains the exact
+    L2i data, tokens, architecture, initialization, minibatch order, optimizer,
+    epochs, comparators, and evaluation gates, changing only direct sigmoid
+    Brier to unweighted BCE-with-logits. In addition to every L2i gate, its new
+    paired gate requires Brier below frozen L2i object-full with a complete-
+    episode bootstrap upper endpoint below zero and at least six favorable
+    episodes. It must reproduce frozen L2f and L2i scores exactly. This tests
+    the observed rare-positive vanishing-gradient/saturation mechanism; it is
+    not scalar calibration, class weighting, a loss sweep, or evidence that
+    the object set works.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has

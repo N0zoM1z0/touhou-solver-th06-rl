@@ -62,9 +62,9 @@ The completed cap-48 L2i current-root set used only the exact four-frame AABB
 and laser primitives already published by the observed shield. Its recorder,
 bounded-export, and overall action-ablation contracts passed, but object gain,
 exploration/lifecycle action, calibration, and probability-surface gates
-failed; it is not an admitted representation. The next frozen change may only
-replace direct sigmoid Brier optimization with unweighted BCE-with-logits on
-the otherwise identical L2i model and rows. It tests the observed
+failed; it is not an admitted representation. The frozen L2j change replaces
+only direct sigmoid Brier optimization with unweighted BCE-with-logits on the
+otherwise identical L2i model and rows. It tests the observed
 rare-positive saturation mechanism and may select fresh confirmation only.
 It may not add prior outcome, propensity, lifecycle label, absolute frame,
 source identity, raw engine fields, or future fact, and it never widens the

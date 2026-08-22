@@ -595,6 +595,7 @@ Direct action-conditioned h16 hazard & Negative formal gate; positive algorithm 
 Uniform-shield-target weighted h16 hazard & Negative action-measure gate & Exact weights passed, but weighted full Brier 0.00454350 was worse than frozen L2f at 0.00449955; overall, low-propensity, nonbaseline, pre-first-HIT, and candidate-bound gates failed.  No fresh confirmation ran. \\
 Fixed short portable-history h16 hazard & Negative representation gate & Exact 16-root history improved point Brier, but temporal, exploratory-action, pre-first-HIT, and raw-boundedness gates failed.  No fresh confirmation ran. \\
 Observed-primitive-set h16 hazard & Negative representation/surface gate & Object-full Brier 0.00473906 was worse than scalar-only 0.00468783; low-propensity and pre-first-HIT action deltas reversed, and 65.05\% of full probabilities saturated below $10^{-7}$.  No fresh confirmation ran. \\
+Log-score primitive-set h16 hazard & Preregistered, not run & The exact L2i model changes only unweighted training loss from direct sigmoid Brier to BCE-with-logits and adds a paired frozen-L2i Brier gate.  Passing can select fresh confirmation only. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1745,6 +1746,21 @@ therefore changes only L2i training loss to BCE-with-logits.  It retains every
 row, token, architecture, optimizer, epoch, comparator, and evaluation gate;
 it is not scalar calibration, class weighting, a loss sweep, or admission of
 object sets, value learning, fresh confirmation, or Wine.
+
+L2j is preregistered in
+\path{experiments/l2j-logscore-primitive-hazard-v1.json}.  Its unweighted
+\texttt{BCEWithLogitsLoss} uses positive and negative class weights exactly
+one.  The L2i initialization, minibatch permutations, AdamW settings, 40
+epochs, batch size 4096, seed 20260846, 8,929-parameter architecture, cap-48
+tokens, eight loader workers, and 32 fit threads remain exact.  All L2i
+object-information, action, support, lifecycle, calibration, saturation, and
+export gates remain.  One additional complete-episode bootstrap compares L2j
+object-full against frozen L2i object-full using seed 20260853; its upper 95\%
+endpoint must be below zero with at least six of eight episode directions
+favorable.  Frozen L2f and L2i Brier/NLL must reproduce within $10^{-12}$.
+The train artifact is serialized before reused L2d loads.  Passing every gate
+can select wholly fresh confirmation only; no validation checkpoint selection,
+new Wine data, policy, value model, or online run is admitted.
 
 \subsection{E4: minimal offline policy improvement}
 
