@@ -605,6 +605,7 @@ Log-score primitive-set h16 hazard & Negative loss/surface gate; positive mechan
 Current-action/h16 target audit & Decisive collection-boundary diagnosis & The initial action lasted a median one frame, while 1,079/1,085 h16 positives first hit after it ended; the low-propensity figure was 157/158.  The factual target is behavior-continuation risk, not supported action value. \\
 Four-root randomized action exposure & Passed collection boundary after bounded audit erratum & Two serial complete Stage 4 pilots finished with 18 and 12 HITs and zero Bomb.  The immutable as-run result rejected only because the checker omitted five preregistered control-dead-end interruptions.  A separately hashed read-only erratum changed no facts or thresholds and passed all seven gates: 12,936 eligible groups, 93.68\% complete intended execution, 0.217\% dead ends, and 92 h16-positive starts.  No model or learned policy ran. \\
 Twelve-root randomized intention protocol & Passed collection and support boundary & Two serial complete Stage 4 pilots finished with 19 and 23 HITs and zero Bomb.  All seven gates passed: 4,227 eligible groups, 207--266 assignments per action, 80.65\% complete intended execution, 0.338\% dead ends, and 31/4,262 accepted h12 HIT positives.  All positives followed the declared control-dead-end mediator.  This admits only a separately frozen serial training collection; no model ran. \\
+Randomized-intention direct-Brier hazard & Preregistered, not run & Sixteen new serial complete Stage 4 episodes freeze ten train and six untouched validation slots; the two pilots join train only.  One paired depth-3, 64-round fit compares the 15-feature group-start/action model with its six-feature state-only control.  Selection requires joint support, proper-score, episode-bootstrap action-ablation, calibration, and raw-bound gates; no online policy runs. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1979,6 +1980,40 @@ decision is
 serial complete-episode split and test held-out proper score, calibration, and
 action ablation before any Wine canary or value learner.
 
+L2m freezes that experiment in
+\path{experiments/l2m-stage4-intention-hazard-v1.json}.  It reuses the two L2l
+episodes as pilot-train-only and collects 16 new serial normal-speed natural-RNG
+complete Stage 4 episodes: indices 0--9 are train and 10--15 are untouched
+validation.  All slots, policy seeds, and the no-HIT-retry stopping rule are
+fixed before collection.  At the pilot rate, the resulting 12/6 episode split
+is expected to contain approximately 186/93 positives and occupy about 6 GiB;
+the frozen support floors are 128/64 positives.  Every validation episode must
+contain a positive, validation must contain at least 10,000 negatives, and each
+action needs at least 800/400 accepted train/validation rows.  These are
+admission gates, never adaptive collection or retry criteria.
+
+The only learner is a paired depth-3, 64-round gradient-boosted direct-Brier
+regressor.  The full model receives the 15 portable current-root and randomized
+intended-action features already used by the factual probes; its same-
+architecture state-only control receives exactly the first six features.  Both
+use unweighted group rows, one CPU thread, fixed seed and hyperparameters, no
+early stopping, no class weighting, and no sweep.  The train fit is serialized
+before the six validation learner datasets are loaded.  Group identity,
+propensity, mediator labels, hit offset, split identity, and future facts are
+not inputs.
+
+The decisive action gate requires the complete-episode bootstrap upper 95\%
+endpoint of full-minus-state-only Brier below zero and at least five of six
+episode directions favorable.  Full-minus-frozen-train-prevalence-constant
+Brier must independently have an upper endpoint below zero.  The full model's
+absolute calibration-in-the-large is at most 0.0025, equal-width ECE is at most
+0.005 and no more than 0.001 worse than state-only, and both raw prediction
+surfaces clip at most 0.1\% of rows.  All collection, support, proper-score,
+calibration, and raw-bound gates must pass jointly.  Passing selects only
+export/inference-parity work and a separately preregistered bounded original-
+Wine canary; it does not itself admit online inference, history, a value
+learner, or a gameplay claim.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -2259,8 +2294,10 @@ completed on attempt one and all seven gates passed, including 31 accepted h12
 positives among 4,262 labels.  All positives followed the explicit
 control-dead-end mediator, so the result establishes feasible randomized
 intention data but not learned action value.  A separately frozen serial
-training collection is now admitted; no learner has yet run and value learning
-remains later.
+training collection is now admitted.  L2m freezes that next step as 16 new
+serial episodes, a 12/6 train/validation inventory after adding the two pilots
+to train, and one paired direct-Brier full-versus-state-only fit.  No learner
+has yet run and value learning remains later.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

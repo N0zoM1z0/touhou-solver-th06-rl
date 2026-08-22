@@ -224,6 +224,21 @@ Current checkpoint:
     this is valid intention-to-treat support, not proof of direct action-value
     discrimination. No model ran. The result selects only a separately frozen
     serial training collection with a complete-episode split.
+24. run only the frozen L2m collection/fit in
+    `experiments/l2m-stage4-intention-hazard-v1.json`. It collects sixteen new
+    serial complete Stage 4 episodes with ten train and six untouched
+    validation slots; the two L2l pilots join train only. The sole learner is a
+    paired depth-3, 64-round direct-Brier regressor over the same portable
+    group-start features, once with randomized-action geometry and once with
+    only the six state features. There is no class weighting, fit sweep,
+    history, object encoder, calibration transform, or validation-driven
+    change. Collection support must pass before the single fit; the fit is
+    serialized before validation learner rows are loaded. Selection requires
+    complete-episode Brier intervals against both state-only and the train-
+    prevalence constant, at least five of six favorable action-ablation episode
+    directions, fixed calibration/raw-bound gates, and the frozen split support.
+    A pass admits only export/parity work and a separately preregistered Wine
+    canary. Parallel Wine and online learned inference remain prohibited here.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has

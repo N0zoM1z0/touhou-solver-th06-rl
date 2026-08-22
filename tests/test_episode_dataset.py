@@ -14,6 +14,11 @@ from th06_rl.action_exposure_audit_v2 import (
     audit_episode as audit_exposure_episode_v2,
     audit_hit_target_episode,
 )
+from th06_rl.action_intention_dataset import (
+    action_exposure_target_rows,
+    load_action_intention_dataset,
+    summarize_target_rows,
+)
 from th06_rl.bc_features import (
     FEATURE_NAMES,
     features_from_policy_context,
@@ -459,11 +464,30 @@ def test_action_exposure_v2_retains_pre_next_assignment_hit_target(tmp_path) -> 
 
     exposure_audit = audit_exposure_episode_v2(run_dir, exposure_roots=4)
     target_audit = audit_hit_target_episode(run_dir, exposure_roots=4)
+    target_rows = action_exposure_target_rows(run_dir, exposure_roots=4)
+    dataset = load_action_intention_dataset(
+        (run_dir,), exposure_roots=4, workers=1
+    )
 
     assert exposure_audit["contract_violation_count"] == 0
     assert target_audit["status"]["accepted-label-0"] == 1
     assert target_audit["status"]["accepted-label-1"] == 1
     assert target_audit["hit_offsets"] == {"1": 1}
+    assert [row.label for row in target_rows] == [True, False]
+    assert target_rows[0].control_dead_end_before_outcome is True
+    assert summarize_target_rows(target_rows) == {
+        key: target_audit[key]
+        for key in (
+            "group_starts",
+            "status",
+            "accepted_actions",
+            "positive_actions",
+            "hit_offsets",
+        )
+    }
+    assert dataset.rows == 2
+    assert dataset.labels.tolist() == [True, False]
+    assert dataset.inventory[0]["positive_after_control_dead_end"] == 1
 
 
 def test_unexecuted_publication_has_no_action_conditioned_successor(tmp_path) -> None:

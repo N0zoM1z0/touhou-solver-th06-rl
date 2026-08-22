@@ -143,6 +143,14 @@ assigned action. The result admits only a separately preregistered serial
 complete-episode training collection and held-out action-ablation test; it does
 not admit parallel collection, a learned online policy, or a gameplay claim.
 
+L2m preserves this estimand exactly. Its full model receives only the portable
+group-start root and randomized intended action; its paired state-only control
+receives the same root with every action-relative feature removed. Assignment
+probability, group ID, override/dead-end labels, hit offset, split identity, and
+future transitions are audit/evaluation provenance, never model inputs. The
+two pilot episodes are train-only, and the six new validation episodes are
+learner-loaded only after the single train fit is serialized.
+
 It may not add prior outcome, propensity, lifecycle label, absolute frame,
 source identity, raw engine fields, or future fact, and it never widens the
 observed shield. One offline expected-HIT value method follows only after a

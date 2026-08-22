@@ -131,6 +131,15 @@ versioned factual exposure recorder/auditor. It fits no learner. The online
 actor observation is unchanged; exposure identifiers and propensities remain
 recorder provenance only. Parallel Wine is explicitly excluded.
 
+L2m is the active end-to-end supervised gate. It keeps the identical 12-root
+collector and adds only a versioned group loader plus one paired probability
+model. Sixteen new fixed serial episodes are split ten train and six validation;
+the two L2l pilots are train-only. A depth-3, 64-round direct-Brier regressor
+uses the 15 portable current-root/action features, while its paired state-only
+control removes the nine action-relative features. Fit settings are frozen,
+unweighted, and single-shot. The fit artifact is serialized before validation
+learner rows are loaded. No history, primitive set, IQL, or online policy runs.
+
 ## Current evidence
 
 - E0 completed Practice Stages 4–6 and one six-stage route. The route recorded
@@ -200,6 +209,14 @@ recorder provenance only. Parallel Wine is explicitly excluded.
   HIT positives. The positives covered 14/18 actions and all occurred after a
   recorded control dead end. This admits a separately preregistered serial
   training collection, not a fitted model or policy claim.
+- L2m is preregistered with sixteen new serial episodes: ten train and six
+  untouched validation, plus the two L2l pilots in train only. At the pilot
+  rate this sizes to roughly 186 train and 93 validation positives. Frozen
+  support floors are 128/64. Its decisive gate is whole-episode Brier for the
+  full randomized-intention model minus the same-architecture state-only model,
+  with the upper 95% endpoint below zero and at least five of six validation
+  episode directions favorable. Calibration, constant-baseline, raw-bound,
+  and exact collection gates must also pass jointly.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final

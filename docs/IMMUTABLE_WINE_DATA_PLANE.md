@@ -82,6 +82,15 @@ outcome, incomplete no-HIT groups, and episode-end truncation remain explicit
 censoring reasons. Group IDs and propensities are audit fields, not actor
 inputs.
 
+The L2m loader is a versioned derived product and deliberately does not modify
+the L2l-frozen auditor. Regression checks reproduce the frozen pilot target
+counts exactly. The learner matrix contains only the 15 portable scalar and
+action-relative group-start features; labels and mediator diagnostics are held
+separately. The state-only comparator selects the first six columns of the same
+matrix. Train and validation inventories retain complete-episode run/manifest
+hashes, and validation rows are constructed only after the train fit artifact
+is written.
+
 Decision-row HIT totals must sum exactly to the raw complete-episode HIT total.
 Rows with no policy intervention are context inside an interval, not new
 behavior-policy samples. A policy invocation with no publication remains an
