@@ -45,14 +45,15 @@ Current checkpoint:
    `171d92b95c55331ab23bec73226b6b81de6f64cf`. It changed only the maximum
    update count, reached the same train-only 0.01 gradient-ratio criterion at
    update 4,631, passed held-out NLL, and failed the unchanged calibration gate;
-7. run only the frozen read-only L1c residual diagnosis next. Its branch
-   selection fits one positive logit scale on training episodes only and never
-   evaluates scaled validation; otherwise exact current-feature reconstruction
-   selects one small nonlinear current-observation ablation. It fits no
-   deployable model and runs no Wine;
-8. do not run a Wine canary or continue optimizing the same fit. IQL, combined
-   history/architecture changes, object encoders, and parallel Wine collection
-   remain disabled.
+7. retain the completed read-only L1c residual diagnosis from commit
+   `a4e8232fbae5e3c4df9ecb8d7a787c5138d54e32`. A train-only global scale
+   failed the calibration limit, current features reconstructed the reactive
+   collector exactly, and the frozen linear model reproduced only 66--67% of
+   its choices; the selected ablation is one small current-observation MLP;
+8. preregister that MLP before fitting and keep its corpus, split, 114 inputs,
+   target, comparator, and held-out gate unchanged. Do not add temperature,
+   history, auxiliary targets, IQL, object encoders, or Wine to the same
+   experiment.
 
 Three research models have been fitted, but none passed its preregistered
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -73,7 +74,10 @@ validation NLL to 1.691664, but its ECE was 0.059713 against the unchanged
 0.028732 limit. Insufficient optimization time is no longer a sufficient
 explanation. The linear current-observation candidate is rejected under the
 joint gate; short history and offline value learning remain blocked pending a
-single-variable representation experiment.
+single-variable representation experiment. The read-only residual diagnosis
+then rejected a global scale as sufficient on train, proved that current
+features exactly determine the reactive collector, and selected one small
+current-observation MLP. No scaled validation distribution was inspected.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.

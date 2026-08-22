@@ -56,7 +56,9 @@ follow-up reached its train-only convergence criterion but failed the unchanged
 calibration gate.  The fitted current-observation
 behavior clones improved held-out action log loss over action frequency but
 none passed all of its separately frozen promotion requirements; none was
-evaluated online.
+evaluated online.  A read-only residual diagnosis rejected a global
+probability scale as sufficient and selected one small current-observation
+nonlinear ablation without inspecting scaled validation.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -505,7 +507,7 @@ Action frequency & Evaluated comparator & Validation NLL 2.286394 and ECE 0.0087
 Current-observation BC & Negative held-out gate & Validation NLL 2.014976 beat action frequency, but ECE 0.124251 exceeded the frozen 0.028749 bound; no Wine canary ran. \\
 Current-observation BC convergence follow-up & Inconclusive & Validation NLL improved to 1.720755 and ECE to 0.055148, but 2,000 updates ended at gradient ratio 0.0196 rather than the frozen 0.01 threshold; no canary ran. \\
 Current-observation BC timebox extension & Negative held-out gate & The identical fit converged at update 4,631 and validation NLL improved to 1.691664, but ECE 0.059713 exceeded the unchanged 0.028732 limit; no canary ran. \\
-L1c residual decomposition & Preregistered, not run & Read-only train-selected discrimination among global scale, nonlinear current-root ranking, and temporal ambiguity; no scaled-validation evaluation or deployable fit. \\
+L1c residual decomposition & Completed & Train-only scaling remained miscalibrated; current features reconstructed the collector exactly while the linear model reproduced only 66--67\% of its reactive choices, selecting one small current-observation MLP. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -840,7 +842,27 @@ the scaled validation distribution remains unread.  A successful train-only
 scale selects one separately preregistered scalar-calibration validation.
 Otherwise, exact current-feature reconstruction selects one small nonlinear
 current-observation model.  Failure of the reconstruction invariant stops the
-ladder rather than silently selecting history.  This diagnosis has not yet run.
+ladder rather than silently selecting history.
+
+The diagnosis ran at solver commit
+\path{a4e8232fbae5e3c4df9ecb8d7a787c5138d54e32}.  The positive train-NLL
+optimum was logit scale 1.032470 (temperature 0.968551) and changed no argmax.
+It improved train NLL only from 1.679447 to 1.678613 and train ECE from
+0.058741 to 0.046387, still above the frozen 0.028732 limit.  The scaled
+validation distribution was not evaluated.  Current features reconstructed
+the reactive baseline on every one of 193,331 train and 94,162 validation
+rows, ruling out temporal ambiguity for the collector target; its remaining
+20\% choice is an independent declared uniform draw.  The linear model agreed
+with the reactive action on only 67.05\% of train and 66.40\% of validation
+rows.  The exact collector oracle had train/validation NLL 1.004524/1.006665
+and validation ECE 0.000756, so this gap is not irreducible exploration noise.
+The preregistered selection is therefore one small current-observation MLP,
+with temperature, history, auxiliary targets, and value learning excluded.
+
+The immutable plan and diagnosis SHA-256 digests are respectively
+\path{a05cd1f70f2e689eb5018cf3393dd30c3681006ae7cf84b834cc5193b8e3bbab}
+and
+\path{e3c25c844c9ec6fdd47388fb3a9690375dcc77c2c7963d30ebfa180eaccce8ce}.
 
 \subsection{E4: minimal offline policy improvement}
 
@@ -956,8 +978,9 @@ initial fit plus two optimization-only follow-ups.  The initial model improved
 held-out likelihood but failed calibration and was never executed online.  The
 bounded diagnosis is complete; offline-only L1b improved held-out metrics but
 did not converge within its frozen timebox and is inconclusive.  L1c then
-converged and failed the unchanged calibration gate.  There is no authorized
-learned candidate.
+converged and failed the unchanged calibration gate.  The read-only residual
+diagnosis selected one small current-observation MLP without reading scaled
+validation.  There is no authorized learned candidate.
 
 \section{Threats to Validity}
 
@@ -1010,8 +1033,10 @@ fit.  L1b improved held-out likelihood and calibration without a representation
 change but exhausted its optimizer timebox before the frozen gradient gate.
 L1c changed only that ceiling, reached the train-only gate, and still failed
 held-out calibration.  The linear current-observation candidate is therefore
-rejected under the joint gate; the next change must isolate one representation
-capacity rather than combine history, nonlinear architecture, and value learning.
+rejected under the joint gate.  Train-only scale correction was insufficient,
+current features exactly reconstructed the collector, and the next frozen
+change is one small current-observation MLP rather than combined history,
+calibration, auxiliary, or value learning.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
