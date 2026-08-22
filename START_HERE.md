@@ -84,6 +84,14 @@ Current checkpoint:
     `proceed-current-observation-factual-signal`. This is predictive
     representation evidence only: it admits neither history nor a deployable
     policy, value learner, Wine canary, or gameplay claim.
+12. the single-variable L2b attribution is frozen in
+    `experiments/l2b-incremental-action-v1.json`. It removes exactly the nine
+    action-relative features and refits the same ridge probability model on the
+    same training episodes. It then compares frozen full versus state-only HIT
+    Brier at the already-supported 16/64-frame horizons. The four validation
+    episodes have already been evaluated by L2, so this is explicitly a
+    reused-heldout attribution and never independent confirmation. No Wine,
+    history, value learner, or policy fit is admitted.
 
 Four preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has

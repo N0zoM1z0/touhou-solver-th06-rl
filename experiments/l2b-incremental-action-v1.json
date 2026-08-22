@@ -1,0 +1,80 @@
+{
+  "data": {
+    "independent_confirmation": false,
+    "reuse_without_mutation": true,
+    "reuses_previously_evaluated_validation": true,
+    "source_experiment_id": "l2-stage4-factual-probes-v1",
+    "train_episode_indices": [0, 1, 3, 4, 6, 7, 9, 10],
+    "validation_episode_indices": [2, 5, 8, 11]
+  },
+  "decision": "Did the nine action-relative features add held-out physical-HIT signal beyond the six portable state-only features in the frozen positive L2 probe?",
+  "diagnosis": {
+    "bootstrap_samples": 2000,
+    "bootstrap_seed": 20260823,
+    "calibration_bins": 10,
+    "feature_ablation": "remove every action-relative feature",
+    "horizons_game_frames": [1, 4, 16, 64],
+    "max_rows_per_split_per_horizon": 400000,
+    "model": "standardized-ridge-linear-probability",
+    "ridge_l2": 0.001,
+    "source_brier_reproduction_tolerance": 1e-12,
+    "state_only_feature_names": [
+      "player_x",
+      "player_y",
+      "power",
+      "log1p_bullet_count",
+      "log1p_laser_count",
+      "shield_action_count"
+    ],
+    "supported_hit_horizons": [16, 64],
+    "validation_use": "load reused validation exactly once after serializing the train-only state-only fit; do not tune or claim independent confirmation"
+  },
+  "experiment_id": "l2b-incremental-action-v1",
+  "fits_policy": false,
+  "gate": {
+    "history_admitted": false,
+    "primary": "at least one frozen supported HIT horizon has a complete-episode bootstrap upper endpoint below zero for full minus state-only Brier",
+    "shield_comparison": "secondary attribution reported at every horizon",
+    "source_full_probe_reproduction_required": true,
+    "value_learning_admitted": false
+  },
+  "hypotheses": {
+    "H1_incremental_action_signal": "At one or both already-supported 16/64-frame physical-HIT horizons, the frozen full current-root/action probe has a complete-episode bootstrap upper bound below zero for Brier minus an otherwise identical state-only ridge probe.",
+    "H2_state_signal_only": "If H1 fails after exact source reproduction, retain the state-only current-root risk representation and do not claim that the pilot established action-relative HIT information.",
+    "H3_reused_holdout_limit": "This attribution reuses validation episodes whose full-model scores are already known. It may select the next bounded representation question but cannot serve as independent confirmation or online promotion evidence."
+  },
+  "non_goals": [
+    "no new feature, target, horizon, regularization, model class, optimizer, corpus, or split",
+    "no counterfactual successor, causal action-effect claim, actor, critic, reward, IQL, OPE, history, object encoder, or Wine run",
+    "no tuning from the already observed validation result and no claim of independent confirmation",
+    "calibration bins and per-episode deltas are descriptive attribution only and cannot alter the frozen decision"
+  ],
+  "online_wine": false,
+  "paths": {
+    "artifact_root": "artifacts/l2b-incremental-action-v1",
+    "diagnosis_runner": "scripts/diagnose_l2b_incremental_action.py",
+    "diagnostics_module": "src/th06_rl/factual_probe_diagnostics.py",
+    "experiment_plan": "artifacts/l2b-incremental-action-v1/experiment-plan.json",
+    "experiment_result": "artifacts/l2b-incremental-action-v1/experiment-result.json",
+    "source_collection_ledger": "artifacts/l1-stage4-bc-v1/collection-ledger.json",
+    "source_corpus_root": "corpora/l1-stage4-bc-v1",
+    "source_l1_model": "artifacts/l1-stage4-bc-v1/model/linear-bc.json",
+    "source_l1_result": "artifacts/l1-stage4-bc-v1/experiment-result.json",
+    "source_l2_fit": "artifacts/l2-stage4-factual-probes-v1/train-only-fit.json",
+    "source_l2_preregistration": "experiments/l2-stage4-factual-probes-v1.json",
+    "source_l2_result": "artifacts/l2-stage4-factual-probes-v1/experiment-result.json",
+    "state_only_fit_artifact": "artifacts/l2b-incremental-action-v1/state-only-train-fit.json",
+    "work_log_root": "work_log"
+  },
+  "schema": "th06-rl-l2b-incremental-action-prereg-v1",
+  "sha256_bindings": {
+    "diagnosis_runner": "781f3aea8a4d213e2159faa15a103c2e87e5efb1fb05b4ff029194f7d3de40ef",
+    "diagnostics_module": "c70db498223162b505db0509860e8545a49f2da9b8f17350321ece3039954f5d",
+    "source_collection_ledger": "614e44b1eab047041337a5ebcee01af3ef672d01a265d856d0dd58c530dc4c87",
+    "source_l1_model": "7b47fee4c261eb8dbde77e3e13391a49cc5771d27e9c4d3d546f6abb695cd245",
+    "source_l1_result": "75810a82c9bf3ec0a1063b0d53e6814243afc08b3319268800a2eaff5ef5bae3",
+    "source_l2_fit": "be7b17b6b5399f97f55afd3f0f37cc9ed192e7476141d8966b3a9db2c46ebc07",
+    "source_l2_preregistration": "86644ec89081e76d55e5a29599ac6b0be95d35ff20c5cc1b07084c2b39cbfac7",
+    "source_l2_result": "4f1bad0d7f6720b4da55dda4927855b88f0249cf7f0ee95ff842255bb3b5ed07"
+  }
+}

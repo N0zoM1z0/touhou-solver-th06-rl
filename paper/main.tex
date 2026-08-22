@@ -534,6 +534,7 @@ Small current-observation MLP & Negative held-out gate & The fixed 114--32--18 m
 L1d target-contract diagnosis & Completed & All propensities were exact; paired train-only continuations rejected sampled-label noise, stopping, and discarded full propensities as sufficient explanations, selecting one structured current-observation scorer. \\
 Shared action-conditioned BC & Inconclusive & Exhausted 10,000 updates at gradient ratio 0.011684; validation KL 0.986686 and reactive agreement 0.655371 were worse than L1d, with zero final-tie agreement. \\
 Current-observation dynamics and factual risk probes & Positive diagnostic & Published and first executed actions agreed on all 94,162 validation roots; motion MSE ratio was 0.00732. Shield contraction passed at all four horizons and HIT passed at supported 16/64-frame horizons; no history or policy fit. \\
+Incremental action factual-risk ablation & Preregistered, not run & Remove all nine action-relative features from the frozen ridge probe and compare full versus state-only HIT Brier at 16/64 frames; reused held-out attribution, not independent confirmation. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1144,6 +1145,21 @@ therefore decompose calibration, lifecycle/support, and state-only versus
 incremental action signal before freezing one confirmatory risk model; history
 and IQL remain unadmitted.
 
+The first of those attributions is frozen in
+\path{experiments/l2b-incremental-action-v1.json}.  L2b changes one surface:
+it removes the nine action-relative fields---clearance knownness/value,
+projected endpoint, boundary reserve, current-input equality, direction, and
+focus---while retaining the first six state fields, ridge penalty, labels,
+horizons, corpus, and split.  It serializes the train-only state model before
+loading validation, reproduces the frozen full probe within $10^{-12}$ Brier,
+and asks whether the full-minus-state-only complete-episode Brier interval has
+an upper endpoint below zero at either already-supported 16- or 64-frame HIT
+horizon.  Calibration bins, per-episode deltas, and shield-target comparisons
+are descriptive only.  Because L2 already evaluated these four validation
+episodes, L2b is explicitly reused-heldout attribution rather than independent
+confirmation or promotion evidence.  Either outcome still admits no history,
+value learner, policy, or Wine run.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1269,7 +1285,8 @@ on both splits, exposing additive-score mismatch with the lexicographic rule.
 The current-observation execution/dynamics and factual-risk pilot then passed
 its frozen diagnostic gate at supported horizons.  This establishes portable
 current-root factual signal but neither causal action value nor an authorized
-learned candidate.
+learned candidate.  One state-only reused-heldout attribution is preregistered
+to determine whether action-relative features add to that signal.
 
 \section{Threats to Validity}
 
@@ -1334,8 +1351,9 @@ final tie strata.  The known collector distribution remains an exact
 data-plane control.  The frozen offline current-observation execution/dynamics
 and factual HIT-risk pilot then passed at its supported horizons.  Its next
 boundary is incremental action signal and calibrated/support-aware factual
-risk, not history or value learning.  History still requires separately
-measured temporal ambiguity.
+risk, not history or value learning.  The incremental-action attribution is
+frozen but not yet run; history still requires separately measured temporal
+ambiguity.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
