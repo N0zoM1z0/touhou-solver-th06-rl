@@ -54,8 +54,14 @@ not stabilize low-propensity or known-nonbaseline action signal. Exact behavior
 propensity and baseline identity remain offline-only diagnostics or weights and
 may never become actor inputs. Observed-shield set size retains its existing
 portable current-root feature role. The next admitted change is one fixed short
-portable history under the unweighted direct-hazard measure. One offline
-expected-HIT value method follows only after that representation gate.
+portable history under the unweighted direct-hazard measure. It contains only
+16 prior consecutive eligible policy roots whose intervals are each exactly one
+game frame, plus their then-published actions. Any non-unit interval resets the
+history. A prior outcome, propensity, lifecycle label, absolute frame, or future
+fact never enters. Rows without a complete causal prefix are excluded rather
+than padded.
+One offline expected-HIT value method follows only after that representation
+gate.
 Object-set/recurrent encoders, alternative survival objectives, CQL after IQL,
 ensembles, OPE, active collection, learned dynamics/MPC, and real-Wine branch
 acquisition require separate evidence gates. A learned prediction scores

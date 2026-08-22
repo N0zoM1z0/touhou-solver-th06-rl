@@ -132,13 +132,17 @@ Current checkpoint:
     The full raw surface also clipped 13.53% of evaluation rows. Its decision is
     `reject-weighted-h16-hazard`; action-measure mismatch is rejected as the
     primary L2f root cause. No fresh confirmation or Wine run occurred.
-18. preregister one fixed short portable-history h16 experiment before fitting
-    it. Return to the unweighted L2f Brier measure and frozen current-root model
-    so temporal history is the only core representation change. It must retain
-    exact causal root ordering, whole-episode splits, behavior-continuation
-    labels, forbidden-feature rejection, and the low-propensity/nonbaseline and
-    pre-first-HIT boundaries. Passing can select wholly fresh confirmation only;
-    value learning and Wine remain blocked.
+18. run only the frozen offline L2h experiment in
+    `experiments/l2h-fixed-history-hazard-v1.json`. It returns to unweighted
+    L2f Brier and adds exactly 16 prior consecutive learning-eligible policy
+    roots whose intervals are each exactly one game frame, oldest to newest,
+    before the current root. Each past root contains
+    the same portable 15-field vector for the action actually published then;
+    no outcome, lifecycle, propensity, absolute frame, padding, or future fact
+    enters. Three identical-capacity fits compare history-full, current-only,
+    and history with current action-relative fields removed on exactly the same
+    rows. Passing can select wholly fresh confirmation only; value learning and
+    Wine remain blocked.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has

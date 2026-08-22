@@ -1547,6 +1547,58 @@ nonbaseline, and pre-first-HIT views.  If history fails, the next boundary is
 the information discarded by the bounded current-root object summary, not a
 weight sweep or immediate value learner.
 
+L2h is preregistered in
+\path{experiments/l2h-fixed-history-hazard-v1.json}.  A history-ready row has
+exactly 16 immediately preceding, consecutive, learning-eligible policy roots.
+Every one of those prior root intervals must span exactly one game frame; a
+non-unit interval resets the history rather than bridging a HIT, respawn, or
+capture gap.
+Each past root contributes the unchanged 15 portable L2 fields evaluated for
+the action actually published at that past root; fields are ordered oldest to
+newest before the current 15-field action-conditioned root.  A row without the
+full prefix is excluded rather than padded.  No prior outcome, HIT/lifecycle
+indicator, behavior propensity, baseline identity, absolute frame, source
+fact, or future fact is present.  At online inference the same ring buffer can
+be updated only after a published action, so the representation has an exact
+causal export contract.
+
+All three L2h fits retain L2f's 64 depth-3 trees, learning rate,
+regularization, deterministic 16-thread CPU execution, unweighted h16 Brier
+objective, and train/evaluation episode identities.  The history-full fit uses all 255
+fields.  The current-only comparator uses the final 15 fields on exactly the
+same history-ready rows.  The current-action-ablated-history comparator retains
+all 240 past fields plus the six current state fields and removes exactly the
+nine current action-relative fields.  Thus the first comparison tests temporal
+information and the second tests current-action discrimination conditional on
+that history, without changing model family or row support.
+
+The train-only artifact is serialized before reused L2d loads.  Selection
+requires complete-episode Brier intervals below zero for history-full minus
+current-only and history-full minus current-action-ablated history, each with at
+least six favorable episode directions.  The latter action comparison must
+also pass below-propensity-0.025, known-nonbaseline, and pre-first-HIT support
+views with intervals below zero and at least six favorable directions.  The
+full candidate alone must satisfy the 0.001 raw-clipping limit; calibration-in-
+the-large must be within 0.002 and its ECE may exceed the action-ablated
+comparator by at most 0.001.  Passing selects wholly fresh complete-episode
+confirmation only.  If temporal gain and exploratory action signal remain
+absent, a bounded current-root object-set representation becomes the next
+candidate; history length, tree, weighting, and value-method sweeps remain
+unadmitted.
+
+A read-only pre-fit audit was completed before freezing or evaluating any L2h
+model.  The eight train episodes contain 192,791 factual h16 current rows;
+190,469 retain a valid history, with 1,105 positives.  The eight reused L2d
+episodes contain 188,791 current rows; 186,615 retain a valid history, with
+1,075 positives.  Hence the reset rule drops only 2,322 train rows and 2,176
+evaluation rows.  On evaluation history-ready rows there remain 156 positives
+below behavior propensity 0.025, 170 known-nonbaseline positives, and 96
+pre-first-HIT positives, all above their frozen support thresholds.  The
+history elapsed-game-frame minimum, median, and maximum are all exactly 16 in
+both splits.  The all-current frozen-L2f evaluation Brier also reproduces at
+0.004807849266974402.  A repeated 16-thread fixture fit serialized identically;
+thread count is frozen for runtime only and is not an algorithmic ablation.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
