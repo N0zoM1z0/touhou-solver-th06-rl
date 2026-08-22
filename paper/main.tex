@@ -9,6 +9,7 @@
 \usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage{float}
+\usepackage{longtable}
 \usepackage[numbers,sort&compress]{natbib}
 \usepackage{xurl}
 \usepackage[hidelinks]{hyperref}
@@ -89,6 +90,10 @@ episodes then independently reproduced the 16-frame proper-score increment,
 including the preregistered nonbaseline point and pre-first-HIT boundaries, but
 failed calibration readiness.  The predictive representation is confirmed;
 causal action value, history, and online policy remain unadmitted.
+A subsequent train-only two-parameter Platt surface repaired the frozen global
+calibration limits but worsened Brier against both the uncalibrated full and
+state-only probes, including the nonbaseline and pre-first-HIT views.  Scalar
+calibration is therefore rejected; no fresh confirmation or policy was run.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -527,15 +532,26 @@ constraint they solve.
 
 \subsection{Algorithm and policy record}
 
-\begin{table}[H]
-\centering
 \small
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.22\linewidth}
-                    >{\raggedright\arraybackslash}p{0.20\linewidth}
-                    >{\raggedright\arraybackslash}p{0.50\linewidth}@{}}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.22\linewidth}
+                       >{\raggedright\arraybackslash}p{0.20\linewidth}
+                       >{\raggedright\arraybackslash}p{0.50\linewidth}@{}}
+\caption{Algorithm record at this checkpoint.  ``Not run'' means no fit and no
+online learned candidate, not an unreported negative result.}
+\label{tab:algorithm-record}\\
 \toprule
 Policy or method & Status & Evidence or admission condition \\
 \midrule
+\endfirsthead
+\toprule
+Policy or method & Status & Evidence or admission condition \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{Continued on next page} \\
+\endfoot
+\bottomrule
+\endlastfoot
 Reactive scorer & Executed control & E0 completed one route with 108 HITs; this is infrastructure evidence, not a learned-policy result. \\
 20\% uniform-shield mixture & Executed collection & Twelve new serial Stage 4 episodes completed on attempt 1 with 139 factual HITs; this is a training inventory, not policy-improvement evidence. \\
 Action frequency & Evaluated comparator & Validation NLL 2.286394 and ECE 0.008749 on the frozen four-episode split. \\
@@ -548,17 +564,16 @@ L1d target-contract diagnosis & Completed & All propensities were exact; paired 
 Shared action-conditioned BC & Inconclusive & Exhausted 10,000 updates at gradient ratio 0.011684; validation KL 0.986686 and reactive agreement 0.655371 were worse than L1d, with zero final-tie agreement. \\
 Current-observation dynamics and factual risk probes & Positive diagnostic & Published and first executed actions agreed on all 94,162 validation roots; motion MSE ratio was 0.00732. Shield contraction passed at all four horizons and HIT passed at supported 16/64-frame horizons; no history or policy fit. \\
 Incremental action factual-risk ablation & Positive, weak attribution & Full beat state-only HIT Brier at 16 frames by a barely negative episode interval but not at 64; full calibration was worse. Shield contraction improved robustly at all horizons. Reused heldout, not confirmation. \\
+Support/lifecycle decomposition & Completed diagnostic & The old h16 increment was baseline-equal and reversed on known-nonbaseline rows; pre-first-HIT remained favorable.  No fit or policy. \\
+Fresh h16 factual-risk confirmation & Positive signal, not policy-ready & Eight new complete episodes reproduced the full-versus-state Brier increment in all episode directions and passed weak nonbaseline and pre-first-HIT point gates, but failed calibration readiness. \\
+Train-only Platt calibration & Negative probability-surface gate & The two-parameter monotone fit converged and passed calibration limits, but worsened h16 Brier versus both uncalibrated full and state-only and reversed both diagnostic point deltas. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
 Deep Sets, recurrence, ensembles, active collection, learned MPC, branching & Not run & Each requires its distinct L2, L5, or L6 gate; none is active architecture. \\
 SABER-RL composite & Not admitted & Its survival, recurrence, uncertainty, collection, and branching claims must each pass their separate rung before a combined-method experiment exists. \\
-\bottomrule
-\end{tabular}
-\caption{Algorithm record at this checkpoint.  ``Not run'' means no fit and no
-online learned candidate, not an unreported negative result.}
-\label{tab:algorithm-record}
-\end{table}
+\end{longtable}
+\normalsize
 
 \section{Experimental Protocol}
 
@@ -1284,6 +1299,49 @@ nonbaseline ranking, causal action effect, calibrated action value, or online
 candidate.  The next bounded experiment remains offline and may change only
 the train-only probability/calibration surface.
 
+That experiment is frozen in
+\path{experiments/l2e-train-only-calibration-v1.json}.  L2e changes only the
+probability surface: a two-parameter affine-logistic Platt mapping is fit on the
+original eight L2 train episodes over the frozen, unclipped h16 full ridge
+score.  The mapping has no actor inputs of its own and cannot change the
+ordering of that scalar score.  The fit was serialized before the already
+inspected L2d episodes were loaded.  Those eight episodes provide a one-time
+selection evaluation, not independent confirmation.  The primary gates
+require complete-episode Brier improvement over both uncalibrated full and
+state-only, preservation of the known-nonbaseline and pre-first-HIT point
+boundaries, and the unchanged L2d calibration limits.
+
+L2e ran at solver commit
+\path{9004e387249f1a1b3a2c2c92e3da05333a470733}.  The fit and result SHA-256
+values are
+\path{ae3e25a2b440b5afc8aa83dacf5f71f8c260c88898694ee0bd651d7c405e7720}
+and
+\path{dbe9d9bb58f442ec14c3e0ea2e2416ab68e4e3d7affec2c052c9ae7fadb0a9d8}.
+The damped-Newton fit converged in five accepted steps with final gradient
+infinity norm $5.73\times10^{-11}$; its raw-score slope was positive.  Source
+reproduction was exact.
+
+On the 188,791 reused L2d rows, calibrated-full Brier was 0.0056111, worse
+than uncalibrated full at 0.0055114 and state-only at 0.0055610.  The
+calibrated-minus-uncalibrated interval was
+$[-2.62\times10^{-5},2.21\times10^{-4}]$, and the calibrated-minus-state
+interval was $[-8.07\times10^{-5},1.78\times10^{-4}]$; both point estimates
+were positive.  Known-nonbaseline and pre-first-HIT calibrated-minus-state
+point deltas were likewise positive, and only two and three of eight episode
+directions favored calibrated full.  In contrast, calibration-in-the-large
+improved from 0.001931 to $-0.000185$ and ECE improved from 0.001976 to
+0.001553, so the unchanged calibration-readiness limits passed.
+
+The formal decision is \texttt{reject-train-only-platt-calibration}.  The
+surface slightly improved reused-evaluation logistic NLL while regressing the
+preregistered Brier target.  It removed clipped zeros but expanded the number
+of predictions at least 0.1 from 26 to 1,404; most populated higher bins
+overpredicted factual event rates.  Thus a global logistic remapping of this
+linear-probability score is not sufficient.  No post-hoc calibration family,
+fresh confirmation, history, value learner, or online policy is admitted.  A
+future direct train-only probability model would be a new experiment and must
+align its training proper score with its selection proper score.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1419,7 +1477,11 @@ route/tie-breaking context.  Eight fresh episodes independently confirmed the
 overall 16-frame proper-score increment and pre-first-HIT direction.  The
 nonbaseline point gate also passed, but only three of eight episode directions
 favored full, and calibration readiness failed; value learning remains
-unadmitted.
+unadmitted.  The subsequent train-only Platt fit then passed the global
+calibration limits but worsened Brier against both frozen comparators and in
+the nonbaseline and pre-first-HIT views.  This rejects scalar calibration of
+the frozen ridge score without weakening the confirmed predictive-signal
+claim.
 
 \section{Threats to Validity}
 
@@ -1491,8 +1553,12 @@ baseline-equal and reversed sign on known nonbaseline actions.  Fresh
 confirmation subsequently reproduced the overall signal on all eight episode
 directions and a weak negative nonbaseline point delta, while failing the
 unchanged calibration-readiness gate.  The next boundary is one train-only
-calibration/probability model, not history or value learning; history still
-requires separately measured temporal ambiguity.
+calibration/probability model, not history or value learning.  The first such
+test, a two-parameter monotone Platt surface, repaired global calibration but
+failed its proper-score and signal-preservation gates and is rejected.  Any
+direct probability-model test requires a new preregistration with aligned
+training and selection proper scores; history still requires separately
+measured temporal ambiguity.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

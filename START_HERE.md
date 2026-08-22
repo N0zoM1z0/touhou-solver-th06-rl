@@ -94,8 +94,29 @@ Current checkpoint:
     `proceed-action-relative-current-root-signal`, but these were reused
     validation episodes: this is attribution, not independent confirmation,
     causal action value, or permission for Wine, history, or IQL.
+13. retain the completed L2c support/lifecycle diagnosis recorded at commit
+    `c17839cbaed0643e567193ee8dc2e630931b70cf`. It reproduced the source
+    scores exactly, localized the old h16 increment to baseline-equal rows,
+    retained a favorable pre-first-HIT point direction, and froze a fresh
+    confirmation. It fit no model and admitted no history or value learner.
+14. retain the completed L2d fresh confirmation recorded at commit
+    `c2d285a47c56e5dae0278fc837585394481f070b`. All eight new serial Stage 4
+    episodes passed on attempt one,
+    retained 91 physical HITs and zero Bomb, and independently reproduced the
+    h16 full-versus-state Brier increment in all eight episode directions. The
+    known-nonbaseline point gate passed weakly, the pre-first-HIT gate passed,
+    and calibration readiness failed. Its decision is
+    `confirm-predictive-signal-calibration-not-ready`.
+15. retain the completed negative offline L2e calibration experiment run at
+    commit `9004e387249f1a1b3a2c2c92e3da05333a470733`. A train-only
+    two-parameter Platt surface converged, reproduced the L2d source scores
+    exactly, and passed the frozen calibration limits, but worsened Brier
+    against both uncalibrated full and state-only. It also reversed the
+    nonbaseline and pre-first-HIT point deltas. Its decision is
+    `reject-train-only-platt-calibration`; no fresh confirmation, policy,
+    history, or value learning is admitted.
 
-Four preregistered research fits have completed, but none passed its
+Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
 been run online. A complete route with many HITs is still a successful
 infrastructure baseline when the factual and control contracts pass.
@@ -155,6 +176,15 @@ action features, rather than state features, cause the improvement. The next
 bounded work should decompose calibration, lifecycle/support, and incremental
 action signal before selecting one confirmatory risk model. History, an object
 encoder, IQL, and Wine evaluation remain unadmitted.
+That decomposition and fresh confirmation are now complete. Fresh episodes
+confirmed the h16 incremental predictive signal, including the frozen weak
+nonbaseline point and pre-first-HIT boundaries, but failed calibration
+readiness. The first train-only probability-surface test then showed that a
+global monotone Platt mapping can repair calibration-in-the-large and ECE while
+simultaneously destroying the Brier advantage. Scalar calibration of the
+frozen ridge score is therefore rejected. Any direct probability-model test
+must be a new single-variable preregistration with its training and selection
+proper scores aligned; history, value learning, and Wine remain blocked.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.
