@@ -115,6 +115,14 @@ Current checkpoint:
     nonbaseline and pre-first-HIT point deltas. Its decision is
     `reject-train-only-platt-calibration`; no fresh confirmation, policy,
     history, or value learning is admitted.
+16. run only the frozen offline L2f experiment in
+    `experiments/l2f-action-conditioned-hazard-v1.json`. It is not BC and does
+    not calibrate the old ridge. One shared 64-tree, depth-3 current-root/action
+    regressor and its same-architecture state-only ablation are trained directly
+    by h16 physical-HIT Brier on the original eight train episodes. The already
+    inspected L2d episodes are selection evidence only. A joint pass can select
+    the immutable scorer for wholly fresh confirmation; it cannot admit Wine,
+    causal action value, history, or value learning.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -183,8 +191,11 @@ readiness. The first train-only probability-surface test then showed that a
 global monotone Platt mapping can repair calibration-in-the-large and ECE while
 simultaneously destroying the Brier advantage. Scalar calibration of the
 frozen ridge score is therefore rejected. Any direct probability-model test
-must be a new single-variable preregistration with its training and selection
-proper scores aligned; history, value learning, and Wine remain blocked.
+must align its training and selection proper scores. L2f is that frozen test:
+a small shared nonlinear action-conditioned hazard regressor trained directly
+by Brier, compared both with frozen L2 full and a same-architecture state-only
+ablation. History, value learning, and Wine remain blocked until this reused-
+selection gate and then a wholly fresh confirmation pass.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.

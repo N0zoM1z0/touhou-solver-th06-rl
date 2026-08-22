@@ -44,8 +44,11 @@ add an action rejected by the online shield.
 
 Algorithmic freedom is sequential rather than simultaneous. The active order
 is causal decision-row audit, one frozen serial complete-episode inventory,
-action-frequency/reactive controls, current-observation behavior cloning, one
-short-history ablation, and then one offline expected-HIT value method.
+action-frequency/reactive controls, current-observation behavior cloning,
+fixed-horizon factual-risk probes, and one direct Brier-trained
+action-conditioned hazard model.  A fixed short-history ablation is admitted
+only if that current-root hazard boundary exposes temporal ambiguity; one
+offline expected-HIT value method follows only after the representation gate.
 Object-set/recurrent encoders, alternative survival objectives, CQL after IQL,
 ensembles, OPE, active collection, learned dynamics/MPC, and real-Wine branch
 acquisition require separate evidence gates. A learned prediction scores
