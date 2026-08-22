@@ -103,9 +103,12 @@ worsened its target Brier comparator and retained unstable low-propensity and
 nonbaseline action evidence, rejecting logged action measure as the primary
 cause.  A fixed 16-root portable history then improved the point score and the
 overall current-action ablation, but failed episode-stable temporal,
-exploratory-action, pre-first-HIT, and raw-boundedness gates.  It is rejected;
-the next boundary is a bounded instantiated-object set, and no hazard scorer or
-policy has been selected.
+exploratory-action, pre-first-HIT, and raw-boundedness gates.  It is rejected.
+A bounded current-root primitive-set model then improved ranking and aggregate
+action ablation, but not object-set Brier; exploratory and pre-first-HIT action
+deltas reversed, while direct sigmoid Brier saturated 65.05\% of rows and
+underpredicted event rate.  It too is rejected.  The next boundary changes only
+that rare-positive optimization loss; no hazard scorer or policy is selected.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -591,7 +594,7 @@ Train-only Platt calibration & Negative probability-surface gate & The two-param
 Direct action-conditioned h16 hazard & Negative formal gate; positive algorithm signal & Direct full Brier was 0.00480785 versus 0.00551139 for frozen L2 and 0.00500959 for same-architecture state-only, with both episode-bootstrap intervals wholly favorable.  Calibration passed, but nonbaseline and pre-first-HIT gates did not; no fresh confirmation ran. \\
 Uniform-shield-target weighted h16 hazard & Negative action-measure gate & Exact weights passed, but weighted full Brier 0.00454350 was worse than frozen L2f at 0.00449955; overall, low-propensity, nonbaseline, pre-first-HIT, and candidate-bound gates failed.  No fresh confirmation ran. \\
 Fixed short portable-history h16 hazard & Negative representation gate & Exact 16-root history improved point Brier, but temporal, exploratory-action, pre-first-HIT, and raw-boundedness gates failed.  No fresh confirmation ran. \\
-Observed-primitive-set h16 hazard & Preregistered, not run & One cap-48 current-root DeepSets comparison tests whether exact recorded shield geometry adds stable object and action signal beyond scalar summaries.  Passing can select fresh confirmation only. \\
+Observed-primitive-set h16 hazard & Negative representation/surface gate & Object-full Brier 0.00473906 was worse than scalar-only 0.00468783; low-propensity and pre-first-HIT action deltas reversed, and 65.05\% of full probabilities saturated below $10^{-7}$.  No fresh confirmation ran. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1705,6 +1708,44 @@ Frozen L2f all-row scores must reproduce exactly.  Passing selects a wholly
 fresh confirmation experiment only; it does not establish causal action value,
 authorize exhaustive objects or history, fit a policy/value, or run Wine.
 
+L2i ran once from commit
+\path{b8344f60e3d0d654e1bc23b2108cf4ea7231cd9a}.  The immutable decision is
+\texttt{reject-observed-primitive-set-h16-hazard}.  The 188,791 evaluation rows
+contained 1,085 positives, maximum 42 tokens, zero truncation, and exact frozen
+L2f Brier/NLL reproduction.  The 8,929-parameter scorer met its export bound
+with batch-18 one-thread p99 0.388 ms.  Object-full Brier was 0.00473906 versus
+0.00468783 for scalar-only.  Their difference was $+5.1231\times10^{-5}$,
+episode-bootstrap 95\% interval
+$[-9.6905\times10^{-5},+2.3328\times10^{-4}]$, with five of eight favorable
+directions; object information therefore failed its gate.  Object-full versus
+frozen L2f was $-6.8787\times10^{-5}$, but its interval also crossed zero.
+
+The aggregate current-action comparison did pass: full minus action-ablated
+Brier was $-1.2621\times10^{-4}$, interval
+$[-1.9912\times10^{-4},-6.1912\times10^{-5}]$, with all eight episodes
+favorable.  It again localized to baseline-equal behavior.  Below propensity
+0.025 the delta reversed to $+2.2964\times10^{-4}$ with a wholly positive
+interval and two favorable episodes; known-nonbaseline was
+$+1.6414\times10^{-4}$ with an interval crossing zero and two favorable
+episodes; pre-first-HIT was $+2.2714\times10^{-4}$ with a wholly positive
+interval and two favorable episodes.  These are not supported action-value
+effects.
+
+The fitted probability surface supplies a separate algorithmic diagnosis.
+Object-full assigned 122,814 rows (65.05\%) probability at most $10^{-7}$ and
+reached logit $-38.09$.  Its mean prediction was 0.002653 against event rate
+0.005747, so calibration-in-the-large was $-0.003094$ and failed the 0.002
+bound.  Yet its average precision 0.31373 exceeded scalar-only 0.29665,
+consistent with geometric ranking information but a bad probability surface.
+For sigmoid probability $p$ and logit $z$, direct Brier has derivative
+$2(p-y)p(1-p)$; its correction on a rare missed positive vanishes as $p$ tends
+to zero.  Unweighted Bernoulli log score instead has derivative $p-y$ and the
+same population probability target.  The next separately frozen experiment
+therefore changes only L2i training loss to BCE-with-logits.  It retains every
+row, token, architecture, optimizer, epoch, comparator, and evaluation gate;
+it is not scalar calibration, class weighting, a loss sweep, or admission of
+object sets, value learning, fresh confirmation, or Wine.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1943,9 +1984,12 @@ action signal, and produced a heavily clipping raw surface.  Its formal decision
 is also reject.  The subsequent fixed unit-frame 16-root scalar history
 improved its point Brier and aggregate action ablation, but temporal gain was
 heterogeneous, exploratory and pre-first-HIT action intervals crossed zero,
-and the raw surface clipped materially.  It too is rejected.  One bounded
-current-root instantiated-object-set experiment is now the next representation
-boundary; value learning remains later.
+and the raw surface clipped materially.  It too is rejected.  The subsequent
+cap-48 primitive set improved aggregate action ablation and ranking but failed
+object-gain, exploratory-action, lifecycle, calibration, and saturation gates;
+it is also rejected.  The next single-variable boundary is unweighted
+BCE-with-logits on that otherwise identical frozen design; value learning
+remains later.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

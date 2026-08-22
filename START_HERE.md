@@ -142,20 +142,24 @@ Current checkpoint:
     zero and the full raw surface clipped 2.43% of rows. Its decision is
     `reject-fixed-history-h16-hazard`; no fresh confirmation or Wine run
     occurred.
-19. retain the frozen, not-yet-run L2i current-root object-set h16 experiment in
-    `experiments/l2i-observed-primitive-set-hazard-v1.json`. A read-only audit
-    found maxima of 41/42 exact four-frame observed-shield tokens and zero
-    malformed rows, so its fixed cap 48 causes zero truncation on all 192,791
-    train and 188,791 reused-L2d h16 rows. Three shared-initialization,
-    shared-minibatch-order 8,929-parameter sigmoid DeepSets compare object-full,
-    scalar-only, and current-action-ablated representations under direct Brier.
-    Episode decoding uses eight ordered independent workers after an exact
-    serial/parallel differential; the deterministic CPU fit uses 32 threads.
-    The already inspected L2d split loads only after the train-only artifact is
-    frozen. Passing can select a wholly fresh confirmation only. It consumes
-    only already instantiated
-    physical primitives and the factual executed action; history, value
-    learning, and Wine remain blocked.
+19. retain the completed negative L2i experiment run at commit
+    `b8344f60e3d0d654e1bc23b2108cf4ea7231cd9a`. Its cap-48 primitive
+    contract, zero truncation, 8,929-parameter export bound, 0.388 ms scorer
+    p99, and overall action ablation passed. Object-full evaluation Brier
+    `0.00473906` was worse than scalar-only `0.00468783`; the object interval
+    crossed zero with five favorable episodes. Low-propensity, nonbaseline,
+    and pre-first-HIT action deltas reversed with only two favorable episodes.
+    The full sigmoid surface saturated 65.05% of rows and underpredicted event
+    rate by `0.003094`. Its decision is
+    `reject-observed-primitive-set-h16-hazard`; no fresh confirmation, Wine,
+    policy, or value fit occurred.
+20. before fitting another representation or value method, freeze one L2j
+    probability-optimization test. It must retain the exact L2i data, tokens,
+    architecture, initialization, minibatch order, optimizer, epochs,
+    comparators, and evaluation gates, changing only direct sigmoid Brier to
+    unweighted BCE-with-logits. This tests the observed rare-positive
+    vanishing-gradient/saturation mechanism; it is not scalar calibration,
+    class weighting, a loss sweep, or evidence that the object set works.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -237,12 +241,17 @@ the baseline-equal signal pattern. Logged action measure is therefore not the
 primary root cause. The subsequent exact 16-frame scalar history used temporal
 facts and improved its point score, but temporal gain was episode-heterogeneous
 and its action increment again vanished on exploratory and pre-first-HIT rows.
-That scalar-history candidate is rejected. The next justified representation
-test is one bounded current-root instantiated-object set; it tests information
-discarded by scalar counts and minimum-clearance summaries. Value learning and
-Wine remain blocked until a hazard candidate passes selection and wholly fresh
-confirmation. Survival critics, IQL/CQL sweeps, recurrent encoders, ensembles,
-active collection, learned MPC, and Wine branching are not starting points.
+That scalar-history candidate is rejected. The subsequent bounded current-root
+instantiated-object set improved ranking and the aggregate action ablation, but
+failed object gain, exploration/lifecycle action, calibration, and saturation
+gates. Direct sigmoid Brier drove 65.05% of evaluation rows below probability
+`1e-7` and underpredicted the event rate by `0.003094`. The next single-variable
+boundary is unweighted BCE-with-logits on the otherwise identical L2i design,
+because it retains a corrective gradient for rare positives while targeting
+the same conditional event probability. Value learning and Wine remain blocked
+until a hazard candidate passes selection and wholly fresh confirmation.
+Survival critics, IQL/CQL sweeps, recurrent encoders, ensembles, active
+collection, learned MPC, and Wine branching are not starting points.
 
 The first training inventory was collected serially with
 unchanged retail clock/update semantics, coherent capture suspension, the

@@ -58,14 +58,18 @@ only 16 prior consecutive eligible roots with unit game-frame intervals and
 their then-published actions; non-unit intervals reset it. It improved a point
 score but failed episode-stable temporal, exploratory-action, lifecycle, and
 bounded-surface gates, so it is not an admitted representation.
-The frozen next experiment is one cap-48 current-root set of the exact four-
-frame AABB and laser primitives already published by the observed shield. Its
-token order, mask, physical normalization, scalar-only and current-action-
-ablated comparators, direct-Brier fit, and export-cost contract are immutable
-before fitting. It may not contain prior outcome, propensity, lifecycle label,
-absolute frame, source identity, raw engine fields, or future fact, and it
-never widens the observed shield. Passing selects wholly fresh confirmation;
-one offline expected-HIT value method follows only after that confirmation.
+The completed cap-48 L2i current-root set used only the exact four-frame AABB
+and laser primitives already published by the observed shield. Its recorder,
+bounded-export, and overall action-ablation contracts passed, but object gain,
+exploration/lifecycle action, calibration, and probability-surface gates
+failed; it is not an admitted representation. The next frozen change may only
+replace direct sigmoid Brier optimization with unweighted BCE-with-logits on
+the otherwise identical L2i model and rows. It tests the observed
+rare-positive saturation mechanism and may select fresh confirmation only.
+It may not add prior outcome, propensity, lifecycle label, absolute frame,
+source identity, raw engine fields, or future fact, and it never widens the
+observed shield. One offline expected-HIT value method follows only after a
+representation passes wholly fresh confirmation.
 Recurrent encoders, alternative survival objectives, CQL after IQL,
 ensembles, OPE, active collection, learned dynamics/MPC, and real-Wine branch
 acquisition require separate evidence gates. A learned prediction scores
