@@ -101,11 +101,16 @@ before fitting.
    checker with the frozen lifecycle list and passed all seven gates without
    changing data or thresholds. Read-only target sizing then found zero strict
    complete-execution h4 positives and only four accepted h4 intention-to-treat
-   positives. L2l freezes the single change to a 12-root intention and h12 ITT
+   positives. L2l froze the single change to a 12-root intention and h12 ITT
    HIT target, selected because factual 4/8/12/16-root event upper bounds were
-   4/17/21/22 and 12-root mask persistence remained 82.42%. It uses two serial
-   pilot-train episodes and no fit; recurrence and value learning remain
-   blocked.
+   4/17/21/22 and 12-root mask persistence remained 82.42%. Its two serial
+   pilot-train episodes passed all seven gates with 4,227 eligible complete
+   groups, 80.65% complete intended execution, 0.338% dead ends, and 31/4,262
+   accepted h12 positives. Every positive followed a recorded control-dead-end
+   mediator, so L2l establishes intention-to-treat collection support rather
+   than direct action-value discrimination. It fitted no model. A separately
+   frozen serial training collection is admitted; recurrence and value
+   learning remain blocked.
 4. **L3 — one offline value method.** On the identical frozen data and
    representation, compare BC with one expected-HIT value learner. IQL is the
    first candidate. CQL is admitted only if IQL demonstrates unsupported-action
@@ -120,7 +125,7 @@ before fitting.
    factual and input-delivery digests. Predictions never widen the shield's
    observed-object certificate.
 
-The active L2l pilot retains exactly three moving parts: a uniform 12-root
+The completed L2l pilot retained exactly three moving parts: a uniform 12-root
 intention policy, the unchanged per-root observed shield/controller, and a
 versioned factual exposure recorder/auditor. It fits no learner. The online
 actor observation is unchanged; exposure identifiers and propensities remain
@@ -188,9 +193,13 @@ recorder provenance only. Parallel Wine is explicitly excluded.
   1,011/1,017 transitions before a two-frame observation gap changed input
   execution and player position. The poll-to-suspend boundary has no native
   root handshake, so parallel remains disabled. L2k group sizing then found
-  only 4/12,948 accepted h4 ITT positives. L2l is preregistered, not run: two
-  serial Stage 4 pilots test a 12-root assignment protocol and exact h12 HIT
-  label before any scaled collection or model.
+  only 4/12,948 accepted h4 ITT positives. L2l then completed two serial Stage
+  4 pilots on attempt one with 19 and 23 HITs and zero Bomb. All seven gates
+  passed: 4,227 eligible complete groups, 207--266 assignments per action,
+  80.65% no-override and full execution, 0.338% dead ends, and 31 accepted h12
+  HIT positives. The positives covered 14/18 actions and all occurred after a
+  recorded control dead end. This admits a separately preregistered serial
+  training collection, not a fitted model or policy claim.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final
@@ -200,8 +209,9 @@ reported, and infrastructure failures remain separate.
 
 The old fixed-seed pool did not pass exact factual equality. Its substantive
 first divergence is a scheduling-dependent observation gap in the external
-poll-to-suspend window, not RNG or policy drift. L2l therefore stays serial;
-scaled action-exposure collection remains prohibited until its own pilot and
-support gate pass. Failed or partial waves remain quarantined. A future native
-root handshake is a separate infrastructure hypothesis, not a prerequisite
-for serial learner feasibility.
+poll-to-suspend window, not RNG or policy drift. L2l therefore stayed serial
+and passed its collection/support boundary. Any scaled action-exposure
+collection must remain serial and receive its own frozen episode count, seeds,
+split, gates, and stopping rule. Failed or partial waves remain quarantined. A
+future native root handshake is a separate infrastructure hypothesis, not a
+prerequisite for serial learner feasibility.

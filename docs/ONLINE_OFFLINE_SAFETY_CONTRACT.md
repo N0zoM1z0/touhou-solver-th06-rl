@@ -135,6 +135,14 @@ unexecuted initial assignment, intervening assignment, incomplete no-HIT group,
 or episode truncation is censored. This is a factual intention-to-treat label,
 not a counterfactual successor.
 
+The frozen two-episode L2l pilot passed all seven collection gates and admitted
+31 positives among 4,262 exact h12 labels. Every positive followed a recorded
+control-dead-end mediator. This is expected under the declared protocol and
+does not authorize relabeling the last released input as execution of the
+assigned action. The result admits only a separately preregistered serial
+complete-episode training collection and held-out action-ablation test; it does
+not admit parallel collection, a learned online policy, or a gameplay claim.
+
 It may not add prior outcome, propensity, lifecycle label, absolute frame,
 source identity, raw engine fields, or future fact, and it never widens the
 observed shield. One offline expected-HIT value method follows only after a

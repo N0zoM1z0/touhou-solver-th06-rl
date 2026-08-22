@@ -203,8 +203,8 @@ Current checkpoint:
     admits pilot-train use and selects only a separately frozen stateful
     serial-versus-parallel differential; it does not select a model, value
     learner, learned policy, or gameplay claim.
-23. retain the read-only E5/L2k boundary diagnosis and the frozen, not-yet-run
-    L2l pilot in `experiments/l2l-stage4-action-exposure-v1.json`. The old E5
+23. retain the read-only E5/L2k boundary diagnosis and the completed L2l pilot
+    in `experiments/l2l-stage4-action-exposure-v1.json`. The old E5
     serial/concurrent traces first differ at a schedule-dependent two-frame
     observation gap after 1,011/1,017 exact transitions; the controller's
     frame-poll-to-`NtSuspendProcess` window has no root handshake. Parallel
@@ -212,11 +212,18 @@ Current checkpoint:
     intention-to-treat target has only 4 positives among 12,948 accepted
     examples; strict complete-execution HIT support is zero. Read-only upper-
     bound event counts at 4/8/12/16 roots were 4/17/21/22, while 12/16-root
-    factual shield-mask persistence was 82.42%/78.13%. L2l therefore changes
+    factual shield-mask persistence was 82.42%/78.13%. L2l changed
     only exposure and target horizon to 12 roots, retaining the same shield,
     assignment, override, lifecycle, recorder, and two-episode serial pilot.
     Its label is physical HIT within 12 unit-frame transitions and before a
-    new randomized assignment. No model runs.
+    new randomized assignment. Both serial episodes completed on attempt one
+    with 19 and 23 HITs and zero Bomb. All seven gates passed: 4,227 eligible
+    complete groups, 207--266 assignments per action, 80.65% no-override and
+    full 12-root execution, 0.338% control dead ends, and 31 accepted h12 HIT
+    positives. All positives followed a recorded control dead-end mediator;
+    this is valid intention-to-treat support, not proof of direct action-value
+    discrimination. No model ran. The result selects only a separately frozen
+    serial training collection with a complete-episode split.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -323,10 +330,13 @@ thresholds. This is collector Wine, not a learned-policy canary. Read-only
 first-divergence analysis then found that the old exact parallel gate fails at
 a scheduling gap inside the frame-poll-to-process-suspend window, so parallel
 remains disabled without a native root handshake. More importantly, four-root
-ITT HIT support is only 4/12,948 accepted examples. L2l is now frozen as a
-serial 12-root pilot, the shortest measured horizon near event-support
-saturation. Scaled collection, value learning, and Wine policy evaluation
-remain blocked until their own gates.
+ITT HIT support is only 4/12,948 accepted examples. L2l then passed the serial
+12-root pilot boundary with 31/4,262 accepted h12 positives and all seven
+collection gates. Every positive followed the declared control-dead-end
+mediator, so this establishes feasible randomized-intention data rather than
+learned action value. A separately preregistered serial training collection is
+now admitted; value learning and Wine policy evaluation remain blocked until
+their own gates.
 Survival critics, IQL/CQL sweeps, recurrent encoders, ensembles, active
 collection, learned MPC, and Wine branching are not starting points.
 
