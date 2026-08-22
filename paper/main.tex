@@ -80,7 +80,12 @@ A state-only attribution then found a small incremental action-relative HIT
 signal at 16 frames but not 64, with worse calibration than state-only at both
 horizons; action-relative shield-contraction signal was robust.  Because it
 reuses the same held-out episodes, it is selection evidence only, not
-independent confirmation.
+independent confirmation.  A further frozen support/lifecycle diagnosis found
+that the weak HIT increment was confined to actions equal to the reactive
+baseline and reversed sign on actions known to differ from it.  Pre-first-HIT
+rows retained a negative point delta, rejecting a purely post-HIT artifact,
+while overprediction and clipping remained material.  Fresh confirmation must
+therefore test the nonbaseline support boundary; no action value is admitted.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -1188,6 +1193,45 @@ physical-HIT information is small, horizon-dependent, heterogeneous, and not
 yet calibrated.  Independent confirmation plus support/lifecycle decomposition
 must precede any value learner or online candidate.
 
+That decomposition is frozen in
+\path{experiments/l2c-stage4-boundary-diagnosis-v1.json}.  L2c fits nothing and
+reuses the same four validation episodes only to retain recorder facts beside
+the exact L2 rows: the published action's logged propensity, equality to the
+reactive baseline, shield-set size, and elapsed game frames since the latest
+physical HIT.  These are diagnostic strata, not actor inputs.  In particular,
+an action unequal to baseline proves a nonbaseline draw, whereas equality does
+not identify the latent 80/20 mixture component because uniform exploration
+can sample the baseline action.  HIT never terminates or removes the remainder
+of an episode.  Ten fixed equal-width reliability bins, calibration in the
+large, ECE, and clipping counts diagnose probability scale but do not calibrate
+or select a model.
+
+L2c ran at solver commit
+\path{c5f03db73ba8987d88d54ffff19931779b2fa578}; its result SHA-256 is
+\path{bf2fa3d74b16f13102a25a7f809e56bfb0841b2955f2249b9c62b399dd3276cc}.
+It reproduced every 16/64-frame L2b full and state-only Brier value with zero
+error.  At 16 frames, the overall full-minus-state-only delta remained
+$-2.83\times10^{-5}$, but the 76,216 baseline-equal rows had delta
+$-3.63\times10^{-5}$ while the 17,706 rows known to differ from baseline had
+$+6.38\times10^{-6}$; only two of four episodes favored full in the latter
+stratum.  At 64 frames the corresponding deltas were
+$-7.43\times10^{-5}$ and $+5.17\times10^{-5}$, with only one of four
+nonbaseline episode views favoring full.  Thus the prior increment is
+concentrated in baseline-equal behavior, consistent with reactive tie-breaking
+or route context rather than a supported physical-HIT action value.
+
+The 16-frame pre-first-HIT view still had a negative
+$-2.16\times10^{-5}$ delta and all four episodes favored full, so a purely
+post-HIT lifecycle artifact is not supported.  Calibration remains a separate
+failure: at 16 frames the full versus state-only calibration-in-the-large and
+ECE were 0.00204 versus 0.00096, and 36,406 versus 34,013 of 93,922 predictions
+clipped to zero.  The formal L2c decision is
+\texttt{freeze-fresh-independent-confirmation}.  That confirmation must use
+untouched models and wholly new complete episodes, and report overall
+replication, nonbaseline support, pre-first-HIT lifecycle, and calibration as
+separate gates.  L2c identifies no causal effect and admits neither history nor
+value learning.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1315,7 +1359,11 @@ its frozen diagnostic gate at supported horizons.  This establishes portable
 current-root factual signal but neither causal action value nor an authorized
 learned candidate.  The state-only reused-heldout attribution found weak
 incremental action-relative HIT signal at 16 frames, none at 64, and robust
-incremental shield signal.  Independent confirmation remains required.
+incremental shield signal.  The subsequent support/lifecycle decomposition
+localized that weak HIT increment to baseline-equal actions: it reversed sign
+on actions known to differ from the reactive baseline, while pre-first-HIT rows
+still favored full.  This rejects a pure post-HIT explanation but not reactive
+route/tie-breaking context; fresh independent confirmation remains required.
 
 \section{Threats to Validity}
 
@@ -1382,7 +1430,9 @@ and factual HIT-risk pilot then passed at its supported horizons.  Its next
 boundary is incremental action signal and calibrated/support-aware factual
 risk, not history or value learning.  The incremental-action attribution found
 weak 16-frame but not 64-frame HIT evidence and worse full-model calibration;
-fresh confirmation and lifecycle/support attribution are next.  History still
+the fixed lifecycle/support attribution then found that the increment was
+baseline-equal and reversed sign on known nonbaseline actions.  Fresh
+confirmation now tests that exact boundary with untouched models; history still
 requires separately measured temporal ambiguity.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
