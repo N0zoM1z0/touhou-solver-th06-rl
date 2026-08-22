@@ -217,7 +217,7 @@ def test_compact_frame_round_trips_repeated_dataclasses(tmp_path) -> None:
     frame_path = next(run_dir.glob("frames-*.jsonl.gz"))
     with gzip.open(frame_path, "rt", encoding="utf-8") as source:
         frame = json.loads(next(source))
-    assert frame["schema_version"] == "th06-rl-authoritative-frame-v13"
+    assert frame["schema_version"] == "th06-rl-authoritative-frame-v14"
     assert frame["decision"]["dialogue_delivery"] == [
         {
             "stage": 1,

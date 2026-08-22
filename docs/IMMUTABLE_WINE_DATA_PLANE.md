@@ -14,6 +14,8 @@ Every admitted episode binds:
 - attacks, items, resources, HIT/Bomb events, and stage transitions;
 - commanded action, witnessed input, hold/elapsed time, policy identity,
   exploration seed, and the full behavior distribution;
+- when declared, randomized action-intention group, step, horizon, intended
+  action, initial assignment propensity/distribution, and shield override;
 - observed-shield inputs, result, horizon, margin, and publication outcome;
 - factual next root for every nonterminal transition;
 - immutable compressed shard hashes and byte counts.
@@ -52,6 +54,15 @@ must retain:
 - the exact sum of physical HIT events between decision roots;
 - lifecycle, observation-gap, and learning-exclusion evidence;
 - a versioned portable history and shield mask built without future facts.
+
+For action-exposure episodes, frame/transition v14 stores the assignment and
+override provenance alongside the ordinary per-root behavior distribution.
+The generic loader accepts immutable v13 episodes without inventing these
+fields and requires exact raw/transition agreement when v14 exposure metadata
+is present. Group identity, step, assignment propensity, and override reason
+are never portable actor inputs. The controller still publishes only a freshly
+observed-shield-admissible action; an unsafe in-flight input is a fail-closed
+control dead-end, not a successful override.
 
 Decision-row HIT totals must sum exactly to the raw complete-episode HIT total.
 Rows with no policy intervention are context inside an interval, not new

@@ -6,6 +6,7 @@ import json
 import pytest
 
 from th06_rl.corpus import CorpusRecorder, FrameEvidence, RunMetadata
+from th06_rl.action_exposure_audit import audit_episode
 from th06_rl.bc_features import (
     FEATURE_NAMES,
     features_from_policy_context,
@@ -17,7 +18,11 @@ from th06_rl.episode_dataset import (
     validate_decision_epochs,
 )
 from th06_rl.th06.control_capture import ControlSnapshot
-from th06_rl.policy_api import PolicyContext
+from th06_rl.policy_api import (
+    ACTION_EXPOSURE_SCHEMA,
+    ActionExposure,
+    PolicyContext,
+)
 
 
 def _snapshot(
@@ -84,12 +89,16 @@ def _decision(
     current: str = "stay",
     published: str | None = None,
     legal: tuple[str, ...] = (),
+    exposure: ActionExposure | None = None,
+    probability: float | None = None,
+    probabilities: tuple[tuple[str, float], ...] | None = None,
+    policy_id: str = "fixture-policy-v1",
 ) -> FrameEvidence:
     evaluations = tuple(
         (action, 10.0 + index, 190.0 + index, 399.0 + index)
         for index, action in enumerate(legal)
     )
-    probabilities = (
+    recorded_probabilities = probabilities if probabilities is not None else (
         tuple((action, float(action == published)) for action in legal)
         if published is not None
         else ()
@@ -102,15 +111,30 @@ def _decision(
         locally_admissible_actions=legal,
         proposed_action=published,
         published_action=published,
-        behavior_probability=1.0,
-        behavior_probabilities=probabilities,
-        policy_id="fixture-policy-v1",
+        behavior_probability=(
+            probability if probability is not None else 1.0
+        ),
+        behavior_probabilities=recorded_probabilities,
+        policy_id=policy_id,
         policy_generation=1,
         policy_sha256="fixture",
+        action_exposure=exposure,
         capture_ms=1.0,
         solve_ms=0.1,
         reason=reason,
         shield_collision_margin=0.35,
+    )
+
+
+def _exposure(step: int) -> ActionExposure:
+    return ActionExposure(
+        ACTION_EXPOSURE_SCHEMA,
+        0,
+        step,
+        4,
+        "left",
+        0.5,
+        (("left", 0.5), ("right", 0.5)),
     )
 
 
@@ -211,6 +235,87 @@ def test_offline_and_online_scalar_features_are_bit_exact(tmp_path) -> None:
     assert len(offline) == len(FEATURE_NAMES)
     assert offline == online
     assert online == features_from_policy_context(replace(context, baseline_action="left"))
+
+
+def test_action_exposure_round_trips_across_input_lease(tmp_path) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata("test", "exe", "native", "test", 3, 0, 0, 4, {}),
+    )
+    exposure = _exposure(0)
+    recorder.record(
+        _snapshot(0),
+        _decision(
+            "ok", published="left", legal=("left", "right"), exposure=exposure
+        ),
+    )
+    recorder.record(
+        _snapshot(1),
+        _decision(
+            "input-lease",
+            current="left",
+            published="left",
+            legal=("left",),
+            exposure=exposure,
+        ),
+    )
+    recorder.record(
+        _snapshot(2, in_menu=True),
+        _decision("passive", current="left"),
+    )
+    run_dir = recorder.close({
+        "termination_reason": "practice-stage-complete",
+        "stage_completed": True,
+        "physical_hits": 0,
+    })
+
+    epoch = next(iter_decision_epochs(run_dir))
+
+    assert epoch.action_exposure == exposure
+    assert epoch.learning_eligible is True
+
+
+def test_four_root_action_exposure_audit_uses_factual_execution(tmp_path) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata("test", "exe", "native", "test", 3, 0, 0, 4, {}),
+    )
+    assignments = (("left", 0.5), ("right", 0.5))
+    for step in range(4):
+        exposure = _exposure(step)
+        recorder.record(
+            _snapshot(step),
+            _decision(
+                "ok",
+                current="left" if step else "stay",
+                published="left",
+                legal=("left", "right"),
+                exposure=exposure,
+                probability=0.5 if step == 0 else 1.0,
+                probabilities=(
+                    assignments
+                    if step == 0
+                    else (("left", 1.0), ("right", 0.0))
+                ),
+                policy_id="fixed-shield-action-exposure-v1",
+            ),
+        )
+    recorder.record(
+        _snapshot(4, in_menu=True),
+        _decision("passive", current="left"),
+    )
+    run_dir = recorder.close({
+        "termination_reason": "practice-stage-complete",
+        "stage_completed": True,
+        "physical_hits": 0,
+    })
+
+    audit = audit_episode(run_dir, exposure_roots=4)
+
+    assert audit["contract_violation_count"] == 0
+    assert audit["eligible_complete_groups"] == 1
+    assert audit["no_override_groups"] == 1
+    assert audit["four_intended_executions_groups"] == 1
 
 
 def test_unexecuted_publication_has_no_action_conditioned_successor(tmp_path) -> None:

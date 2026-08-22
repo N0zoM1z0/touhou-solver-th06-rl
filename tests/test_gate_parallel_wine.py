@@ -37,7 +37,7 @@ def _documents(stage: int = 4):
         "policy_state_sha256_before": "s",
     }
     run = {
-        "schemas": {"frame": "th06-rl-authoritative-frame-v13"},
+        "schemas": {"frame": "th06-rl-authoritative-frame-v14"},
         "metadata": {"online_contract": {
             "algorithm": "observed-shield4-paused-publication-v1",
             "shield_contract": "observed-hazard-kinematics-v1",

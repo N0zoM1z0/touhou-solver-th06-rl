@@ -11,7 +11,15 @@ from pathlib import Path
 from typing import Iterator
 
 from .actions import ACTION_NAMES
-from .corpus import FRAME_SCHEMA, MANIFEST_SCHEMA, RUN_SCHEMA, TRANSITION_SCHEMA
+from .corpus import (
+    FRAME_SCHEMA,
+    LEGACY_FRAME_SCHEMAS,
+    LEGACY_TRANSITION_SCHEMAS,
+    MANIFEST_SCHEMA,
+    RUN_SCHEMA,
+    TRANSITION_SCHEMA,
+)
+from .policy_api import ActionExposure
 
 
 DECISION_EPOCH_SCHEMA = "th06-rl-decision-epoch-v1"
@@ -58,6 +66,7 @@ class EpisodeTransition:
     behavior_probability: float
     behavior_probabilities: tuple[tuple[str, float], ...]
     policy_id: str | None
+    action_exposure: ActionExposure | None
     policy_context: dict[str, object]
     outcome: dict[str, object]
     learning_eligible: bool
@@ -125,6 +134,7 @@ class DecisionEpoch:
     published_action: str | None
     behavior_probability: float
     behavior_probabilities: tuple[tuple[str, float], ...]
+    action_exposure: ActionExposure | None
     transition_sequences: tuple[int, ...]
     commanded_actions: tuple[str | None, ...]
     sampled_actions: tuple[str | None, ...]
@@ -202,7 +212,7 @@ def _rows(paths: tuple[Path, ...]) -> Iterator[dict[str, object]]:
 
 def _episode_contract(
     run_dir: Path,
-) -> tuple[Path, dict[str, object], dict[str, object]]:
+) -> tuple[Path, dict[str, object], dict[str, object], dict[str, object]]:
     run_dir = run_dir.resolve()
     run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     manifest = json.loads(
@@ -231,8 +241,17 @@ def _episode_contract(
     if (
         run.get("schema_version") != RUN_SCHEMA
         or manifest.get("schema_version") != MANIFEST_SCHEMA
-        or schemas.get("frame") != FRAME_SCHEMA
-        or schemas.get("transition") != TRANSITION_SCHEMA
+        or schemas.get("frame") not in ({FRAME_SCHEMA} | LEGACY_FRAME_SCHEMAS)
+        or schemas.get("transition")
+        not in ({TRANSITION_SCHEMA} | LEGACY_TRANSITION_SCHEMAS)
+        or (
+            schemas.get("frame") == FRAME_SCHEMA
+            and schemas.get("transition") != TRANSITION_SCHEMA
+        )
+        or (
+            schemas.get("frame") in LEGACY_FRAME_SCHEMAS
+            and schemas.get("transition") not in LEGACY_TRANSITION_SCHEMAS
+        )
         or run.get("run_id") != manifest.get("run_id")
         or episode.get("id") != run.get("run_id")
         or episode.get("unit") != unit
@@ -244,12 +263,12 @@ def _episode_contract(
         or outcome.get("termination_reason") != expected_reason
     ):
         raise EpisodeDatasetError("episode is not one complete factual trajectory")
-    return run_dir, manifest, metadata
+    return run_dir, manifest, metadata, schemas
 
 
 def iter_episode_frames(run_dir: Path) -> Iterator[EpisodeFrame]:
     """Yield learner-facing facts without decoding game-specific raw state."""
-    run_dir, manifest, metadata = _episode_contract(run_dir)
+    run_dir, manifest, metadata, schemas = _episode_contract(run_dir)
     expected_stages = {int(stage) for stage in metadata.get("expected_stages", ())}
     observed_stages: set[int] = set()
     expected_sequence = 0
@@ -260,7 +279,8 @@ def iter_episode_frames(run_dir: Path) -> Iterator[EpisodeFrame]:
         scope = row.get("scope")
         decision = row.get("decision")
         if (
-            sequence != expected_sequence
+            row.get("schema_version") != schemas["frame"]
+            or sequence != expected_sequence
             or not isinstance(snapshot_id, str)
             or not isinstance(snapshot, dict)
             or not isinstance(scope, dict)
@@ -289,11 +309,42 @@ def iter_episode_frames(run_dir: Path) -> Iterator[EpisodeFrame]:
         raise EpisodeDatasetError("frames do not cover the declared episode stages")
 
 
+def _action_exposure(value: object) -> ActionExposure | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise EpisodeDatasetError("action exposure is malformed")
+    raw_probabilities = value.get("assignment_probabilities")
+    if not isinstance(raw_probabilities, list):
+        raise EpisodeDatasetError("action exposure assignment distribution is malformed")
+    try:
+        probabilities = tuple(
+            (str(row[0]), float(row[1]))
+            for row in raw_probabilities
+            if isinstance(row, list) and len(row) == 2
+        )
+        if len(probabilities) != len(raw_probabilities):
+            raise ValueError("incomplete assignment rows")
+        return ActionExposure(
+            str(value.get("schema", "")),
+            int(value["group_id"]),
+            int(value["step"]),
+            int(value["horizon"]),
+            str(value["intended_action"]),
+            float(value["assignment_probability"]),
+            probabilities,
+            str(value["override_reason"])
+            if value.get("override_reason") is not None else None,
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise EpisodeDatasetError("action exposure is invalid") from error
+
+
 def _iter_episode_links(
     run_dir: Path,
 ) -> Iterator[tuple[EpisodeFrame, EpisodeTransition, EpisodeFrame]]:
     """Yield each validated before/transition/after triple in one frame pass."""
-    run_dir, manifest, _metadata = _episode_contract(run_dir)
+    run_dir, manifest, _metadata, schemas = _episode_contract(run_dir)
     frames = iter(iter_episode_frames(run_dir))
     transitions = iter(_rows(_stream_paths(run_dir, manifest, "transitions")))
     before = next(frames)
@@ -309,6 +360,7 @@ def _iter_episode_links(
         proposed = row.get("proposed_action")
         published = row.get("published_action")
         policy_id = row.get("policy_id")
+        action_exposure = _action_exposure(row.get("action_exposure"))
         policy_context = row.get("policy_context")
         raw_probabilities = row.get("behavior_probabilities", ())
         probabilities = tuple(
@@ -319,7 +371,7 @@ def _iter_episode_links(
         probability = float(row.get("behavior_probability", float("nan")))
         probability_map = dict(probabilities)
         if (
-            row.get("schema_version") != TRANSITION_SCHEMA
+            row.get("schema_version") != schemas["transition"]
             or int(row.get("sequence", -1)) != before.sequence
             or row.get("snapshot_ref") != before.snapshot_id
             or row.get("next_snapshot_ref") != after.snapshot_id
@@ -366,6 +418,7 @@ def _iter_episode_links(
             probability,
             probabilities,
             str(policy_id) if policy_id is not None else None,
+            action_exposure,
             dict(policy_context),
             dict(outcome),
             bool(row.get("learning_eligible")),
@@ -469,10 +522,17 @@ def _portable_root(
 def _behavior_evidence(
     frame: EpisodeFrame,
     root: PortableDecisionRoot,
-) -> tuple[str | None, str | None, float, tuple[tuple[str, float], ...]]:
+) -> tuple[
+    str | None,
+    str | None,
+    float,
+    tuple[tuple[str, float], ...],
+    ActionExposure | None,
+]:
     decision = frame.decision
     proposed = decision.get("proposed_action")
     published = decision.get("published_action")
+    exposure = _action_exposure(decision.get("action_exposure"))
     raw_probabilities = decision.get("behavior_probabilities")
     if not isinstance(raw_probabilities, list):
         raise EpisodeDatasetError("decision behavior distribution is malformed")
@@ -516,6 +576,7 @@ def _behavior_evidence(
         published,
         probability,
         probabilities,
+        exposure,
     )
 
 
@@ -530,10 +591,13 @@ def _decision_epoch(
 ) -> DecisionEpoch:
     start_transition = transitions[0] if transitions else None
     root = _portable_root(start, start_transition)
-    proposed, published, probability, probabilities = _behavior_evidence(start, root)
+    proposed, published, probability, probabilities, exposure = _behavior_evidence(
+        start, root
+    )
     if start_transition is not None and (
         start_transition.behavior_probability != probability
         or start_transition.behavior_probabilities != probabilities
+        or start_transition.action_exposure != exposure
     ):
         raise EpisodeDatasetError("raw frame and transition propensity disagree")
     policy_id = start.decision.get("policy_id")
@@ -563,6 +627,8 @@ def _decision_epoch(
         for reason in item.learning_exclusion_reasons
     ):
         hard_exclusions.append("invalid-factual-link")
+    if any(item.action_exposure != exposure for item in transitions):
+        hard_exclusions.append("exposure-metadata-discontinuous")
     next_root = None if terminal else _portable_root(successor, None)
     return DecisionEpoch(
         DECISION_EPOCH_SCHEMA,
@@ -580,6 +646,7 @@ def _decision_epoch(
         published,
         probability,
         probabilities,
+        exposure,
         tuple(item.sequence for item in transitions),
         commanded,
         sampled,
@@ -594,7 +661,7 @@ def _decision_epoch(
 
 def iter_decision_epochs(run_dir: Path) -> Iterator[DecisionEpoch]:
     """Derive factual policy-decision intervals and audit all episode HITs."""
-    _run_dir, manifest, _metadata = _episode_contract(run_dir)
+    _run_dir, manifest, _metadata, _schemas = _episode_contract(run_dir)
     episode = manifest["episode"]
     outcome = manifest["run_outcome"]
     assert isinstance(episode, dict)

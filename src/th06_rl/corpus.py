@@ -18,13 +18,16 @@ import threading
 import time
 
 from .retail.model import BUTTON_BOMB
+from .policy_api import ActionExposure
 
 
 RUN_SCHEMA = "th06-rl-run-v1"
 MANIFEST_SCHEMA = "th06-rl-manifest-v3"
 OBJECT_SCHEMA = "th06-rl-source-object-v1"
-FRAME_SCHEMA = "th06-rl-authoritative-frame-v13"
-TRANSITION_SCHEMA = "th06-rl-transition-v13"
+FRAME_SCHEMA = "th06-rl-authoritative-frame-v14"
+TRANSITION_SCHEMA = "th06-rl-transition-v14"
+LEGACY_FRAME_SCHEMAS = frozenset({"th06-rl-authoritative-frame-v13"})
+LEGACY_TRANSITION_SCHEMAS = frozenset({"th06-rl-transition-v13"})
 EVENT_SCHEMA = "th06-rl-event-v1"
 FRAME_BUDGET_MS = 1000.0 / 60.0
 # Match one shard of burst tolerance.  A dense control root is bounded by 640
@@ -131,6 +134,7 @@ class FrameEvidence:
     capture_ms: float
     solve_ms: float
     reason: str
+    action_exposure: ActionExposure | None = None
     capture_attempts: int = 1
     observation_gap: int = 1
     snapshot_tier: str = "authoritative-full"
@@ -178,6 +182,8 @@ class FrameEvidence:
             )
         ):
             raise ValueError("published action lacks its complete behavior distribution")
+        if self.action_exposure is not None and self.policy_id is None:
+            raise ValueError("action exposure lacks policy identity")
         if any(
             (right.stage, right.game_frame) < (left.stage, left.game_frame)
             for left, right in zip(self.dialogue_delivery, self.dialogue_delivery[1:])
@@ -715,6 +721,7 @@ def _transition(before: _Envelope, after: _Envelope) -> dict[str, object]:
             before.evidence.behavior_probabilities
         ),
         "policy_id": before.evidence.policy_id,
+        "action_exposure": _jsonable(before.evidence.action_exposure),
         # This compact projection preserves the factual policy context for
         # replaceable offline learners without decoding the raw hazard root.
         # Raw snapshots remain learner-independent factual evidence.

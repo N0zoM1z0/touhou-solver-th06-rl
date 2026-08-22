@@ -82,6 +82,29 @@ root, and record the exact conditional propensity and every override. It must
 first pass execution-duration, zero-Bomb, lifecycle, linkage, and complete-
 episode contracts before its HIT target can be used.
 
+L2k freezes that first feasibility crossing at four policy-invocation roots.
+The policy owns the random assignment and group state; the controller owns the
+fresh per-root shield, action publication, bounded input-pickup lease, and
+lifecycle interruption; the recorder owns immutable assignment and execution
+provenance; the episode loader owns v13/v14 compatibility and exact agreement
+checks. A group-start action is uniform over that root's observed-shield set.
+Continuation has conditional probability one: publish the intention if it is
+still admissible, otherwise publish the current reactive baseline and record
+the override. If a not-yet-sampled input loses shield admission inside the
+existing pickup lease, the controller must release it and record a control
+dead-end; it must not relabel that crossing as a successful baseline override.
+HIT, passive control, inactive player state, or a control dead-end interrupts
+an unfinished group without becoming an actor input. The run-local group ID,
+step, assignment distribution, and override reason are recorder provenance,
+not deployable observations.
+
+The first two L2k Stage 4 episodes are serial, complete, normal-speed,
+natural-RNG, pilot-train-only data. A physical HIT never triggers retry. H16
+positive support is reported separately: low support cannot turn a valid
+collection contract into failure or justify collecting until a desired HIT
+count appears. Parallel collection remains blocked until the stateful policy
+passes a separate serial-versus-parallel differential.
+
 It may not add prior outcome, propensity, lifecycle label, absolute frame,
 source identity, raw engine fields, or future fact, and it never widens the
 observed shield. One offline expected-HIT value method follows only after a

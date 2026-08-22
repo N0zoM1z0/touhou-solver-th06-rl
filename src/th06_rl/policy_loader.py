@@ -79,6 +79,17 @@ class ImmutablePolicy:
                 ),
             )
 
+    def interrupt(self, reason: str) -> None:
+        """End optional stateful decision groups at factual lifecycle boundaries."""
+        callback = getattr(self.policy, "interrupt", None)
+        if not callable(callback):
+            return
+        try:
+            callback(reason)
+        except Exception as error:
+            self.policy_failures += 1
+            self.last_error = f"{type(error).__name__}: {error}"
+
     def status(self, *, include_metrics: bool = True) -> dict[str, object]:
         result = {
             "immutable": True,

@@ -49,6 +49,13 @@ not action-conditioned behavior samples. No learner may invent the successor
 of an action Wine did not execute. Interval costs must sum exactly to the
 episode HIT total.
 
+For a preregistered multi-root randomized intention, the raw frame and
+transition additionally retain a run-local group ID, step, horizon, intended
+action, initial assignment propensity/distribution, and override reason. These
+are intervention provenance, not actor observations. The per-root behavior
+distribution remains the exact conditional publication distribution. A
+decision group never erases commanded, sampled, or executed action evidence.
+
 ## Admission ladder
 
 Only one rung changes at a time. Corpus inventory, whole-episode split, feature
@@ -77,15 +84,18 @@ before fitting.
    collector BC. The separately gated factual-probe line nevertheless
    established current-root h16 physical-HIT predictability without admitting
    a policy.
-3. **L2 — factual hazard representation (active).** Current scalar features,
-   direct Brier fitting, exact uniform-shield weighting, and one fixed
-   unit-frame 16-root scalar history have been tested. The direct model
-   established overall action-relative prediction, but weighting and history
-   did not make that increment stable on low-propensity, known-nonbaseline, and
-   pre-first-HIT rows. The fixed history is rejected. The next single ablation
-   is a bounded current-root instantiated-object set after its cap, order, mask,
-   portable geometry, comparators, and inference-cost bound are preregistered.
-   Recurrence and value learning remain blocked.
+3. **L2 — factual hazard and action exposure (active collection boundary).**
+   Current scalar, weighted, fixed-history, observed-primitive, and log-score
+   hazard candidates were tested and rejected by their frozen joint gates.
+   BCE-with-logits repaired almost all saturated missed positives but did not
+   stabilize object or exploratory-action gain. A factual audit then found
+   that 99.45% of h16 positives occurred after the initially published action
+   ended. The label is valid behavior-continuation risk but unsupported as
+   current-action value. Learner sweeps on that target are stopped. L2k now
+   preregisters a four-policy-root uniformly randomized intention with a fresh
+   observed-shield check at every root, exact assignment/override provenance,
+   and two serial complete Stage 4 pilot-train episodes. Recurrence and value
+   learning remain blocked.
 4. **L3 — one offline value method.** On the identical frozen data and
    representation, compare BC with one expected-HIT value learner. IQL is the
    first candidate. CQL is admitted only if IQL demonstrates unsupported-action
@@ -100,11 +110,11 @@ before fitting.
    factual and input-delivery digests. Predictions never widen the shield's
    observed-object certificate.
 
-The initial runnable learner therefore has exactly three moving parts: a
-deterministic causal dataset builder, a transparent current-observation BC
-scorer, and an immutable bounded exporter. The existing online policy context
-is not expanded before offline evidence earns a precisely specified portable
-feature and a parity test.
+The active runnable experiment has exactly three moving parts: a uniform
+four-root intention policy, the unchanged per-root observed shield/controller,
+and a versioned factual exposure recorder/auditor. It fits no learner. The
+online actor observation is unchanged; exposure identifiers and propensities
+are recorder provenance only.
 
 ## Current evidence
 
@@ -151,6 +161,16 @@ feature and a parity test.
   passed, while low-propensity, nonbaseline, and pre-first-HIT intervals crossed
   zero and the raw surface clipped 2.43%. The immutable decision is
   `reject-fixed-history-h16-hazard`; no fresh confirmation or Wine run occurred.
+- L2i and L2j both failed their frozen joint gates. L2j improved object-full
+  Brier from 0.00473906 to 0.00464423 and reduced saturated missed positives
+  from 89 to one, but scalar-only remained better and exploratory/lifecycle
+  action gates did not stabilize. The immutable L2j decision is
+  `reject-logscore-observed-primitive-h16-hazard`.
+- The subsequent action/target audit found median initial action duration one
+  frame and 1,079/1,085 h16 positives after that action ended. L2k is frozen but
+  not run: two serial complete Stage 4 pilot-train episodes test uniform
+  four-root action intentions, exact per-root shield/override behavior, and
+  action-exposure schema integrity. No model or learned policy runs.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final
@@ -158,7 +178,9 @@ policy evidence consists of predeclared serial, non-suspending normal-speed,
 complete original-Wine routes with zero Bomb; NMNB rate and HIT count are both
 reported, and infrastructure failures remain separate.
 
-Parallel collection is only a possible throughput tool. It remains prohibited
-until an unchanged serial-versus-parallel differential proves equality of
-control facts, lifecycle, schemas, action delivery, and factual traces. Failed
-or partial waves remain quarantined.
+The stateless uniform-mixture collector already passed its declared parallel
+infrastructure gate. L2k nevertheless starts serially because its policy adds
+stateful multi-root semantics. Scaled L2k collection remains prohibited until
+a separate stateful serial-versus-parallel differential proves equality of
+control facts, group lifecycle, schemas, action delivery, and factual traces.
+Failed or partial waves remain quarantined.

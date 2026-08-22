@@ -1,0 +1,130 @@
+{
+  "schema": "th06-rl-l2k-stage4-action-exposure-prereg-v1",
+  "experiment_id": "l2k-stage4-action-exposure-v1",
+  "decision": "Can a uniformly randomized, four-policy-root action intention create auditable factual exposure while preserving the per-root observed-shield, action-delivery, lifecycle, propensity, and complete-episode contracts?",
+  "hypotheses": {
+    "H1_boundary_repair": "A run-local assignment group, step, intended action, assignment propensity, and override reason remove the ambiguity between a repeated draw and a held intention without changing actor observations or shield authority.",
+    "H2_exposure": "At least 80% of eligible complete groups have no shield override and at least four witnessed intended-action executions.",
+    "H3_support": "Each complete Stage 4 episode contains at least 4000 eligible four-root groups, and every canonical action receives at least 100 randomized assignments across the two pilot-train episodes.",
+    "H4_safety": "Every published root remains inside its freshly recomputed observed-shield set; an inadmissible retained intention uses the current reactive baseline, while an unsafe in-flight input remains a fail-closed control dead-end rather than a fabricated override.",
+    "H5_selection_limit": "Passing selects a separately frozen scaled training collection after a serial-versus-parallel differential for the stateful policy. It does not select a hazard model, value learner, learned policy, Wine canary, or gameplay claim."
+  },
+  "sizing_evidence": {
+    "scope": "read-only observed-mask persistence on eight immutable L2d factual behavior continuations; no counterfactual successor",
+    "work_log": "work_log/20260822T133149Z-l2k-action-exposure-sizing",
+    "selected_exposure_roots": 4,
+    "action_weighted_mask_persistence": {
+      "2": 0.9757156730014441,
+      "4": 0.9361589191625069,
+      "8": 0.8742951599457566
+    }
+  },
+  "collection": {
+    "stage": 4,
+    "difficulty": "lunatic",
+    "episode_unit": "complete-practice-stage",
+    "episodes": [
+      {
+        "index": 0,
+        "policy_seed": 13326741063985372124,
+        "split": "pilot-train-only"
+      },
+      {
+        "index": 1,
+        "policy_seed": 5175935992713083027,
+        "split": "pilot-train-only"
+      }
+    ],
+    "policy_seed_derivation_domain": "th06-rl:l2k-stage4-action-exposure-v1",
+    "base_policy_seed": 20260822,
+    "assignment": "uniform-over-current-observed-shield-set-at-group-start",
+    "exposure_roots": 4,
+    "continuation": "retain-intended-action-when-currently-shield-admissible",
+    "override": "deterministic-current-reactive-baseline-when-intention-is-not-currently-shield-admissible",
+    "inflight_shield_loss": "existing-fail-closed-control-dead-end-and-input-release",
+    "lifecycle_interruptions": [
+      "physical-hit",
+      "passive",
+      "player-not-active",
+      "control-dead-end"
+    ],
+    "serial_wine_workers": 1,
+    "worker_index": 0,
+    "natural_retail_rng": true,
+    "game_clock": "original-retail-normal-speed",
+    "complete_episode_required": true,
+    "physical_hit_retry": false,
+    "max_attempts_per_slot": 3,
+    "peek_or_sequential_stop": false,
+    "stop_rule": "collect both fixed slots; retain every physical HIT; reject and retry only infrastructure-invalid or Bomb-bearing attempts; stop incomplete after three infrastructure attempts for either slot",
+    "infrastructure_admission": {
+      "capture_p99_ms_max": 40.0,
+      "dense_shield_parity_required": true,
+      "observation_gap_rate_max": 0.005,
+      "player_successor_bit_exact_required": true,
+      "solve_p99_ms_max": 16.7,
+      "stale_retry_rate_max": 0.0,
+      "validator": "scripts.gate_parallel_wine.validate_gate_run"
+    }
+  },
+  "gate": {
+    "minimum_complete_groups_per_episode": 4000,
+    "minimum_assignments_per_action": 100,
+    "minimum_no_override_fraction": 0.8,
+    "minimum_four_execution_fraction": 0.8,
+    "maximum_control_dead_end_rate": 0.005,
+    "h16_support_diagnostic_minimum": 64,
+    "h16_support_is_retry_or_contract_gate": false,
+    "zero_bomb_required": true,
+    "zero_infrastructure_failure_required": true,
+    "exact_exposure_metadata_required": true,
+    "complete_episode_required": true,
+    "parallel_collection_admitted": false,
+    "hazard_model_admitted": false,
+    "value_learning_admitted": false,
+    "online_learned_policy_admitted": false
+  },
+  "paths": {
+    "artifact_root": "artifacts/l2k-stage4-action-exposure-v1",
+    "corpus_root": "corpora/l2k-stage4-action-exposure-v1",
+    "collection_ledger": "artifacts/l2k-stage4-action-exposure-v1/collection-ledger.json",
+    "experiment_result": "artifacts/l2k-stage4-action-exposure-v1/experiment-result.json",
+    "base_policy_state": "config/fixed_shield_action_exposure.json",
+    "exposure_policy_plugin": "src/th06_rl/policies/fixed_shield_action_exposure.py",
+    "policy_api": "src/th06_rl/policy_api.py",
+    "policy_loader": "src/th06_rl/policy_loader.py",
+    "controller": "src/th06_rl/th06/controller.py",
+    "corpus_module": "src/th06_rl/corpus.py",
+    "episode_dataset_module": "src/th06_rl/episode_dataset.py",
+    "exposure_audit_module": "src/th06_rl/action_exposure_audit.py",
+    "experiment_runner": "scripts/run_l2k_stage4_action_exposure.py",
+    "source_l2j_preregistration": "experiments/l2j-logscore-primitive-hazard-v1.json",
+    "source_l2j_result": "artifacts/l2j-logscore-primitive-hazard-v1/experiment-result.json",
+    "wine_pool": "reference/wine-workers-v2-zklean-safe/pool.json",
+    "work_log_root": "work_log"
+  },
+  "sha256_bindings": {
+    "base_policy_state": "676c974e0c11cde836f3e9c36feb380c2c6836e4207a6ceb2e68e732580c35ac",
+    "exposure_policy_plugin": "def9d448ec79ef31eb1a8684c6b25763d781c8482dc7df279b7b1646a0381362",
+    "policy_api": "1a026d9212300ca106a300c405ca020bb3e401a3dd006bbc468d0b990cb7e2de",
+    "policy_loader": "0c26e87313b04723606d41e63215435955bf6fc11e31d81f33e8525049dca48b",
+    "controller": "800be475a8a0c68cbd23d36dcdbbf8df6db6f64fa1e286d766d3f9605765f8bf",
+    "corpus_module": "68e723e2846189da8ca7a41312c566e48452f2f2b0a58c5f9e4a504928c51e5d",
+    "episode_dataset_module": "e65faed1e50d08f473fb894c75df206f71ff3e7543e6c3ba01518bfad027bbfe",
+    "exposure_audit_module": "75dd499879c4eb41b18368742dbfe86dc8ad7b85b7519e9ee00d16ec755e87c7",
+    "experiment_runner": "384e71f356a6b13b4ae8d966a5582880a417dd8b5acbe52e996ff086fba515ad",
+    "source_l2j_preregistration": "d14db15d9bdc316c6b3f6b1cc7dba18989e489b1cbe33ef9ea23fbbb1e0dddf0",
+    "source_l2j_result": "2d6006178d01f5262c2b73426587f4e28fa408f8c87166b375b20aa8e1c9fee1",
+    "wine_pool": "76fe8c634855a2a9f11f4a5b83ab0c3498eb914df384ed40f206f199750447ad"
+  },
+  "fits_model": false,
+  "runs_learned_policy": false,
+  "online_wine": true,
+  "pilot_data_use": "train-only after a passing collection contract; never evaluation or promotion evidence",
+  "non_goals": [
+    "no learned actor, hazard model, critic, IQL, CQL, OPE, history encoder, object encoder, calibration, or learner fit",
+    "no counterfactual successor, ECL interpreter, future-birth envelope, shield widening, route logic, stage pattern rule, RNG input, or source identity",
+    "no physical-HIT retry, stop-on-hit output, Bomb, accelerated clock, parallel Wine, adaptive collection, or result peeking",
+    "no claim that a shield override estimates the unsafe intended action; assignment, conditional publication, execution, and outcome remain separate factual fields"
+  ]
+}

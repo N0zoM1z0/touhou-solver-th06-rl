@@ -395,6 +395,7 @@ def run(args: argparse.Namespace) -> int:
                 deferred_compression=args.defer_corpus_compression,
             )
         lease = InputLease()
+        active_action_exposure = None
         trial = (
             RouteTrial()
             if args.start_route
@@ -412,6 +413,12 @@ def run(args: argparse.Namespace) -> int:
         next_dialogue_probe = started
         next_health_sample = started
         next_health_trace = started
+
+        def interrupt_policy(reason: str) -> None:
+            nonlocal active_action_exposure
+            if active_action_exposure is not None:
+                plugin.interrupt(reason)
+                active_action_exposure = None
 
         def emit_trace(record: dict[str, object]) -> None:
             """Telemetry failure must never take physical input authority."""
@@ -736,6 +743,7 @@ def run(args: argparse.Namespace) -> int:
             proposed = None
             published = None
             policy = None
+            action_exposure = active_action_exposure
             shield_evaluations = ()
             legal = ()
             locally_admissible = ()
@@ -760,6 +768,7 @@ def run(args: argparse.Namespace) -> int:
                         if keyboard is not None:
                             keyboard.release_all()
                             lease.cleared()
+                        interrupt_policy("physical-hit")
                     else:
                         raise ControlUnavailable("physical HIT")
                 elif _physical_bomb(snapshot):
@@ -769,6 +778,7 @@ def run(args: argparse.Namespace) -> int:
                     if keyboard is not None:
                         keyboard.release_all()
                         lease.cleared()
+                    interrupt_policy("passive")
                     if (
                         dialogue is not None
                         and keyboard is not None
@@ -792,6 +802,7 @@ def run(args: argparse.Namespace) -> int:
                     if keyboard is not None:
                         keyboard.release_all()
                         lease.cleared()
+                    interrupt_policy("player-not-active")
                 elif snapshot.frame_multiplier != 1.0:
                     raise ControlUnavailable("unsupported frame multiplier")
                 elif snapshot.laser_count != len(snapshot.lasers):
@@ -916,6 +927,8 @@ def run(args: argparse.Namespace) -> int:
                                 for item in shield
                             ),
                         ))
+                        action_exposure = policy.action_exposure
+                        active_action_exposure = action_exposure
                         selected = next(
                             item.action for item in legal
                             if item.action.name == policy.action
@@ -991,6 +1004,7 @@ def run(args: argparse.Namespace) -> int:
                 if keyboard is not None:
                     keyboard.release_all()
                     lease.cleared()
+                interrupt_policy(reason)
             except (OSError, RuntimeError, ValueError) as error:
                 raise RuntimeError(
                     "control infrastructure lost its coherent transaction"
@@ -1046,6 +1060,7 @@ def run(args: argparse.Namespace) -> int:
                     ),
                     policy_generation=int(policy_status["generation"]),
                     policy_sha256=policy_status.get("sha256"),
+                    action_exposure=action_exposure,
                     capture_ms=capture_ms,
                     solve_ms=solve_ms,
                     reason=reason,

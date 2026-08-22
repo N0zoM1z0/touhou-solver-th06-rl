@@ -179,6 +179,22 @@ Current checkpoint:
     preregistered fixed-short-exposure collection feasibility test that keeps
     rechecking the observed shield and records exact conditional propensities
     and overrides; it is not yet authorized until that contract is frozen.
+22. retain the frozen, not-yet-run L2k collection-only experiment in
+    `experiments/l2k-stage4-action-exposure-v1.json`. A read-only sizing audit
+    on all eight L2d episodes found action-weighted factual-mask persistence of
+    97.57%, 93.62%, and 87.43% over 2, 4, and 8 policy roots respectively, so
+    L2k fixes the smallest material intervention at four roots. At each group
+    start it samples uniformly over the current observed-shield set; later
+    roots retain that intention only while it remains currently admissible,
+    otherwise publishing the current reactive baseline. The controller still
+    recomputes and replays the shield every root. An unsafe input already in
+    the bounded pickup lease remains a fail-closed control dead-end, never a
+    claimed override. Frame/transition v14 records group, step, intended
+    action, initial assignment propensity/distribution, and override reason;
+    the loader retains exact v13 compatibility. Two fixed serial complete
+    Stage 4 episodes are pilot-train-only. Passing can select a separate
+    stateful serial-versus-parallel differential and scaled train collection;
+    it cannot select a model, value learner, learned policy, or gameplay claim.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -276,7 +292,13 @@ continuation risk, not the causal effect of a one-frame action. Further learner
 sweeps on that action-conditioned target are stopped. The next bounded work
 must freeze and test a safe short-action-exposure collection contract before
 defining a new action-risk target. Value learning and Wine policy evaluation
-remain blocked.
+remain blocked. L2k now freezes the minimal collection-boundary test: uniform
+four-root action intentions, per-root observed-shield revalidation, explicit
+assignment/override provenance, lifecycle interruption, two serial complete
+Stage 4 pilot-train episodes, and no learner fit. This is collector Wine, not a
+learned-policy canary. Its h16 HIT support is diagnostic and may not cause a
+physical-HIT retry; a structurally passing but low-HIT pilot is reported as
+insufficient support rather than re-collected.
 Survival critics, IQL/CQL sweeps, recurrent encoders, ensembles, active
 collection, learned MPC, and Wine branching are not starting points.
 
