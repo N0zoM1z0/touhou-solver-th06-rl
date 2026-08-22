@@ -58,7 +58,12 @@ behavior clones improved held-out action log loss over action frequency but
 none passed all of its separately frozen promotion requirements; none was
 evaluated online.  A read-only residual diagnosis rejected a global
 probability scale as sufficient and selected one small current-observation
-nonlinear ablation without inspecting scaled validation.
+nonlinear ablation without inspecting scaled validation.  That MLP converged
+and improved held-out log loss, accuracy, and Brier over the linear model, but
+failed the unchanged calibration gate and was not run online.  A frozen
+target-contract diagnosis now tests whether the remaining error belongs to
+recorded propensity, sampled-label training, stopping, or flat-model
+misspecification before another learner is admitted.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -917,6 +922,27 @@ fails the joint supervised gate.  It runs no Wine canary and admits neither
 history nor value learning.  Any calibration diagnosis or further ablation
 must be separately frozen; this result cannot be repaired post hoc.
 
+The root-cause protocol is frozen in
+\path{experiments/l1d-stage4-target-diagnosis-v1.json}.  It first audits every
+eligible row against the declared $0.8$ reactive plus $0.2$ uniform-shield
+distribution and measures frozen L1d against both sampled actions and the
+recorded full distribution.  It then starts two non-deployable branches from
+the exact frozen L1d state: 500 additional full-batch train-only updates with
+the historical one-hot published-action objective, and 500 with cross-entropy
+to the recorded full propensities.  Both retain learning rate 0.05 and L2
+$10^{-4}$ and report fixed checkpoints 0, 100, 250, and 500.  Branch parameters
+are never serialized and neither branch is evaluated on validation.
+
+The diagnosis attributes a recorder/dataset defect only if a recorded mixture
+differs by more than $10^{-15}$.  Otherwise a final soft-target train KL
+advantage of at least 0.005 nat selects one separately preregistered
+full-propensity target correction.  Failing that, a hard-target KL reduction of
+at least 0.01 nat selects one stopping correction.  If neither occurs while a
+large distribution and reactive-action residual remains, the next candidate
+is one structured current-observation scorer, not history.  This diagnosis
+runs no Wine, fits no deployable model, does not revise the negative L1d result,
+and cannot admit value learning.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1033,7 +1059,9 @@ bounded diagnosis is complete; offline-only L1b improved held-out metrics but
 did not converge within its frozen timebox and is inconclusive.  L1c then
 converged and failed the unchanged calibration gate.  The read-only residual
 diagnosis selected one small current-observation MLP without reading scaled
-validation.  There is no authorized learned candidate.
+validation.  That model converged and improved held-out proper scores but
+failed calibration; the target-contract root-cause diagnosis is frozen before
+the next learner choice.  There is no authorized learned candidate.
 
 \section{Threats to Validity}
 
@@ -1087,9 +1115,10 @@ change but exhausted its optimizer timebox before the frozen gradient gate.
 L1c changed only that ceiling, reached the train-only gate, and still failed
 held-out calibration.  The linear current-observation candidate is therefore
 rejected under the joint gate.  Train-only scale correction was insufficient,
-current features exactly reconstructed the collector, and the next frozen
-change is one small current-observation MLP rather than combined history,
-calibration, auxiliary, or value learning.
+current features exactly reconstructed the collector, and the fixed small MLP
+then improved held-out NLL but also failed calibration.  Before another model,
+one frozen target-contract diagnosis tests the recorded full propensities,
+sampled-label objective, train-only stopping, and remaining flat-model error.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

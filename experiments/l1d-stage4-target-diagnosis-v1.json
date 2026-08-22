@@ -1,0 +1,67 @@
+{
+  "data": {
+    "reuse_without_mutation": true,
+    "source_experiment_id": "l1-stage4-bc-v1",
+    "train_episode_indices": [0, 1, 3, 4, 6, 7, 9, 10],
+    "validation_episode_indices": [2, 5, 8, 11]
+  },
+  "decision": "Is the negative L1d calibration result caused by corrupt recorded propensities, sampled-label calibration noise, an architecture-dependent premature stopping rule, discarding the recorded full behavior distribution during training, or remaining flat-MLP misspecification?",
+  "diagnosis": {
+    "continuation_checkpoints": [0, 100, 250, 500],
+    "continuation_updates": 500,
+    "evaluate_continuation_validation": false,
+    "exploration_probability": 0.2,
+    "fit_deployable_model": false,
+    "l2": 0.0001,
+    "learning_rate": 0.05,
+    "material_kl_reduction": 0.01,
+    "material_soft_target_advantage": 0.005,
+    "mixture_tolerance": 1e-15,
+    "serialize_continuation_parameters": false
+  },
+  "experiment_id": "l1d-stage4-target-diagnosis-v1",
+  "hypotheses": {
+    "H1_propensity_pipeline": "If capture or dataset linkage is wrong, at least one eligible row's recorded full distribution will differ from the declared 0.8 reactive plus 0.2 uniform-shield mixture by more than 1e-15.",
+    "H2_sampled_ece_noise": "If sampled-label ECE is the sufficient explanation, frozen L1d calibration against the exact recorded distribution should be materially smaller than ECE against sampled published actions.",
+    "H3_premature_stop": "If the architecture-relative 0.01 gradient ratio stopped L1d too early, 500 further hard-target train-only updates from the frozen state will reduce train KL(recorded mu || model) by at least 0.01 nat.",
+    "H4_discarded_propensity": "If throwing away the recorded full distribution is materially harmful, the soft-target continuation will end at least 0.005 nat lower in train KL than the paired hard-target continuation.",
+    "H5_model_misspecification": "If neither continuation effect is material while substantial KL and reactive-action error remain, the fixed flat 114--32--18 scorer has the wrong capacity or inductive bias for the known lexicographic current-observation rule."
+  },
+  "non_goals": [
+    "no Wine collection, canary, gameplay execution, or corpus mutation",
+    "no deployable model fit and no serialization of either continuation branch",
+    "no continuation-branch validation evaluation or validation-selected choice",
+    "no width, depth, optimizer, learning-rate, L2, seed, history, temperature, or auxiliary sweep",
+    "no baseline_action actor input, privileged feature, value learning, IQL, HIT-reduction claim, or NMNB claim",
+    "no rewriting the immutable L1d result or retroactively changing its gate"
+  ],
+  "paths": {
+    "artifact_root": "artifacts/l1d-stage4-target-diagnosis-v1",
+    "diagnosis_result": "artifacts/l1d-stage4-target-diagnosis-v1/diagnosis.json",
+    "diagnosis_runner": "scripts/diagnose_l1d_target_contract.py",
+    "diagnostics_module": "src/th06_rl/bc_target_diagnostics.py",
+    "experiment_plan": "artifacts/l1d-stage4-target-diagnosis-v1/experiment-plan.json",
+    "source_collection_ledger": "artifacts/l1-stage4-bc-v1/collection-ledger.json",
+    "source_corpus_root": "corpora/l1-stage4-bc-v1",
+    "source_l1d_model": "artifacts/l1d-stage4-bc-mlp-v1/model/small-mlp-bc.json",
+    "source_l1d_preregistration": "experiments/l1d-stage4-bc-mlp-v1.json",
+    "source_l1d_result": "artifacts/l1d-stage4-bc-mlp-v1/experiment-result.json",
+    "work_log_root": "work_log"
+  },
+  "schema": "th06-rl-l1d-target-contract-diagnosis-prereg-v1",
+  "selection_rule": {
+    "first": "Any propensity-mixture mismatch stops the learner ladder and assigns repair to the recorder/dataset boundary.",
+    "second": "With exact propensity, a soft-target final KL advantage of at least 0.005 selects one separately preregistered full-propensity BC target correction.",
+    "third": "Otherwise, a hard-target KL reduction of at least 0.01 selects one separately preregistered train-only convergence correction.",
+    "fourth": "If neither train-only effect is material, select one structured current-observation scorer rather than history; current features already reconstruct the collector exactly.",
+    "selection_uses_continuation_validation": false
+  },
+  "sha256_bindings": {
+    "diagnosis_runner": "a5da89623bd027f733e121dbf375fb83f7253fb1d0127888f5cec6f4c7f8f184",
+    "diagnostics_module": "a1e5f8ecac16a4583db2432337cab4fa93d161f168e243f37641c004fb02fc2d",
+    "source_collection_ledger": "614e44b1eab047041337a5ebcee01af3ef672d01a265d856d0dd58c530dc4c87",
+    "source_l1d_model": "3f8d54f2574e4830c0b2cc81c516d70bcc5637967600a8df8941860a8ddaa286",
+    "source_l1d_preregistration": "1fab3f9f8e2fdafe78aa5647f44ada16a80f82c9eb15f6183a138a3ae18bd79c",
+    "source_l1d_result": "aaf62b7e6a696c4d72e7f61a8b68e772d45e6f320b23c7e963b84b15d7657bf2"
+  }
+}

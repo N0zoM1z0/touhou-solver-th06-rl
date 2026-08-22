@@ -57,6 +57,13 @@ Current checkpoint:
    bound. Its decision is `stop-l1d-small-current-observation-mlp`; no Wine
    canary or value learning is admitted. Do not post-hoc add temperature,
    history, auxiliary targets, IQL, object encoders, or Wine to this result.
+9. run the frozen offline-only target-contract diagnosis in
+   `experiments/l1d-stage4-target-diagnosis-v1.json` before choosing another
+   learner. It audits every recorded full propensity and compares paired
+   500-update hard-label and full-propensity train-only continuations from the
+   frozen L1d state. Neither branch is serialized or evaluated on validation.
+   This distinguishes capture/target corruption, premature stopping, unused
+   exact supervision, and remaining flat-MLP misspecification without Wine.
 
 Four preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
