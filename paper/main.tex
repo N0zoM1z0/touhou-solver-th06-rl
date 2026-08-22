@@ -61,9 +61,12 @@ probability scale as sufficient and selected one small current-observation
 nonlinear ablation without inspecting scaled validation.  That MLP converged
 and improved held-out log loss, accuracy, and Brier over the linear model, but
 failed the unchanged calibration gate and was not run online.  A frozen
-target-contract diagnosis now tests whether the remaining error belongs to
-recorded propensity, sampled-label training, stopping, or flat-model
-misspecification before another learner is admitted.
+target-contract diagnosis then verified the recorded propensities exactly and
+found neither sampled-label noise, 500 more optimization steps, nor replacing
+one-hot targets with full propensities sufficient.  The residual is localized
+to the flat scorer's inductive bias for an exactly reconstructible
+action-conditioned lexicographic rule, selecting one structured
+current-observation scorer rather than history.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -513,6 +516,8 @@ Current-observation BC & Negative held-out gate & Validation NLL 2.014976 beat a
 Current-observation BC convergence follow-up & Inconclusive & Validation NLL improved to 1.720755 and ECE to 0.055148, but 2,000 updates ended at gradient ratio 0.0196 rather than the frozen 0.01 threshold; no canary ran. \\
 Current-observation BC timebox extension & Negative held-out gate & The identical fit converged at update 4,631 and validation NLL improved to 1.691664, but ECE 0.059713 exceeded the unchanged 0.028732 limit; no canary ran. \\
 L1c residual decomposition & Completed & Train-only scaling remained miscalibrated; current features reconstructed the collector exactly while the linear model reproduced only 66--67\% of its reactive choices, selecting one small current-observation MLP. \\
+Small current-observation MLP & Negative held-out gate & The fixed 114--32--18 model converged and improved validation NLL to 1.568672, but ECE 0.076007 exceeded the unchanged 0.028732 limit; no canary ran. \\
+L1d target-contract diagnosis & Completed & All propensities were exact; paired train-only continuations rejected sampled-label noise, stopping, and discarded full propensities as sufficient explanations, selecting one structured current-observation scorer. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -943,6 +948,45 @@ is one structured current-observation scorer, not history.  This diagnosis
 runs no Wine, fits no deployable model, does not revise the negative L1d result,
 and cannot admit value learning.
 
+The diagnosis ran at solver commit
+\path{b12efebd995832fd68669af163255419cd517dc7}.  All 193,331 train and
+94,162 validation rows matched the declared behavior distribution with maximum
+absolute error exactly zero.  Frozen L1d validation
+$\mathrm{KL}(\mu\Vert\pi)$ was 0.563604 and exact-distribution top-label
+calibration error was 0.077039, close to sampled-action ECE 0.076007; sampling
+noise is therefore not a sufficient explanation.  The current features
+reconstructed the reactive action on every row, whereas L1d agreed on only
+0.754633 of train and 0.748550 of validation rows.  On validation, agreement
+was 0.801009 when boundary reserve was decisive and 0.725546 when clearance
+was decisive, but only 0.003086 for focused and 0.039474 for lexical final tie
+breaks.
+
+After 500 additional hard-target train updates, train
+$\mathrm{KL}(\mu\Vert\pi)$ fell from 0.552480 to 0.542529, a 0.009951
+reduction just below the frozen 0.01 materiality threshold.  The paired
+full-propensity branch ended at 0.541191, only 0.001338 nat better than the hard
+branch and below the frozen 0.005 threshold.  Thus the result does not claim
+that further optimization or exact soft labels have zero effect; it rejects
+either as sufficient for the large residual under the preregistered bounds.
+The selected attribution is a flat-model inductive-bias mismatch for the known
+action-conditioned lexicographic relation.  History remains unsupported.
+The experiment-plan and result SHA-256 digests are
+\path{eabe1743d40bc1cb8d5ab949826658ac46e483ef564ce5e922a4f84739f05738}
+and
+\path{6aaee7631249dc30f0ac60fa76a3e72a2c42ab5bda580340ca6b14722b056e4f},
+respectively.
+
+The diagnosis also exposes two prospective protocol corrections without
+changing any historical decision.  First, reducing a captured full behavior
+distribution to one sampled action discards exact supervision, although its
+measured effect here was only 0.001338 nat.  Second, top-label ECE relative to
+a diffuse action-frequency predictor is not a proper distributional comparison:
+such a predictor can have small ECE despite poor likelihood.  A future
+behavior-model gate should compare episode-bootstrap cross-entropy or
+$\mathrm{KL}(\mu\Vert\pi)$ directly against the recorded full distribution.
+L1d remains negative because it is also poor under that exact target; this is
+not a post-hoc revision of its frozen gate.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1060,8 +1104,11 @@ did not converge within its frozen timebox and is inconclusive.  L1c then
 converged and failed the unchanged calibration gate.  The read-only residual
 diagnosis selected one small current-observation MLP without reading scaled
 validation.  That model converged and improved held-out proper scores but
-failed calibration; the target-contract root-cause diagnosis is frozen before
-the next learner choice.  There is no authorized learned candidate.
+failed calibration.  The completed target-contract diagnosis found exact
+propensities and localized the residual to flat-model misspecification after
+its other frozen explanations missed their materiality thresholds.  One
+structured current-observation scorer is selected next.  There is no
+authorized learned candidate.
 
 \section{Threats to Validity}
 
@@ -1116,9 +1163,12 @@ L1c changed only that ceiling, reached the train-only gate, and still failed
 held-out calibration.  The linear current-observation candidate is therefore
 rejected under the joint gate.  Train-only scale correction was insufficient,
 current features exactly reconstructed the collector, and the fixed small MLP
-then improved held-out NLL but also failed calibration.  Before another model,
-one frozen target-contract diagnosis tests the recorded full propensities,
-sampled-label objective, train-only stopping, and remaining flat-model error.
+then improved held-out NLL but also failed calibration.  The frozen
+target-contract diagnosis verified every recorded propensity, found the
+sampled-label, stopping, and discarded-soft-target explanations insufficient,
+and localized the residual to the flat model's handling of a reconstructible
+action-conditioned lexicographic rule.  The next bounded candidate is one
+structured current-observation scorer, not history.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

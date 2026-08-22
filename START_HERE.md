@@ -57,13 +57,15 @@ Current checkpoint:
    bound. Its decision is `stop-l1d-small-current-observation-mlp`; no Wine
    canary or value learning is admitted. Do not post-hoc add temperature,
    history, auxiliary targets, IQL, object encoders, or Wine to this result.
-9. run the frozen offline-only target-contract diagnosis in
-   `experiments/l1d-stage4-target-diagnosis-v1.json` before choosing another
-   learner. It audits every recorded full propensity and compares paired
-   500-update hard-label and full-propensity train-only continuations from the
-   frozen L1d state. Neither branch is serialized or evaluated on validation.
-   This distinguishes capture/target corruption, premature stopping, unused
-   exact supervision, and remaining flat-MLP misspecification without Wine.
+9. retain the completed offline-only target-contract diagnosis from commit
+   `b12efebd995832fd68669af163255419cd517dc7`. Every recorded propensity
+   exactly matched the declared mixture. Sampled-label noise, 500 more hard
+   updates, and use of the full propensity target did not meet their frozen
+   explanatory thresholds. Current features reconstruct the collector exactly,
+   but L1d reproduced only 74.9% of its validation actions and nearly failed
+   the rare focused/lexical tie stages. The selected next experiment is one
+   structured current-observation scorer; no history, Wine, or value learning
+   is admitted.
 
 Four preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -92,7 +94,16 @@ L1d then showed that the fixed nonlinear representation materially improves
 held-out NLL, accuracy, and Brier over converged L1c, but its train and
 validation ECE remained high and the joint supervised gate failed. This exact
 MLP is rejected as an online candidate; the result neither demonstrates a
-need for history nor admits a Wine canary or value learning.
+need for history nor admits a Wine canary or value learning. The subsequent
+target-contract diagnosis verified every captured behavior distribution
+exactly. Against that exact distribution L1d still had validation KL 0.563604
+and calibration error 0.077039. Five hundred more hard-target updates reduced
+train KL by only 0.009951, while the paired full-propensity target gained only
+0.001338 nat over the hard target. The frozen selection rule therefore assigns
+the failure to the flat model's inductive bias and selects a shared
+action-conditioned current-observation scorer. Future probability gates should
+use the captured full distribution and a proper score directly; this
+prospective correction does not revise any negative L1--L1d decision.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.
