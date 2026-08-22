@@ -51,7 +51,8 @@ time only after a simpler preregistered experiment exposes a concrete failure.
 The paper reports an audited six-stage infrastructure baseline with 108 HITs,
 a completed causal learner-view audit, a negative serial/parallel equivalence
 gate, a completed negative Stage~4 supervised-baseline gate, and an
-inconclusive optimization-only follow-up.  The fitted current-observation
+inconclusive optimization-only follow-up.  A second optimization-only
+follow-up is preregistered but not yet run.  The fitted current-observation
 behavior clones improved held-out action log loss over action frequency but
 did not pass their separately frozen convergence and calibration requirements;
 neither was evaluated online.
@@ -417,7 +418,11 @@ train gradient is not stationary.  L1b therefore changes only the train-only
 stopping rule and corrects the ECE implementation; it does not change data,
 split, representation, target, model class, regularization, or comparator.
 L1b exhausted its frozen update timebox before convergence and is inconclusive,
-so it still does not admit L2.
+so it still does not admit L2.  L1c is the narrow continuation: it restarts the
+same fit from zero and changes only the maximum update ceiling from 2,000 to
+10,000, retaining the same train-only 0.01 relative-gradient early stop and
+evaluating validation exactly once after stopping.  No optimizer,
+hyperparameter, representation, comparator, or gate changes.
 
 \paragraph{L2: one representation change.}
 Add a short, fixed physical/action history and simple factual heads for HIT
@@ -487,6 +492,7 @@ Reactive scorer & Executed control & E0 completed one route with 108 HITs; this 
 Action frequency & Evaluated comparator & Validation NLL 2.286394 and ECE 0.008749 on the frozen four-episode split. \\
 Current-observation BC & Negative held-out gate & Validation NLL 2.014976 beat action frequency, but ECE 0.124251 exceeded the frozen 0.028749 bound; no Wine canary ran. \\
 Current-observation BC convergence follow-up & Inconclusive & Validation NLL improved to 1.720755 and ECE to 0.055148, but 2,000 updates ended at gradient ratio 0.0196 rather than the frozen 0.01 threshold; no canary ran. \\
+Current-observation BC timebox extension & Preregistered, not run & Restart from zero with the identical fit and gate; only the maximum update ceiling changes from 2,000 to 10,000, with immediate train-only early stopping at the same 0.01 gradient ratio. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -768,6 +774,23 @@ and
 Any convergence-suitable optimizer or larger timebox is another frozen L1
 experiment; validation may not select it.
 
+The L1c protocol is frozen in
+\path{experiments/l1c-stage4-bc-timebox-v1.json}.  It reuses the exact L1
+corpus, whole-episode split, code, from-zero initialization, features, target,
+linear model, full-batch optimizer, learning rate, regularization, seed,
+comparators, and acceptance gates.  Its single experimental change is a
+maximum of 10,000 rather than 2,000 updates.  After at least 100 updates it
+still stops immediately when train gradient L2 is at most 0.01 of the same
+initial value; validation is evaluated once only after that train-only stop.
+The ceiling is five times L1b's optimization budget because L1b ended less
+than a factor of two above the frozen gradient threshold.  This is a resource
+bound, not a validation-selected update.  L1c collects no Wine data and runs
+no canary.  If it converges but fails calibration, the transparent linear
+current-observation representation is rejected by the unchanged gate.  If it
+still does not converge, the next smallest experiment is a separately frozen
+deterministic convergence-suitable optimizer, not history or a larger model.
+L1c has not yet been run.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -881,8 +904,8 @@ gates.  E3 collected its complete serial Stage~4 inventory and fitted one
 research model.  That model improved held-out likelihood but failed calibration
 and was never executed online.  The bounded diagnosis is complete; the
 offline-only L1b follow-up improved held-out metrics but did not converge within
-its frozen timebox and is inconclusive.  There is no authorized learned
-candidate.
+its frozen timebox and is inconclusive.  The L1c maximum-update extension is
+preregistered but has not yet run.  There is no authorized learned candidate.
 
 \section{Threats to Validity}
 
@@ -932,6 +955,8 @@ held-out likelihood but failed calibration, so it emitted no online candidate.
 The diagnosis localized the next test to convergence of that same transparent
 fit.  L1b improved held-out likelihood and calibration without a representation
 change but exhausted its optimizer timebox before the frozen gradient gate.
+L1c is preregistered to change only that ceiling while retaining the same
+train-only stop and held-out gate; it has not yet run.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

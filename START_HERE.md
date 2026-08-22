@@ -41,10 +41,14 @@ Current checkpoint:
    commit `7285ee76fe36eda1470844b3635eaddd64292d23`. It reused the exact L1
    corpus and split and improved every held-out score, but exhausted 2,000
    updates at gradient ratio 0.0196 rather than the frozen 0.01 threshold;
-6. do not reinterpret L1b as a representation failure or run its withheld Wine
-   canary. Any convergence-suitable optimizer or larger timebox is a new
-   preregistration. IQL, history, object encoders, and parallel Wine collection
-   remain disabled.
+6. run only the preregistered offline L1c timebox extension next. It restarts
+   the identical fit from zero, changes only the maximum update count from
+   2,000 to 10,000, stops immediately at the same train-only 0.01 gradient
+   ratio, and evaluates validation exactly once after stopping;
+7. do not reinterpret L1b as a representation failure or run a Wine canary.
+   L1c must first reach convergence and pass the unchanged held-out joint gate.
+   IQL, history, object encoders, temperature scaling, optimizer changes, and
+   parallel Wine collection remain disabled.
 
 Two research models have been fitted, but neither passed its preregistered
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -60,7 +64,9 @@ first unresolved boundary to optimization convergence rather than missing
 capture or validation drift. L1b then improved validation NLL from 2.014976 to
 1.720755 and ECE from 0.124251 to 0.055148, but its gradient ratio 0.0196 did
 not reach the frozen 0.01 convergence requirement. The result is inconclusive;
-short history and offline value learning remain blocked.
+the separately preregistered L1c experiment changes only the maximum update
+timebox and has not yet been run. Short history and offline value learning
+remain blocked.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.
