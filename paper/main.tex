@@ -84,8 +84,11 @@ independent confirmation.  A further frozen support/lifecycle diagnosis found
 that the weak HIT increment was confined to actions equal to the reactive
 baseline and reversed sign on actions known to differ from it.  Pre-first-HIT
 rows retained a negative point delta, rejecting a purely post-HIT artifact,
-while overprediction and clipping remained material.  Fresh confirmation must
-therefore test the nonbaseline support boundary; no action value is admitted.
+while overprediction and clipping remained material.  Eight fresh complete
+episodes then independently reproduced the 16-frame proper-score increment,
+including the preregistered nonbaseline point and pre-first-HIT boundaries, but
+failed calibration readiness.  The predictive representation is confirmed;
+causal action value, history, and online policy remain unadmitted.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -1232,6 +1235,55 @@ replication, nonbaseline support, pre-first-HIT lifecycle, and calibration as
 separate gates.  L2c identifies no causal effect and admits neither history nor
 value learning.
 
+The independent confirmation is frozen in
+\path{experiments/l2d-stage4-fresh-confirmation-v1.json}.  It collected eight
+new serial natural-RNG Stage~4 episodes under eight new policy RNG seeds and
+the unchanged reactive plus 20\% uniform observed-shield mixture.  Collection
+could not peek or stop sequentially, physical HIT could not cause a retry, and
+the untouched L2/L2b fits were evaluated only after all eight slots completed.
+The primary gate required 16-frame event support, at least six of eight episode
+directions favoring full, and a 2,000-draw complete-episode bootstrap upper
+endpoint below zero.  Separate point gates required known-nonbaseline and
+pre-first-HIT rows from every episode with frozen positive-count minima.
+Calibration readiness required absolute calibration-in-the-large at most
+0.002 and full ECE no more than 0.001 above state-only.  Passing predictive
+gates could not admit causal action value, a learned policy, or gameplay claims.
+
+L2d ran at solver commit
+\path{c17839cbaed0643e567193ee8dc2e630931b70cf}.  All eight episodes were
+accepted on attempt one, with 91 physical HITs total, zero Bomb, and no rejected
+infrastructure attempt.  The collection ledger and result SHA-256 values are
+\path{5c9625b5ea82e2ef033b663e9a68535df13e6e7793673d6c326b0b7463bfb50c}
+and
+\path{ee240dc3a8bfa5a02eaa146f7a37ef9cbf281c39edf7712b7f79046911e0ad2f}.
+The primary view contained 188,791 rows and 1,085 positive windows.  Full versus
+state-only Brier was 0.0055114 versus 0.0055610; all eight episode directions
+favored full, and the full-minus-state interval was
+$[-7.14\times10^{-5},-2.75\times10^{-5}]$.  Thus independent signal
+replication passed.
+
+The known-nonbaseline view contained 35,272 rows and 172 positives from all
+eight episodes.  Its point delta changed from the old positive value to a weak
+$-2.10\times10^{-6}$ and therefore passed the frozen point/support boundary,
+but only three of eight episode directions favored full.  In contrast, the
+baseline-equal delta was $-6.05\times10^{-5}$ and favored full in every
+episode.  The pre-first-HIT delta was $-2.00\times10^{-5}$ with all eight
+directions favorable, independently rejecting a purely post-HIT explanation.
+At 64 frames the descriptive overall and nonbaseline deltas were
+$-4.56\times10^{-4}$ and $-2.39\times10^{-4}$, with seven and six favorable
+episode directions respectively.
+
+Calibration readiness failed.  At 16 frames, full calibration-in-the-large
+was 0.00193 and met its ceiling, but full ECE 0.001976 exceeded state-only ECE
+0.000960 by 0.001016, just above the frozen allowance; 73,334 full predictions
+clipped to zero.  At 64 frames the ECE gap was much larger, 0.005139 versus
+0.000253.  The formal decision is
+\texttt{confirm-predictive-signal-calibration-not-ready}.  Fresh data therefore
+confirm incremental logged-action predictive information, not a stable
+nonbaseline ranking, causal action effect, calibrated action value, or online
+candidate.  The next bounded experiment remains offline and may change only
+the train-only probability/calibration surface.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1363,7 +1415,11 @@ incremental shield signal.  The subsequent support/lifecycle decomposition
 localized that weak HIT increment to baseline-equal actions: it reversed sign
 on actions known to differ from the reactive baseline, while pre-first-HIT rows
 still favored full.  This rejects a pure post-HIT explanation but not reactive
-route/tie-breaking context; fresh independent confirmation remains required.
+route/tie-breaking context.  Eight fresh episodes independently confirmed the
+overall 16-frame proper-score increment and pre-first-HIT direction.  The
+nonbaseline point gate also passed, but only three of eight episode directions
+favored full, and calibration readiness failed; value learning remains
+unadmitted.
 
 \section{Threats to Validity}
 
@@ -1432,7 +1488,10 @@ risk, not history or value learning.  The incremental-action attribution found
 weak 16-frame but not 64-frame HIT evidence and worse full-model calibration;
 the fixed lifecycle/support attribution then found that the increment was
 baseline-equal and reversed sign on known nonbaseline actions.  Fresh
-confirmation now tests that exact boundary with untouched models; history still
+confirmation subsequently reproduced the overall signal on all eight episode
+directions and a weak negative nonbaseline point delta, while failing the
+unchanged calibration-readiness gate.  The next boundary is one train-only
+calibration/probability model, not history or value learning; history still
 requires separately measured temporal ambiguity.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
