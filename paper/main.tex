@@ -98,9 +98,11 @@ current-root/action regressor trained by 16-frame physical-HIT Brier then
 strongly improved the frozen score and its same-architecture state-only
 ablation, with acceptable calibration.  Its formal gate still rejected fresh
 confirmation because low-propensity nonbaseline and pre-first-HIT evidence was
-not episode-stable.  Propensity stratification identifies a logged-action
-measure mismatch, selecting one bounded uniform-shield-target weighted hazard
-experiment before any history encoder or value learner.
+not episode-stable.  An exact bounded uniform-shield-target weighting test then
+worsened its target Brier comparator and retained unstable low-propensity and
+nonbaseline action evidence, rejecting logged action measure as the primary
+cause.  The next admitted representation test is one fixed short portable
+history; no hazard scorer or policy has been selected.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -441,8 +443,8 @@ representative algorithm that directly addresses it; the study need not exhaust
 every weaker model family first.  Conversely, an unfocused architecture or
 hyperparameter sweep cannot substitute for a named mechanism and a frozen
 decision rule.  A formally negative prototype may therefore select a modified
-member of the same algorithm family when its diagnostics sharply localize the
-failure, as L2f does for the logged action measure.
+member of the same algorithm family when its diagnostics select a falsifiable
+mechanism, as L2f selected the subsequently negative L2g action-measure test.
 
 \paragraph{L0: causal data audit (completed).}
 Build and test decision-epoch rows.  Admission requires exact raw linkage,
@@ -584,7 +586,8 @@ Support/lifecycle decomposition & Completed diagnostic & The old h16 increment w
 Fresh h16 factual-risk confirmation & Positive signal, not policy-ready & Eight new complete episodes reproduced the full-versus-state Brier increment in all episode directions and passed weak nonbaseline and pre-first-HIT point gates, but failed calibration readiness. \\
 Train-only Platt calibration & Negative probability-surface gate & The two-parameter monotone fit converged and passed calibration limits, but worsened h16 Brier versus both uncalibrated full and state-only and reversed both diagnostic point deltas. \\
 Direct action-conditioned h16 hazard & Negative formal gate; positive algorithm signal & Direct full Brier was 0.00480785 versus 0.00551139 for frozen L2 and 0.00500959 for same-architecture state-only, with both episode-bootstrap intervals wholly favorable.  Calibration passed, but nonbaseline and pre-first-HIT gates did not; no fresh confirmation ran. \\
-Uniform-shield-target weighted h16 hazard & Selected, not run & The next single change uses exact bounded target/behavior weights to align fitting and selection with ranking all observed-shield-admissible actions.  Propensity and baseline identity are not actor inputs; the existing portable shield-count feature is unchanged. \\
+Uniform-shield-target weighted h16 hazard & Negative action-measure gate & Exact weights passed, but weighted full Brier 0.00454350 was worse than frozen L2f at 0.00449955; overall, low-propensity, nonbaseline, pre-first-HIT, and candidate-bound gates failed.  No fresh confirmation ran. \\
+Fixed short portable-history h16 hazard & Selected, not run & The next representation experiment returns to unweighted L2f Brier and changes only causal past-root history.  Passing can select fresh confirmation only. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1434,8 +1437,9 @@ full-minus-state point delta of $+1.12\times10^{-6}$; at propensity at least
 0.5, 153,519 rows and 913 positives had $-2.43\times10^{-4}$ with all eight
 episode directions favorable.  The unweighted objective is therefore dominated
 by the reactive baseline measure, whereas deployment would rank the entire
-observed-shield set.  This is a measured action-measure mismatch, not yet
-evidence that current-root observations require history.
+observed-shield set.  This selected action-measure mismatch as the next
+falsifiable explanation; it was not yet evidence that current-root observations
+require history, and L2g subsequently rejected it as the primary cause.
 
 The research decision is to modify the objective measure while retaining the
 architecture.  L2g is preregistered in
@@ -1483,6 +1487,65 @@ experiment still fails the low-propensity/nonbaseline and pre-first-HIT gates,
 one fixed short history becomes the next representation test.  Tree sweeps,
 scalar calibration, collector BC, IQL, and online evaluation are not responses
 to the L2f result.
+
+L2g was executed once at commit
+\path{adb355875a0c008fc057881bad2c7f99e08e4302}.  The preregistration, plan,
+train-only fit, and final result SHA-256 hashes were respectively
+\texttt{e893a608276d26d8dbc75dbf73da0373e1c8d1206f5dfe959cc1b8398779cad6},
+\texttt{64d4a8e46844a590fb8c8f3524ce9e1eec64d21219a934a0270b955d6eeadb52},
+\texttt{e49143359a17e440221964a9977cc81461bc174e43e3c81f5dc1068e513b34e8},
+and
+\texttt{81dc532d094199133f72918f1c23931c614ae478c05770197c921ce4c523b9c7}.
+The weighted fits were serialized at 10:52:43 UTC before the reused-L2d load.
+Frozen L2f Brier and NLL reproduced with absolute error zero.
+
+On train, target-weighted full Brier was 0.00447703, versus 0.00459510 for
+weighted state-only and 0.00541167 for constant prevalence.  The intervention
+therefore learned a train action increment.  Its unconstrained surface was
+already defective: 13.38\% of full predictions and 12.23\% of state-only
+predictions required clipping below zero before evaluation data loaded.
+
+On reused L2d, target-weighted full Brier was 0.00454350, versus 0.00455238 for
+weighted state-only and 0.00449955 for frozen unweighted L2f full.  Weighted
+full minus frozen L2f full had point $+4.40\times10^{-5}$, interval
+$[-3.48\times10^{-5},1.28\times10^{-4}]$, and four of eight favorable episode
+directions.  Weighted full minus weighted state-only had point
+$-8.87\times10^{-6}$, interval
+$[-5.54\times10^{-5},3.64\times10^{-5}]$, and four favorable directions.  Under
+the logged measure, weighted full Brier worsened from L2f's 0.00480785 to
+0.00493361 with a wholly positive interval.  Thus the exact weighting change
+failed both its primary target-measure comparator and the overall action
+increment.
+
+The bulk below propensity 0.025 had 34,792 rows, 158 positives, a
+full-minus-state point of $+2.11\times10^{-5}$, interval
+$[-2.56\times10^{-5},6.39\times10^{-5}]$, and only three favorable episodes.
+Known-nonbaseline had 35,272 rows, 172 positives, point
+$+3.96\times10^{-6}$, and four favorable episodes.  Pre-first-HIT retained a
+favorable point of $-4.78\times10^{-5}$ but its interval crossed zero and only
+five episodes favored full.  In contrast, baseline-equal rows retained a
+$-2.06\times10^{-4}$ point increment with seven favorable directions.  Exact
+action-measure correction therefore did not remove the baseline-equal pattern.
+
+The full evaluation surface clipped 13.53\% of raw predictions and failed its
+candidate-bound gate.  Target-weighted calibration-in-the-large at
+$1.76\times10^{-5}$, target-weighted ECE at 0.000823, and logged calibration-
+in-the-large at $-4.87\times10^{-5}$ all passed.  Aggregate calibration after
+clipping does not repair the invalid raw surface or failed proper-score gates.
+The immutable decision is \texttt{reject-weighted-h16-hazard}; no fresh
+confirmation, Wine canary, history fit, or value learner ran.
+
+At the research level, importance weighting as the sole repair is stopped.
+Action-measure mismatch may contribute variance, but is not the primary L2f
+root cause because the exact correction failed its own target score and
+exploration-action views.  A bounded link could remove clipping but cannot by
+itself explain those failures.  Following the frozen L2g boundary and the TH06
+update-order partial observability result, the next separately preregistered
+experiment adds one fixed short portable history under the unweighted L2f
+measure.  It must preserve causal root order and the same low-propensity,
+nonbaseline, and pre-first-HIT views.  If history fails, the next boundary is
+the information discarded by the bounded current-root object summary, not a
+weight sweep or immediate value learner.
 
 \subsection{E4: minimal offline policy improvement}
 
@@ -1630,8 +1693,12 @@ nonbaseline interval narrowly crossed zero and pre-first-HIT episode directions
 were heterogeneous.  A propensity-stratified diagnosis localized the missing
 increment to the bulk of randomized actions below probability 0.025, whereas
 baseline-heavy rows improved in every episode.  The next frozen change is
-therefore bounded uniform-shield-target weighting, not history or value
-learning.
+therefore bounded uniform-shield-target weighting.  That exact weighting test
+then worsened target Brier against frozen L2f and failed every action-signal
+view, pre-first-HIT stability, and its candidate-bound gate despite passing
+weight and calibration contracts.  Logged action measure is rejected as the
+primary root cause.  Fixed short portable history is now the selected
+representation test; value learning remains unadmitted.
 
 \section{Threats to Validity}
 
@@ -1709,12 +1776,14 @@ failed its proper-score and signal-preservation gates and is rejected.  The
 aligned direct probability test then established a much stronger overall
 hazard model and incremental action-relative signal, but failed its frozen
 nonbaseline and pre-first-HIT stability gates.  Its formal decision is reject,
-so no fresh confirmation or policy ran; its research decision is modify because
-the failure is concentrated in the low-propensity action measure rather than
-the full candidate's overall discrimination or calibration.  The next
-separately preregistered test changes only fitting and selection to bounded
-uniform-observed-shield target/behavior weighting.  History requires that
-support-corrected current-root test to fail; value learning remains later.
+so no fresh confirmation or policy ran; its research decision was modify because
+the failure was concentrated in the low-propensity action measure rather than
+the full candidate's overall discrimination or calibration.  The subsequent
+exact bounded uniform-shield-target weighting test rejected that proposed main
+cause: it worsened its target Brier comparator, did not stabilize exploratory
+action signal, and produced a heavily clipping raw surface.  Its formal decision
+is also reject.  One fixed short portable-history h16 experiment under the
+unweighted L2f measure is now admitted; value learning remains later.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

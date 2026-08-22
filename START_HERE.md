@@ -124,20 +124,21 @@ Current checkpoint:
     rejected it: the comparator had an invalidly clipping raw surface, the
     nonbaseline interval narrowly crossed zero, and pre-first-HIT directions
     were heterogeneous. No fresh confirmation or Wine run occurred.
-17. run only the frozen offline L2g experiment in
-    `experiments/l2g-uniform-shield-weighted-hazard-v1.json`. Its single
-    algorithmic change is the exact bounded uniform-observed-shield
-    target/behavior weight `(1 / shield_action_count) / behavior_probability`
-    in fit and primary Brier selection. It retains the L2f architecture,
-    features, target, split, and reused-L2d limitation; the full candidate is
-    compared with frozen unweighted L2f full and a weighted state-only
-    ablation. Low-propensity, known-nonbaseline, pre-first-HIT, candidate-bound,
-    and weighted-calibration gates are frozen. Behavior propensity and baseline
-    identity remain offline-only and forbidden actor inputs. The shield-set
-    size retains its existing portable current-root feature role and also
-    defines the uniform target probability; no feature changes. Passing selects
-    wholly fresh confirmation only. History, value learning, and Wine remain
-    blocked.
+17. retain the completed negative offline L2g experiment run at commit
+    `adb355875a0c008fc057881bad2c7f99e08e4302`. Exact bounded
+    uniform-shield target weighting passed its recorder contract but did not
+    improve target-weighted Brier over frozen L2f and did not stabilize the
+    overall, low-propensity, nonbaseline, or pre-first-HIT action increments.
+    The full raw surface also clipped 13.53% of evaluation rows. Its decision is
+    `reject-weighted-h16-hazard`; action-measure mismatch is rejected as the
+    primary L2f root cause. No fresh confirmation or Wine run occurred.
+18. preregister one fixed short portable-history h16 experiment before fitting
+    it. Return to the unweighted L2f Brier measure and frozen current-root model
+    so temporal history is the only core representation change. It must retain
+    exact causal root ordering, whole-episode splits, behavior-continuation
+    labels, forbidden-feature rejection, and the low-propensity/nonbaseline and
+    pre-first-HIT boundaries. Passing can select wholly fresh confirmation only;
+    value learning and Wine remain blocked.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -211,13 +212,16 @@ improved Brier, ranking, calibration, and the overall action-relative ablation.
 Its formal gate nevertheless failed on the low-propensity/nonbaseline and
 pre-first-HIT boundaries. Propensity stratification localized the missing
 action increment to the bulk of randomized actions below behavior probability
-0.025, while baseline-heavy rows improved in all eight episodes. The next
-experiment therefore changes the training and selection measure, not the
-representation: one bounded propensity-corrected uniform-observed-shield Brier
-model. If that current-root model still fails the same support/lifecycle views,
-one fixed short history becomes the next justified representation test. Value
-learning and Wine remain blocked until a hazard candidate passes selection and
-wholly fresh confirmation.
+0.025, while baseline-heavy rows improved in all eight episodes. The bounded
+propensity-corrected test then passed its exact weight and calibration contracts
+but failed its own target-score, exploration-action, lifecycle, and candidate-
+surface gates. It worsened uniform-target Brier versus frozen L2f and retained
+the baseline-equal signal pattern. Logged action measure is therefore not the
+primary root cause. The next justified representation test is one fixed short
+portable history under the unweighted L2f measure; this tests the known TH06
+partial-observability boundary without simultaneously changing capacity,
+target, or evaluation episodes. Value learning and Wine remain blocked until a
+hazard candidate passes selection and wholly fresh confirmation.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.

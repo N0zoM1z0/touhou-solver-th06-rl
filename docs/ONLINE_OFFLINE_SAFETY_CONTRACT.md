@@ -47,16 +47,15 @@ available model. The completed order is causal decision-row audit, one frozen
 serial complete-episode inventory, action-frequency/reactive controls,
 current-observation behavior cloning, fixed-horizon factual-risk probes, and
 one direct Brier-trained action-conditioned hazard model. That direct model
-established overall nonlinear action-relative signal but localized its
-remaining failure to the baseline-heavy logged action measure. The next
-admitted change is one bounded target/behavior-weighted hazard whose target
-measure is uniform over the observed-shield set. Exact behavior propensity and
-baseline identity may define or audit offline loss and evaluation weights, but
+established overall nonlinear action-relative signal. A subsequent exact
+bounded target/behavior-weighted hazard rejected baseline-heavy action measure
+as the primary remaining cause: it worsened its target Brier comparator and did
+not stabilize low-propensity or known-nonbaseline action signal. Exact behavior
+propensity and baseline identity remain offline-only diagnostics or weights and
 may never become actor inputs. Observed-shield set size retains its existing
-portable current-root feature role and also defines the uniform target measure;
-L2g does not change the feature schema. A fixed short-history ablation is
-admitted only if this support-corrected current-root boundary still fails; one
-offline expected-HIT value method follows only after the representation gate.
+portable current-root feature role. The next admitted change is one fixed short
+portable history under the unweighted direct-hazard measure. One offline
+expected-HIT value method follows only after that representation gate.
 Object-set/recurrent encoders, alternative survival objectives, CQL after IQL,
 ensembles, OPE, active collection, learned dynamics/MPC, and real-Wine branch
 acquisition require separate evidence gates. A learned prediction scores
