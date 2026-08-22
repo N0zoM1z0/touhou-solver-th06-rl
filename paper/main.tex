@@ -584,7 +584,7 @@ Support/lifecycle decomposition & Completed diagnostic & The old h16 increment w
 Fresh h16 factual-risk confirmation & Positive signal, not policy-ready & Eight new complete episodes reproduced the full-versus-state Brier increment in all episode directions and passed weak nonbaseline and pre-first-HIT point gates, but failed calibration readiness. \\
 Train-only Platt calibration & Negative probability-surface gate & The two-parameter monotone fit converged and passed calibration limits, but worsened h16 Brier versus both uncalibrated full and state-only and reversed both diagnostic point deltas. \\
 Direct action-conditioned h16 hazard & Negative formal gate; positive algorithm signal & Direct full Brier was 0.00480785 versus 0.00551139 for frozen L2 and 0.00500959 for same-architecture state-only, with both episode-bootstrap intervals wholly favorable.  Calibration passed, but nonbaseline and pre-first-HIT gates did not; no fresh confirmation ran. \\
-Uniform-shield-target weighted h16 hazard & Selected, not run & The next single change uses exact bounded target/behavior weights to align fitting and selection with ranking all observed-shield-admissible actions.  Propensity is not an actor input; history remains gated on this result. \\
+Uniform-shield-target weighted h16 hazard & Selected, not run & The next single change uses exact bounded target/behavior weights to align fitting and selection with ranking all observed-shield-admissible actions.  Propensity and baseline identity are not actor inputs; the existing portable shield-count feature is unchanged. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1438,17 +1438,51 @@ observed-shield set.  This is a measured action-measure mismatch, not yet
 evidence that current-root observations require history.
 
 The research decision is to modify the objective measure while retaining the
-architecture.  The next separately preregistered experiment uses the exact
+architecture.  L2g is preregistered in
+\path{experiments/l2g-uniform-shield-weighted-hazard-v1.json} and uses the exact
 one-step ratio
 $w=(1/|\mathcal A_{\mathrm{shield}}|)/\mu(a\mid s)$ in both fitting and its
 primary Brier comparisons.  Under the frozen 80\% baseline plus 20\% uniform
 collector, a nonbaseline action has weight exactly five, so this is bounded
 action-distribution correction rather than long-horizon OPE.  Propensity and
-shield-set size are weights only, never actor features.  If this corrected
-current-root experiment still fails the low-propensity/nonbaseline and
-pre-first-HIT gates, one fixed short history becomes the next representation
-test.  Tree sweeps, scalar calibration, collector BC, IQL, and online
-evaluation are not responses to the L2f result.
+baseline identity remain offline-only.  Shield-set size retains its existing
+portable current-root feature role and also defines the target probability, so
+the feature schema is unchanged.  All weights must be
+finite, positive, at most five, and reproduce the declared collector formula;
+the full train and reused-L2d inventories remain unchanged.
+
+A pre-fit read-only contract audit reconstructed all weights without fitting a
+model.  The 192,791 train rows had range $[0.068493,5]$, mean 1.00113, and
+effective sample size 41,048; the 188,791 reused-L2d rows had the same range,
+mean 0.99486, and effective sample size 39,960.  Maximum absolute error against
+the declared collector probability was $6.94\times10^{-18}$ and every known-
+nonbaseline weight equaled five within $8.88\times10^{-16}$.  This validates
+the bounded one-step weighting contract but also records its roughly 40,000-row
+effective support; it is not a model result or independent evidence.
+
+L2g retains L2f's 64 depth-3 trees, learning rate, regularization, h16 factual
+target, portable 15-field current-root/action vector, and state-only ablation.
+It serializes both weighted fits before loading reused L2d.  Its primary
+uniform-target episode bootstrap must put the upper endpoint below zero for
+weighted full versus both frozen unweighted L2f full and weighted state-only,
+with at least six of eight state-ablation episode directions favorable.  The
+known-nonbaseline and below-0.025 propensity views must each have sufficient
+factual positives, all eight episodes, an upper endpoint below zero, and at
+least six favorable episode directions.  The unchanged pre-first-HIT support
+must also have an upper endpoint below zero and at least six favorable
+directions.  Target-weighted calibration-in-the-large must be within 0.002 and
+target-weighted ECE may exceed weighted state-only by at most 0.001; logged-
+measure calibration-in-the-large retains the same 0.002 guardrail.
+
+L2f showed that applying a clipping gate to a noncandidate comparator can
+reject an otherwise bounded full candidate.  L2g prospectively corrects that
+gate: only the selected full model must keep raw clipping at or below 0.001;
+comparator clipping remains fully reported.  Passing selects the immutable
+scorer for wholly fresh confirmation only.  If this corrected current-root
+experiment still fails the low-propensity/nonbaseline and pre-first-HIT gates,
+one fixed short history becomes the next representation test.  Tree sweeps,
+scalar calibration, collector BC, IQL, and online evaluation are not responses
+to the L2f result.
 
 \subsection{E4: minimal offline policy improvement}
 

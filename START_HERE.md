@@ -124,14 +124,20 @@ Current checkpoint:
     rejected it: the comparator had an invalidly clipping raw surface, the
     nonbaseline interval narrowly crossed zero, and pre-first-HIT directions
     were heterogeneous. No fresh confirmation or Wine run occurred.
-17. preregister one propensity-corrected current-root hazard experiment before
-    fitting it. The single algorithmic change is bounded target/behavior
-    weighting from the exact logged collector probabilities, so the Brier
-    objective represents uniform ranking over the observed-shield set instead
-    of the baseline-heavy behavior measure. Propensity and shield-set size are
-    training/evaluation weights only and remain forbidden actor inputs. A
-    fixed short history is admitted only if this support-corrected boundary
-    still fails; value learning and Wine remain blocked.
+17. run only the frozen offline L2g experiment in
+    `experiments/l2g-uniform-shield-weighted-hazard-v1.json`. Its single
+    algorithmic change is the exact bounded uniform-observed-shield
+    target/behavior weight `(1 / shield_action_count) / behavior_probability`
+    in fit and primary Brier selection. It retains the L2f architecture,
+    features, target, split, and reused-L2d limitation; the full candidate is
+    compared with frozen unweighted L2f full and a weighted state-only
+    ablation. Low-propensity, known-nonbaseline, pre-first-HIT, candidate-bound,
+    and weighted-calibration gates are frozen. Behavior propensity and baseline
+    identity remain offline-only and forbidden actor inputs. The shield-set
+    size retains its existing portable current-root feature role and also
+    defines the uniform target probability; no feature changes. Passing selects
+    wholly fresh confirmation only. History, value learning, and Wine remain
+    blocked.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has

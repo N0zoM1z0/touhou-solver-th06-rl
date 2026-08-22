@@ -51,10 +51,12 @@ established overall nonlinear action-relative signal but localized its
 remaining failure to the baseline-heavy logged action measure. The next
 admitted change is one bounded target/behavior-weighted hazard whose target
 measure is uniform over the observed-shield set. Exact behavior propensity and
-shield-set size may define offline loss and evaluation weights, but may never
-become actor inputs. A fixed short-history ablation is admitted only if this
-support-corrected current-root boundary still fails; one offline expected-HIT
-value method follows only after the representation gate.
+baseline identity may define or audit offline loss and evaluation weights, but
+may never become actor inputs. Observed-shield set size retains its existing
+portable current-root feature role and also defines the uniform target measure;
+L2g does not change the feature schema. A fixed short-history ablation is
+admitted only if this support-corrected current-root boundary still fails; one
+offline expected-HIT value method follows only after the representation gate.
 Object-set/recurrent encoders, alternative survival objectives, CQL after IQL,
 ensembles, OPE, active collection, learned dynamics/MPC, and real-Wine branch
 acquisition require separate evidence gates. A learned prediction scores
