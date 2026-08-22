@@ -1,0 +1,121 @@
+{
+  "auxiliary_targets": [],
+  "comparators": [
+    "frozen-l1d-small-current-observation-mlp",
+    "exact-recorded-behavior-distribution"
+  ],
+  "data": {
+    "reuse_without_mutation": true,
+    "source_experiment_id": "l1-stage4-bc-v1",
+    "train_episode_indices": [0, 1, 3, 4, 6, 7, 9, 10],
+    "validation_episode_indices": [2, 5, 8, 11]
+  },
+  "decision": "Does one seven-parameter scorer shared across all actions fix the flat model's measured action-relative and final-tie residual while retaining the frozen current-observation corpus and hard behavior target?",
+  "diagnostic_basis": {
+    "frozen_l1d_validation_kl_recorded_mu_to_model": 0.563603676971699,
+    "frozen_l1d_validation_reactive_agreement": 0.7485503706378369,
+    "propensity_pipeline_exact": true,
+    "selected_next_experiment": "preregister-structured-current-observation-scorer",
+    "selection_rationale": "All current features reconstruct the collector exactly, but the flat 114--32--18 model duplicates action geometry across 18 outputs and agrees on only 74.9 percent of validation reactive actions, including 0.3 percent focused-stage and 3.9 percent lexical-stage agreement. Neither 500 more hard-target updates nor the paired full-propensity target met its frozen explanatory threshold."
+  },
+  "experiment_id": "l1e-stage4-bc-shared-action-v1",
+  "fit": {
+    "action_feature_names": [
+      "clearance_unknown",
+      "clearance",
+      "boundary_reserve",
+      "is_current_action",
+      "is_stationary",
+      "is_focused",
+      "lexical_priority"
+    ],
+    "action_feature_schema": "th06-rl-shared-action-features-v1",
+    "bootstrap_samples": 2000,
+    "decision_epoch_schema": "th06-rl-decision-epoch-v1",
+    "exploration_probability": 0.2,
+    "feature_schema": "th06-rl-current-observation-features-v1",
+    "initialization": "all-zero-shared-linear",
+    "l2": 0.0001,
+    "learning_rate": 0.05,
+    "max_rows_per_split": 400000,
+    "maximum_updates": 10000,
+    "minimum_updates": 100,
+    "model": "masked-shared-linear-action-softmax",
+    "normalization": "mean and population standard deviation over train legal action rows only; sub-1e-9 scales become 1",
+    "optimizer": "full-batch-gradient-descent",
+    "relative_gradient_l2_tolerance": 0.01,
+    "seed": 0,
+    "target_schema": "th06-rl-published-executed-action-target-v1",
+    "validation_use": "evaluate exactly once after the train-only stopping rule; never select a feature, update, threshold, scale, or optimizer"
+  },
+  "gate": {
+    "absolute_distribution_fit": "validation KL(recorded mu || candidate) must be no greater than 0.1 nat",
+    "final_tie_target": "pooled validation agreement on rows first decided by focused or lexical tie breaking must be at least 0.5",
+    "maximum_validation_kl": 0.1,
+    "minimum_final_tie_agreement": 0.5,
+    "minimum_reactive_agreement": 0.95,
+    "minimum_validation_episodes": 4,
+    "optimization": "after at least 100 updates, final train gradient L2 must be no more than 0.01 times its all-zero initial value",
+    "optimization_convergence_required": true,
+    "primary_comparator": "frozen-l1d-exact-propensity-score",
+    "proper_score": "the upper endpoint of the 2000-draw whole-episode bootstrap 95 percent interval for candidate minus frozen-L1d validation cross-entropy to the exact recorded behavior distribution must be below zero",
+    "reactive_target": "validation argmax agreement with the recorded reactive action must be at least 0.95",
+    "rationale": "The proper-score interval requires generalization beyond L1d; KL <= 0.1 prevents a tiny relative gain from promoting a poor distribution; 0.95 overall and 0.5 pooled final-tie agreement directly test the diagnosed action-structure failure. These thresholds were fixed before fitting and are not tuned from validation.",
+    "timebox": "stop immediately when the train-only gradient criterion passes, or after 10000 full-batch updates; non-convergence is inconclusive"
+  },
+  "hypothesis": "The dominant L1d residual is duplicated flat-output learning rather than missing observation. Sharing one scalar linear scorer across actions and explicitly deriving the already-defined boundary reserve will converge, improve held-out exact-distribution proper score over frozen L1d, reach validation KL at most 0.1 nat, reproduce at least 95 percent of reactive actions, and recover at least half of the rare focused/lexical final ties.",
+  "model_scope": {
+    "derived_portable_facts": "Each legal action row contains only observed clearance knownness/value, boundary reserve derived from its recorded final x/y, equality to current action, stationary/focused action attributes, and fixed lexical action-name rank.",
+    "parameter_count": 7,
+    "sharing": "One weight vector scores every canonical action; the observed-shield mask remains external and cannot be widened.",
+    "unchanged_target": "Training remains one-hot published executed action cross-entropy so the sole learner change is the structured shared scorer. Exact recorded propensities are used only for audit and prospective proper-score evaluation."
+  },
+  "non_goals": [
+    "no new Wine collection, online execution, or corpus mutation",
+    "no baseline_action actor input, direct reactive-winner feature, stage, boss, spell, ECL, RNG, run identity, future fact, or counterexample-specific feature",
+    "no full-propensity training target, temperature, fixed 0.8 mixture output, or post-hoc calibration",
+    "no width, depth, feature, threshold, seed, optimizer, learning-rate, L2, or update-budget sweep",
+    "no history, recurrent model, object-set encoder, auxiliary target, IQL, reward change, or value learning",
+    "no HIT-reduction, gameplay-improvement, NMNB, or transfer claim"
+  ],
+  "online_canary": {
+    "run_in_this_experiment": false,
+    "run_only_after_joint_gate": true,
+    "scope_if_later_admitted": "one separately preregistered complete natural-RNG original-Wine Lunatic Practice Stage 4 integration run; not training or policy-improvement evidence"
+  },
+  "paths": {
+    "action_feature_module": "src/th06_rl/shared_action_features.py",
+    "artifact_root": "artifacts/l1e-stage4-bc-shared-action-v1",
+    "bc_policy_plugin": "src/th06_rl/policies/shared_action_behavior_clone.py",
+    "bc_training_module": "src/th06_rl/shared_action_bc_training.py",
+    "experiment_plan": "artifacts/l1e-stage4-bc-shared-action-v1/experiment-plan.json",
+    "experiment_result": "artifacts/l1e-stage4-bc-shared-action-v1/experiment-result.json",
+    "fit_artifact": "artifacts/l1e-stage4-bc-shared-action-v1/model/shared-action-bc.json",
+    "fit_cli": "scripts/fit_shared_action_behavior_clone.py",
+    "l1e_runner": "scripts/run_l1e_stage4.py",
+    "source_collection_ledger": "artifacts/l1-stage4-bc-v1/collection-ledger.json",
+    "source_corpus_root": "corpora/l1-stage4-bc-v1",
+    "source_diagnosis_preregistration": "experiments/l1d-stage4-target-diagnosis-v1.json",
+    "source_diagnosis_result": "artifacts/l1d-stage4-target-diagnosis-v1/diagnosis.json",
+    "source_l1_model": "artifacts/l1-stage4-bc-v1/model/linear-bc.json",
+    "source_l1_result": "artifacts/l1-stage4-bc-v1/experiment-result.json",
+    "source_l1d_model": "artifacts/l1d-stage4-bc-mlp-v1/model/small-mlp-bc.json",
+    "source_l1d_result": "artifacts/l1d-stage4-bc-mlp-v1/experiment-result.json",
+    "work_log_root": "work_log"
+  },
+  "schema": "th06-rl-l1e-stage4-bc-shared-action-prereg-v1",
+  "sha256_bindings": {
+    "action_feature_module": "ba4bb8408c9b41fb6bbf47dc4b0e4eb8911b46e2545343ceaf523eaa85c62052",
+    "bc_policy_plugin": "45e56d4105209870195d22f6f850107b11e35f42bce75b109d8bbb48335c9542",
+    "bc_training_module": "6b26ff6d2566eb14a8ae5b9c341d3e90b96ca29e6d51562701fb2943a49ea34c",
+    "fit_cli": "f328086bd000de278a715b198293cba60920c26ba55313365c416bc2d9dbb669",
+    "l1e_runner": "ef6b075abf5fb17556c0de5bab9f1248a89a1820dd12216cf95a5a5e9176d36b",
+    "source_collection_ledger": "614e44b1eab047041337a5ebcee01af3ef672d01a265d856d0dd58c530dc4c87",
+    "source_diagnosis_preregistration": "84545f1ce21bb19d86f7aecf09dde8a10868d0d9cf1221af02e2d6a29ebf0a2e",
+    "source_diagnosis_result": "6aaee7631249dc30f0ac60fa76a3e72a2c42ab5bda580340ca6b14722b056e4f",
+    "source_l1_model": "7b47fee4c261eb8dbde77e3e13391a49cc5771d27e9c4d3d546f6abb695cd245",
+    "source_l1_result": "75810a82c9bf3ec0a1063b0d53e6814243afc08b3319268800a2eaff5ef5bae3",
+    "source_l1d_model": "3f8d54f2574e4830c0b2cc81c516d70bcc5637967600a8df8941860a8ddaa286",
+    "source_l1d_result": "aaf62b7e6a696c4d72e7f61a8b68e772d45e6f320b23c7e963b84b15d7657bf2"
+  }
+}

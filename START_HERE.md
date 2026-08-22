@@ -66,6 +66,13 @@ Current checkpoint:
    the rare focused/lexical tie stages. The selected next experiment is one
    structured current-observation scorer; no history, Wine, or value learning
    is admitted.
+10. run the frozen offline-only L1e fit in
+    `experiments/l1e-stage4-bc-shared-action-v1.json` only after its code and
+    preregistration are committed. It changes the learner structure to one
+    seven-parameter score shared by all actions, while retaining the same
+    corpus, whole-episode split, hard published-action target, mask, optimizer,
+    and stopping rule. Its primary score is cross-entropy to the exact recorded
+    behavior distribution, compared directly with frozen L1d. It runs no Wine.
 
 Four preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -104,6 +111,13 @@ the failure to the flat model's inductive bias and selects a shared
 action-conditioned current-observation scorer. Future probability gates should
 use the captured full distribution and a proper score directly; this
 prospective correction does not revise any negative L1--L1d decision.
+The frozen L1e ablation is the smallest test of this attribution: one shared
+linear scorer sees only seven action-relative facts already derivable from the
+114-vector. It has no hidden layer, history, auxiliary head, value target, or
+new data. It must converge, beat frozen L1d by a whole-episode interval, reach
+validation KL at most 0.1 nat, reproduce at least 95% of reactive actions, and
+recover at least half of the focused/lexical final ties. None of these results
+has been observed yet.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.

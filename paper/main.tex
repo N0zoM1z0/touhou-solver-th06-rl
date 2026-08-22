@@ -518,6 +518,7 @@ Current-observation BC timebox extension & Negative held-out gate & The identica
 L1c residual decomposition & Completed & Train-only scaling remained miscalibrated; current features reconstructed the collector exactly while the linear model reproduced only 66--67\% of its reactive choices, selecting one small current-observation MLP. \\
 Small current-observation MLP & Negative held-out gate & The fixed 114--32--18 model converged and improved validation NLL to 1.568672, but ECE 0.076007 exceeded the unchanged 0.028732 limit; no canary ran. \\
 L1d target-contract diagnosis & Completed & All propensities were exact; paired train-only continuations rejected sampled-label noise, stopping, and discarded full propensities as sufficient explanations, selecting one structured current-observation scorer. \\
+Shared action-conditioned BC & Preregistered, not run & Seven shared linear parameters over the known portable reactive tuple; unchanged hard target and no Wine. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -986,6 +987,31 @@ behavior-model gate should compare episode-bootstrap cross-entropy or
 $\mathrm{KL}(\mu\Vert\pi)$ directly against the recorded full distribution.
 L1d remains negative because it is also poor under that exact target; this is
 not a post-hoc revision of its frozen gate.
+
+The selected L1e test is frozen in
+\path{experiments/l1e-stage4-bc-shared-action-v1.json}.  It retains the same
+12 episodes, eight/four split, published executed-action target, observed-shield
+mask, learning rate 0.05, L2 $10^{-4}$, all-zero initialization, 10,000-update
+ceiling, and train-only 0.01 relative-gradient stop.  Its only learner change
+is one seven-parameter linear score shared across all 18 actions.  For each
+action it reads clearance unknownness and value, boundary reserve derived from
+the already captured final coordinates, equality to the current action,
+stationary and focused action attributes, and fixed lexical action-name rank.
+It receives neither the recorded reactive winner nor any temporal, source, or
+future fact.  The shared score is masked by the unchanged shield and converted
+to a categorical distribution.
+
+The primary gate is now the proper score available from capture: the upper
+endpoint of a 2,000-draw whole-episode bootstrap interval for L1e minus frozen
+L1d cross-entropy to the exact recorded behavior distribution must be below
+zero.  To prevent a tiny relative gain from promoting a poor model, validation
+$\mathrm{KL}(\mu\Vert\pi)$ must also be at most 0.1 nat.  The diagnosed
+structure must be repaired directly: validation argmax agreement with the
+reactive action must be at least 0.95, and pooled agreement on focused- or
+lexical-decisive rows must be at least 0.5.  All thresholds are frozen before
+fitting.  The hard training target remains unchanged so this is one structural
+ablation; exact propensities are used for audit and evaluation only.  L1e runs
+no Wine and can at most admit a separately preregistered integration canary.
 
 \subsection{E4: minimal offline policy improvement}
 
