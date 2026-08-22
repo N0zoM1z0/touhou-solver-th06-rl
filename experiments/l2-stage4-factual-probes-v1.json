@@ -1,0 +1,95 @@
+{
+  "data": {
+    "reuse_without_mutation": true,
+    "source_experiment_id": "l1-stage4-bc-v1",
+    "split_unit": "complete-physical-episode",
+    "train_episode_indices": [0, 1, 3, 4, 6, 7, 9, 10],
+    "validation_episode_indices": [2, 5, 8, 11]
+  },
+  "decision": "Do exact action/time alignment and portable current-root facts contain held-out factual signal for executed movement, future observed-shield contraction, and physical HIT at fixed game-frame horizons?",
+  "experiment_id": "l2-stage4-factual-probes-v1",
+  "fits_policy": false,
+  "gate": {
+    "bootstrap_samples": 2000,
+    "bootstrap_seed": 20260822,
+    "dynamics_executed_to_global_mse_ratio_max": 0.25,
+    "execution_match_rate_min": 0.999,
+    "history_admitted_by_this_experiment": false,
+    "minimum_train_positives": 20,
+    "minimum_validation_negatives": 100,
+    "minimum_validation_positives": 10,
+    "mismatch_executed_to_published_mse_ratio_max": 0.8,
+    "mismatch_rows_min": 100,
+    "proceed_rule": "dynamics gate passes and at least one sufficient HIT horizon and one sufficient shield-collapse horizon pass the frozen proper-score gate",
+    "risk_proper_score": "upper endpoint of 2000-draw complete-episode bootstrap 95 percent interval for candidate minus train-prevalence validation Brier is below zero"
+  },
+  "hypotheses": {
+    "H1_action_time_alignment": "A train-only executed-action delta-x/delta-y table will reduce held-out joint MSE to at most one quarter of the global-mean MSE, and publication is either at least 99.9 percent identical to the first witnessed executed action or executed-action conditioning beats published-action conditioning by at least 20 percent over at least 100 mismatches.",
+    "H2_current_root_shield_signal": "At least one sufficiently supported fixed horizon has a complete-episode bootstrap upper bound below zero for current-root action-conditioned shield-collapse Brier relative to the frozen train-prevalence constant.",
+    "H3_current_root_hit_signal": "At least one sufficiently supported fixed horizon has a complete-episode bootstrap upper bound below zero for current-root action-conditioned physical-HIT Brier relative to the frozen train-prevalence constant. This is predictive evidence only, not policy or gameplay improvement.",
+    "H4_history_boundary": "This pilot never admits history. A negative risk probe first requires a separately preregistered attribution distinguishing transparent current-root model insufficiency, event scarcity, and temporal ambiguity. A positive probe leaves history unsupported."
+  },
+  "non_goals": [
+    "no new collection, Wine execution, corpus mutation, policy export, canary, or gameplay claim",
+    "no counterfactual successor, replay-generated transition, reward shaping, value target, IQL, OPE, or actor fitting",
+    "no stage, boss, spell, ECL, RNG, run identity, future fact, source address, or counterexample-specific feature",
+    "no history, MLP, recurrent encoder, object-set encoder, ensemble, model sweep, horizon sweep, threshold tuning, or post-hoc calibration",
+    "physical HIT is the only cost; shield collapse and movement are factual auxiliary diagnostics and never rewards"
+  ],
+  "online_wine": false,
+  "paths": {
+    "artifact_root": "artifacts/l2-stage4-factual-probes-v1",
+    "experiment_plan": "artifacts/l2-stage4-factual-probes-v1/experiment-plan.json",
+    "experiment_result": "artifacts/l2-stage4-factual-probes-v1/experiment-result.json",
+    "fit_artifact": "artifacts/l2-stage4-factual-probes-v1/train-only-fit.json",
+    "probe_module": "src/th06_rl/factual_probes.py",
+    "probe_runner": "scripts/run_l2_stage4_factual_probes.py",
+    "source_collection_ledger": "artifacts/l1-stage4-bc-v1/collection-ledger.json",
+    "source_corpus_root": "corpora/l1-stage4-bc-v1",
+    "source_l1_model": "artifacts/l1-stage4-bc-v1/model/linear-bc.json",
+    "source_l1_result": "artifacts/l1-stage4-bc-v1/experiment-result.json",
+    "work_log_root": "work_log"
+  },
+  "probes": {
+    "decision_epoch_schema": "th06-rl-decision-epoch-v1",
+    "dynamics_target": "first contiguous raw transition executed delta-x/delta-y",
+    "feature_names": [
+      "player_x",
+      "player_y",
+      "power",
+      "log1p_bullet_count",
+      "log1p_laser_count",
+      "shield_action_count",
+      "action_clearance_unknown",
+      "action_clearance",
+      "action_final_x",
+      "action_final_y",
+      "action_boundary_reserve",
+      "action_is_current",
+      "action_dx",
+      "action_dy",
+      "action_is_focused"
+    ],
+    "feature_schema": "th06-rl-current-root-action-probe-features-v1",
+    "horizons_game_frames": [1, 4, 16, 64],
+    "hit_target": "any exact physical life_lost within the contiguous horizon",
+    "max_rows_per_split_per_horizon": 400000,
+    "ridge_l2": 0.001,
+    "risk_model": "standardized-ridge-linear-probability",
+    "shield_collapse_target": "within horizon: explicit observed-shield control dead end or strict contraction to a positive shield-action count below the start count; zero passive/HIT counts alone are excluded",
+    "validation_use": "load and evaluate validation exactly once after serializing the train-only fit; never select a feature, horizon, threshold, or model"
+  },
+  "prototype_debt": [
+    "the transparent linear-probability probe clips predictions to [0,1]; a passing signal may later justify a bounded calibrated classifier under a new preregistration",
+    "the pilot performs one fully validated decision-epoch pass and one fully validated raw-transition pass per episode instead of materializing a derived cache",
+    "four validation episodes bound the episode-bootstrap resolution; this pilot is a representation diagnostic, not a promotion experiment"
+  ],
+  "schema": "th06-rl-l2-stage4-factual-probes-prereg-v1",
+  "sha256_bindings": {
+    "probe_module": "3d28550db2ba4e1c5da8440600d6db0292d4fdab0c30996ebaa674bf6204ae10",
+    "probe_runner": "ab985dd68ab616be5428954643c09ac5a000d534ef7792db1770e30921216d3b",
+    "source_collection_ledger": "614e44b1eab047041337a5ebcee01af3ef672d01a265d856d0dd58c530dc4c87",
+    "source_l1_model": "7b47fee4c261eb8dbde77e3e13391a49cc5771d27e9c4d3d546f6abb695cd245",
+    "source_l1_result": "75810a82c9bf3ec0a1063b0d53e6814243afc08b3319268800a2eaff5ef5bae3"
+  }
+}
