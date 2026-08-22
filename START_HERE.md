@@ -41,16 +41,16 @@ Current checkpoint:
    commit `7285ee76fe36eda1470844b3635eaddd64292d23`. It reused the exact L1
    corpus and split and improved every held-out score, but exhausted 2,000
    updates at gradient ratio 0.0196 rather than the frozen 0.01 threshold;
-6. run only the preregistered offline L1c timebox extension next. It restarts
-   the identical fit from zero, changes only the maximum update count from
-   2,000 to 10,000, stops immediately at the same train-only 0.01 gradient
-   ratio, and evaluates validation exactly once after stopping;
-7. do not reinterpret L1b as a representation failure or run a Wine canary.
-   L1c must first reach convergence and pass the unchanged held-out joint gate.
-   IQL, history, object encoders, temperature scaling, optimizer changes, and
-   parallel Wine collection remain disabled.
+6. retain the completed negative offline L1c timebox extension from commit
+   `171d92b95c55331ab23bec73226b6b81de6f64cf`. It changed only the maximum
+   update count, reached the same train-only 0.01 gradient-ratio criterion at
+   update 4,631, passed held-out NLL, and failed the unchanged calibration gate;
+7. do not run a Wine canary or continue optimizing the same fit. The next
+   action is a read-only residual decomposition followed by one separately
+   preregistered representation ablation. IQL, combined history/architecture
+   changes, object encoders, and parallel Wine collection remain disabled.
 
-Two research models have been fitted, but neither passed its preregistered
+Three research models have been fitted, but none passed its preregistered
 promotion gate or is an authorized learned candidate. No learned policy has
 been run online. A complete route with many HITs is still a successful
 infrastructure baseline when the factual and control contracts pass.
@@ -64,9 +64,12 @@ first unresolved boundary to optimization convergence rather than missing
 capture or validation drift. L1b then improved validation NLL from 2.014976 to
 1.720755 and ECE from 0.124251 to 0.055148, but its gradient ratio 0.0196 did
 not reach the frozen 0.01 convergence requirement. The result is inconclusive;
-the separately preregistered L1c experiment changes only the maximum update
-timebox and has not yet been run. Short history and offline value learning
-remain blocked.
+L1c then reached that train-only criterion at update 4,631 and improved
+validation NLL to 1.691664, but its ECE was 0.059713 against the unchanged
+0.028732 limit. Insufficient optimization time is no longer a sufficient
+explanation. The linear current-observation candidate is rejected under the
+joint gate; short history and offline value learning remain blocked pending a
+single-variable representation experiment.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.

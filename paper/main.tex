@@ -52,10 +52,11 @@ The paper reports an audited six-stage infrastructure baseline with 108 HITs,
 a completed causal learner-view audit, a negative serial/parallel equivalence
 gate, a completed negative Stage~4 supervised-baseline gate, and an
 inconclusive optimization-only follow-up.  A second optimization-only
-follow-up is preregistered but not yet run.  The fitted current-observation
+follow-up reached its train-only convergence criterion but failed the unchanged
+calibration gate.  The fitted current-observation
 behavior clones improved held-out action log loss over action frequency but
-did not pass their separately frozen convergence and calibration requirements;
-neither was evaluated online.
+none passed all of its separately frozen promotion requirements; none was
+evaluated online.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -422,7 +423,10 @@ so it still does not admit L2.  L1c is the narrow continuation: it restarts the
 same fit from zero and changes only the maximum update ceiling from 2,000 to
 10,000, retaining the same train-only 0.01 relative-gradient early stop and
 evaluating validation exactly once after stopping.  No optimizer,
-hyperparameter, representation, comparator, or gate changes.
+hyperparameter, representation, comparator, or gate changes.  L1c reached the
+gradient gate and failed calibration, rejecting this linear current-observation
+candidate under the frozen joint gate.  A read-only residual decomposition may
+choose one subsequent representation ablation; L2 is not yet admitted.
 
 \paragraph{L2: one representation change.}
 Add a short, fixed physical/action history and simple factual heads for HIT
@@ -492,7 +496,7 @@ Reactive scorer & Executed control & E0 completed one route with 108 HITs; this 
 Action frequency & Evaluated comparator & Validation NLL 2.286394 and ECE 0.008749 on the frozen four-episode split. \\
 Current-observation BC & Negative held-out gate & Validation NLL 2.014976 beat action frequency, but ECE 0.124251 exceeded the frozen 0.028749 bound; no Wine canary ran. \\
 Current-observation BC convergence follow-up & Inconclusive & Validation NLL improved to 1.720755 and ECE to 0.055148, but 2,000 updates ended at gradient ratio 0.0196 rather than the frozen 0.01 threshold; no canary ran. \\
-Current-observation BC timebox extension & Preregistered, not run & Restart from zero with the identical fit and gate; only the maximum update ceiling changes from 2,000 to 10,000, with immediate train-only early stopping at the same 0.01 gradient ratio. \\
+Current-observation BC timebox extension & Negative held-out gate & The identical fit converged at update 4,631 and validation NLL improved to 1.691664, but ECE 0.059713 exceeded the unchanged 0.028732 limit; no canary ran. \\
 Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
@@ -771,8 +775,8 @@ digests are respectively
 \path{22254afd55d97a740889e76c44617fd408d3354566a550abc3f74feb9b497ae5},
 and
 \path{0d814a6f20036175e16a507256e79c3195ce4b48193b73c3fc51b7cc33d1d336}.
-Any convergence-suitable optimizer or larger timebox is another frozen L1
-experiment; validation may not select it.
+Any convergence-suitable optimizer or larger timebox would be another frozen
+L1 experiment; validation may not select it.
 
 The L1c protocol is frozen in
 \path{experiments/l1c-stage4-bc-timebox-v1.json}.  It reuses the exact L1
@@ -789,7 +793,33 @@ no canary.  If it converges but fails calibration, the transparent linear
 current-observation representation is rejected by the unchanged gate.  If it
 still does not converge, the next smallest experiment is a separately frozen
 deterministic convergence-suitable optimizer, not history or a larger model.
-L1c has not yet been run.
+L1c ran at solver commit
+\path{171d92b95c55331ab23bec73226b6b81de6f64cf}.  The train-only stop fired
+at update 4,631 with final gradient L2 0.010372, or 0.009998 of the initial
+1.037370.  The optimization gate therefore passed.  Validation NLL was
+1.691664 and the episode-bootstrap BC-minus-frequency interval was
+$[-0.607988,-0.581455]$, so the proper-score gate also passed.  Validation
+ECE was 0.059713 against the unchanged comparator-plus-tolerance limit
+$0.008732+0.02=0.028732$; calibration and the joint gate failed.  Validation
+accuracy and Brier were 0.543234 and 0.634249.  Continued optimization from
+L1b improved NLL, Brier, and accuracy but worsened ECE by 0.004565.  The
+preregistered decision is
+\path{stop-l1c-linear-current-observation}; policy
+\path{linear-behavior-clone-v1:368d286c449c3d7d} was not run online.
+
+The immutable plan, model, and result SHA-256 digests are respectively
+\path{f1eef124b1717cac7f582a50964e793ed98a75e34ea41930e66a6f734d4cb8aa},
+\path{b7e350ff86103ee803a6c2a856f5509b1a29b5080c02e78e5825de9a9cca16b9},
+and
+\path{fac6fd06cd57f93ed276a6c5afa5a3c6c8da9bf8dd42935fac6b876ffe3dc1a1}.
+L1c rules out insufficient optimization time as a sufficient explanation for
+the calibration failure.  It rejects the current feature/model/exported-
+probability combination under the declared gate, not BC in general or every
+model using current physical observations.  It also does not distinguish
+nonlinear current-observation expressivity from missing temporal information.
+One read-only residual decomposition and then one separately frozen
+representation ablation are admissible; continued optimization of the same fit,
+an online canary, combined history/architecture changes, and IQL are not.
 
 \subsection{E4: minimal offline policy improvement}
 
@@ -900,12 +930,13 @@ unchanged versus changed code/schema surfaces, zero-shot behavior, and
 fine-tuning sample cost.  It was not run.
 
 This documentation checkpoint follows E0, completed E2, and negative E3 and E5
-gates.  E3 collected its complete serial Stage~4 inventory and fitted one
-research model.  That model improved held-out likelihood but failed calibration
-and was never executed online.  The bounded diagnosis is complete; the
-offline-only L1b follow-up improved held-out metrics but did not converge within
-its frozen timebox and is inconclusive.  The L1c maximum-update extension is
-preregistered but has not yet run.  There is no authorized learned candidate.
+gates.  E3 collected its complete serial Stage~4 inventory and produced the
+initial fit plus two optimization-only follow-ups.  The initial model improved
+held-out likelihood but failed calibration and was never executed online.  The
+bounded diagnosis is complete; offline-only L1b improved held-out metrics but
+did not converge within its frozen timebox and is inconclusive.  L1c then
+converged and failed the unchanged calibration gate.  There is no authorized
+learned candidate.
 
 \section{Threats to Validity}
 
@@ -950,13 +981,16 @@ one measured failure of that baseline.
 
 E0 establishes the serial factual data plane, E2 establishes the causal learner
 projection and first exporter, and E5 rejects the current parallel pool.  E3
-completed its serial Stage~4 inventory and one frozen supervised fit; improved
-held-out likelihood but failed calibration, so it emitted no online candidate.
+completed its serial Stage~4 inventory and initial frozen supervised fit;
+held-out likelihood improved but calibration failed, so it emitted no online
+candidate.
 The diagnosis localized the next test to convergence of that same transparent
 fit.  L1b improved held-out likelihood and calibration without a representation
 change but exhausted its optimizer timebox before the frozen gradient gate.
-L1c is preregistered to change only that ceiling while retaining the same
-train-only stop and held-out gate; it has not yet run.
+L1c changed only that ceiling, reached the train-only gate, and still failed
+held-out calibration.  The linear current-observation candidate is therefore
+rejected under the joint gate; the next change must isolate one representation
+capacity rather than combine history, nonlinear architecture, and value learning.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
