@@ -48,7 +48,8 @@ to the goal metric.  The initial learner is deliberately limited to a causal
 decision-epoch dataset, a transparent supervised baseline, and immutable Wine
 evaluation.  History encoders, offline value learning, uncertainty, adaptive
 collection, learned dynamics, and exact-prefix branching are admitted one at a
-time only after a simpler preregistered experiment exposes a concrete failure.
+time only after the preceding preregistered experiment exposes the concrete
+boundary that the added mechanism addresses.
 The paper reports an audited six-stage infrastructure baseline with 108 HITs,
 a completed causal learner-view audit, a negative serial/parallel equivalence
 gate, a completed negative Stage~4 supervised-baseline gate, and an
@@ -92,12 +93,14 @@ failed calibration readiness.  The predictive representation is confirmed;
 causal action value, history, and online policy remain unadmitted.
 A subsequent train-only two-parameter Platt surface repaired the frozen global
 calibration limits but worsened Brier against both the uncalibrated full and
-state-only probes, including the nonbaseline and pre-first-HIT views.  Scalar
-calibration is therefore rejected; no fresh confirmation or policy was run.
-The next frozen experiment stops imitating the collector: a small shared
-current-root/action regressor is trained directly by 16-frame physical-HIT
-Brier and compared with the same architecture after removing action-relative
-facts.  It is selection-only and fits no policy.
+state-only probes.  Scalar calibration is therefore rejected.  A direct small
+current-root/action regressor trained by 16-frame physical-HIT Brier then
+strongly improved the frozen score and its same-architecture state-only
+ablation, with acceptable calibration.  Its formal gate still rejected fresh
+confirmation because low-propensity nonbaseline and pre-first-HIT evidence was
+not episode-stable.  Propensity stratification identifies a logged-action
+measure mismatch, selecting one bounded uniform-shield-target weighted hazard
+experiment before any history encoder or value learner.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -432,6 +435,15 @@ Only one rung may change at a time.  Every rung freezes its corpus inventory,
 whole-episode split, feature schema, target schema, seeds, acceptance statistic,
 and artifact hashes before fitting.
 
+This ladder controls attribution, not model sophistication for its own sake.
+After a boundary is measured, the next rung should be the smallest
+representative algorithm that directly addresses it; the study need not exhaust
+every weaker model family first.  Conversely, an unfocused architecture or
+hyperparameter sweep cannot substitute for a named mechanism and a frozen
+decision rule.  A formally negative prototype may therefore select a modified
+member of the same algorithm family when its diagnostics sharply localize the
+failure, as L2f does for the logged action measure.
+
 \paragraph{L0: causal data audit (completed).}
 Build and test decision-epoch rows.  Admission requires exact raw linkage,
 command/sample/execution separation, propensity normalization, interval and
@@ -571,7 +583,8 @@ Incremental action factual-risk ablation & Positive, weak attribution & Full bea
 Support/lifecycle decomposition & Completed diagnostic & The old h16 increment was baseline-equal and reversed on known-nonbaseline rows; pre-first-HIT remained favorable.  No fit or policy. \\
 Fresh h16 factual-risk confirmation & Positive signal, not policy-ready & Eight new complete episodes reproduced the full-versus-state Brier increment in all episode directions and passed weak nonbaseline and pre-first-HIT point gates, but failed calibration readiness. \\
 Train-only Platt calibration & Negative probability-surface gate & The two-parameter monotone fit converged and passed calibration limits, but worsened h16 Brier versus both uncalibrated full and state-only and reversed both diagnostic point deltas. \\
-Direct action-conditioned h16 hazard & Preregistered, not run & A fixed 64-tree depth-3 shared regressor trains directly by physical-HIT Brier, with a same-architecture state-only ablation and reused-L2d support/calibration gates.  Passing selects fresh confirmation only. \\
+Direct action-conditioned h16 hazard & Negative formal gate; positive algorithm signal & Direct full Brier was 0.00480785 versus 0.00551139 for frozen L2 and 0.00500959 for same-architecture state-only, with both episode-bootstrap intervals wholly favorable.  Calibration passed, but nonbaseline and pre-first-HIT gates did not; no fresh confirmation ran. \\
+Uniform-shield-target weighted h16 hazard & Selected, not run & The next single change uses exact bounded target/behavior weights to align fitting and selection with ranking all observed-shield-admissible actions.  Propensity is not an actor input; history remains gated on this result. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1380,6 +1393,63 @@ strata are reported as diagnostics.  Passing does not establish causal action
 value or admit a policy, history, value learning, or Wine; it freezes this
 scorer for wholly new complete-episode confirmation.
 
+L2f was executed once at commit
+\path{7289949466c4ce38b3f1b43d853fa4bd72e3d02d}.  The plan, train-only fit,
+and final result SHA-256 hashes were respectively
+\texttt{13060ab55c2095f96587d894efba57f11d599de3120a07462739417ad0946960},
+\texttt{fdc6f47843fc55defaf0989d2aac9dd613c1ce270c29fe48d1dd87a1dc85eb64},
+and
+\texttt{58667fa7e535c30522aedde1f2f8ae3d2c9e403611f3fc663bafe34d95b63f24}.
+The fit artifact recorded that evaluation had not been loaded before either
+model was serialized.  Frozen L2 source scores were reproduced exactly.
+
+On 188,791 reused-L2d rows with 1,085 positive windows, direct full Brier was
+0.00480785, versus 0.00551139 for frozen L2 full and 0.00500959 for the direct
+state-only ablation.  Direct full minus frozen full had a complete-episode
+bootstrap interval of
+$[-9.13\times10^{-4},-4.98\times10^{-4}]$; direct full minus direct state-only
+had $[-2.54\times10^{-4},-1.52\times10^{-4}]$.  Average precision rose to
+0.2816 from frozen L2's 0.0772, ROC AUC rose to 0.9661 from 0.9276, and both
+calibration-in-the-large at $-0.000248$ and ECE at 0.001368 passed.  Thus direct
+nonlinear Brier fitting, overall incremental action signal, support, and
+calibration all passed.  This is positive evidence for the model family, not
+for an online policy.
+
+The immutable decision was nevertheless
+\texttt{reject-action-conditioned-h16-hazard}.  The full candidate itself
+clipped only 0.0773\% of raw evaluation predictions, below the 0.1\% limit, but
+the frozen joint bounded-surface gate also required the state-only comparator,
+which clipped 16.70\%.  On 35,272 known-nonbaseline rows, full minus state-only
+was favorable at $-2.19\times10^{-5}$ in six of eight episodes, but its
+interval narrowly crossed zero at
+$[-4.79\times10^{-5},4.66\times10^{-6}]$.  On 34,154 pre-first-HIT rows the
+point delta was $-3.59\times10^{-5}$, but only four of eight episode directions
+favored full and the interval also crossed zero.  No fresh confirmation, Wine
+canary, history model, or value learner was run.
+
+The action names themselves were supported: all 18 occurred with positive
+windows in all eight episodes.  The sharper boundary was their logged
+probability.  Below propensity 0.025, 34,792 rows and 158 positives had a
+full-minus-state point delta of $+1.12\times10^{-6}$; at propensity at least
+0.5, 153,519 rows and 913 positives had $-2.43\times10^{-4}$ with all eight
+episode directions favorable.  The unweighted objective is therefore dominated
+by the reactive baseline measure, whereas deployment would rank the entire
+observed-shield set.  This is a measured action-measure mismatch, not yet
+evidence that current-root observations require history.
+
+The research decision is to modify the objective measure while retaining the
+architecture.  The next separately preregistered experiment uses the exact
+one-step ratio
+$w=(1/|\mathcal A_{\mathrm{shield}}|)/\mu(a\mid s)$ in both fitting and its
+primary Brier comparisons.  Under the frozen 80\% baseline plus 20\% uniform
+collector, a nonbaseline action has weight exactly five, so this is bounded
+action-distribution correction rather than long-horizon OPE.  Propensity and
+shield-set size are weights only, never actor features.  If this corrected
+current-root experiment still fails the low-propensity/nonbaseline and
+pre-first-HIT gates, one fixed short history becomes the next representation
+test.  Tree sweeps, scalar calibration, collector BC, IQL, and online
+evaluation are not responses to the L2f result.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1519,7 +1589,15 @@ unadmitted.  The subsequent train-only Platt fit then passed the global
 calibration limits but worsened Brier against both frozen comparators and in
 the nonbaseline and pre-first-HIT views.  This rejects scalar calibration of
 the frozen ridge score without weakening the confirmed predictive-signal
-claim.
+claim.  The aligned direct Brier model then substantially improved the frozen
+full score and the same-architecture state-only comparator while passing global
+calibration.  Its formal gate still rejected fresh confirmation because the
+nonbaseline interval narrowly crossed zero and pre-first-HIT episode directions
+were heterogeneous.  A propensity-stratified diagnosis localized the missing
+increment to the bulk of randomized actions below probability 0.025, whereas
+baseline-heavy rows improved in every episode.  The next frozen change is
+therefore bounded uniform-shield-target weighting, not history or value
+learning.
 
 \section{Threats to Validity}
 
@@ -1593,13 +1671,16 @@ directions and a weak negative nonbaseline point delta, while failing the
 unchanged calibration-readiness gate.  The next boundary is one train-only
 calibration/probability model, not history or value learning.  The first such
 test, a two-parameter monotone Platt surface, repaired global calibration but
-failed its proper-score and signal-preservation gates and is rejected.  Any
-direct probability-model test requires a new preregistration with aligned
-training and selection proper scores.  L2f freezes that test as a shared
-depth-3 action-conditioned h16 hazard regressor trained directly by Brier, with
-a same-architecture state-only ablation.  Reused L2d can select fresh
-confirmation only; history still requires separately measured temporal
-ambiguity.
+failed its proper-score and signal-preservation gates and is rejected.  The
+aligned direct probability test then established a much stronger overall
+hazard model and incremental action-relative signal, but failed its frozen
+nonbaseline and pre-first-HIT stability gates.  Its formal decision is reject,
+so no fresh confirmation or policy ran; its research decision is modify because
+the failure is concentrated in the low-propensity action measure rather than
+the full candidate's overall discrimination or calibration.  The next
+separately preregistered test changes only fitting and selection to bounded
+uniform-observed-shield target/behavior weighting.  History requires that
+support-corrected current-root test to fail; value learning remains later.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

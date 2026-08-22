@@ -115,14 +115,23 @@ Current checkpoint:
     nonbaseline and pre-first-HIT point deltas. Its decision is
     `reject-train-only-platt-calibration`; no fresh confirmation, policy,
     history, or value learning is admitted.
-16. run only the frozen offline L2f experiment in
-    `experiments/l2f-action-conditioned-hazard-v1.json`. It is not BC and does
-    not calibrate the old ridge. One shared 64-tree, depth-3 current-root/action
-    regressor and its same-architecture state-only ablation are trained directly
-    by h16 physical-HIT Brier on the original eight train episodes. The already
-    inspected L2d episodes are selection evidence only. A joint pass can select
-    the immutable scorer for wholly fresh confirmation; it cannot admit Wine,
-    causal action value, history, or value learning.
+16. retain the completed negative-but-informative offline L2f experiment run at
+    commit `7289949466c4ce38b3f1b43d853fa4bd72e3d02d`. The direct 64-tree,
+    depth-3 action-conditioned h16 model improved reused-L2d Brier from
+    `0.00551139` to `0.00480785` and beat its same-architecture state-only
+    ablation at `0.00500959`; both complete-episode intervals were wholly
+    favorable and calibration readiness passed. The frozen joint gate still
+    rejected it: the comparator had an invalidly clipping raw surface, the
+    nonbaseline interval narrowly crossed zero, and pre-first-HIT directions
+    were heterogeneous. No fresh confirmation or Wine run occurred.
+17. preregister one propensity-corrected current-root hazard experiment before
+    fitting it. The single algorithmic change is bounded target/behavior
+    weighting from the exact logged collector probabilities, so the Brier
+    objective represents uniform ranking over the observed-shield set instead
+    of the baseline-heavy behavior measure. Propensity and shield-set size are
+    training/evaluation weights only and remain forbidden actor inputs. A
+    fixed short history is admitted only if this support-corrected boundary
+    still fails; value learning and Wine remain blocked.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -190,12 +199,19 @@ nonbaseline point and pre-first-HIT boundaries, but failed calibration
 readiness. The first train-only probability-surface test then showed that a
 global monotone Platt mapping can repair calibration-in-the-large and ECE while
 simultaneously destroying the Brier advantage. Scalar calibration of the
-frozen ridge score is therefore rejected. Any direct probability-model test
-must align its training and selection proper scores. L2f is that frozen test:
-a small shared nonlinear action-conditioned hazard regressor trained directly
-by Brier, compared both with frozen L2 full and a same-architecture state-only
-ablation. History, value learning, and Wine remain blocked until this reused-
-selection gate and then a wholly fresh confirmation pass.
+frozen ridge score is therefore rejected. The first aligned direct probability
+model established that the nonlinear hazard family is learnable: it strongly
+improved Brier, ranking, calibration, and the overall action-relative ablation.
+Its formal gate nevertheless failed on the low-propensity/nonbaseline and
+pre-first-HIT boundaries. Propensity stratification localized the missing
+action increment to the bulk of randomized actions below behavior probability
+0.025, while baseline-heavy rows improved in all eight episodes. The next
+experiment therefore changes the training and selection measure, not the
+representation: one bounded propensity-corrected uniform-observed-shield Brier
+model. If that current-root model still fails the same support/lifecycle views,
+one fixed short history becomes the next justified representation test. Value
+learning and Wine remain blocked until a hazard candidate passes selection and
+wholly fresh confirmation.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.
