@@ -65,8 +65,11 @@ target-contract diagnosis then verified the recorded propensities exactly and
 found neither sampled-label noise, 500 more optimization steps, nor replacing
 one-hot targets with full propensities sufficient.  The residual is localized
 to the flat scorer's inductive bias for an exactly reconstructible
-action-conditioned lexicographic rule, selecting one structured
-current-observation scorer rather than history.
+action-conditioned lexicographic rule.  The selected seven-parameter shared
+action scorer then exhausted its optimization timebox and was worse than the
+MLP on both splits, with zero final-tie agreement.  This exposes a deeper
+mismatch between compensatory pointwise scores and the known non-compensatory
+collector rule; no learned policy was run online.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -446,11 +449,16 @@ is not a candidate for this behavior target because the declared collector
 distribution is a current-root reactive choice plus an independent uniform
 draw.
 
-\paragraph{L2: one representation change.}
-Add a short, fixed physical/action history and simple factual heads for HIT
-within fixed horizons and observed-hazard-set shrinkage or empty-set events.
-History is retained only if it improves held-out log loss or another frozen
-proper score over L1 with an episode-level interval.  Deep Sets
+\paragraph{L2: factual action and risk probes.}
+First fit current-observation action-conditioned probes for executed
+$\Delta x/\Delta y$, observed-shield-set collapse, and physical HIT within
+fixed horizons.  These diagnose command alignment and whether the captured
+current root contains learnable risk signal; they do not alter reward or make
+a gameplay claim.  Add one short, fixed physical/action history only if a
+current-observation probe fails its separately frozen proper-score gate and
+the failure is attributable to temporal ambiguity.  History is retained only
+if it then improves the same held-out target with an episode-level interval.
+Deep Sets
 \citep{zaheer2017deepsets} are considered only if a transparent bounded vector
 summary fails; a recurrent encoder is considered only if history has already
 shown value.  Auxiliary heads remain separate from reward.
@@ -518,8 +526,8 @@ Current-observation BC timebox extension & Negative held-out gate & The identica
 L1c residual decomposition & Completed & Train-only scaling remained miscalibrated; current features reconstructed the collector exactly while the linear model reproduced only 66--67\% of its reactive choices, selecting one small current-observation MLP. \\
 Small current-observation MLP & Negative held-out gate & The fixed 114--32--18 model converged and improved validation NLL to 1.568672, but ECE 0.076007 exceeded the unchanged 0.028732 limit; no canary ran. \\
 L1d target-contract diagnosis & Completed & All propensities were exact; paired train-only continuations rejected sampled-label noise, stopping, and discarded full propensities as sufficient explanations, selecting one structured current-observation scorer. \\
-Shared action-conditioned BC & Preregistered, not run & Seven shared linear parameters over the known portable reactive tuple; unchanged hard target and no Wine. \\
-Short-history BC and factual risk probes & Not run & One L2 representation ablation after current-observation BC. \\
+Shared action-conditioned BC & Inconclusive & Exhausted 10,000 updates at gradient ratio 0.011684; validation KL 0.986686 and reactive agreement 0.655371 were worse than L1d, with zero final-tie agreement. \\
+Current-observation dynamics and factual risk probes & Not run & Next L2 diagnostics; history is admitted only by measured temporal ambiguity. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1013,6 +1021,48 @@ fitting.  The hard training target remains unchanged so this is one structural
 ablation; exact propensities are used for audit and evaluation only.  L1e runs
 no Wine and can at most admit a separately preregistered integration canary.
 
+L1e ran at solver commit
+\path{ec24e8ad05a6e25513ad0468e22bb53617ebc338}.  It exhausted all 10,000
+updates at final-to-initial train-gradient ratio 0.011684, above the frozen
+0.01 threshold, so its immutable decision is
+\path{inconclusive-l1e-shared-action-optimization-not-converged}.  Validation
+does not override that stopping decision.  Reportable validation evidence was
+also uniformly unfavorable: $\mathrm{KL}(\mu\Vert\pi)$ was 0.986686 versus
+0.563604 for L1d; the complete-episode L1e-minus-L1d exact-target
+cross-entropy interval was $[0.408315,0.437710]$; reactive-action agreement was
+0.655371 versus 0.748550; and focused/lexical final-tie agreement was exactly
+zero.  Train KL 0.978077 and reactive agreement 0.660861 show the same pattern,
+so episode-split overfit is not a sufficient explanation.  The plan, model,
+and result SHA-256 digests are respectively
+\path{c4c2ef915c158544f73ddc779acb2e28697c20e4e587081153d13421bc22b60d},
+\path{8afc439fc6678a088fd0053086450d64f8344dc559382da116404759df5501f9},
+and
+\path{a77b661136e3db85face5661c87919a13cf7966900b7b3fbd6a48cea6e2edce9}.
+No Wine canary ran.
+
+The fitted normalized weights further localize the practical failure.  The
+clearance and boundary-reserve weights were positive, 5.611145 and 8.651481,
+but stationary and focused weights were negative, $-0.288433$ and $-0.633078$,
+and lexical priority was nearly zero and negative.  Those signs oppose the
+collector precisely inside its rare final tie strata.  A global additive score
+cannot turn lower-priority fields off when a higher-priority field differs;
+their correlations over common non-tie rows compete with their conditional
+meaning.  Thus sharing action weights alone does not implement lexicographic,
+non-compensatory semantics.  Because the fit did not converge, L1e does not
+formally reject every shared linear fit; its wide performance deficit does
+reject this frozen run as a candidate and does not justify another post-hoc
+timebox extension.
+
+More fundamentally, exact capture already supplies the behavior distribution,
+and portable current features already reconstruct its reactive winner on every
+row.  Generic-network imitation of that known hand-coded controller is a
+model-class probe, not a necessary global prerequisite for learning factual
+HIT risk.  The next bounded work therefore returns to the original diagnostic
+sequence: current-observation action-conditioned execution/dynamics probes,
+then observed-shield-collapse and fixed-horizon HIT probes.  A fixed short
+history is admitted only if those expose temporal ambiguity.  This reframing
+does not admit IQL or revise any L1--L1e decision.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1132,9 +1182,11 @@ diagnosis selected one small current-observation MLP without reading scaled
 validation.  That model converged and improved held-out proper scores but
 failed calibration.  The completed target-contract diagnosis found exact
 propensities and localized the residual to flat-model misspecification after
-its other frozen explanations missed their materiality thresholds.  One
-structured current-observation scorer is selected next.  There is no
-authorized learned candidate.
+its other frozen explanations missed their materiality thresholds.  The
+selected shared-action scorer then failed to converge and was worse than L1d
+on both splits, exposing additive-score mismatch with the lexicographic rule.
+Current-observation execution/dynamics and factual-risk probes are next; there
+is no authorized learned candidate.
 
 \section{Threats to Validity}
 
@@ -1193,8 +1245,12 @@ then improved held-out NLL but also failed calibration.  The frozen
 target-contract diagnosis verified every recorded propensity, found the
 sampled-label, stopping, and discarded-soft-target explanations insufficient,
 and localized the residual to the flat model's handling of a reconstructible
-action-conditioned lexicographic rule.  The next bounded candidate is one
-structured current-observation scorer, not history.
+action-conditioned lexicographic rule.  The selected shared additive scorer
+then exhausted its timebox and performed worse, with zero agreement on the
+final tie strata.  The known collector distribution remains an exact
+data-plane control; the next learner evidence is current-observation
+execution/dynamics and factual HIT-risk probes, with history admitted only by
+measured temporal ambiguity.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

@@ -66,13 +66,13 @@ Current checkpoint:
    the rare focused/lexical tie stages. The selected next experiment is one
    structured current-observation scorer; no history, Wine, or value learning
    is admitted.
-10. run the frozen offline-only L1e fit in
-    `experiments/l1e-stage4-bc-shared-action-v1.json` only after its code and
-    preregistration are committed. It changes the learner structure to one
-    seven-parameter score shared by all actions, while retaining the same
-    corpus, whole-episode split, hard published-action target, mask, optimizer,
-    and stopping rule. Its primary score is cross-entropy to the exact recorded
-    behavior distribution, compared directly with frozen L1d. It runs no Wine.
+10. retain the completed inconclusive L1e fit from commit
+    `ec24e8ad05a6e25513ad0468e22bb53617ebc338`. The seven-parameter shared
+    action score exhausted 10,000 updates at gradient ratio 0.011684 rather
+    than 0.01. It was also worse than L1d: validation KL 0.986686, reactive
+    agreement 65.5%, and zero focused/lexical final-tie agreement. Its formal
+    decision is `inconclusive-l1e-shared-action-optimization-not-converged`;
+    no Wine canary is admitted. Do not extend or repair it post hoc.
 
 Four preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -111,13 +111,18 @@ the failure to the flat model's inductive bias and selects a shared
 action-conditioned current-observation scorer. Future probability gates should
 use the captured full distribution and a proper score directly; this
 prospective correction does not revise any negative L1--L1d decision.
-The frozen L1e ablation is the smallest test of this attribution: one shared
+The frozen L1e ablation was the smallest test of this attribution: one shared
 linear scorer sees only seven action-relative facts already derivable from the
 114-vector. It has no hidden layer, history, auxiliary head, value target, or
-new data. It must converge, beat frozen L1d by a whole-episode interval, reach
-validation KL at most 0.1 nat, reproduce at least 95% of reactive actions, and
-recover at least half of the focused/lexical final ties. None of these results
-has been observed yet.
+new data. It did not converge and missed every representation gate, performing
+worse than L1d on train and validation. Its negative stationary, focused, and
+lexical weights expose the deeper mismatch: a global additive score cannot
+apply lower lexicographic priorities only inside their rare higher-field tie
+strata. The behavior distribution and reactive winner are already exactly
+known from capture and portable current features. They should remain data-plane
+controls rather than forcing a sequence of larger BC models. The next bounded
+question is factual action/execution and HIT-risk learnability, not another
+collector-imitation architecture.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.
