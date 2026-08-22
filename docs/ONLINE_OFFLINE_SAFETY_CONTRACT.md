@@ -62,10 +62,26 @@ The completed cap-48 L2i current-root set used only the exact four-frame AABB
 and laser primitives already published by the observed shield. Its recorder,
 bounded-export, and overall action-ablation contracts passed, but object gain,
 exploration/lifecycle action, calibration, and probability-surface gates
-failed; it is not an admitted representation. The frozen L2j change replaces
-only direct sigmoid Brier optimization with unweighted BCE-with-logits on the
-otherwise identical L2i model and rows. It tests the observed
-rare-positive saturation mechanism and may select fresh confirmation only.
+failed; it is not an admitted representation. Completed L2j replaced only
+direct sigmoid Brier optimization with unweighted BCE-with-logits on the
+otherwise identical L2i model and rows. It improved the probability surface
+and reduced saturated missed positives from 89 to one, but still failed
+episode-stable loss improvement, object gain, exploration/lifecycle action,
+calibration, and raw-saturation gates; it too is rejected.
+
+A read-only factual audit then showed that the h16 outcome is temporally
+misaligned with current-action attribution: 99.45% of positive evaluation rows
+first hit only after their initial action run ended, including 99.37% of
+low-propensity positives. The label remains valid behavior-continuation risk,
+but it must not be presented as the value of that usually one-frame action.
+Do not repair this mismatch with architecture, loss, weighting, calibration,
+or invented counterfactual successors. Any next action-risk collection must
+be separately preregistered, give a randomized shield-admissible intention a
+fixed short exposure while rechecking the observed shield at every coherent
+root, and record the exact conditional propensity and every override. It must
+first pass execution-duration, zero-Bomb, lifecycle, linkage, and complete-
+episode contracts before its HIT target can be used.
+
 It may not add prior outcome, propensity, lifecycle label, absolute frame,
 source identity, raw engine fields, or future fact, and it never widens the
 observed shield. One offline expected-HIT value method follows only after a

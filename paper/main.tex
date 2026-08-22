@@ -107,8 +107,13 @@ exploratory-action, pre-first-HIT, and raw-boundedness gates.  It is rejected.
 A bounded current-root primitive-set model then improved ranking and aggregate
 action ablation, but not object-set Brier; exploratory and pre-first-HIT action
 deltas reversed, while direct sigmoid Brier saturated 65.05\% of rows and
-underpredicted event rate.  It too is rejected.  The next boundary changes only
-that rare-positive optimization loss; no hazard scorer or policy is selected.
+underpredicted event rate.  It too is rejected.  Changing only its training
+loss to BCE-with-logits improved Brier and reduced saturated missed positives
+from 89 to one, but still failed the joint gate.  A factual audit then showed
+that 99.45\% of h16-positive rows hit only after the current action stopped.
+The target is behavior-continuation risk, not supported current-action value;
+the next boundary is a safe fixed-short-exposure collection contract, not a
+larger learner.  No hazard scorer or policy is selected.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -595,7 +600,8 @@ Direct action-conditioned h16 hazard & Negative formal gate; positive algorithm 
 Uniform-shield-target weighted h16 hazard & Negative action-measure gate & Exact weights passed, but weighted full Brier 0.00454350 was worse than frozen L2f at 0.00449955; overall, low-propensity, nonbaseline, pre-first-HIT, and candidate-bound gates failed.  No fresh confirmation ran. \\
 Fixed short portable-history h16 hazard & Negative representation gate & Exact 16-root history improved point Brier, but temporal, exploratory-action, pre-first-HIT, and raw-boundedness gates failed.  No fresh confirmation ran. \\
 Observed-primitive-set h16 hazard & Negative representation/surface gate & Object-full Brier 0.00473906 was worse than scalar-only 0.00468783; low-propensity and pre-first-HIT action deltas reversed, and 65.05\% of full probabilities saturated below $10^{-7}$.  No fresh confirmation ran. \\
-Log-score primitive-set h16 hazard & Preregistered, not run & The exact L2i model changes only unweighted training loss from direct sigmoid Brier to BCE-with-logits and adds a paired frozen-L2i Brier gate.  Passing can select fresh confirmation only. \\
+Log-score primitive-set h16 hazard & Negative loss/surface gate; positive mechanism diagnosis & Object-full Brier improved from frozen L2i 0.00473906 to 0.00464423, but only five episode directions favored it and scalar-only remained better at 0.00463179.  Exploratory-action, lifecycle, calibration, and raw-saturation gates failed; saturated missed positives nevertheless fell from 89 to one. \\
+Current-action/h16 target audit & Decisive collection-boundary diagnosis & The initial action lasted a median one frame, while 1,079/1,085 h16 positives first hit after it ended; the low-propensity figure was 157/158.  The factual target is behavior-continuation risk, not supported action value. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1762,6 +1768,60 @@ The train artifact is serialized before reused L2d loads.  Passing every gate
 can select wholly fresh confirmation only; no validation checkpoint selection,
 new Wine data, policy, value model, or online run is admitted.
 
+L2j ran once from commit
+\path{90d3988f565c9d3972b433a392f4f0b7ca17e11a}.  The immutable decision is
+\texttt{reject-logscore-observed-primitive-h16-hazard}.  Frozen L2f and L2i
+Brier/NLL reproduced with zero absolute error.  The preregistration, frozen
+plan, train-only fit, and result SHA-256 digests were respectively
+\texttt{d14db15d9bdc316c}, \texttt{3cd5544fda8ca808},
+\texttt{fcc1e63a6f8721af}, and \texttt{2d6006178d01f526}; the full digests are
+retained in the per-experiment research log.  Object-full Brier was
+0.00464423, NLL 0.01973721, average precision 0.33083, and AUC 0.97269;
+scalar-only Brier was 0.00463179.  Full minus frozen L2i Brier was
+$-9.4838\times10^{-5}$, complete-episode interval
+$[-2.0763\times10^{-4},-9.3637\times10^{-6}]$, but only five of eight episode
+directions were favorable.  Full minus scalar-only was
+$+1.2431\times10^{-5}$ with an interval crossing zero and four favorable
+episodes.  Overall full minus action-ablated was
+$-3.5818\times10^{-4}$, interval
+$[-4.6076\times10^{-4},-2.5569\times10^{-4}]$, with all eight favorable.
+Low-propensity, known-nonbaseline, and pre-first-HIT intervals crossed zero
+with only two, four, and five favorable episodes respectively; baseline-equal
+again passed in all eight.
+
+BCE reduced full probabilities at most $10^{-7}$ from 65.05\% to 37.07\%, NLL
+from 0.02866 to 0.01974, and calibration-in-the-large magnitude from 0.003094
+to 0.002401.  The frozen row-fraction saturation and 0.002 calibration limits
+still failed.  A read-only outcome audit gives the mechanism a sharper
+interpretation: L2i's saturated rows contained 89 positives, whereas L2j's
+contained one.  BCE repaired almost all confident missed positives, so its
+rare-positive gradient hypothesis was real but insufficient.  This post-hoc
+fact does not revise the formal rejection; future probability gates should
+distinguish saturated easy negatives from saturated positives.
+
+The more fundamental failure was target attribution.  On all 188,791 reused
+evaluation rows, the initial action had median run length one frame, changed on
+the second frame in 74.46\%, and the median first-HIT offset was 11.  Of 1,085
+h16 positives, 1,079 (99.45\%) first hit after that action run ended.  For
+low-propensity rows the action changed on frame two in 91.97\% and 157/158
+positives hit afterward; known-nonbaseline was 91.71\% and 170/172.  Only six
+overall positive rows hit during their initial action.  Thus aggregate action
+ablation primarily identifies correlation between collector mode/action and a
+later factual behavior continuation.  It cannot support a claim about the
+effect or value of the usually one-frame current action.
+
+Further loss, width, pooling, attention, history, calibration, or weighting
+sweeps on this action-conditioned h16 target are stopped.  The next separately
+preregistered feasibility experiment must create measurable factual exposure:
+hold a randomized observed-shield-admissible action intention for one fixed
+short duration, recheck the observed shield at every coherent root, and record
+all conditional propensities and overrides.  It must preserve zero Bomb,
+lifecycle, exact PID/input delivery, root linkage, normal clock, and complete
+episodes.  Passing that collection contract can define an exposure-conditional
+physical-HIT target; it does not invent a counterfactual successor, widen the
+shield, admit an object encoder or value learner, or authorize a Wine policy
+canary.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -2003,9 +2063,13 @@ heterogeneous, exploratory and pre-first-HIT action intervals crossed zero,
 and the raw surface clipped materially.  It too is rejected.  The subsequent
 cap-48 primitive set improved aggregate action ablation and ranking but failed
 object-gain, exploratory-action, lifecycle, calibration, and saturation gates;
-it is also rejected.  The next single-variable boundary is unweighted
-BCE-with-logits on that otherwise identical frozen design; value learning
-remains later.
+it is also rejected.  Its loss-only BCE-with-logits follow-up improved Brier,
+NLL, ranking, and confident missed positives, but still failed the joint gate.
+The decisive read-only audit found that 99.45\% of h16 positives occurred only
+after the initial action ended, so the target is not supported current-action
+value.  Further learner sweeps on this target are stopped.  The next boundary
+is a preregistered safe fixed-short-action-exposure collection feasibility
+test; value learning remains later.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

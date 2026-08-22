@@ -153,17 +153,32 @@ Current checkpoint:
     rate by `0.003094`. Its decision is
     `reject-observed-primitive-set-h16-hazard`; no fresh confirmation, Wine,
     policy, or value fit occurred.
-20. retain the frozen, not-yet-run L2j loss-only experiment in
-    `experiments/l2j-logscore-primitive-hazard-v1.json`. It retains the exact
-    L2i data, tokens, architecture, initialization, minibatch order, optimizer,
+20. retain the completed negative-but-diagnostic L2j experiment run at commit
+    `90d3988f565c9d3972b433a392f4f0b7ca17e11a`. It retained the exact L2i
+    data, tokens, architecture, initialization, minibatch order, optimizer,
     epochs, comparators, and evaluation gates, changing only direct sigmoid
-    Brier to unweighted BCE-with-logits. In addition to every L2i gate, its new
-    paired gate requires Brier below frozen L2i object-full with a complete-
-    episode bootstrap upper endpoint below zero and at least six favorable
-    episodes. It must reproduce frozen L2f and L2i scores exactly. This tests
-    the observed rare-positive vanishing-gradient/saturation mechanism; it is
-    not scalar calibration, class weighting, a loss sweep, or evidence that
-    the object set works.
+    Brier to unweighted BCE-with-logits. Object-full Brier improved from frozen
+    L2i `0.00473906` to `0.00464423`, but only five episode directions were
+    favorable; object-full remained worse than scalar-only at `0.00463179`.
+    Low-propensity, nonbaseline, pre-first-HIT, calibration, and raw-saturation
+    gates failed. Its immutable decision is
+    `reject-logscore-observed-primitive-h16-hazard`; no fresh confirmation,
+    Wine, policy, or value fit occurred. BCE nevertheless reduced saturated
+    positives from 89 to one, confirming vanishing rare-positive gradients as
+    a real but partial L2i failure mechanism.
+21. retain the read-only L2j action/target-alignment diagnosis. On 188,791
+    reused evaluation rows, the current action had median run length one frame
+    and changed on frame two in 74.46% of rows, while first h16 HIT had median
+    offset 11. Of 1,085 positive rows, 1,079 (99.45%) hit only after the
+    initial action stopped. For low-propensity rows the action changed on frame
+    two in 91.97% and 157/158 positives hit after it stopped; known-nonbaseline
+    was 91.71% and 170/172. The old h16 target is therefore a valid factual
+    behavior-continuation risk label but not a supported current-action value.
+    Stop architecture, loss, calibration, history, and weighting sweeps on this
+    action-conditioned label. The next research boundary is a separately
+    preregistered fixed-short-exposure collection feasibility test that keeps
+    rechecking the observed shield and records exact conditional propensities
+    and overrides; it is not yet authorized until that contract is frozen.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -249,11 +264,19 @@ That scalar-history candidate is rejected. The subsequent bounded current-root
 instantiated-object set improved ranking and the aggregate action ablation, but
 failed object gain, exploration/lifecycle action, calibration, and saturation
 gates. Direct sigmoid Brier drove 65.05% of evaluation rows below probability
-`1e-7` and underpredicted the event rate by `0.003094`. The next single-variable
-boundary is unweighted BCE-with-logits on the otherwise identical L2i design,
-because it retains a corrective gradient for rare positives while targeting
-the same conditional event probability. Value learning and Wine remain blocked
-until a hazard candidate passes selection and wholly fresh confirmation.
+`1e-7` and underpredicted the event rate by `0.003094`. The loss-only L2j
+follow-up confirmed that this optimizer surface was one real failure
+mechanism: BCE-with-logits improved Brier and reduced saturated positives from
+89 to one. It still failed object gain, episode-stable loss improvement,
+exploratory-action, lifecycle, calibration, and raw-saturation gates. A
+read-only factual audit then exposed the more fundamental target boundary:
+99.45% of h16 positives occurred after the initially published action had
+stopped, rising to 99.37% in low-propensity rows. The label measures behavior-
+continuation risk, not the causal effect of a one-frame action. Further learner
+sweeps on that action-conditioned target are stopped. The next bounded work
+must freeze and test a safe short-action-exposure collection contract before
+defining a new action-risk target. Value learning and Wine policy evaluation
+remain blocked.
 Survival critics, IQL/CQL sweeps, recurrent encoders, ensembles, active
 collection, learned MPC, and Wine branching are not starting points.
 
