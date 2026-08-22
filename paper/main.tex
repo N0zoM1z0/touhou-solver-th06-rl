@@ -889,6 +889,34 @@ MLP.  This offline fit runs no Wine canary and makes no HIT, value-learning, or
 NMNB claim.  Only the joint supervised gate may admit a separately
 preregistered Stage~4 integration canary.
 
+L1d ran at solver commit
+\path{c96845952572f41f4c263706fe76548b6927df7e}.  Its train-only stop fired
+at update 3,121 with final gradient L2 0.020971, or 0.009996 of its fixed-seed
+initial value 2.098068, so optimization passed.  Validation NLL was 1.568672,
+compared with 1.691664 for frozen converged L1c; the complete-episode
+MLP-minus-L1c bootstrap interval was $[-0.127334,-0.115239]$, so the direct
+representation gate passed.  Validation accuracy and Brier also improved from
+0.543234 and 0.634249 to 0.610076 and 0.572805.  The report-only
+MLP-minus-frequency NLL interval was $[-0.734694,-0.700380]$.
+
+Calibration nevertheless failed.  Validation ECE was 0.076007 against the
+unchanged limit $0.008732+0.02=0.028732$; train ECE was similarly high at
+0.080346.  A read-only post-result reliability check found mean validation top
+confidence 0.549501 versus accuracy 0.610076.  Most 0.2--0.7 confidence bins
+were under-confident, while the 0.8--0.9 bins were over-confident; no
+probability transform was fit or evaluated.  The immutable decision is
+\path{stop-l1d-small-current-observation-mlp}.  The plan, model, and result
+SHA-256 digests are respectively
+\path{ef1ae999fe75d434cd60f9126d50a2d7e89210f88e925626174e117a0dc7e8c5},
+\path{3f8d54f2574e4830c0b2cc81c516d70bcc5637967600a8df8941860a8ddaa286},
+and
+\path{aaf62b7e6a696c4d72e7f61a8b68e772d45e6f320b23c7e963b84b15d7657bf2}.
+Thus the nonlinear current-observation hypothesis receives partial support on
+proper score, accuracy, and Brier, but this exact exported probability model
+fails the joint supervised gate.  It runs no Wine canary and admits neither
+history nor value learning.  Any calibration diagnosis or further ablation
+must be separately frozen; this result cannot be repaired post hoc.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It

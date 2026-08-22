@@ -50,17 +50,15 @@ Current checkpoint:
    failed the calibration limit, current features reconstructed the reactive
    collector exactly, and the frozen linear model reproduced only 66--67% of
    its choices; the selected ablation is one small current-observation MLP;
-8. retain the preregistered offline L1d experiment in
-   `experiments/l1d-stage4-bc-mlp-v1.json`. It changes only the necessary
-   representation from the linear scorer to a fixed 114--32--18 ReLU MLP and
-   its deterministic He initialization. The corpus, whole-episode split,
-   target, mask, optimizer, learning rate, L2, seed, timebox, train-only stop,
-   and calibration bound remain frozen. Its primary held-out gate is direct
-   episode-bootstrap NLL improvement over converged L1c; fit it once before
-   considering any Wine canary. Do not add temperature, history, auxiliary
-   targets, IQL, object encoders, or Wine to the same experiment.
+8. retain the completed negative offline L1d experiment from commit
+   `c96845952572f41f4c263706fe76548b6927df7e`. The fixed 114--32--18 ReLU
+   MLP converged at update 3,121 and decisively improved held-out NLL over
+   converged L1c, but validation ECE 0.076007 failed the unchanged 0.028732
+   bound. Its decision is `stop-l1d-small-current-observation-mlp`; no Wine
+   canary or value learning is admitted. Do not post-hoc add temperature,
+   history, auxiliary targets, IQL, object encoders, or Wine to this result.
 
-Three research models have been fitted, but none passed its preregistered
+Four preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
 been run online. A complete route with many HITs is still a successful
 infrastructure baseline when the factual and control contracts pass.
@@ -83,6 +81,11 @@ single-variable representation experiment. The read-only residual diagnosis
 then rejected a global scale as sufficient on train, proved that current
 features exactly determine the reactive collector, and selected one small
 current-observation MLP. No scaled validation distribution was inspected.
+L1d then showed that the fixed nonlinear representation materially improves
+held-out NLL, accuracy, and Brier over converged L1c, but its train and
+validation ECE remained high and the joint supervised gate failed. This exact
+MLP is rejected as an online candidate; the result neither demonstrates a
+need for history nor admits a Wine canary or value learning.
 Survival critics, IQL/CQL
 sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
 and Wine branching are not starting points.
