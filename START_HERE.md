@@ -142,13 +142,20 @@ Current checkpoint:
     zero and the full raw surface clipped 2.43% of rows. Its decision is
     `reject-fixed-history-h16-hazard`; no fresh confirmation or Wine run
     occurred.
-19. before fitting anything else, preregister one bounded current-root
-    object-set h16 hazard experiment. Its cap, order, mask, portable
-    action-relative geometry, scalar-only and current-action-ablated
-    comparators, export-cost bound, and complete-episode gates must be frozen
-    after a read-only raw-schema/support audit. It may consume only already
-    instantiated physical objects and the factual executed action; value
-    learning and Wine remain blocked.
+19. retain the frozen, not-yet-run L2i current-root object-set h16 experiment in
+    `experiments/l2i-observed-primitive-set-hazard-v1.json`. A read-only audit
+    found maxima of 41/42 exact four-frame observed-shield tokens and zero
+    malformed rows, so its fixed cap 48 causes zero truncation on all 192,791
+    train and 188,791 reused-L2d h16 rows. Three shared-initialization,
+    shared-minibatch-order 8,929-parameter sigmoid DeepSets compare object-full,
+    scalar-only, and current-action-ablated representations under direct Brier.
+    Episode decoding uses eight ordered independent workers after an exact
+    serial/parallel differential; the deterministic CPU fit uses 32 threads.
+    The already inspected L2d split loads only after the train-only artifact is
+    frozen. Passing can select a wholly fresh confirmation only. It consumes
+    only already instantiated
+    physical primitives and the factual executed action; history, value
+    learning, and Wine remain blocked.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has

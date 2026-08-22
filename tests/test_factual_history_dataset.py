@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -15,6 +17,26 @@ from tests.test_episode_dataset import _decision, _snapshot
 from tests.test_factual_probes import _probe_episode
 
 
+def _with_primitives(decision):
+    return replace(
+        decision,
+        shield_contract="observed-hazard-kinematics-v1",
+        shield_horizon=4,
+        shield_aabb_frames=(
+            ((96.0, 390.0, 100.0, 394.0),),
+            ((97.0, 391.0, 101.0, 395.0),),
+            (),
+            (),
+        ),
+        shield_laser_frames=(
+            (),
+            (),
+            ((192.0, 120.0, 1.5, 250.0, 20.0, 12.0),),
+            (),
+        ),
+    )
+
+
 def _history_episode(root, *, mirrored: bool = False):
     recorder = CorpusRecorder(
         root,
@@ -24,15 +46,21 @@ def _history_episode(root, *, mirrored: bool = False):
     rows = (
         (
             _snapshot(0, x=100.0),
-            _decision("ok", current="stay", published="left", legal=("left", "right")),
+            _with_primitives(_decision(
+                "ok", current="stay", published="left", legal=("left", "right")
+            )),
         ),
         (
             _snapshot(1, x=100.0 + 4.0 * sign),
-            _decision("ok", current="left", published="stay", legal=("stay", "left")),
+            _with_primitives(_decision(
+                "ok", current="left", published="stay", legal=("stay", "left")
+            )),
         ),
         (
             _snapshot(2, x=100.0 + 4.0 * sign),
-            _decision("ok", current="stay", published="left", legal=("left", "stay")),
+            _with_primitives(_decision(
+                "ok", current="stay", published="left", legal=("left", "stay")
+            )),
         ),
         (
             _snapshot(3, player_state=2, lives=1, x=100.0),

@@ -590,11 +590,12 @@ Fresh h16 factual-risk confirmation & Positive signal, not policy-ready & Eight 
 Train-only Platt calibration & Negative probability-surface gate & The two-parameter monotone fit converged and passed calibration limits, but worsened h16 Brier versus both uncalibrated full and state-only and reversed both diagnostic point deltas. \\
 Direct action-conditioned h16 hazard & Negative formal gate; positive algorithm signal & Direct full Brier was 0.00480785 versus 0.00551139 for frozen L2 and 0.00500959 for same-architecture state-only, with both episode-bootstrap intervals wholly favorable.  Calibration passed, but nonbaseline and pre-first-HIT gates did not; no fresh confirmation ran. \\
 Uniform-shield-target weighted h16 hazard & Negative action-measure gate & Exact weights passed, but weighted full Brier 0.00454350 was worse than frozen L2f at 0.00449955; overall, low-propensity, nonbaseline, pre-first-HIT, and candidate-bound gates failed.  No fresh confirmation ran. \\
-Fixed short portable-history h16 hazard & Selected, not run & The next representation experiment returns to unweighted L2f Brier and changes only causal past-root history.  Passing can select fresh confirmation only. \\
+Fixed short portable-history h16 hazard & Negative representation gate & Exact 16-root history improved point Brier, but temporal, exploratory-action, pre-first-HIT, and raw-boundedness gates failed.  No fresh confirmation ran. \\
+Observed-primitive-set h16 hazard & Preregistered, not run & One cap-48 current-root DeepSets comparison tests whether exact recorded shield geometry adds stable object and action signal beyond scalar summaries.  Passing can select fresh confirmation only. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
-Deep Sets, recurrence, ensembles, active collection, learned MPC, branching & Not run & Each requires its distinct L2, L5, or L6 gate; none is active architecture. \\
+Recurrence, ensembles, active collection, learned MPC, branching & Not run & Each requires its distinct L2, L5, or L6 gate; none is active architecture. \\
 SABER-RL composite & Not admitted & Its survival, recurrence, uncertainty, collection, and branching claims must each pass their separate rung before a combined-method experiment exists. \\
 \end{longtable}
 \normalsize
@@ -1647,6 +1648,62 @@ mask, portable action-relative geometry, scalar-only and current-action-
 ablated comparators, and immutable inference-cost bound before fitting.  It may
 not use future births, source identity, an invented successor, value learning,
 or Wine evaluation.
+
+L2i asks whether the information missing from the scalar root is the individual
+geometry of already-instantiated hazards.  A read-only audit preceded the
+preregistration.  Exhaustive occupied-bullet counts have median 193/195,
+99th percentile 630/631, and maximum 640 on train/reused-L2d rows, so flattening
+the raw pool is rejected.  In contrast, the exact four-frame primitives already
+recorded for the observed shield yield spatiotemporal-token median 1, 90th
+percentile 6, 95th percentile 16, 99th percentile 27, and maxima 41/42.  All
+192,791 train and 188,791 reused-L2d h16 rows have the expected contract,
+four-frame shape, finite geometry, and zero malformed tokens.  A cap of 48
+therefore causes zero truncation in both audited splits.  Positive rows contain
+5.307/4.994 tokens on average versus 2.564/2.577 for negatives; this is support
+for testing the representation, not a learner result or reward.
+
+The L2i token is deliberately source-free and correspondence-free.  Each AABB
+or laser primitive at each of the four shield frames becomes one token with a
+two-way type indicator, four-way frame indicator, anchor or center relative to
+the current player, and normalized physical geometry.  AABB geometry contains
+half width and height; laser geometry contains cosine and sine of angle, its two
+recorded extent values, and width.  Fixed divisors derived from the portable
+playfield/geometry contract are used instead of train-fitted normalization.
+No bullet state, EX flag, sprite, slot, enemy program, ECL, RNG, address, source
+identity, future birth, or object correspondence is read.  The set is
+action-independent; the factual published action conditions the encoder through
+the same current portable action fields used by L2f.  If a future root exceeds
+48 tokens, one frozen frame/type/geometry ordering truncates it and the event is
+counted; no audited train or evaluation row exercises that fallback.
+
+L2i is preregistered as
+\path{experiments/l2i-observed-primitive-set-hazard-v1.json}.  It fits three
+identical cap-48 sigmoid DeepSets from one shared initialization and identical
+minibatch order: object-full, scalar-only with the set mask removed, and object
+set with exactly the nine current action-relative scalar fields removed.  The
+shared token MLP has two width-32 ReLU layers; masked mean and maximum pooling,
+normalized log token count, and the 15 scalar slots feed width-64 and width-32
+ReLU head layers.  The ablations retain the same tensor shapes and parameter
+count by zero masking.  Training uses float32, direct unweighted row Brier,
+AdamW at 0.001 with weight decay 0.0001, batch size 4096, 40 fixed epochs, seed
+20260846, eight order-preserving episode-loader workers, 32 deterministic CPU
+fit threads, and no validation early stopping,
+weighting, calibration fit, or model sweep.  A train-only artifact is frozen
+before the already inspected L2d episodes load.
+
+Selection requires zero primitive-contract failures and truncations, a
+complete-episode Brier interval below zero for object-full minus scalar-only,
+and another below zero for object-full minus current-action-ablated object set,
+each with at least six favorable episode directions.  The current-action
+comparison must separately pass the unchanged below-propensity-0.025,
+known-nonbaseline, and pre-first-HIT support/interval/direction gates.  Sigmoid
+probabilities must be finite with saturation fraction at most 0.001;
+calibration-in-the-large must be within 0.002 and full ECE may exceed the
+action-ablated comparator by at most 0.001.  The immutable scorer must remain
+below 10,000 parameters and batch-18 one-thread CPU p99 inference below 5 ms.
+Frozen L2f all-row scores must reproduce exactly.  Passing selects a wholly
+fresh confirmation experiment only; it does not establish causal action value,
+authorize exhaustive objects or history, fit a policy/value, or run Wine.
 
 \subsection{E4: minimal offline policy improvement}
 
