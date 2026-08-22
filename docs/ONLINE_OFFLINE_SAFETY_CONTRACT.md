@@ -53,16 +53,18 @@ as the primary remaining cause: it worsened its target Brier comparator and did
 not stabilize low-propensity or known-nonbaseline action signal. Exact behavior
 propensity and baseline identity remain offline-only diagnostics or weights and
 may never become actor inputs. Observed-shield set size retains its existing
-portable current-root feature role. The next admitted change is one fixed short
-portable history under the unweighted direct-hazard measure. It contains only
-16 prior consecutive eligible policy roots whose intervals are each exactly one
-game frame, plus their then-published actions. Any non-unit interval resets the
-history. A prior outcome, propensity, lifecycle label, absolute frame, or future
-fact never enters. Rows without a complete causal prefix are excluded rather
-than padded.
-One offline expected-HIT value method follows only after that representation
-gate.
-Object-set/recurrent encoders, alternative survival objectives, CQL after IQL,
+portable current-root feature role. The completed L2h fixed history contained
+only 16 prior consecutive eligible roots with unit game-frame intervals and
+their then-published actions; non-unit intervals reset it. It improved a point
+score but failed episode-stable temporal, exploratory-action, lifecycle, and
+bounded-surface gates, so it is not an admitted representation.
+The next admitted change is one bounded current-root set of already
+instantiated bullets, lasers, and enemy bodies after a separately frozen cap,
+order, mask, geometry, comparator, and export-cost contract. It may not contain
+prior outcome, propensity, lifecycle label, absolute frame, source identity,
+or future fact, and it never widens the observed shield. One offline
+expected-HIT value method follows only after that representation gate.
+Recurrent encoders, alternative survival objectives, CQL after IQL,
 ensembles, OPE, active collection, learned dynamics/MPC, and real-Wine branch
 acquisition require separate evidence gates. A learned prediction scores
 unknown future risk; it never turns the absence of a predicted birth into an

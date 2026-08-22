@@ -132,17 +132,23 @@ Current checkpoint:
     The full raw surface also clipped 13.53% of evaluation rows. Its decision is
     `reject-weighted-h16-hazard`; action-measure mismatch is rejected as the
     primary L2f root cause. No fresh confirmation or Wine run occurred.
-18. run only the frozen offline L2h experiment in
-    `experiments/l2h-fixed-history-hazard-v1.json`. It returns to unweighted
-    L2f Brier and adds exactly 16 prior consecutive learning-eligible policy
-    roots whose intervals are each exactly one game frame, oldest to newest,
-    before the current root. Each past root contains
-    the same portable 15-field vector for the action actually published then;
-    no outcome, lifecycle, propensity, absolute frame, padding, or future fact
-    enters. Three identical-capacity fits compare history-full, current-only,
-    and history with current action-relative fields removed on exactly the same
-    rows. Passing can select wholly fresh confirmation only; value learning and
-    Wine remain blocked.
+18. retain the completed negative offline L2h experiment run at commit
+    `bbf6e81a3203fb00443060a215949a37fdb13352`. Its exact unit-frame 16-root
+    portable history improved reused-L2d point Brier to `0.00479407` from
+    same-row current-only `0.00483026`, and current action fields beat their
+    history-preserving ablation in all eight episode directions. The temporal
+    interval crossed zero with only five favorable episodes, however, while
+    low-propensity, nonbaseline, and pre-first-HIT action intervals also crossed
+    zero and the full raw surface clipped 2.43% of rows. Its decision is
+    `reject-fixed-history-h16-hazard`; no fresh confirmation or Wine run
+    occurred.
+19. before fitting anything else, preregister one bounded current-root
+    object-set h16 hazard experiment. Its cap, order, mask, portable
+    action-relative geometry, scalar-only and current-action-ablated
+    comparators, export-cost bound, and complete-episode gates must be frozen
+    after a read-only raw-schema/support audit. It may consume only already
+    instantiated physical objects and the factual executed action; value
+    learning and Wine remain blocked.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -221,14 +227,15 @@ propensity-corrected test then passed its exact weight and calibration contracts
 but failed its own target-score, exploration-action, lifecycle, and candidate-
 surface gates. It worsened uniform-target Brier versus frozen L2f and retained
 the baseline-equal signal pattern. Logged action measure is therefore not the
-primary root cause. The next justified representation test is one fixed short
-portable history under the unweighted L2f measure; this tests the known TH06
-partial-observability boundary without simultaneously changing capacity,
-target, or evaluation episodes. Value learning and Wine remain blocked until a
-hazard candidate passes selection and wholly fresh confirmation.
-Survival critics, IQL/CQL
-sweeps, object/recurrent encoders, ensembles, active collection, learned MPC,
-and Wine branching are not starting points.
+primary root cause. The subsequent exact 16-frame scalar history used temporal
+facts and improved its point score, but temporal gain was episode-heterogeneous
+and its action increment again vanished on exploratory and pre-first-HIT rows.
+That scalar-history candidate is rejected. The next justified representation
+test is one bounded current-root instantiated-object set; it tests information
+discarded by scalar counts and minimum-clearance summaries. Value learning and
+Wine remain blocked until a hazard candidate passes selection and wholly fresh
+confirmation. Survival critics, IQL/CQL sweeps, recurrent encoders, ensembles,
+active collection, learned MPC, and Wine branching are not starting points.
 
 The first training inventory was collected serially with
 unchanged retail clock/update semantics, coherent capture suspension, the

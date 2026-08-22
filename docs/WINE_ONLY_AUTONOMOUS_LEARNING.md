@@ -73,13 +73,19 @@ before fitting.
    baseline, so missing capture is not the failure. L1b reused the exact
    corpus/split and changed only train-only optimization convergence plus a
    corrected ECE implementation. It exhausted the frozen 2,000-update timebox
-   at gradient ratio 0.0196 rather than 0.01, so its result is inconclusive and
-   does not admit L2.
-3. **L2 — one representation ablation (blocked).** Add one fixed short physical/action
-   history and simple factual HIT-horizon or observed-shield-collapse probes.
-   Retain it only after a preregistered held-out proper-score improvement. A
-   bounded object-set encoder is considered only if a transparent vector
-   summary fails; recurrence only if short history has already shown value.
+   at gradient ratio 0.0196 rather than 0.01, so its result is inconclusive as
+   collector BC. The separately gated factual-probe line nevertheless
+   established current-root h16 physical-HIT predictability without admitting
+   a policy.
+3. **L2 — factual hazard representation (active).** Current scalar features,
+   direct Brier fitting, exact uniform-shield weighting, and one fixed
+   unit-frame 16-root scalar history have been tested. The direct model
+   established overall action-relative prediction, but weighting and history
+   did not make that increment stable on low-propensity, known-nonbaseline, and
+   pre-first-HIT rows. The fixed history is rejected. The next single ablation
+   is a bounded current-root instantiated-object set after its cap, order, mask,
+   portable geometry, comparators, and inference-cost bound are preregistered.
+   Recurrence and value learning remain blocked.
 4. **L3 — one offline value method.** On the identical frozen data and
    representation, compare BC with one expected-HIT value learner. IQL is the
    first candidate. CQL is admitted only if IQL demonstrates unsupported-action
@@ -138,6 +144,13 @@ feature and a parity test.
   the 0.028732 bound. Proper-score passed, optimization and calibration failed,
   and the exact decision is `inconclusive-l1b-optimization-not-converged`.
   L1b performed no Wine run and created no authorized learned candidate.
+- L2h ran from commit `bbf6e81a3203fb00443060a215949a37fdb13352` on
+  exact unit-frame 16-root histories. History-full Brier was 0.00479407 versus
+  0.00483026 for same-row current-only, but the temporal interval crossed zero
+  with five of eight favorable episodes. Its overall current-action ablation
+  passed, while low-propensity, nonbaseline, and pre-first-HIT intervals crossed
+  zero and the raw surface clipped 2.43%. The immutable decision is
+  `reject-fixed-history-h16-hazard`; no fresh confirmation or Wine run occurred.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final

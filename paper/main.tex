@@ -101,8 +101,11 @@ confirmation because low-propensity nonbaseline and pre-first-HIT evidence was
 not episode-stable.  An exact bounded uniform-shield-target weighting test then
 worsened its target Brier comparator and retained unstable low-propensity and
 nonbaseline action evidence, rejecting logged action measure as the primary
-cause.  The next admitted representation test is one fixed short portable
-history; no hazard scorer or policy has been selected.
+cause.  A fixed 16-root portable history then improved the point score and the
+overall current-action ablation, but failed episode-stable temporal,
+exploratory-action, pre-first-HIT, and raw-boundedness gates.  It is rejected;
+the next boundary is a bounded instantiated-object set, and no hazard scorer or
+policy has been selected.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -1599,6 +1602,52 @@ both splits.  The all-current frozen-L2f evaluation Brier also reproduces at
 0.004807849266974402.  A repeated 16-thread fixture fit serialized identically;
 thread count is frozen for runtime only and is not an algorithmic ablation.
 
+L2h ran once from commit
+\texttt{bbf6e81a3203fb00443060a215949a37fdb13352}.  The immutable result
+SHA-256 is
+\texttt{b91e44250b3c5a8551a861d978b1d8558b050422f5e596a3280568d35a2af37b};
+the frozen L2f Brier and NLL reproduced with zero error.  History-full
+evaluation Brier was 0.00479407, versus 0.00483026 for same-row current-only,
+0.00488334 for history with current action fields ablated, and 0.00482784 for
+frozen L2f on the same rows.  Its full-minus-current-only point delta was
+$-3.62\times10^{-5}$, but the complete-episode 95\% interval
+$[-1.44\times10^{-4},1.02\times10^{-4}]$ crossed zero and only five of eight
+episodes favored history.  The temporal-gain gate failed.
+
+Current action fields did add an aggregate increment conditional on history:
+full minus action-ablated Brier was $-8.93\times10^{-5}$ with interval
+$[-1.05\times10^{-4},-7.03\times10^{-5}]$ and all eight favorable episode
+directions.  This increment was again baseline-heavy.  All eight baseline-
+equal episode directions favored full, with point delta
+$-1.08\times10^{-4}$.  Below propensity 0.025 the point was
+$-5.18\times10^{-7}$ with interval
+$[-4.10\times10^{-5},3.97\times10^{-5}]$ and three favorable episodes;
+known-nonbaseline was $-7.95\times10^{-6}$ with
+$[-4.51\times10^{-5},2.74\times10^{-5}]$ and four; pre-first-HIT was
+$-2.49\times10^{-5}$ with
+$[-5.36\times10^{-5},1.40\times10^{-6}]$ and five.  All three frozen boundary
+gates failed despite sufficient support.
+
+The history-full raw surface clipped 4,543 of 186,615 rows (2.434\%), failing
+the 0.001 candidate limit.  Calibration-in-the-large was -0.000135 and ECE was
+0.001735, so aggregate calibration passed and does not explain away the
+unbounded surface or heterogeneous boundaries.  Post-hoc feature-gain
+accounting assigns 37.78\% to prior roots, ruling out a silently unused history,
+but most history gain is sparse player-position, power, and shield-count
+context rather than retained hazard geometry.  The formal decision is
+\texttt{reject-fixed-history-h16-hazard}; no fresh confirmation, Wine run,
+policy, or value fit occurred.
+
+L2h therefore rejects this fixed scalar history, not all temporal information.
+A bounded link could repair range violations but cannot make the temporal or
+exploration-action intervals negative.  The next high-information boundary is
+a separately preregistered bounded current-root set encoder over captured
+instantiated bullets, lasers, and enemy bodies.  It must freeze its cap, order,
+mask, portable action-relative geometry, scalar-only and current-action-
+ablated comparators, and immutable inference-cost bound before fitting.  It may
+not use future births, source identity, an invented successor, value learning,
+or Wine evaluation.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1834,8 +1883,12 @@ the full candidate's overall discrimination or calibration.  The subsequent
 exact bounded uniform-shield-target weighting test rejected that proposed main
 cause: it worsened its target Brier comparator, did not stabilize exploratory
 action signal, and produced a heavily clipping raw surface.  Its formal decision
-is also reject.  One fixed short portable-history h16 experiment under the
-unweighted L2f measure is now admitted; value learning remains later.
+is also reject.  The subsequent fixed unit-frame 16-root scalar history
+improved its point Brier and aggregate action ablation, but temporal gain was
+heterogeneous, exploratory and pre-first-HIT action intervals crossed zero,
+and the raw surface clipped materially.  It too is rejected.  One bounded
+current-root instantiated-object-set experiment is now the next representation
+boundary; value learning remains later.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
