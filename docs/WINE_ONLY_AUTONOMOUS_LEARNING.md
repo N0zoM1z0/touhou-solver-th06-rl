@@ -99,8 +99,13 @@ before fitting.
    five recorded control-dead-end lifecycle interrupts were not recognized.
    The immutable result is retained; a separate read-only erratum aligned the
    checker with the frozen lifecycle list and passed all seven gates without
-   changing data or thresholds. A stateful serial-versus-parallel differential
-   is next; recurrence and value learning remain blocked.
+   changing data or thresholds. Read-only target sizing then found zero strict
+   complete-execution h4 positives and only four accepted h4 intention-to-treat
+   positives. L2l freezes the single change to a 12-root intention and h12 ITT
+   HIT target, selected because factual 4/8/12/16-root event upper bounds were
+   4/17/21/22 and 12-root mask persistence remained 82.42%. It uses two serial
+   pilot-train episodes and no fit; recurrence and value learning remain
+   blocked.
 4. **L3 — one offline value method.** On the identical frozen data and
    representation, compare BC with one expected-HIT value learner. IQL is the
    first candidate. CQL is admitted only if IQL demonstrates unsupported-action
@@ -115,12 +120,11 @@ before fitting.
    factual and input-delivery digests. Predictions never widen the shield's
    observed-object certificate.
 
-The completed L2k experiment had exactly three moving parts: a uniform
-four-root intention policy, the unchanged per-root observed shield/controller,
-and a versioned factual exposure recorder/auditor. It fitted no learner. The
-online actor observation was unchanged; exposure identifiers and propensities
-remain recorder provenance only. The next runnable artifact must first freeze
-the stateful serial-versus-parallel differential and its exact comparison.
+The active L2l pilot retains exactly three moving parts: a uniform 12-root
+intention policy, the unchanged per-root observed shield/controller, and a
+versioned factual exposure recorder/auditor. It fits no learner. The online
+actor observation is unchanged; exposure identifiers and propensities remain
+recorder provenance only. Parallel Wine is explicitly excluded.
 
 ## Current evidence
 
@@ -180,6 +184,13 @@ the stateful serial-versus-parallel differential and its exact comparison.
   erratum passed all seven gates on the same immutable data: 12,936 eligible
   complete groups, 93.68% complete intended execution, 0.217% dead ends, and
   92 h16-positive starts. No model or learned policy ran.
+- A first-divergence audit found the old concurrent traces exact for
+  1,011/1,017 transitions before a two-frame observation gap changed input
+  execution and player position. The poll-to-suspend boundary has no native
+  root handshake, so parallel remains disabled. L2k group sizing then found
+  only 4/12,948 accepted h4 ITT positives. L2l is preregistered, not run: two
+  serial Stage 4 pilots test a 12-root assignment protocol and exact h12 HIT
+  label before any scaled collection or model.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final
@@ -187,9 +198,10 @@ policy evidence consists of predeclared serial, non-suspending normal-speed,
 complete original-Wine routes with zero Bomb; NMNB rate and HIT count are both
 reported, and infrastructure failures remain separate.
 
-The stateless uniform-mixture collector already passed its declared parallel
-infrastructure gate. L2k nevertheless ran serially because its policy adds
-stateful multi-root semantics. Scaled action-exposure collection remains prohibited until
-a separate stateful serial-versus-parallel differential proves equality of
-control facts, group lifecycle, schemas, action delivery, and factual traces.
-Failed or partial waves remain quarantined.
+The old fixed-seed pool did not pass exact factual equality. Its substantive
+first divergence is a scheduling-dependent observation gap in the external
+poll-to-suspend window, not RNG or policy drift. L2l therefore stays serial;
+scaled action-exposure collection remains prohibited until its own pilot and
+support gate pass. Failed or partial waves remain quarantined. A future native
+root handshake is a separate infrastructure hypothesis, not a prerequisite
+for serial learner feasibility.

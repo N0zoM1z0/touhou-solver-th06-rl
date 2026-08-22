@@ -116,6 +116,25 @@ data, threshold, or metric and passes all seven gates. This admits pilot-train
 use and a separately preregistered stateful collection differential, not
 parallel collection, model fitting, value learning, or online policy use.
 
+The subsequent boundary diagnosis prevents that differential from being
+misused as a routine rerun. In the immutable E5 traces, concurrent workers
+match the serial RNG, policy, shield, action, and physical stream until one
+schedule-dependent observation gap advances retail by two frames. The
+controller polls the frame before calling `NtSuspendProcess`; without a native
+root handshake, exact all-root equality is not established. L2l therefore
+keeps one serial worker and does not modify this infrastructure boundary.
+
+L2l also corrects the learner decision unit rather than stretching the old
+one-frame target. Its randomized treatment is assignment to one complete
+12-root intention protocol. The controller may override an inadmissible
+intention or release input at a control dead-end; those are deterministic
+mediators and are never relabeled as intended-action execution. Physical HIT
+before the twelfth unit-frame transition and before another random assignment
+is positive. An exact step-0-through-step-11 no-HIT group is negative. A gap,
+unexecuted initial assignment, intervening assignment, incomplete no-HIT group,
+or episode truncation is censored. This is a factual intention-to-treat label,
+not a counterfactual successor.
+
 It may not add prior outcome, propensity, lifecycle label, absolute frame,
 source identity, raw engine fields, or future fact, and it never widens the
 observed shield. One offline expected-HIT value method follows only after a

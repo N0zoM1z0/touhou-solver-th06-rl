@@ -1,0 +1,5 @@
+{
+  "schema": "th06-rl-fixed-shield-action-exposure-v1",
+  "policy_seed": 0,
+  "exposure_roots": 12
+}

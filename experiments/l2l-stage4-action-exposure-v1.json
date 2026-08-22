@@ -1,0 +1,150 @@
+{
+  "schema": "th06-rl-l2l-stage4-action-exposure-prereg-v1",
+  "experiment_id": "l2l-stage4-action-exposure-v1",
+  "decision": "Can a uniformly randomized 12-root shield-bounded intention create enough exactly attributed intention-to-treat physical-HIT support for a later serial training collection?",
+  "hypotheses": {
+    "H1_target_alignment": "The learner decision is the randomized group-start intention, not a one-frame action. Its factual label is physical HIT within the following 12 unit-frame transitions and before any next randomized assignment; shield overrides and fail-closed input release are deterministic parts of that intention protocol.",
+    "H2_exposure": "At least 70% of eligible complete groups have no shield override and at least 12 witnessed intended-action executions.",
+    "H3_support": "Each complete Stage 4 episode contains at least 1800 eligible 12-root groups, and every canonical action receives at least 100 randomized assignments across the two pilot-train episodes.",
+    "H4_safety": "Every published root remains inside its freshly recomputed observed-shield set. An inadmissible intention publishes the current reactive baseline; an unsafe input already in the pickup lease remains a fail-closed control dead-end.",
+    "H5_selection_limit": "Passing the collection contract with at least 16 accepted HIT-positive group starts selects only a separately frozen serial training collection. It does not admit parallel Wine, a model, value learning, a learned policy, or a gameplay claim."
+  },
+  "sizing_evidence": {
+    "scope": "read-only factual continuations from immutable L2d and L2k episodes; no counterfactual successor and no fit",
+    "work_log": "work_log/20260822T144337Z-e5-first-divergence-diagnosis",
+    "l2k_four_root_itt": {
+      "group_starts": 12985,
+      "strict_complete_execution_hit_positives": 0,
+      "accepted_itt_hit_positives": 4
+    },
+    "nonoverlapping_event_support_upper_bound": {
+      "4": {"starts": 12971, "hit_positives": 4},
+      "8": {"starts": 6479, "hit_positives": 17},
+      "12": {"starts": 4315, "hit_positives": 21},
+      "16": {"starts": 3233, "hit_positives": 22}
+    },
+    "action_weighted_factual_mask_persistence": {
+      "12": 0.8241576208576177,
+      "16": 0.7813208215518285
+    },
+    "selected_exposure_roots": 12,
+    "selection_reason": "Twelve roots is the shortest measured horizon near event-support saturation: extending to 16 adds one upper-bound positive while removing about 25% of group starts and lowering factual mask persistence.",
+    "parallel_boundary": "The immutable E5 serial/concurrent traces first diverge at schedule-dependent observation gaps after matching RNG, policy, shield, action, and physical facts. The polling-to-NtSuspendProcess window has no root handshake. Exact parallel collection remains rejected; L2l is serial."
+  },
+  "target": {
+    "unit": "randomized-action-intention-group-start",
+    "cost": "physical HIT only",
+    "horizon_unit_frames": 12,
+    "positive": "a physical HIT occurs within 12 contiguous unit-frame transitions after assignment and before any next randomized assignment",
+    "negative": "the same assignment group records exact exposure steps 0 through 11 over 12 contiguous unit-frame transitions with no physical HIT",
+    "censor": [
+      "episode ends before the complete factual window",
+      "any transition has elapsed_frames other than one",
+      "the assigned action is not witnessed on the first transition",
+      "a new randomized assignment begins before the outcome boundary",
+      "an incomplete protocol reaches neither HIT nor a complete negative window"
+    ],
+    "shield_override_semantics": "intention-to-treat mediator retained in the primary target and reported separately; it is not relabeled as execution of the intended action",
+    "control_dead_end_semantics": "deterministic protocol outcome retained when a HIT occurs before a new assignment; otherwise an incomplete dead-end group is censored",
+    "reward_shaping": false,
+    "counterfactual_successors": false
+  },
+  "collection": {
+    "stage": 4,
+    "difficulty": "lunatic",
+    "episode_unit": "complete-practice-stage",
+    "episodes": [
+      {"index": 0, "policy_seed": 12754757775496269706, "split": "pilot-train-only"},
+      {"index": 1, "policy_seed": 17509614397864923417, "split": "pilot-train-only"}
+    ],
+    "policy_seed_derivation_domain": "th06-rl:l2l-stage4-action-exposure-v1",
+    "base_policy_seed": 20260822,
+    "assignment": "uniform-over-current-observed-shield-set-at-group-start",
+    "exposure_roots": 12,
+    "target_horizon_unit_frames": 12,
+    "continuation": "retain-intended-action-when-currently-shield-admissible",
+    "override": "deterministic-current-reactive-baseline-when-intention-is-not-currently-shield-admissible",
+    "lifecycle_interruptions": [
+      "physical-hit",
+      "passive",
+      "player-not-active",
+      "control-dead-end"
+    ],
+    "serial_wine_workers": 1,
+    "worker_index": 0,
+    "natural_retail_rng": true,
+    "game_clock": "original-retail-normal-speed",
+    "complete_episode_required": true,
+    "physical_hit_retry": false,
+    "max_attempts_per_slot": 3,
+    "peek_or_sequential_stop": false,
+    "stop_rule": "collect both fixed slots; retain every physical HIT; reject and retry only infrastructure-invalid or Bomb-bearing attempts; stop incomplete after three infrastructure attempts for either slot",
+    "infrastructure_admission": {
+      "capture_p99_ms_max": 40.0,
+      "dense_shield_parity_required": true,
+      "observation_gap_rate_max": 0.005,
+      "player_successor_bit_exact_required": true,
+      "solve_p99_ms_max": 16.7,
+      "stale_retry_rate_max": 0.0,
+      "validator": "scripts.gate_parallel_wine.validate_gate_run"
+    }
+  },
+  "gate": {
+    "minimum_complete_groups_per_episode": 1800,
+    "minimum_assignments_per_action": 100,
+    "minimum_no_override_fraction": 0.7,
+    "minimum_full_execution_fraction": 0.7,
+    "maximum_control_dead_end_rate": 0.005,
+    "hit_support_diagnostic_minimum": 16,
+    "hit_support_is_retry_or_contract_gate": false,
+    "zero_bomb_required": true,
+    "zero_infrastructure_failure_required": true,
+    "exact_exposure_metadata_required": true,
+    "complete_episode_required": true,
+    "parallel_collection_admitted": false,
+    "hazard_model_admitted": false,
+    "value_learning_admitted": false,
+    "online_learned_policy_admitted": false
+  },
+  "paths": {
+    "artifact_root": "artifacts/l2l-stage4-action-exposure-v1",
+    "corpus_root": "corpora/l2l-stage4-action-exposure-v1",
+    "collection_ledger": "artifacts/l2l-stage4-action-exposure-v1/collection-ledger.json",
+    "experiment_result": "artifacts/l2l-stage4-action-exposure-v1/experiment-result.json",
+    "base_policy_state": "config/fixed_shield_action_exposure_h12.json",
+    "exposure_policy_plugin": "src/th06_rl/policies/fixed_shield_action_exposure.py",
+    "policy_api": "src/th06_rl/policy_api.py",
+    "policy_loader": "src/th06_rl/policy_loader.py",
+    "controller": "src/th06_rl/th06/controller.py",
+    "corpus_module": "src/th06_rl/corpus.py",
+    "episode_dataset_module": "src/th06_rl/episode_dataset.py",
+    "exposure_audit_module": "src/th06_rl/action_exposure_audit_v2.py",
+    "experiment_runner": "scripts/run_l2l_stage4_action_exposure.py",
+    "source_l2k_erratum": "artifacts/l2k-stage4-action-exposure-v1/audit-erratum-v1.json",
+    "wine_pool": "reference/wine-workers-v2-zklean-safe/pool.json",
+    "work_log_root": "work_log"
+  },
+  "sha256_bindings": {
+    "base_policy_state": "d4ada545fb463b4498dc72804f5975a340593e775d66cfecc8a2e8e7dc6461eb",
+    "exposure_policy_plugin": "def9d448ec79ef31eb1a8684c6b25763d781c8482dc7df279b7b1646a0381362",
+    "policy_api": "1a026d9212300ca106a300c405ca020bb3e401a3dd006bbc468d0b990cb7e2de",
+    "policy_loader": "0c26e87313b04723606d41e63215435955bf6fc11e31d81f33e8525049dca48b",
+    "controller": "800be475a8a0c68cbd23d36dcdbbf8df6db6f64fa1e286d766d3f9605765f8bf",
+    "corpus_module": "68e723e2846189da8ca7a41312c566e48452f2f2b0a58c5f9e4a504928c51e5d",
+    "episode_dataset_module": "e65faed1e50d08f473fb894c75df206f71ff3e7543e6c3ba01518bfad027bbfe",
+    "exposure_audit_module": "bdf8fcf4169b043e70eef2b06e5e0b7ee61b7e7813b882135895fcd3b6f273ab",
+    "experiment_runner": "9837e26efd97c19bf76fea66a8edb219fe8c0859f646f179b87dd53968850f10",
+    "source_l2k_erratum": "97c51277f35c234c2673b750ad040b359760b82f0b30a2cae4fcf89a3124b446",
+    "wine_pool": "76fe8c634855a2a9f11f4a5b83ab0c3498eb914df384ed40f206f199750447ad"
+  },
+  "fits_model": false,
+  "runs_learned_policy": false,
+  "online_wine": true,
+  "pilot_data_use": "train-only after a passing collection contract; never evaluation or promotion evidence",
+  "non_goals": [
+    "no learned actor, hazard model, critic, IQL, CQL, OPE, history encoder, object encoder, calibration, or learner fit",
+    "no counterfactual successor, ECL interpreter, future-birth envelope, shield widening, route logic, stage pattern rule, RNG input, or source identity",
+    "no physical-HIT retry, stop-on-hit output, Bomb, accelerated clock, parallel Wine, native root-handshake change, adaptive collection, or result peeking",
+    "no claim that the intended action executed after a shield override or control dead-end; the estimand is assignment to the full declared intention protocol"
+  ]
+}

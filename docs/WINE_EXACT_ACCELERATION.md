@@ -112,6 +112,20 @@ factual trajectories differed. The gate rejected the pool exactly as required;
 there is no admitted parallel collector at this checkpoint. Do not proceed to
 the command below unless a future unchanged-criterion gate passes.
 
+A later read-only first-divergence audit localized the failure. The historical
+digest also included an unnormalized run-local `snapshot_id` and coherent-read
+attempt counts, so its first byte mismatch was not a gameplay boundary. After
+removing only those diagnostic differences, concurrent workers matched the
+serial reference through 1,011 and 1,017 transitions. Each then recorded an
+`observation_gap=2` where the serial run advanced one frame; input execution
+and player position immediately diverged. The controller currently polls the
+frame counter before entering `NtSuspendProcess`, leaving a scheduler-sensitive
+window with no native root handshake. Normal-priority serial L2k episodes also
+contained rare gaps, so changing process nice alone is not proof of repair.
+Exact parallel collection remains disabled; current action-exposure work uses
+one serial worker rather than adding handshake complexity before learner
+feasibility is established.
+
 Only the exact bound policy/commit/pool may then collect a predeclared schedule
 of complete natural-RNG routes. Changing the policy requires a new gate:
 

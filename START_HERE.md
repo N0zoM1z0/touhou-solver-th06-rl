@@ -203,6 +203,20 @@ Current checkpoint:
     admits pilot-train use and selects only a separately frozen stateful
     serial-versus-parallel differential; it does not select a model, value
     learner, learned policy, or gameplay claim.
+23. retain the read-only E5/L2k boundary diagnosis and the frozen, not-yet-run
+    L2l pilot in `experiments/l2l-stage4-action-exposure-v1.json`. The old E5
+    serial/concurrent traces first differ at a schedule-dependent two-frame
+    observation gap after 1,011/1,017 exact transitions; the controller's
+    frame-poll-to-`NtSuspendProcess` window has no root handshake. Parallel
+    collection remains rejected, and L2l stays serial. The four-root L2k
+    intention-to-treat target has only 4 positives among 12,948 accepted
+    examples; strict complete-execution HIT support is zero. Read-only upper-
+    bound event counts at 4/8/12/16 roots were 4/17/21/22, while 12/16-root
+    factual shield-mask persistence was 82.42%/78.13%. L2l therefore changes
+    only exposure and target horizon to 12 roots, retaining the same shield,
+    assignment, override, lifecycle, recorder, and two-episode serial pilot.
+    Its label is physical HIT within 12 unit-frame transitions and before a
+    new randomized assignment. No model runs.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -298,17 +312,21 @@ read-only factual audit then exposed the more fundamental target boundary:
 stopped, rising to 99.37% in low-propensity rows. The label measures behavior-
 continuation risk, not the causal effect of a one-frame action. Further learner
 sweeps on that action-conditioned target are stopped. The next bounded work
-test a safe short-action-exposure collection contract before defining a new
+tested a safe short-action-exposure collection contract before defining a new
 action-risk target. L2k completed that minimal boundary with uniform four-root
 intentions, per-root observed-shield revalidation, explicit assignment and
 override provenance, lifecycle interruption, and two serial complete Stage 4
 pilot-train episodes. The immutable as-run audit rejected on a checker
 omission; a separately hashed erratum recognized the preregistered factual
 control-dead-end boundary and passed every gate without changing data or
-thresholds. This is collector Wine, not a learned-policy canary. The next work
-is a separately frozen stateful serial-versus-parallel differential; scaled
-collection, value learning, and Wine policy evaluation remain blocked until
-their own gates.
+thresholds. This is collector Wine, not a learned-policy canary. Read-only
+first-divergence analysis then found that the old exact parallel gate fails at
+a scheduling gap inside the frame-poll-to-process-suspend window, so parallel
+remains disabled without a native root handshake. More importantly, four-root
+ITT HIT support is only 4/12,948 accepted examples. L2l is now frozen as a
+serial 12-root pilot, the shortest measured horizon near event-support
+saturation. Scaled collection, value learning, and Wine policy evaluation
+remain blocked until their own gates.
 Survival critics, IQL/CQL sweeps, recurrent encoders, ensembles, active
 collection, learned MPC, and Wine branching are not starting points.
 

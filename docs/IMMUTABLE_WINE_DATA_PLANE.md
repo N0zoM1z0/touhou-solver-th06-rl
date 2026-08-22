@@ -72,6 +72,16 @@ unfinished group. The erratum checker therefore requires the factual
 from group shape or relax execution eligibility. The original rejected audit
 and corrected read-only artifact are both retained and hash-linked.
 
+The L2l group-level learner view is derived without changing frame/transition
+v14. One row begins only at exposure step zero. It retains the initial portable
+observation, randomized intended action, assignment distribution, every
+observed override/dead-end mediator, and the next 12 factual unit-frame
+transitions. HIT before a new assignment is positive; a complete 12-step
+no-HIT group is negative. Gaps, initial non-execution, reassignment before the
+outcome, incomplete no-HIT groups, and episode-end truncation remain explicit
+censoring reasons. Group IDs and propensities are audit fields, not actor
+inputs.
+
 Decision-row HIT totals must sum exactly to the raw complete-episode HIT total.
 Rows with no policy intervention are context inside an interval, not new
 behavior-policy samples. A policy invocation with no publication remains an

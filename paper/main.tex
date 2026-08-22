@@ -604,6 +604,7 @@ Observed-primitive-set h16 hazard & Negative representation/surface gate & Objec
 Log-score primitive-set h16 hazard & Negative loss/surface gate; positive mechanism diagnosis & Object-full Brier improved from frozen L2i 0.00473906 to 0.00464423, but only five episode directions favored it and scalar-only remained better at 0.00463179.  Exploratory-action, lifecycle, calibration, and raw-saturation gates failed; saturated missed positives nevertheless fell from 89 to one. \\
 Current-action/h16 target audit & Decisive collection-boundary diagnosis & The initial action lasted a median one frame, while 1,079/1,085 h16 positives first hit after it ended; the low-propensity figure was 157/158.  The factual target is behavior-continuation risk, not supported action value. \\
 Four-root randomized action exposure & Passed collection boundary after bounded audit erratum & Two serial complete Stage 4 pilots finished with 18 and 12 HITs and zero Bomb.  The immutable as-run result rejected only because the checker omitted five preregistered control-dead-end interruptions.  A separately hashed read-only erratum changed no facts or thresholds and passed all seven gates: 12,936 eligible groups, 93.68\% complete intended execution, 0.217\% dead ends, and 92 h16-positive starts.  No model or learned policy ran. \\
+Twelve-root randomized intention protocol & Preregistered, not run & Read-only sizing found zero strict h4 execution positives and only four accepted h4 intention-to-treat positives.  Upper-bound event counts at 4/8/12/16 roots were 4/17/21/22, selecting the shortest near-saturated horizon at 12.  Two serial complete Stage 4 pilot-train episodes test the exact h12 group target; no model runs. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1907,6 +1908,46 @@ episodes only as pilot-train data and selects a separately frozen stateful
 serial-versus-parallel differential.  It does not admit scaled parallel
 collection, hazard fitting, value learning, a Wine canary, or a gameplay claim.
 
+L2k passing the recorder contract did not by itself make its target useful.
+A strict four-unit-frame view requiring witnessed intended-action execution had
+zero HIT positives among 12,985 group starts.  Treating the randomized
+intention as the intervention and retaining the controller's deterministic
+dead-end/input-release response admitted only four positives among 12,948
+examples; all four followed a control dead-end.  Scaling the same protocol
+would therefore produce an almost entirely negative action target.
+
+A train-only, read-only duration audit measured nonoverlapping factual
+behavior-continuation support at 4, 8, 12, and 16 roots.  The corresponding
+start/positive counts were 12,971/4, 6,479/17, 4,315/21, and 3,233/22.  These
+are event-support upper bounds, not action effects, because the immutable L2k
+continuation reassigns every four roots.  A separate eight-episode L2d mask
+audit measured action-weighted persistence of 82.42\% at 12 roots and 78.13\%
+at 16.  Twelve roots is therefore the shortest measured horizon near event
+saturation: extending to 16 adds one upper-bound positive while losing about a
+quarter of group starts and reducing mask persistence.
+
+L2l freezes this one change in
+\path{experiments/l2l-stage4-action-exposure-v1.json}.  Its decision unit is a
+uniform group-start assignment to the complete shield-bounded intention
+protocol.  Physical HIT within 12 contiguous unit-frame transitions and before
+another randomized assignment is positive; an exact step-zero through
+step-eleven no-HIT group is negative.  Observation gaps, initial
+non-execution, reassignment before outcome, incomplete no-HIT groups, and
+episode-end truncation are censored.  Shield override and fail-closed input
+release remain recorded mediators; neither is relabeled as intended-action
+execution.  This is an intention-to-treat factual estimand, not an invented
+successor.
+
+The L2l pilot fixes two serial normal-speed natural-RNG complete Stage 4
+episodes, both pilot-train-only.  Each needs at least 1,800 eligible complete
+groups; every action needs 100 aggregate assignments; no-override and full
+12-execution fractions must each be at least 70\%; control dead ends remain at
+most 0.5\%; and the exact metadata, zero-Bomb, infrastructure, linkage, and
+complete-episode gates remain unchanged.  Sixteen accepted HIT-positive group
+starts is a readiness diagnostic, not a retry or contract gate.  Passing with
+support selects only a separately frozen serial training collection.  It does
+not admit a fit, parallel Wine, value learning, a canary, or a gameplay claim.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1992,6 +2033,26 @@ checks, but both HIT count and normalized factual digest failed exact equality.
 The gate rejected \path{concurrent-worker-0} and emitted no admission ledger.
 This is a negative E5 result, not permission to weaken equality: parallel
 collection remains disabled.
+
+A later read-only, record-level diagnosis separated digest noise from the
+first gameplay boundary.  The historical normalizer omitted the run-local
+\texttt{snapshot\_id}, and its first transition mismatch was only a coherent
+capture-attempt count.  After ignoring only those diagnostic fields, the two
+concurrent traces matched the serial reference through 1,011 and 1,017
+transitions.  Each then advanced two retail frames where the reference advanced
+one.  The resulting observation gap removed the one-frame execution witness
+and changed player position by 4 pixels; later trajectory and HIT differences
+are downstream.  RNG, policy distribution, shield, action, and physical facts
+matched before that point.
+
+The controller polls the game-frame counter before calling
+\texttt{NtSuspendProcess}; there is no in-process completed-root handshake.
+Scheduler delay in that window can admit another retail update.  Normal-
+priority serial L2k episodes still contained nine and three rare observation
+gaps, so changing \texttt{nice} alone is not a proof-quality repair.  Exact
+parallel collection remains rejected.  L2l deliberately uses one serial worker
+rather than adding a native handshake before action-target feasibility is
+established.
 
 An earlier \texttt{SCHED\_IDLE} attempt is retained as a scheduling negative:
 its serial run completed with zero semantic mismatch but 883 observation gaps
@@ -2158,9 +2219,12 @@ uniform four-root intentions and explicit assignment and override provenance
 over two serial complete Stage 4 pilot-train episodes.  Its original rejection
 is retained, while a separately hashed, bounded audit erratum aligned the
 checker with the preregistered control-dead-end lifecycle case and passed all
-seven gates without changing data or thresholds.  The next boundary is a
-stateful serial-versus-parallel differential before scaled training collection;
-no learner has yet run and value learning remains later.
+seven gates without changing data or thresholds.  First-divergence analysis
+kept parallel disabled at the external poll-to-suspend scheduling race, while
+target sizing found zero strict h4 positives and only four accepted h4 ITT
+positives.  L2l therefore freezes a serial 12-root intention/h12 HIT pilot, the
+shortest measured horizon near event-support saturation.  No learner has yet
+run and value learning remains later.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
