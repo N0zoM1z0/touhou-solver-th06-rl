@@ -7,6 +7,9 @@ import pytest
 
 from th06_rl.corpus import CorpusRecorder, FrameEvidence, RunMetadata
 from th06_rl.action_exposure_audit import audit_episode
+from th06_rl.action_exposure_audit_erratum import (
+    audit_episode as audit_episode_erratum,
+)
 from th06_rl.bc_features import (
     FEATURE_NAMES,
     features_from_policy_context,
@@ -34,6 +37,7 @@ def _snapshot(
     current_power: int = 64,
     bullet_count: int = 10,
     in_menu: bool = False,
+    input_mask: int = 1,
 ) -> ControlSnapshot:
     return ControlSnapshot(
         capture_tier="control-v2",
@@ -49,7 +53,7 @@ def _snapshot(
         normal_diagonal_speed=2.8,
         focus_diagonal_speed=1.4,
         frame_multiplier=1.0,
-        input_mask=1,
+        input_mask=input_mask,
         bullets=(),
         live_bullet_count=bullet_count,
         raw_bullet_tails=b"",
@@ -126,10 +130,10 @@ def _decision(
     )
 
 
-def _exposure(step: int) -> ActionExposure:
+def _exposure(step: int, *, group_id: int = 0) -> ActionExposure:
     return ActionExposure(
         ACTION_EXPOSURE_SCHEMA,
-        0,
+        group_id,
         step,
         4,
         "left",
@@ -316,6 +320,74 @@ def test_four_root_action_exposure_audit_uses_factual_execution(tmp_path) -> Non
     assert audit["eligible_complete_groups"] == 1
     assert audit["no_override_groups"] == 1
     assert audit["four_intended_executions_groups"] == 1
+
+
+def test_action_exposure_audit_accepts_recorded_control_dead_end_interrupt(
+    tmp_path,
+) -> None:
+    recorder = CorpusRecorder(
+        tmp_path,
+        RunMetadata("test", "exe", "native", "test", 3, 0, 0, 4, {}),
+    )
+    assignments = (("left", 0.5), ("right", 0.5))
+    recorder.record(
+        _snapshot(0),
+        _decision(
+            "ok",
+            published="left",
+            legal=("left", "right"),
+            exposure=_exposure(0),
+            probability=0.5,
+            probabilities=assignments,
+            policy_id="fixed-shield-action-exposure-v1",
+        ),
+    )
+    recorder.record(
+        _snapshot(1, input_mask=0x45),
+        _decision(
+            "control-dead-end:observed shield set empty",
+            current="left",
+            exposure=_exposure(0),
+            policy_id="fixed-shield-action-exposure-v1",
+        ),
+    )
+    for step in range(4):
+        recorder.record(
+            _snapshot(step + 2),
+            _decision(
+                "ok",
+                current="left",
+                published="left",
+                legal=("left", "right"),
+                exposure=_exposure(step, group_id=1),
+                probability=0.5 if step == 0 else 1.0,
+                probabilities=(
+                    assignments
+                    if step == 0
+                    else (("left", 1.0), ("right", 0.0))
+                ),
+                policy_id="fixed-shield-action-exposure-v1",
+            ),
+        )
+    recorder.record(
+        _snapshot(6, in_menu=True),
+        _decision("passive", current="left"),
+    )
+    run_dir = recorder.close({
+        "termination_reason": "practice-stage-complete",
+        "stage_completed": True,
+        "physical_hits": 0,
+    })
+
+    original_audit = audit_episode(run_dir, exposure_roots=4)
+    audit = audit_episode_erratum(run_dir, exposure_roots=4)
+
+    assert original_audit["contract_violation_sample"] == [
+        "group-0:unexplained-interruption"
+    ]
+    assert audit["interrupted_groups"] == 1
+    assert audit["contract_violation_count"] == 0
+    assert audit["eligible_complete_groups"] == 1
 
 
 def test_unexecuted_publication_has_no_action_conditioned_successor(tmp_path) -> None:

@@ -64,6 +64,14 @@ are never portable actor inputs. The controller still publishes only a freshly
 observed-shield-admissible action; an unsafe in-flight input is a fail-closed
 control dead-end, not a successful override.
 
+The first L2k audit exposed an important collapsed-epoch edge: a published
+action may be witnessed and remain learning-eligible while a later transition
+inside the same decision epoch records a control dead-end and interrupts the
+unfinished group. The erratum checker therefore requires the factual
+`outcome.control_dead_end` transition itself; it does not infer interruption
+from group shape or relax execution eligibility. The original rejected audit
+and corrected read-only artifact are both retained and hash-linked.
+
 Decision-row HIT totals must sum exactly to the raw complete-episode HIT total.
 Rows with no policy intervention are context inside an interval, not new
 behavior-policy samples. A policy invocation with no publication remains an

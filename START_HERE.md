@@ -179,7 +179,7 @@ Current checkpoint:
     preregistered fixed-short-exposure collection feasibility test that keeps
     rechecking the observed shield and records exact conditional propensities
     and overrides; it is not yet authorized until that contract is frozen.
-22. retain the frozen, not-yet-run L2k collection-only experiment in
+22. retain the completed L2k collection-only experiment in
     `experiments/l2k-stage4-action-exposure-v1.json`. A read-only sizing audit
     on all eight L2d episodes found action-weighted factual-mask persistence of
     97.57%, 93.62%, and 87.43% over 2, 4, and 8 policy roots respectively, so
@@ -192,9 +192,17 @@ Current checkpoint:
     claimed override. Frame/transition v14 records group, step, intended
     action, initial assignment propensity/distribution, and override reason;
     the loader retains exact v13 compatibility. Two fixed serial complete
-    Stage 4 episodes are pilot-train-only. Passing can select a separate
-    stateful serial-versus-parallel differential and scaled train collection;
-    it cannot select a model, value learner, learned policy, or gameplay claim.
+    Stage 4 episodes finished on attempt one with 18 and 12 physical HITs and
+    zero Bomb. Both passed infrastructure admission. The frozen as-run result
+    rejected only because its auditor misclassified five declared control-
+    dead-end lifecycle interruptions as unexplained; that result remains
+    immutable. A separately stored bounded erratum changed no threshold or
+    factual metric and made all seven gates pass: 12,936 eligible groups,
+    645--815 assignments per action, 93.68% no-override and four-action
+    execution, 0.217% control dead ends, and 92 h16-positive starts. This
+    admits pilot-train use and selects only a separately frozen stateful
+    serial-versus-parallel differential; it does not select a model, value
+    learner, learned policy, or gameplay claim.
 
 Multiple preregistered research fits have completed, but none passed its
 promotion gate or is an authorized learned candidate. No learned policy has
@@ -290,15 +298,17 @@ read-only factual audit then exposed the more fundamental target boundary:
 stopped, rising to 99.37% in low-propensity rows. The label measures behavior-
 continuation risk, not the causal effect of a one-frame action. Further learner
 sweeps on that action-conditioned target are stopped. The next bounded work
-must freeze and test a safe short-action-exposure collection contract before
-defining a new action-risk target. Value learning and Wine policy evaluation
-remain blocked. L2k now freezes the minimal collection-boundary test: uniform
-four-root action intentions, per-root observed-shield revalidation, explicit
-assignment/override provenance, lifecycle interruption, two serial complete
-Stage 4 pilot-train episodes, and no learner fit. This is collector Wine, not a
-learned-policy canary. Its h16 HIT support is diagnostic and may not cause a
-physical-HIT retry; a structurally passing but low-HIT pilot is reported as
-insufficient support rather than re-collected.
+test a safe short-action-exposure collection contract before defining a new
+action-risk target. L2k completed that minimal boundary with uniform four-root
+intentions, per-root observed-shield revalidation, explicit assignment and
+override provenance, lifecycle interruption, and two serial complete Stage 4
+pilot-train episodes. The immutable as-run audit rejected on a checker
+omission; a separately hashed erratum recognized the preregistered factual
+control-dead-end boundary and passed every gate without changing data or
+thresholds. This is collector Wine, not a learned-policy canary. The next work
+is a separately frozen stateful serial-versus-parallel differential; scaled
+collection, value learning, and Wine policy evaluation remain blocked until
+their own gates.
 Survival critics, IQL/CQL sweeps, recurrent encoders, ensembles, active
 collection, learned MPC, and Wine branching are not starting points.
 

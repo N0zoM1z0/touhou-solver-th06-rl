@@ -105,6 +105,17 @@ collection contract into failure or justify collecting until a desired HIT
 count appears. Parallel collection remains blocked until the stateful policy
 passes a separate serial-versus-parallel differential.
 
+Both pilots completed on their first attempt with 18 and 12 physical HITs and
+zero Bomb, and both passed infrastructure admission. The immutable as-run
+exposure result rejected solely because the checker omitted the already
+declared control-dead-end case when validating an interrupted group. Five such
+groups had an actual `outcome.control_dead_end` transition followed by a fresh
+step-zero group. The original rejection is retained. A separately hashed,
+read-only erratum recognizes only that factual lifecycle case; it changes no
+data, threshold, or metric and passes all seven gates. This admits pilot-train
+use and a separately preregistered stateful collection differential, not
+parallel collection, model fitting, value learning, or online policy use.
+
 It may not add prior outcome, propensity, lifecycle label, absolute frame,
 source identity, raw engine fields, or future fact, and it never widens the
 observed shield. One offline expected-HIT value method follows only after a

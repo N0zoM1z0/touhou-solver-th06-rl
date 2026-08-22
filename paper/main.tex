@@ -603,7 +603,7 @@ Fixed short portable-history h16 hazard & Negative representation gate & Exact 1
 Observed-primitive-set h16 hazard & Negative representation/surface gate & Object-full Brier 0.00473906 was worse than scalar-only 0.00468783; low-propensity and pre-first-HIT action deltas reversed, and 65.05\% of full probabilities saturated below $10^{-7}$.  No fresh confirmation ran. \\
 Log-score primitive-set h16 hazard & Negative loss/surface gate; positive mechanism diagnosis & Object-full Brier improved from frozen L2i 0.00473906 to 0.00464423, but only five episode directions favored it and scalar-only remained better at 0.00463179.  Exploratory-action, lifecycle, calibration, and raw-saturation gates failed; saturated missed positives nevertheless fell from 89 to one. \\
 Current-action/h16 target audit & Decisive collection-boundary diagnosis & The initial action lasted a median one frame, while 1,079/1,085 h16 positives first hit after it ended; the low-propensity figure was 157/158.  The factual target is behavior-continuation risk, not supported action value. \\
-Four-root randomized action exposure & Preregistered, not run & A collection-only Stage 4 pilot assigns uniformly over the current shield set, retains the intention for four policy roots with a fresh shield check at every root, records assignment/override provenance, and uses two serial complete pilot-train episodes.  No model or learned policy runs. \\
+Four-root randomized action exposure & Passed collection boundary after bounded audit erratum & Two serial complete Stage 4 pilots finished with 18 and 12 HITs and zero Bomb.  The immutable as-run result rejected only because the checker omitted five preregistered control-dead-end interruptions.  A separately hashed read-only erratum changed no facts or thresholds and passed all seven gates: 12,936 eligible groups, 93.68\% complete intended execution, 0.217\% dead ends, and 92 h16-positive starts.  No model or learned policy ran. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1871,6 +1871,42 @@ stateful serial-versus-parallel differential and scaled train collection.
 No fit, learned online policy, fresh evaluation, or policy-improvement claim is
 admitted.
 
+Both fixed pilots completed on their first attempt.  Episode
+\path{20260822T135910Z-643218400} recorded 26,855 transitions, 18 physical
+HITs, and zero Bomb; episode \path{20260822T141219Z-215760100} recorded
+26,976 transitions, 12 physical HITs, and zero Bomb.  Both passed complete
+dataset admission, dense native shield parity, bit-exact player-successor
+replay, zero policy callback failures, and their frozen latency limits.  The
+aggregate exposure audit measured 12,936 eligible complete groups, 645--815
+assignments for every action, no-override and four-intended-execution fractions
+of 0.93677, a control-dead-end rate of 0.00217, and 92 h16-positive group
+starts.  All numeric, Bomb, and infrastructure gates passed.
+
+The immutable as-run result nevertheless recorded
+\texttt{reject-action-exposure-collection-contract}.  Its exact-contract
+checker classified five partial groups as unexplained interruptions.  A
+read-only transition-level diagnosis found that every case contained a factual
+\texttt{outcome.control\_dead\_end} transition followed by a new step-zero
+group.  Control dead-end was already one of the frozen lifecycle interruptions;
+the checker had accepted only HIT, non-learning-eligible, or terminal collapsed
+epochs and therefore missed the case where an earlier published action was
+witnessed before the dead end.  This is an audit implementation defect, not a
+collector exception.
+
+The original result is retained unchanged at SHA-256
+\path{f40ec816faff8340ba029f500c6de239239215695e02113909bda481733891fb}.
+A bounded erratum adds only the factual control-dead-end transition condition,
+changes no episode, metric, threshold, assignment, or label, and reproduces all
+other audit fields exactly.  Its separate artifact,
+\path{artifacts/l2k-stage4-action-exposure-v1/audit-erratum-v1.json}, has
+SHA-256
+\path{97c51277f35c234c2673b750ad040b359760b82f0b30a2cae4fcf89a3124b446}
+and the corrected decision
+\texttt{proceed-action-exposure-training-collection}.  This admits the two
+episodes only as pilot-train data and selects a separately frozen stateful
+serial-versus-parallel differential.  It does not admit scaled parallel
+collection, hazard fitting, value learning, a Wine canary, or a gameplay claim.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -2116,11 +2152,15 @@ it is also rejected.  Its loss-only BCE-with-logits follow-up improved Brier,
 NLL, ranking, and confident missed positives, but still failed the joint gate.
 The decisive read-only audit found that 99.45\% of h16 positives occurred only
 after the initial action ended, so the target is not supported current-action
-value.  Further learner sweeps on this target are stopped.  The next boundary
-is a preregistered safe fixed-short-action-exposure collection feasibility
-test.  L2k freezes this as uniform four-root intentions with explicit
-assignment and override provenance over two serial complete Stage 4
-pilot-train episodes; no learner runs and value learning remains later.
+value.  Further learner sweeps on this target are stopped.  L2k then
+established the safe fixed-short-action-exposure collection boundary with
+uniform four-root intentions and explicit assignment and override provenance
+over two serial complete Stage 4 pilot-train episodes.  Its original rejection
+is retained, while a separately hashed, bounded audit erratum aligned the
+checker with the preregistered control-dead-end lifecycle case and passed all
+seven gates without changing data or thresholds.  The next boundary is a
+stateful serial-versus-parallel differential before scaled training collection;
+no learner has yet run and value learning remains later.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 

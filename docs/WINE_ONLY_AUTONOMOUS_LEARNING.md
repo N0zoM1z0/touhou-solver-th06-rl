@@ -91,11 +91,16 @@ before fitting.
    stabilize object or exploratory-action gain. A factual audit then found
    that 99.45% of h16 positives occurred after the initially published action
    ended. The label is valid behavior-continuation risk but unsupported as
-   current-action value. Learner sweeps on that target are stopped. L2k now
-   preregisters a four-policy-root uniformly randomized intention with a fresh
+   current-action value. Learner sweeps on that target are stopped. L2k tested
+   a four-policy-root uniformly randomized intention with a fresh
    observed-shield check at every root, exact assignment/override provenance,
-   and two serial complete Stage 4 pilot-train episodes. Recurrence and value
-   learning remain blocked.
+   and two serial complete Stage 4 pilot-train episodes. Both infrastructure
+   audits passed. Its original frozen result rejected on a bounded auditor bug:
+   five recorded control-dead-end lifecycle interrupts were not recognized.
+   The immutable result is retained; a separate read-only erratum aligned the
+   checker with the frozen lifecycle list and passed all seven gates without
+   changing data or thresholds. A stateful serial-versus-parallel differential
+   is next; recurrence and value learning remain blocked.
 4. **L3 — one offline value method.** On the identical frozen data and
    representation, compare BC with one expected-HIT value learner. IQL is the
    first candidate. CQL is admitted only if IQL demonstrates unsupported-action
@@ -110,11 +115,12 @@ before fitting.
    factual and input-delivery digests. Predictions never widen the shield's
    observed-object certificate.
 
-The active runnable experiment has exactly three moving parts: a uniform
+The completed L2k experiment had exactly three moving parts: a uniform
 four-root intention policy, the unchanged per-root observed shield/controller,
-and a versioned factual exposure recorder/auditor. It fits no learner. The
-online actor observation is unchanged; exposure identifiers and propensities
-are recorder provenance only.
+and a versioned factual exposure recorder/auditor. It fitted no learner. The
+online actor observation was unchanged; exposure identifiers and propensities
+remain recorder provenance only. The next runnable artifact must first freeze
+the stateful serial-versus-parallel differential and its exact comparison.
 
 ## Current evidence
 
@@ -167,10 +173,13 @@ are recorder provenance only.
   action gates did not stabilize. The immutable L2j decision is
   `reject-logscore-observed-primitive-h16-hazard`.
 - The subsequent action/target audit found median initial action duration one
-  frame and 1,079/1,085 h16 positives after that action ended. L2k is frozen but
-  not run: two serial complete Stage 4 pilot-train episodes test uniform
-  four-root action intentions, exact per-root shield/override behavior, and
-  action-exposure schema integrity. No model or learned policy runs.
+  frame and 1,079/1,085 h16 positives after that action ended. L2k then ran two
+  serial complete Stage 4 pilot-train episodes with 18 and 12 HITs and zero
+  Bomb. The original result retained a rejection caused solely by five
+  misclassified, preregistered control-dead-end interrupts. A bounded separate
+  erratum passed all seven gates on the same immutable data: 12,936 eligible
+  complete groups, 93.68% complete intended execution, 0.217% dead ends, and
+  92 h16-positive starts. No model or learned policy ran.
 
 Auxiliary next-object, birth/death, occupancy, or HIT-horizon predictions may
 test representation information, but they are never reward shaping. Final
@@ -179,8 +188,8 @@ complete original-Wine routes with zero Bomb; NMNB rate and HIT count are both
 reported, and infrastructure failures remain separate.
 
 The stateless uniform-mixture collector already passed its declared parallel
-infrastructure gate. L2k nevertheless starts serially because its policy adds
-stateful multi-root semantics. Scaled L2k collection remains prohibited until
+infrastructure gate. L2k nevertheless ran serially because its policy adds
+stateful multi-root semantics. Scaled action-exposure collection remains prohibited until
 a separate stateful serial-versus-parallel differential proves equality of
 control facts, group lifecycle, schemas, action delivery, and factual traces.
 Failed or partial waves remain quarantined.
