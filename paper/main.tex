@@ -76,6 +76,11 @@ observed-shield contraction and physical HIT at supported 16- and 64-frame
 horizons.  This is representation evidence, not a causal action-effect or
 gameplay-improvement result, and it admits neither history nor a learned
 policy.
+A state-only attribution then found a small incremental action-relative HIT
+signal at 16 frames but not 64, with worse calibration than state-only at both
+horizons; action-relative shield-contraction signal was robust.  Because it
+reuses the same held-out episodes, it is selection evidence only, not
+independent confirmation.
 \end{abstract}
 
 \section{Motivation and Scope}
@@ -534,7 +539,7 @@ Small current-observation MLP & Negative held-out gate & The fixed 114--32--18 m
 L1d target-contract diagnosis & Completed & All propensities were exact; paired train-only continuations rejected sampled-label noise, stopping, and discarded full propensities as sufficient explanations, selecting one structured current-observation scorer. \\
 Shared action-conditioned BC & Inconclusive & Exhausted 10,000 updates at gradient ratio 0.011684; validation KL 0.986686 and reactive agreement 0.655371 were worse than L1d, with zero final-tie agreement. \\
 Current-observation dynamics and factual risk probes & Positive diagnostic & Published and first executed actions agreed on all 94,162 validation roots; motion MSE ratio was 0.00732. Shield contraction passed at all four horizons and HIT passed at supported 16/64-frame horizons; no history or policy fit. \\
-Incremental action factual-risk ablation & Preregistered, not run & Remove all nine action-relative features from the frozen ridge probe and compare full versus state-only HIT Brier at 16/64 frames; reused held-out attribution, not independent confirmation. \\
+Incremental action factual-risk ablation & Positive, weak attribution & Full beat state-only HIT Brier at 16 frames by a barely negative episode interval but not at 64; full calibration was worse. Shield contraction improved robustly at all horizons. Reused heldout, not confirmation. \\
 IQL & Not run & First L3 value candidate after representation learnability. \\
 CQL & Not run & Admitted only after measured IQL unsupported-action overestimation. \\
 Survival/distributional value & Not run & Admitted only by L4 coverage or objective evidence. \\
@@ -1160,6 +1165,29 @@ episodes, L2b is explicitly reused-heldout attribution rather than independent
 confirmation or promotion evidence.  Either outcome still admits no history,
 value learner, policy, or Wine run.
 
+L2b ran at solver commit
+\path{3e01cfd4c8cc0a255f9ff0209da32c21ae291d14}; its result SHA-256 is
+\path{e4a6e85ef9827a01a3f21aec97a137893defa09b8370b6c25180ca48ca7b1e83}.
+The full L2 Brier values reproduced with zero error.  At 16 frames, full and
+state-only HIT Brier were 0.005572803 and 0.005601079, and the full-minus-state
+episode interval was $[-0.00005950,-0.00000047]$, passing just below zero.
+One of four per-episode deltas nevertheless favored state-only.  At 64 frames,
+full and state-only Brier were 0.027221173 and 0.027271775, but the interval
+$[-0.00048632,0.00031167]$ crossed zero and two episodes favored state-only.
+The full model's 10-bin HIT calibration error was also worse: 0.00204 versus
+0.00096 at 16 frames and 0.00520 versus 0.00111 at 64 frames.
+
+Action-relative geometry contributed much more consistently to the auxiliary
+shield target.  Full-minus-state-only shield-contraction Brier intervals were
+strictly negative at all four horizons, and every individual validation
+episode favored the full representation.  The formal L2b decision is
+\texttt{proceed-action-relative-current-root-signal} because its frozen rule
+required one supported HIT horizon.  The substantive claim is deliberately
+narrower: the result rejects ``all signal is state-only,'' but action-relative
+physical-HIT information is small, horizon-dependent, heterogeneous, and not
+yet calibrated.  Independent confirmation plus support/lifecycle decomposition
+must precede any value learner or online candidate.
+
 \subsection{E4: minimal offline policy improvement}
 
 E4 begins only after E3 identifies one frozen portable representation.  It
@@ -1285,8 +1313,9 @@ on both splits, exposing additive-score mismatch with the lexicographic rule.
 The current-observation execution/dynamics and factual-risk pilot then passed
 its frozen diagnostic gate at supported horizons.  This establishes portable
 current-root factual signal but neither causal action value nor an authorized
-learned candidate.  One state-only reused-heldout attribution is preregistered
-to determine whether action-relative features add to that signal.
+learned candidate.  The state-only reused-heldout attribution found weak
+incremental action-relative HIT signal at 16 frames, none at 64, and robust
+incremental shield signal.  Independent confirmation remains required.
 
 \section{Threats to Validity}
 
@@ -1351,9 +1380,10 @@ final tie strata.  The known collector distribution remains an exact
 data-plane control.  The frozen offline current-observation execution/dynamics
 and factual HIT-risk pilot then passed at its supported horizons.  Its next
 boundary is incremental action signal and calibrated/support-aware factual
-risk, not history or value learning.  The incremental-action attribution is
-frozen but not yet run; history still requires separately measured temporal
-ambiguity.
+risk, not history or value learning.  The incremental-action attribution found
+weak 16-frame but not 64-frame HIT evidence and worse full-model calibration;
+fresh confirmation and lifecycle/support attribution are next.  History still
+requires separately measured temporal ambiguity.
 No learned policy has run online, exact-prefix branching is not established,
 and this checkpoint makes no policy-improvement, NMNB, or transfer claim.
 
